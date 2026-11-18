@@ -9,7 +9,7 @@ async function api(path,data){const tabProject=data?.project||data;const needsEn
 function task(fn){return async()=>{try{await fn();}catch(e){message(e.message,true);}};}
 function project(){const p={};for(const k of fields)p[k]=['mode','protocol','operation','dwell_units','lead_shape','laser_pattern','router_entry'].includes(k)?$(k).value:Number($(k).value);p.paths=objects.flatMap(o=>o.paths);if(p.mode==='laser'&&objects.some(o=>o.powers))p.path_powers=objects.flatMap(o=>o.paths.map((path,i)=>o.powers?.[i]?.map(v=>v*p.power)||path.map(()=>p.power)));if(p.mode==='router'&&objects.some(o=>o.depths))p.path_depths=objects.flatMap(o=>o.paths.map((path,i)=>o.depths?.[i]||path.map(()=>-p.depth)));return p;}
 function machiningProject(){window.CNCSolidLinks?.requireCurrent();return project();}
-function invalidate(){window.stockPreview=null;window.recordHistory?.();preview=null;previewProject=null;$('confirmed').checked=false;$('gcode').textContent='Generate a new preview after editing.';$('summary').textContent=`${objects.length} objects · preview needs generating`;$('playhead').replaceChildren();$('toolpaths').replaceChildren();if(token&&!webMode)api('disarm',{}).catch(()=>{});}
+function invalidate(){window.stockPreview=null;window.recordHistory?.();preview=null;previewProject=null;$('confirmed').checked=false;$('gcode').textContent='Generate a new preview after editing.';$('summary').textContent=`${objects.length} objects · preview needs generating`;$('playhead').replaceChildren();$('toolpaths').replaceChildren();cancelPhoneArm();}
 function draw(){const w=Number($('width').value)||300,h=Number($('height').value)||180;$('canvas').setAttribute('viewBox',`-12 -12 ${w+24} ${h+24}`);$('stock').setAttribute('width',w);$('stock').setAttribute('height',h);$('dimensions').textContent=`${w} × ${h} mm`;$('drawing').replaceChildren();$('objects').replaceChildren();objects.forEach((o,i)=>{const g=document.createElementNS(NS,'path');g.setAttribute('d',o.paths.map(p=>'M'+p.map(([x,y])=>`${x},${h-y}`).join(' L')).join(' '));g.setAttribute('fill','none');g.setAttribute('stroke',i===selected?'#c77829':'#176a9a');g.setAttribute('stroke-width',i===selected?'2.5':'1.5');g.dataset.object=i;g.style.pointerEvents='bounding-box';$('drawing').append(g);const b=document.createElement('button');b.className='object'+(i===selected?' selected':'');b.textContent=`${i+1}. ${o.output===false?'[OFF] ':''}${o.name}${o.operationSettings?' · '+o.operationSettings.operation:''}`;b.onclick=()=>{selected=i;draw();};$('objects').append(b);});renderSelection();}
 function add(name,paths,properties={}){objects.push({designLayerId:window.CNCDesignLayers?.activeId?.()||'default',...properties,name,paths});selected=objects.length-1;invalidate();draw();}
 function shape(){const a=['shapeX','shapeY','shapeW','shapeH'].map(k=>Number($(k).value));if(a.some(x=>!Number.isFinite(x))||a[2]<=0||a[3]<=0)throw Error('Enter a positive shape width and height');return a;}
@@ -64,7 +64,28 @@ $('run').onclick=task(async()=>{if(!preview||previewProject!==JSON.stringify(mac
 for(const b of document.querySelectorAll('[data-command]'))b.onclick=task(async()=>{const action=b.dataset.command;if(['home','zero','unlock'].includes(action)&&!confirm(`${b.textContent} on the connected controller?`))return;await api('command',{action});});
 for(const b of document.querySelectorAll('[data-jog]'))b.onclick=task(()=>{const[axis,sign]=b.dataset.jog.split(',');return api('command',{action:'jog',axis,distance:Number(sign)*Number($('jogDistance').value),feed:Number($('jogFeed').value)});});
 $('demo').onclick=()=>{objects=[{name:'Workshop badge',paths:[[[30,30],[130,30],[130,90],[30,90],[30,30]],[[40,40],[120,40],[120,80],[40,80],[40,40]]]},{name:'Diamond',paths:[[[80,48],[105,60],[80,72],[55,60],[80,48]]]}];selected=0;invalidate();draw();};
-async function poll(){try{latest=await api('status');$('state').textContent=(latest.simulated?'SIMULATOR · ':'')+(latest.state||'Disconnected')+' · '+(latest.protocol||'grbl');$('progress').value=latest.progress||0;$('log').textContent=(latest.log||[]).join('\n');$('position').textContent=latest.position?JSON.stringify(latest.position):'Position unavailable';$('run').disabled=!latest.connected||!CNCProtocols.get($('protocol').value).live_transport||latest.protocol!==$('protocol').value; if(latest.error)message(latest.error,true);}catch(e){$('state').textContent='Server unavailable';$('run').disabled=true;}setTimeout(poll,700);}
+async function poll(){
+  try {
+    latest=await api('status');
+    $('state').textContent=(latest.simulated?'SIMULATOR · ':'')+(latest.state||'Disconnected')+' · '+(latest.protocol||'grbl');
+    $('progress').value=latest.progress||0;
+    $('log').textContent=(latest.log||[]).join('\n');
+    $('position').textContent=latest.position?JSON.stringify(latest.position):'Position unavailable';
+    $('run').disabled=!latest.connected||!CNCProtocols.get($('protocol').value).live_transport||latest.protocol!==$('protocol').value;
+    const holdButton=document.querySelector('[data-command="hold"]');
+    const resumeButton=document.querySelector('[data-command="resume"]');
+    holdButton.disabled=!latest.connected||['Hold requested','Decelerating','Hold'].includes(latest.state);
+    resumeButton.disabled=!latest.connected||latest.state!=='Hold'||!!latest.error;
+    if(latest.error)message(latest.error,true);
+    await checkPhoneArm();
+  } catch(e) {
+    $('state').textContent='Server unavailable';
+    $('run').disabled=true;
+    document.querySelector('[data-command="resume"]').disabled=true;
+    cancelPhoneArm();
+  }
+  setTimeout(poll,700);
+}
 window.studioReady=(async()=>{try{const session=await api('session');token=session.token;webMode=!!session.web_mode;window.studioSession=session;const profiles=await api('profiles');for(const p of profiles){const o=document.createElement('option');o.value=p.id;o.textContent=p.name;$('profile').append(o);}$('profile').onchange=()=>{const p=profiles.find(p=>p.id===$('profile').value);$('width').value=p.width;$('height').value=p.height;$('profileHint').textContent=p.firmware+(session.hardware_enabled?' · physical ports enabled; commissioning required':' · simulator only; hardware commissioning pending')+(p.travel_conflict?' · '+p.travel_conflict:'');invalidate();draw();};$('profile').onchange();for(const p of (webMode?[]:await api('ports'))){const option=document.createElement('option');option.value=p.device;option.textContent=p.device+' · '+p.description;$('port').append(option);}draw();if(!offline&&!webMode)poll();else{ $('machinePanel').hidden=true;for(const id of ['connect','disconnect','port'])$(id).hidden=true;$('state').textContent=offline?'LOCAL FILE EDITOR':'HTTPS EDITOR · '+session.username;$('profileHint').textContent='Design and file preparation; machine inbox uploads do not start motion';}return session;}catch(e){message(e.message,true);throw e;}})();
 
 function svgNode(tag,attrs){const n=document.createElementNS(NS,tag);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,v);return n;}
@@ -118,7 +139,95 @@ $('canvas').addEventListener('pointerup',()=>endGesture());$('canvas').addEventL
 for(const id of ['rect','ellipse','line','polygon','gear'])$(id).addEventListener('dragstart',e=>{e.dataTransfer.setData('application/x-cnc-shape',id);e.dataTransfer.effectAllowed='copy';});
 const bed=document.querySelector('.bed');bed.addEventListener('dragover',e=>{e.preventDefault();bed.classList.add('drop-target');e.dataTransfer.dropEffect='copy';});bed.addEventListener('dragleave',e=>{if(!bed.contains(e.relatedTarget))bed.classList.remove('drop-target');});bed.addEventListener('drop',async e=>{e.preventDefault();bed.classList.remove('drop-target');try{const id=e.dataTransfer.getData('application/x-cnc-shape');if(['rect','ellipse','line','polygon','gear'].includes(id)){const[x,y]=canvasPoint(e);$('shapeX').value=Math.max(0,Math.min(Number($('width').value)-Number($(id==='gear'?'gearDiameter':'shapeW').value),x)).toFixed(2);$('shapeY').value=Math.max(0,Math.min(Number($('height').value)-Number($(id==='gear'?'gearDiameter':'shapeH').value),y)).toFixed(2);$(id).click();}else{const files=[...e.dataTransfer.files];if(files.length!==1)throw Error('Drop one SVG or project file at a time');const file=files[0];if(window.CNCInterchange?.recognises(file)){await CNCInterchange.open(file);return;}if(!/\.(svg|json)$/i.test(file.name))throw Error('Drop an SVG or .cncstudio.json project');await loadFile(file,/\.json$/i.test(file.name)?'project':'svg');}}catch(error){message(error.message,true);}});
 function renderToolpaths(){const layer=$('toolpaths');layer.replaceChildren();if(!preview)return;const h=Number($('height').value);if(preview.drill_holes){for(const [x,y,diameter] of preview.drill_holes)layer.append(svgNode('circle',{cx:x,cy:h-y,r:diameter/2,fill:'none',stroke:'#116d80','stroke-width':2,'vector-effect':'non-scaling-stroke'}));}const groups=new Map();for(const s of preview.segments){if(preview.mode==='laser'&&s[5]===0)continue;const ratio=s[5]===null?1:s[5]/Number($('power').value),bin=Math.max(0,Math.min(10,Math.round(ratio*10)));groups.set(bin,(groups.get(bin)||'')+`M${s[0]},${h-s[1]}L${s[2]},${h-s[3]} `);}for(const[bin,d]of groups){layer.append(svgNode('path',{d,fill:'none',stroke:`hsl(${210-bin*16} 75% 45%)`,'stroke-width':6,'stroke-opacity':.55,'vector-effect':'non-scaling-stroke'}));}}
-$('armPhone').onclick=task(async()=>{if(!preview||previewProject!==JSON.stringify(machiningProject()))throw Error('Generate a current preview first');if(!$('confirmed').checked)throw Error('Confirm setup first');const p=machiningProject();await api('arm',{project:p,confirmed:true});if(JSON.stringify(p)!==JSON.stringify(machiningProject())){await api('disarm',{});throw Error('Design changed; generate and arm a fresh preview');}$('confirmed').checked=false;message('Preview armed for one phone start. Editing the design disarms it.');});
+// Only this live document receives the handle for the preview that it armed.
+let phoneArm=null, armInFlight=false, pageGeneration=0;
+const disarms=new Set(), sendingDisarms=new Set();
+const armNotice=document.createElement('p');
+armNotice.className='hint';
+armNotice.setAttribute('role','status');
+$('armPhone').after(armNotice);
+
+function setArmNotice(text,error=false){
+  armNotice.textContent=text;
+  if(error)message(text,true);
+}
+async function sendDisarm(id){
+  if(sendingDisarms.has(id))return;
+  sendingDisarms.add(id);
+  try {
+    await api('disarm',{arm_id:id});
+    disarms.delete(id);
+    if(!phoneArm&&!disarms.size)setArmNotice('Phone Start is disarmed.');
+  } catch(error) {
+    if(!phoneArm)setArmNotice('Preview invalidated. Waiting to confirm disarm with the workstation server.',true);
+  } finally {
+    sendingDisarms.delete(id);
+  }
+}
+function cancelPhoneArm(){
+  if(!phoneArm)return;
+  const id=phoneArm.id;
+  phoneArm=null;
+  disarms.add(id);
+  setArmNotice('Preview invalidated. Confirming disarm…');
+  void sendDisarm(id);
+}
+function sameArmedPreview(arm, checkDocument=true){
+  return phoneArm===arm && arm.generation===pageGeneration && preview===arm.preview && previewProject===arm.document
+    && (!checkDocument||JSON.stringify(machiningProject())===arm.document);
+}
+async function checkPhoneArm(){
+  for(const id of disarms)void sendDisarm(id);
+  const arm=phoneArm;
+  if(!arm)return;
+  try {
+    if(!sameArmedPreview(arm,false)){cancelPhoneArm();return;}
+    const result=await api('arm/check',{arm_id:arm.id});
+    if(phoneArm!==arm)return;
+    if(!result.armed){
+      phoneArm=null;
+      setArmNotice('This preview is no longer armed. Check controller status before arming again.');
+      return;
+    }
+    if(result.challenge){
+      if(!sameArmedPreview(arm)){cancelPhoneArm();return;}
+      setArmNotice('Phone Start requested. Confirming the current preview…');
+      await api('arm/confirm',{arm_id:arm.id,challenge:result.challenge});
+      if(phoneArm===arm)setArmNotice('Preview confirmed for this Start request. Check controller status.');
+    }
+  } catch(error) {
+    if(phoneArm===arm){cancelPhoneArm();setArmNotice('Phone Start confirmation failed. Check controller status and rearm the preview.',true);}
+  }
+}
+window.addEventListener('pagehide',()=>{
+  pageGeneration++;
+  if(!phoneArm)return;
+  const id=phoneArm.id;
+  phoneArm=null;
+  fetch('/api/disarm',{method:'POST',keepalive:true,
+    headers:{'Content-Type':'application/json','X-Studio-Token':token},body:JSON.stringify({arm_id:id})}).catch(()=>{});
+});
+$('armPhone').onclick=task(async()=>{
+  if(!window.studioSession?.phone_arm_challenge)throw Error('Update the workstation server and reload this editor before arming phone Start.');
+  if(armInFlight)throw Error('An arm request is already in progress.');
+  if(!preview||previewProject!==JSON.stringify(machiningProject()))throw Error('Generate a current preview first');
+  if(!$('confirmed').checked)throw Error('Confirm setup first');
+  const project=machiningProject(),snapshot=preview,document=previewProject,generation=pageGeneration;
+  armInFlight=true;
+  cancelPhoneArm();
+  try {
+    const result=await api('arm',{project,confirmed:true,phone_arm_challenge:true});
+    if(typeof result.arm_id!=='string'||!result.arm_id)throw Error('The server did not supply an arm handle. Update the server before using phone Start.');
+    phoneArm={id:result.arm_id,preview:snapshot,document,generation};
+    if(!sameArmedPreview(phoneArm)){
+      cancelPhoneArm();
+      throw Error('Design changed. Generate and arm a fresh preview.');
+    }
+    $('confirmed').checked=false;
+    setArmNotice('Preview armed. Keep this workstation tab open and connected for phone Start.');
+    message(armNotice.textContent);
+  } finally {armInFlight=false;}
+});
 
 function addGenerated(name,paths,properties){const[x,y,mx,my]=bounds(paths);if(x<0||y<0||mx>Number($('width').value)||my>Number($('height').value))throw Error('Shape exceeds the work area; reduce its size or change X/Y');add(name,paths,properties);}
 $('polygon').onclick=task(()=>{const[x,y,width,height]=shape(),sides=Number($('polygonSides').value),options={x,y,width,height,sides,bore:Number($('polygonBore').value),rotation:Number($('shapeRotation').value)};addGenerated(`${sides}-sided polygon`,CNCShapes.polygon(options));objects[selected].polygon=options;draw();});

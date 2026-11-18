@@ -78,10 +78,85 @@ def _arc(start, centre, sweep, radius):
              centre[1] + radius * math.sin(angle + sweep * i / count)] for i in range(1, count + 1)]
 
 
+def _dxf_clip_polygon(clip, transform):
+    """Project an ordinary planar spatial filter into the drawing's millimetre coordinates."""
+    from ezdxf.math import BoundingBox2d, Matrix44, Z_AXIS
+    from shapely.geometry import Polygon
+
+    spatial = clip.get_spatial_filter()
+    dxf = spatial.dxf
+    if (clip.is_inverted_clip or dxf.has_front_clipping_plane or dxf.has_back_clipping_plane
+            or not dxf.extrusion.isclose(Z_AXIS) or dxf.origin.x or dxf.origin.y
+            or not all(math.isclose(a, b, abs_tol=1e-12)
+                       for a, b in zip(spatial.transform_matrix, Matrix44()))):
+        raise ValueError('unsupported inverted, 3D or custom-plane XCLIP')
+    matrix = spatial.inverse_insert_matrix @ transform
+    # Clipping is an infinite prism through XY. A tilted axis needs a 3D intersection.
+    z = matrix.transform_direction(Z_AXIS)
+    if not z.magnitude or math.hypot(z.x, z.y) > 1e-10 * z.magnitude:
+        raise ValueError('unsupported tilted XCLIP')
+    vertices = spatial.boundary_vertices
+    if len(vertices) == 2:
+        # Expand BEFORE rotation; the transformed diagonal alone loses two corners.
+        vertices = BoundingBox2d(vertices).rect_vertices()
+    if not 3 <= len(vertices) <= 256:
+        raise ValueError('XCLIP needs 3–256 polygon vertices')
+    xy = [(v.x, v.y) for v in matrix.transform_vertices(vertices)]
+    if not all(math.isfinite(c) for point in xy for c in point):
+        raise ValueError('nonfinite XCLIP boundary')
+    polygon = Polygon(xy)
+    if not polygon.is_valid or polygon.area <= 0:
+        raise ValueError('invalid XCLIP boundary')
+    return polygon
+
+
+def _dxf_clipped_paths(points, mask):
+    """Retain drawing order, retraces and gaps. The crop boundary is never a cutting edge."""
+    from shapely.geometry import LineString
+
+    if len(points) < 2:
+        return []
+    if mask is None:
+        return [points]
+    line = LineString(points)
+    if mask.covers(line):
+        return [points]
+    if mask.disjoint(line):
+        return []
+    parts = []
+    output_points = 0
+    for start, end in zip(points, points[1:]):
+        visible = mask.intersection(LineString([start, end]))
+        # A concave window can retain several separate intervals from one source segment.
+        members = getattr(visible, 'geoms', [visible])
+        intervals = []
+        for piece in members:
+            if piece.geom_type != 'LineString' or piece.is_empty:
+                continue
+            a, b = list(piece.coords[0]), list(piece.coords[-1])
+            if math.dist(start, a) > math.dist(start, b):
+                a, b = b, a
+            intervals.append((math.dist(start, a), a, b))
+        for _, a, b in sorted(intervals):
+            if parts and parts[-1][-1] == a:
+                parts[-1].append(b)
+                output_points += 1
+            else:
+                parts.append([a, b])
+                output_points += 2
+            if len(parts) > MAX_PATHS or output_points > MAX_POINTS:
+                raise ValueError('Simplify the clipped DXF to 100000 vertices and 3000 paths')
+    if len(parts) > 1 and points[0] == points[-1] and parts[-1][-1] == parts[0][0]:
+        parts[0] = parts.pop() + parts[0][1:]
+    return parts
+
+
 def _dxf(text, default_scale):
     import ezdxf
     from ezdxf import colors, units
+    from ezdxf.math import Matrix44
     from ezdxf.path import make_path
+    from ezdxf.xclip import XClip
     try:
         doc = ezdxf.read(io.StringIO(text))
     except (ezdxf.DXFError, TypeError, ValueError, IndexError, StopIteration) as exc:
@@ -97,8 +172,10 @@ def _dxf(text, default_scale):
             raise ValueError('Unrecognised DXF drawing units') from exc
     skipped = Counter()
     visited = 0
-    def read_entity(entity, parent_layer='0', ancestry=()):
-        nonlocal visited
+    source_points = clipped_instances = 0
+
+    def read_entity(entity, transform, parent_layer='0', ancestry=(), mask=None):
+        nonlocal visited, source_points, clipped_instances
         visited += 1
         if visited > 20_000:
             raise ValueError('Flattened DXF exceeds 20000 entities')
@@ -112,12 +189,29 @@ def _dxf(text, default_scale):
                 raise ValueError('Recursive or excessively nested DXF block')
             if entity.mcount > 256:
                 raise ValueError('DXF block array exceeds 256 instances')
+            layout = entity.block()
+            if layout is None:
+                skipped['missing block definition'] += 1
+                return
+            clip = XClip(entity)
             copies = entity.multi_insert() if entity.mcount > 1 else (entity,)
-            def skipped_instance(child, reason):
-                skipped[child.dxftype()] += 1
             for instance in copies:
-                for child in instance.virtual_entities(skipped_entity_callback=skipped_instance):
-                    read_entity(child, layer, ancestry + (block,))
+                frame = instance.matrix44() @ transform
+                window = mask
+                if clip.is_clipping_enabled:
+                    try:
+                        local = _dxf_clip_polygon(clip, frame)
+                    except ValueError as exc:
+                        skipped[f'block with {exc}; export its visible outlines'] += 1
+                        continue
+                    clipped_instances += 1
+                    window = local if mask is None else mask.intersection(local)
+                    if window.is_empty or not window.area:
+                        continue
+                # Traverse the original block to retain nested spatial filters.
+                # virtual_entities() discards clipping during expansion.
+                for child in layout:
+                    read_entity(child, frame, layer, ancestry + (block,), window)
             return
         if kind not in {'LINE', 'LWPOLYLINE', 'POLYLINE', 'CIRCLE', 'ARC', 'ELLIPSE', 'SPLINE'}:
             skipped[kind] += 1
@@ -125,22 +219,26 @@ def _dxf(text, default_scale):
         if kind == 'POLYLINE' and (entity.is_poly_face_mesh or entity.is_polygon_mesh):
             skipped['MESH'] += 1
             return
-        path = make_path(entity)
+        path = make_path(entity).transform(transform)
         points = []
         z0 = None
-        for p in path.flattening(distance=TOLERANCE / scale, segments=4):
-            z = p.z * scale
+        for p in path.flattening(distance=TOLERANCE, segments=4):
+            z = p.z
             if z0 is None:
                 z0 = z
             if not math.isfinite(z) or abs(z - z0) > 1e-6:
                 skipped['non-XY contour'] += 1
                 return
-            xy = [p.x * scale, p.y * scale]
+            xy = [p.x, p.y]
+            if not all(math.isfinite(axis) for axis in xy):
+                raise ValueError('DXF contains a nonfinite XY coordinate')
             if not points or points[-1] != xy:
                 points.append(xy)
-            if len(points) + drawing.points > MAX_POINTS:
+            if len(points) + source_points > MAX_POINTS:
                 raise ValueError('Simplify DXF curves to at most 100000 vertices')
-        drawing.path(f'{layer} · {kind.title()}', layer, points)
+        source_points += len(points)
+        for run in _dxf_clipped_paths(points, mask):
+            drawing.path(f'{layer} · {kind.title()}', layer, run)
         if layer in drawing.layers and doc.layers.has_entry(layer):
             entry = doc.layers.get(layer)
             color = entry.rgb
@@ -150,10 +248,13 @@ def _dxf(text, default_scale):
                 drawing.layers[layer]['color'] = '#%02x%02x%02x' % tuple(color)
             drawing.layers[layer]['visible'] = not (entry.is_off() or entry.is_frozen())
     try:
+        unit_transform = Matrix44.scale(scale)
         for entity in doc.modelspace():
-            read_entity(entity)
+            read_entity(entity, unit_transform)
     except ezdxf.DXFError as exc:
         raise ValueError('Malformed or unsupported DXF entity') from exc
+    if clipped_instances:
+        drawing.warnings.append(f'Applied XCLIP to {clipped_instances} block instance(s). Only visible contour segments are retained.')
     if skipped:
         drawing.warnings.append('Skipped DXF entities: ' + ', '.join(f'{k} ({v})' for k, v in sorted(skipped.items())))
     drawing.warnings.append('Imported model-space outlines in XY. Elevation, widths, paper layouts and plot styles are omitted.')

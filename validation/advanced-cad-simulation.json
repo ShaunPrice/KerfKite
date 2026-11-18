@@ -93,7 +93,7 @@
       "name": "Python regression suite",
       "status": "passed",
       "evidence": {
-        "tests_run": 196,
+        "tests_run": 220,
         "skipped": []
       }
     },

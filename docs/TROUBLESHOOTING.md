@@ -146,6 +146,8 @@ Marlin uses different initialization, acknowledgements, homing and zero commands
 
 Treat motion and output state as uncertain until checked locally. Record the last accepted command and controller log. Resolve the underlying connection/firmware issue, reconnect when required and re-establish the necessary origin/setup before generating or starting another job. Do not automatically replay an ambiguous job from the beginning: part of it may already have executed.
 
+For a GRBL feed hold requested from Studio or the pendant, fresh `Hold:0` (or legacy `Hold`) reports confirm that movement has stopped. During **Decelerating**, wait for **Hold** before selecting Resume. On resume, Studio waits for the controller to report Run or Idle before transmitting further lines. During the stationary hold, Studio pauses the acknowledgement and completion timers until resume. The controller must keep reporting its status throughout the hold. A missing hold confirmation or lost status can still abort the job.
+
 For Marlin, a long blocking command can exceed the configured acknowledgement timeout. Its fault handler requests M112, but immediate processing depends on firmware emergency-parser behavior. Do not repeatedly increase timeouts to hide a failing connection.
 
 ### Keyboard/gamepad will not jog

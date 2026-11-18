@@ -89,7 +89,7 @@ class PhoneMonitor:
             if self.listener:
                 with self.jobs.lock:
                     self.revoked.set()
-                    self.jobs.disarm()
+                    self.jobs.invalidate_controls()
                 if self.certificate:
                     self.listener.stop()
                 else:

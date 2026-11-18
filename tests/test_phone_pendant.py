@@ -24,11 +24,12 @@ class PendantTests(unittest.TestCase):
         self.client = create_monitor_app(self.controller, 'x' * 43, self.jobs).test_client()
 
     def post(self, action, **values):
-        return self.client.post('/api/pendant', json=dict(action=action, request_id=str(uuid4()), **values), headers=self.headers)
+        return self.client.post('/api/pendant', json=dict(action=action, request_id=str(uuid4()), control_epoch=self.jobs.control_epoch, **values), headers=self.headers)
 
     def test_step_disarms_and_duplicate_is_rejected(self):
         self.jobs.arm(['M5'])
         request = dict(action='jog', axis='X', distance=.5, feed=100, request_id=str(uuid4()))
+        request['control_epoch'] = self.jobs.control_epoch
         self.assertEqual(self.client.post('/api/pendant', json=request).status_code, 401)
         self.assertEqual(self.client.post('/api/pendant', json=request, headers=self.headers).status_code, 200)
         self.assertFalse(self.jobs.status()['armed'])

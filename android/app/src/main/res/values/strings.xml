@@ -1,0 +1,4 @@
+<resources>
+    <string name="keep_screen_awake">Keep screen awake</string>
+    <string name="keep_screen_awake_help">Keep screen awake keeps the display on while you use the editor or pendant. Both screens share this setting. Leave Pocket to return to the usual screen timeout.</string>
+</resources>

@@ -19,6 +19,10 @@ On Windows run `gradlew.bat assembleDebug`. The first build fetches the pinned b
 
 **Quick guide** inside the app walks through these same controls. Clearing app data deletes its private project library. Use the system file picker to keep a portable copy.
 
+## Keep the display on
+
+Turn on **Keep screen awake** above the drawing or above **Jog** on the pendant to keep Pocket visible during a long job. The switch starts off. Both screens share the choice and remember it after a restart. Leaving Pocket or turning the switch off restores the phone’s usual screen timeout. You can still lock the phone with its power button.
+
 ## Open and organise projects
 
 Choose **My projects → New project** and give the drawing a name. Edits save to the active project in private storage. **My projects** also lets you switch projects, rename one, duplicate it or delete the local copy. Upgrading from Pocket 0.3.0 keeps the previous single draft as **Pocket design**. Export important projects before uninstalling or clearing application data.
@@ -38,6 +42,8 @@ Open **CNC pendant** in Pocket. Connect the phone and Studio receiver using Wi-F
 1. Start the Studio receiver with the phone monitor and the desired remote control permissions enabled. Paste the monitor’s complete pairing link into **Monitor pairing link**, then tap **Pair**. Include the token after the `#`. For HTTPS, the certificate must match the address and chain to a system CA or a CA installed on the phone. An HTTP pairing requires explicit confirmation and a private IPv4 address or loopback.
 2. Check the displayed receiver state, protocol and coordinate basis. **Work** identifies work coordinates and **Machine** identifies controller machine coordinates. Some controllers omit position. With a connected idle machine and manual controls enabled, select the increment and feed, then tap an X, Y or Z button for a single signed jog. **Home** moves the axes. **Zero XYZ** sets the current work origin. Both ask for confirmation.
 3. For a job, prepare and arm the preview in Studio. Confirm **Start** in Pocket to run the armed job. **Pause** and **Resume** follow controller status. **Stop** asks for confirmation before aborting. If an acknowledgement is lost, check the receiver’s current state before issuing another action.
+While Pocket waits for a Start or jog response, you can still tap **Stop** and confirm the abort. A pending Start needs a current preview confirmation from the workstation. After a timeout, check the receiver state before arming again. If Pocket displays **Update the Studio receiver for motion controls**, update the receiver for motion commands; paired Stop and status remain available.
+
 4. Backgrounding the pendant disables its controls. Returning to it requests fresh status. **Forget pairing** clears the token. Closing the pendant or restarting the app also requires a new pairing. Restarting the receiver revokes its previous link.
 
 ## Scope
@@ -53,3 +59,15 @@ python validation/android_projects_workflow.py --serial emulator-5554 --apk path
 ```
 
 The harness creates a synthetic project in the emulator’s Download folder and drives Android’s document picker. It checks a desktop reference round trip, a separate editable artwork copy, SVG open paths, named projects, invalid-file handling, and persistence across restart. Install the desktop validation dependencies for the shared emulator helpers. For phone controls, see the [pendant acceptance procedure](../docs/PHONE-CONNECTIONS.md).
+
+To verify the display preference, run this on a disposable emulator. The check exercises both screens, preserves a drawing through the signed upgrade, checks that the pairing window stays protected and measures an idle screen timeout. It restores the emulator display settings afterward.
+
+```sh
+python validation/android_screen_awake_workflow.py --serial emulator-5554 --apk path/to/Pocket-0.4.1.apk --previous path/to/Pocket-0.4.0.apk
+```
+
+For integrated priority Stop validation, boot a disposable emulator, install Playwright and Chromium, and run the following. The test opens the workstation, generates and arms a preview, then verifies that one phone can stop a pending Start or jog and recover fresh status.
+
+```sh
+python validation/android_priority_stop_workflow.py --serial emulator-5554 --apk path/to/Pocket.apk
+```

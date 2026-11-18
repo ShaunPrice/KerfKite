@@ -32,6 +32,9 @@ class Controller:
         self.total = self.acked = 0
         self.active = False
         self.paused = False
+        self.hold_requested_at = None
+        self.held_since = None
+        self.resume_requested_at = None
         self.draining = False
         self.ready = False
         self.last_status = 0
@@ -100,6 +103,7 @@ class Controller:
         self.queue.clear()
         self.pending = None
         self.active = self.paused = self.draining = False
+        self.hold_requested_at = self.held_since = self.resume_requested_at = None
 
     def _write(self, data):
         if self.serial:
@@ -116,10 +120,33 @@ class Controller:
         except Exception:
             pass
 
+    def _end_confirmed_hold(self, now):
+        if self.held_since is None:
+            return
+        # A final acknowledgement can start the completion interval during the hold.
+        if self.pending:
+            self.sent_at += now - max(self.held_since, self.sent_at)
+        if self.draining:
+            self.drain_after += now - max(self.held_since, self.drain_after)
+        self.held_since = None
+
+    def _check_timeouts(self, now):
+        if self.active and now - self.last_status > 3:
+            self._fault('Status timeout; job aborted')
+        elif self.held_since is None:
+            if self.pending and now - self.sent_at > self.timeout:
+                self._fault('Acknowledgement timeout; job aborted')
+            elif self.draining and now - self.drain_after > 120:
+                self._fault('Completion timeout; job aborted')
+            elif self.hold_requested_at is not None and now - self.hold_requested_at > self.timeout:
+                self._fault('Feed hold was not confirmed; job aborted')
+            elif self.resume_requested_at is not None and now - self.resume_requested_at > self.timeout:
+                self._fault('Resume was not confirmed; job aborted')
+
     def _idle(self):
         if not self.connected or not self.ready or self.error:
             raise RuntimeError('Controller is not ready; reconnect after resolving the fault')
-        if self.active or self.pending or self.queue or self.state != 'Idle':
+        if self.active or self.paused or self.pending or self.queue or self.state != 'Idle':
             raise RuntimeError('Controller must be idle')
         if not self.simulated and time.monotonic() - self.last_status > 2:
             raise RuntimeError('Controller status is stale')
@@ -148,18 +175,34 @@ class Controller:
                 self.error = None if self.simulated else 'Reset sent. Reconnect before further commands.'
                 return
             if action == 'hold':
-                self.paused = True
                 self._write(b'!')
                 if self.simulated:
-                    self.state = 'Hold'
+                    if self.active:
+                        self.paused, self.state = True, 'Hold'
+                    return
+                if not self.paused or self.resume_requested_at is not None:
+                    self.hold_requested_at = time.monotonic()
+                    self.resume_requested_at = None
+                    self.paused, self.state = True, 'Hold requested'
                 return
             if action == 'resume':
+                now = time.monotonic()
+                if not self.simulated:
+                    self._check_timeouts(now)
                 if self.error or not self.ready or not self.paused:
                     raise RuntimeError('No resumable held job')
+                if not self.simulated and (self.held_since is None or self.state != 'Hold'
+                                            or now - self.last_status > 2):
+                    raise RuntimeError('Wait for a fresh, fully stopped feed hold before resuming')
                 self._write(b'~')
-                self.paused = False
+                self._end_confirmed_hold(now)
+                self.hold_requested_at = None
                 if self.simulated:
+                    self.paused = False
                     self.state = 'Run' if self.active else 'Idle'
+                else:
+                    # Keep subsequent host lines queued until firmware reports Run or Idle.
+                    self.resume_requested_at, self.state = now, 'Resuming'
                 return
             self._idle()
             if action == 'jog':
@@ -180,6 +223,32 @@ class Controller:
                 line = commands[action]
             self.start([line])
 
+    def _motion_status(self, status, now):
+        motion = status.split(':')[0]
+        if self.resume_requested_at is not None:
+            if motion in ('Run', 'Idle'):
+                self.resume_requested_at = None
+                self.paused = False
+            elif motion == 'Hold':
+                return 'Resuming'
+        if not self.active and motion == 'Idle':
+            self.paused = False
+            self.hold_requested_at = self.held_since = None
+        if self.active and motion == 'Hold' and not self.paused:
+            # A controller-panel feed hold must also stop host transmission.
+            self.paused = True
+            self.hold_requested_at = now
+        if self.paused:
+            if status in ('Hold', 'Hold:0'):
+                if self.held_since is None:
+                    self.held_since = now
+            elif self.held_since is not None:
+                self._end_confirmed_hold(now)
+                self.hold_requested_at = now
+            if self.hold_requested_at is not None and motion in ('Idle', 'Run') and not self.draining:
+                return 'Hold requested'
+        return 'Decelerating' if status == 'Hold:1' else motion
+
     def _receive(self, line):
         now = time.monotonic()
         self.receive_sequence += 1
@@ -188,8 +257,6 @@ class Controller:
             parts = line[1:-1].split('|')
             self.last_status = now
             reported = parts[0].split(':')[0]
-            if not self.error:
-                self.state = reported
             for part in parts[1:]:
                 if part.startswith(('MPos:', 'WPos:')):
                     try:
@@ -201,8 +268,11 @@ class Controller:
             if reported == 'Alarm':
                 self._fault('Controller alarm; reconnect after resolving it')
                 return
+            if not self.error:
+                self.state = self._motion_status(parts[0], now)
             if self.draining and reported == 'Idle' and self.receive_sequence > self.drain_sequence and not self.error:
-                self.active = self.draining = False
+                self.active = self.draining = self.paused = False
+                self.hold_requested_at = self.held_since = self.resume_requested_at = None
                 self.progress = 100
             if '30' in self.settings and '32' in self.settings and not self.pending and not self.init_remaining and not self.error:
                 self.ready = True
@@ -271,17 +341,14 @@ class Controller:
                         initialized = True
                         self.initialized = True
                     raw = self.serial.readline()
+                    now = time.monotonic()
+                    # An overdue reply cannot revive a lost link or confirm a late hold.
+                    self._check_timeouts(now)
                     if raw:
                         self._receive(raw.decode('ascii', errors='replace').strip())
                     if now - polled > .25:
                         self._write(b'?')
                         polled = now
-                    if self.pending and now - self.sent_at > self.timeout and not self.paused:
-                        self._fault('Acknowledgement timeout; job aborted')
-                    if self.active and self.last_status and now - self.last_status > 3:
-                        self._fault('Status timeout; job aborted')
-                    if self.draining and now - self.drain_after > 120:
-                        self._fault('Completion timeout; job aborted')
                     if self.active and not self.paused and not self.pending and self.queue and not self.error:
                         self.pending = self.queue.popleft()
                         self._write((self.pending + '\n').encode('ascii'))

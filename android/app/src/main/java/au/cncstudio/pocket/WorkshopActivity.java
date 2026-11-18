@@ -24,6 +24,7 @@ public final class WorkshopActivity extends Activity {
     private Design design;
     private LinearLayout page, items;
     private BedView preview;
+    private ScreenAwakeSwitch screenAwake;
     private TextView feedback,projectTitle,dimensions;
     private Spinner head;
     private Button add;
@@ -72,6 +73,7 @@ public final class WorkshopActivity extends Activity {
         workspace.addView(button("My projects",this::manage),weight());
         workspace.addView(button("Open file",this::browse),weight());
         page.addView(button("CNC pendant",()->startActivity(new Intent(this,PendantActivity.class))));
+        screenAwake=new ScreenAwakeSwitch(this);page.addView(screenAwake);
         preview=new BedView(this,design,this::select);
         LinearLayout.LayoutParams previewSize=new LinearLayout.LayoutParams(-1,dp(205));
         previewSize.setMargins(0,dp(10),0,dp(10));page.addView(preview,previewSize);
@@ -89,10 +91,13 @@ public final class WorkshopActivity extends Activity {
         formats.addView(project,weight());formats.addView(svg,weight());
         feedback=label(warning,14); feedback.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);page.addView(feedback);
         page.addView(button("Quick guide",()->new AlertDialog.Builder(this).setTitle("Design on your phone")
-                .setMessage("Use My projects to create, open, rename or duplicate local drawings. Open file imports a separate library entry.\n\n1. Tap Add shape. Choose a shape and enter its lower-left position and size in millimetres.\n\n2. Tap an object or its row to select it. Edit changes its dimensions.\n\n3. Choose a machine head, then Studio project. Open the saved file in CNC Studio to set cutting parameters and simulate it. SVG saves the artwork in millimetres.")
+                .setMessage("Use My projects to create, open, rename or duplicate local drawings. Open file imports a separate library entry.\n\n1. Tap Add shape. Choose a shape and enter its lower-left position and size in millimetres.\n\n2. Tap an object or its row to select it. Edit changes its dimensions.\n\n3. Choose a machine head, then Studio project. Open the saved file in CNC Studio to set cutting parameters and simulate it. SVG saves the artwork in millimetres.\n\n"+getString(R.string.keep_screen_awake_help))
                 .setPositiveButton("Close",null).show()));
         refresh();
     }
+    @Override protected void onResume(){super.onResume();screenAwake.resume();}
+    @Override protected void onPause(){screenAwake.pause();super.onPause();}
+
     private LinearLayout column(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);return l;}
     private LinearLayout row(){return new LinearLayout(this);}
     private LinearLayout.LayoutParams weight(){return new LinearLayout.LayoutParams(0,-2,1);}

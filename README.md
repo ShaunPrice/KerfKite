@@ -12,19 +12,19 @@ Choose the installer for the computer where you want to design. First launch nee
 
 | Device | Download | How to open it |
 | --- | --- | --- |
-| Windows 10 or 11, 64-bit Intel/AMD | [Windows setup wizard](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-Windows-x64-Setup.exe) | Run Setup, then open **KerfKite Studio** from Start. |
-| Mac | [Apple silicon](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-macOS-Apple-Silicon.dmg) · [Intel](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-macOS-Intel.dmg) | Open the disk image, drag **KerfKite Studio** to **Applications**, then open it there. |
-| Raspberry Pi OS, 64-bit, or Debian/Ubuntu ARM64 | [ARM64 installer](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-Linux-arm64.deb) | Open the package in the desktop software installer, then launch **KerfKite Studio** from the applications menu. |
-| Debian/Ubuntu, 64-bit Intel/AMD | [AMD64 installer](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-Linux-amd64.deb) | Open the package in the desktop software installer. |
-| Android, including Samsung Galaxy S23 | [KerfKite Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-Pocket-Android.apk) | Open the download on the phone and tap **Install**. Choose **CNC pendant** to pair with Studio. |
+| Windows 10 or 11, 64-bit Intel/AMD | [Windows setup wizard](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.1/KerfKite-Windows-x64-Setup.exe) | Run Setup, then open **KerfKite Studio** from Start. |
+| Mac | [Apple silicon](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.1/KerfKite-macOS-Apple-Silicon.dmg) · [Intel](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.1/KerfKite-macOS-Intel.dmg) | Open the disk image, drag **KerfKite Studio** to **Applications**, then open it there. |
+| Raspberry Pi OS, 64-bit, or Debian/Ubuntu ARM64 | [ARM64 installer](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.1/KerfKite-Linux-arm64.deb) | Open the package in the desktop software installer, then launch **KerfKite Studio** from the applications menu. |
+| Debian/Ubuntu, 64-bit Intel/AMD | [AMD64 installer](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.1/KerfKite-Linux-amd64.deb) | Open the package in the desktop software installer. |
+| Android, including Samsung Galaxy S23 | [KerfKite Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.1/KerfKite-Pocket-Android.apk) | Open the download on the phone and tap **Install**. Choose **CNC pendant** to pair with Studio. |
 
-The [installation guide](docs/INSTALL.md) covers first launch, security prompts, updates, removal and optional STEP exchange and controller access, and the source install for HTTPS and MCP services. The [release downloads](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.4.0) also include portable Linux archives and SHA-256 checksums.
+The [installation guide](docs/INSTALL.md) covers first launch, security prompts, updates, removal and optional STEP exchange and controller access, and the source install for HTTPS and MCP services. The [release downloads](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.4.1) also include portable Linux archives and SHA-256 checksums.
 
 For Orange Pi, Radxa, Jetson, BeagleBoard, ODROID, LattePanda and RISC-V systems, the [single-board computer guide](docs/SBC.md) maps each board to its installer. It also includes a browser-only edition for drawing and file export on smaller boards.
 
 ## Applications and features
 
-These screenshots show the released Studio 0.4.0 desktop application and the signed Pocket 0.4.0 Android app. Open an image for the full-size view.
+These screenshots show the released Studio 0.4.0 desktop application and the signed Pocket 0.4.1 Android app. Open an image for the full-size view.
 
 | Parametric solid CAD | Router stock simulation |
 | --- | --- |
@@ -41,7 +41,7 @@ These screenshots show the released Studio 0.4.0 desktop application and the sig
 | Native project editor | Paired CNC pendant |
 | --- | --- |
 | [![Pocket editor showing a four-object alpine trail badge, the selected ridgeline, and Studio project and SVG export controls](studio/static/screen-pocket-project.png)](studio/static/screen-pocket-project.png) | [![Pocket pendant paired to an idle GRBL simulator with a 0.1 mm jog increment, axis controls and an armed job](studio/static/screen-pocket-pendant.png)](studio/static/screen-pocket-pendant.png) |
-| Edit a drawing offline, reopen a named project or export the geometry as SVG. [Pocket guide](docs/ANDROID.md) | Jog or operate a prepared job through the paired Studio server. This capture shows an Android emulator connected to the machine simulator. [Pairing guide](docs/PHONE-CONNECTIONS.md) |
+| Edit a drawing offline, reopen a named project or export the geometry as SVG. [Pocket guide](docs/ANDROID.md) | Jog or operate a prepared job through the paired Studio server. Enable **Keep screen awake** to keep the pendant visible while you work. This capture shows an Android emulator connected to the machine simulator. [Pairing guide](docs/PHONE-CONNECTIONS.md) |
 
 ## Inside the workshop
 
@@ -70,11 +70,11 @@ Browse **Templates → Template library** to insert one of **1,768 editable desi
 
 [![Twelve examples from the stock library, including native flowers, a coastal print, a twin-lens camera and a ginkgo earring](studio/static/stock-artwork-preview.png)](docs/TEMPLATE-CATALOGUE.md)
 
-For an earlier Studio installation or another vector editor, [download the SVG library](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-Stock-Artwork.zip). Extract it and open **index.html** to search the gallery or browse the SVG files by category. The [template catalogue](docs/TEMPLATE-CATALOGUE.md) lists every category and its design count.
+For an earlier Studio installation or another vector editor, [download the SVG library](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.1/KerfKite-Stock-Artwork.zip). Extract it and open **index.html** to search the gallery or browse the SVG files by category. The [template catalogue](docs/TEMPLATE-CATALOGUE.md) lists every category and its design count.
 
 ## Materials guide
 
-Open **CAM → Materials guide** to choose stock for a drill bit, flat end mill, ball end mill, V-bit, blue diode laser or drag knife. Compare two materials for the same operation and keep your measured sample results in a portable notebook. To use the guide on its own, [download the single-file materials guide](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-Materials-Guide.html) and open it in your browser. [Guide and workshop examples](docs/MATERIALS.md)
+Open **CAM → Materials guide** to choose stock for a drill bit, flat end mill, ball end mill, V-bit, blue diode laser or drag knife. Compare two materials for the same operation and keep your measured sample results in a portable notebook. To use the guide on its own, [download the single-file materials guide](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.1/KerfKite-Materials-Guide.html) and open it in your browser. [Guide and workshop examples](docs/MATERIALS.md)
 
 ## CNC simulations
 

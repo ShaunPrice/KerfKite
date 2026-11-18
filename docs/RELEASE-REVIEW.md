@@ -1,5 +1,11 @@
 # KerfKite Studio | CAD and workshop release review
 
+## 0.4.1 pendant and workflow update · 19 November 2026
+
+Pocket adds an optional **Keep screen awake** switch to its editor and pendant. A signed upgrade retained the previous version’s project. With the emulator set to a 10-second screen timeout, Pocket kept the foreground editor visible until the option was switched off. Leaving Pocket restored Android’s normal display behaviour. A physical Galaxy S23 and CNC were unavailable.
+
+The GRBL simulator now exercises long confirmed feed holds and the remaining timeout budget on resume. DXF import handles planar block clipping before exposing artwork to CAM. In the regression drawing, a 100 mm source line clipped from X=10 to X=35 imports as a 25 mm path and survives project reopening at that size. See the [Android guide](ANDROID.md), [troubleshooting guide](TROUBLESHOOTING.md) and [program import coverage](PROGRAM-IMPORT.md).
+
 ## 0.4.0 workshop update · 19 November 2026
 
 The new router operations generate explicit peck, ramp and helix moves. The laser can leave material bridges and generate a perforation pattern. A two-section parametric loft rebuilds from named dimensions and can feed linked machining geometry, STL and exact STEP exchange. The Android editor now keeps named drawings and can retain a desktop project for lossless re-export.

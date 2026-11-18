@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kerfkite-studio"
-version = "0.4.0"
+version = "0.4.1"
 description = "Cross-platform CNC, laser and knife design workspace"
 requires-python = ">=3.10"
 license = "MIT AND OFL-1.1 AND Zlib"

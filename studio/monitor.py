@@ -60,11 +60,13 @@ def create_monitor_app(controller, token, phone_jobs=None, revoked=None):
         with phone_jobs.lock:
             begin_action(data, required=False)
             action = data.get('action')
+            if action != 'stop':
+                phone_jobs.require_current_controls(data.get('control_epoch'))
             if action == 'start':
                 phone_jobs.start()
             elif action in ('pause', 'resume', 'stop'):
                 if action == 'stop':
-                    phone_jobs.disarm()
+                    phone_jobs.invalidate_controls()
                 controller.command({'pause': 'hold', 'resume': 'resume', 'stop': 'reset'}[action])
             else:
                 raise ValueError('Only start, pause, resume and stop are supported')
@@ -77,6 +79,7 @@ def create_monitor_app(controller, token, phone_jobs=None, revoked=None):
         data = request.get_json()
         with phone_jobs.lock:
             begin_action(data, required=True)
+            phone_jobs.require_current_controls(data.get('control_epoch'))
             state = controller.status()
             if not state['connected'] or state['active'] or state['state'] != 'Idle' or state.get('error'):
                 raise ValueError('Connect an idle, ready controller before using the pendant.')
@@ -93,7 +96,7 @@ def create_monitor_app(controller, token, phone_jobs=None, revoked=None):
                 args = dict(axis=axis, distance=distance, feed=feed)
             elif action not in ('home', 'zero'):
                 raise ValueError('Only a single incremental jog, home or work zero is supported.')
-            if set(data) != {'action','request_id',*args}:
+            if set(data) != {'action','request_id','control_epoch',*args}:
                 raise ValueError('Unexpected pendant action fields.')
             phone_jobs.disarm()
             controller.command(action, **args)
@@ -116,10 +119,16 @@ def create_monitor_app(controller, token, phone_jobs=None, revoked=None):
         supplied = request.headers.get('Authorization', '')
         if not secrets.compare_digest(supplied.encode('utf-8'), ('Bearer ' + token).encode('utf-8')):
             return jsonify(error='Pair this phone using the monitor link from the Pi'), 401
-        state = controller.status()
+        if phone_jobs is not None:
+            with phone_jobs.lock:
+                state = controller.status()
+                phone = dict(**phone_jobs.status(), control_epoch=phone_jobs.control_epoch)
+        else:
+            state = controller.status()
+            phone = {'armed': False}
         # Explicit allowlist: no saved machine configuration or serial-port inventory.
         result = {key: state.get(key) for key in ('connected', 'simulated', 'state', 'active', 'progress', 'position', 'error', 'log', 'protocol')}
-        result.update(pendant=phone_jobs is not None and (bool(state.get('simulated')) or phone_jobs.allow_physical), controls=phone_jobs is not None, armed=phone_jobs.status()['armed'] if phone_jobs else False)
+        result.update(pendant=phone_jobs is not None and (bool(state.get('simulated')) or phone_jobs.allow_physical), controls=phone_jobs is not None, **phone)
         return jsonify(result)
 
     return app

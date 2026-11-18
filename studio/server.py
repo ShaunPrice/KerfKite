@@ -51,7 +51,7 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
 
     @app.get('/api/session')
     def session():
-        return jsonify(token=token, depth_paths=True, advanced_cam=True, holding_tabs=True, laser_patterns=True, router_entries=True, hardware_enabled=allow_hardware)
+        return jsonify(token=token, depth_paths=True, advanced_cam=True, holding_tabs=True, laser_patterns=True, router_entries=True, phone_arm_challenge=True, hardware_enabled=allow_hardware)
 
     @app.get('/api/status')
     def status():
@@ -107,31 +107,49 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
     @app.post('/api/arm')
     def arm_phone():
         data = request.get_json()
-        if data.get('confirmed') is not True:
+        if not isinstance(data,dict) or data.get('confirmed') is not True:
             raise ValueError('Confirm setup at the Pi before arming')
+        if data.get('phone_arm_challenge') is not True:
+            raise ValueError('Reload the updated workstation before arming a phone Start.')
         job=generate(data['project'])
         validate_machine(data['project'],job)
-        jobs.arm(job['lines'], validator=lambda:validate_machine(data['project'],job))
+        arm_id = jobs.arm(job['lines'], validator=lambda:validate_machine(data['project'],job),
+                          require_workstation=True)
+        return jsonify(ok=True, arm_id=arm_id)
+
+    def owner_arm_id(data):
+        arm_id = data.get('arm_id') if isinstance(data,dict) else None
+        if not isinstance(arm_id,str) or not arm_id:
+            raise ValueError('Use the workstation tab that armed the preview.')
+        return arm_id
+
+    @app.post('/api/arm/check')
+    def check_phone_arm():
+        return jsonify(jobs.check_preview(owner_arm_id(request.get_json())))
+
+    @app.post('/api/arm/confirm')
+    def confirm_phone_arm():
+        data = request.get_json()
+        jobs.confirm_preview(owner_arm_id(data), data.get('challenge'))
         return jsonify(ok=True)
 
     @app.post('/api/disarm')
     def disarm_phone():
-        jobs.disarm()
-        return jsonify(ok=True)
+        return jsonify(ok=True, removed=jobs.disarm(owner_arm_id(request.get_json())))
 
     @app.post('/api/connect')
     def connect():
         port = request.get_json()['port']
         if port != 'simulator' and not allow_hardware:
             raise ValueError('Physical ports are disabled. Start with --enable-hardware only after completing machine setup and commissioning; otherwise use Simulator.')
-        jobs.disarm()
+        jobs.invalidate_controls()
         if hasattr(ctl,'select_protocol'):ctl.select_protocol(request.get_json().get('protocol','grbl'))
         ctl.connect(port)
         return jsonify(ok=True)
 
     @app.post('/api/disconnect')
     def disconnect():
-        jobs.disarm()
+        jobs.invalidate_controls()
         ctl.disconnect()
         return jsonify(ok=True)
 
@@ -166,7 +184,9 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
     @app.post('/api/command')
     def command():
         data = request.get_json()
-        if data.get('action') not in ('hold', 'resume'):
+        if data.get('action') == 'reset':
+            jobs.invalidate_controls()
+        elif data.get('action') not in ('hold', 'resume'):
             jobs.disarm()
         ctl.command(**data)
         return jsonify(ok=True)

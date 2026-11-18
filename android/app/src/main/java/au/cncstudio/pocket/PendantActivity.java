@@ -30,18 +30,22 @@ public final class PendantActivity extends Activity {
     private static final long FRESH_MS=3500;
     private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService network=Executors.newSingleThreadExecutor();
+    // A Stop travels independently of an ordinary motion POST still waiting for a reply.
+    private final ExecutorService priority=Executors.newSingleThreadExecutor();
     private final Map<Button,String> commands=new LinkedHashMap<>();
     private volatile int generation;
     private volatile boolean foreground;
     private volatile long updated;
     private PendantClient client;
     private JSONObject snapshot;
-    private boolean polling, sending, staleFeedback;
+    private boolean polling, staleFeedback, startUnresolved;
+    private String pendingAction;
     private final Runnable pollTick=this::poll;
     private LinearLayout page,pairFields;
     private EditText link;
     private TextView machine,position,armed,feedback;
     private Button disconnect;
+    private ScreenAwakeSwitch screenAwake;
     private Spinner increment,feed;
     private AlertDialog confirm;
 
@@ -72,6 +76,7 @@ public final class PendantActivity extends Activity {
         armed=text("",15);page.addView(armed);
         feedback=text("",15);feedback.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         page.addView(feedback);
+        screenAwake=new ScreenAwakeSwitch(this);page.addView(screenAwake);
         title("Jog",19);
         LinearLayout options=row(),steps=column(),rates=column();
         page.addView(options);options.addView(steps,half());options.addView(rates,half());
@@ -130,15 +135,25 @@ public final class PendantActivity extends Activity {
     }
     private void forget(String message){
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        ++generation;client=null;updated=0;snapshot=null;sending=false;polling=false;
+        ++generation;client=null;updated=0;snapshot=null;pendingAction=null;startUnresolved=false;polling=false;
         main.removeCallbacksAndMessages(null);link.setText("");pairFields.setVisibility(View.VISIBLE);
         machine.setContentDescription("Machine status: Unpaired");machine.setText("Unpaired");
         position.setContentDescription("Controller position unavailable");position.setText("Position unavailable");armed.setText("");feedback.setText(message);updateControls();
     }
 
     private boolean fresh(){return foreground && updated>0 && SystemClock.elapsedRealtime()-updated<FRESH_MS;}
+    private String controlEpoch(){
+        Object epoch=snapshot==null?null:snapshot.opt("control_epoch");
+        return epoch instanceof String?(String)epoch:"";
+    }
+    private boolean stopMayPreempt(){
+        return "start".equals(pendingAction) || "jog".equals(pendingAction);
+    }
     private boolean permitted(String action){
-        if(!fresh() || snapshot==null || sending || !snapshot.optBoolean("connected"))return false;
+        if(!foreground || client==null)return false;
+        if("stop".equals(action) && (stopMayPreempt() || (pendingAction==null && startUnresolved)))return true;
+        if(!fresh() || snapshot==null || pendingAction!=null || !snapshot.optBoolean("connected"))return false;
+        if(!"stop".equals(action) && controlEpoch().isEmpty())return false;
         String state=snapshot.optString("state");
         boolean active=snapshot.optBoolean("active"), idle="Idle".equalsIgnoreCase(state);
         boolean held=state.equalsIgnoreCase("Hold")||state.startsWith("Hold:");
@@ -146,7 +161,7 @@ public final class PendantActivity extends Activity {
             return !active && idle && snapshot.optBoolean("pendant");
         if(!snapshot.optBoolean("controls"))return false;
         switch(action){
-            case "start":return idle && !active && snapshot.optBoolean("armed");
+            case "start":return !startUnresolved && idle && !active && snapshot.optBoolean("armed");
             case "pause":return active && !held;
             case "resume":return active && held;
             case "stop":return active || snapshot.optBoolean("armed") || held || "Jog".equals(state) || "Home".equals(state) || "Run".equals(state);
@@ -180,14 +195,18 @@ public final class PendantActivity extends Activity {
         String control=state.optBoolean("pendant")?"Manual controls enabled":"Manual controls unavailable";
         String job=state.optBoolean("armed")?"Job armed":state.optBoolean("active")?
                 "Job "+state.optInt("progress")+"%":"No job armed";
+        if(!state.optBoolean("armed") || state.optBoolean("active"))startUnresolved=false;
+        if(controlEpoch().isEmpty() && state.optBoolean("controls"))
+            control="Update the Studio receiver for motion controls";
         armed.setText(control+" · "+job);
         if(!state.isNull("error") && !state.optString("error").isEmpty())feedback.setText(state.optString("error"));
     }
-    private void poll(){
-        if(!foreground || client==null || polling || sending)return;
+    private void poll(){poll(network);}
+    private void poll(ExecutorService worker){
+        if(!foreground || client==null || polling || pendingAction!=null)return;
         polling=true;int ticket=generation;
         PendantClient session=client;
-        network.execute(()->{
+        worker.execute(()->{
             try {
                 JSONObject state=session.status();
                 main.post(()->{
@@ -220,8 +239,16 @@ public final class PendantActivity extends Activity {
     }
     private void ask(String action,String label,String prompt){
         if(!permitted(action))return;
+        final int decision=generation;
+        final String chosenEpoch=controlEpoch();
+        final boolean pendingStop="stop".equals(action) && (stopMayPreempt() || startUnresolved);
         confirm=new AlertDialog.Builder(this).setTitle(label).setMessage(prompt)
-                .setNegativeButton("Cancel",null).setPositiveButton(label,(dialog,which)->send(action,null,0,0)).show();
+                .setNegativeButton("Cancel",null).setPositiveButton(label,(dialog,which)->{
+                    if(decision!=generation || (!"stop".equals(action) && !chosenEpoch.equals(controlEpoch()))){
+                        feedback.setText("Receiver state changed. Review it before confirming again.");return;
+                    }
+                    send(action,null,0,0,pendingStop);
+                }).show();
     }
     private static String readable(Exception e){
         if(e instanceof org.json.JSONException)return "The monitor returned an unreadable response.";
@@ -231,29 +258,50 @@ public final class PendantActivity extends Activity {
         String message=e.getMessage();return message==null?"Receiver request failed.":message;
     }
     private void send(String action,String axis,double distance,int rate){
-        if(!permitted(action)){feedback.setText("Wait for a fresh, permitted receiver state.");return;}
-        sending=true;updateControls();int ticket=generation;PendantClient session=client;
+        send(action,axis,distance,rate,false);
+    }
+    private void send(String action,String axis,double distance,int rate,boolean confirmedPendingStop){
+        boolean stop="stop".equals(action);
+        if(!foreground || client==null || (!(confirmedPendingStop && stop) && !permitted(action))){
+            feedback.setText("Wait for a fresh, permitted receiver state.");return;
+        }
+        final String epoch=controlEpoch();
         final long statusTime=updated;
-        network.execute(()->{
-            if(ticket!=generation||!foreground)return;
+        final int ticket=++generation;
+        final PendantClient session=client;
+        final ExecutorService worker=stop?priority:network;
+        pendingAction=action;polling=false;main.removeCallbacks(pollTick);
+        if("start".equals(action)){
+            startUnresolved=true;
+            feedback.setText("Start requested. Stop is available while the receiver confirms the job.");
+        }
+        updateControls();
+        worker.execute(()->{
+            if(ticket!=generation || !foreground)return;
             String message;
-            if(SystemClock.elapsedRealtime()-statusTime>=FRESH_MS)message="Status expired before sending. Check the current machine state.";
+            if(!stop && SystemClock.elapsedRealtime()-statusTime>=FRESH_MS)
+                message="Status expired before sending. Check the current machine state.";
             else try{
-                session.command(action,axis,distance,rate);
+                session.command(action,axis,distance,rate,epoch);
                 message="Receiver acknowledged "+action+".";
-            }catch(Exception e){message=readable(e)+" Check the machine state before trying another action.";}
+            }catch(Exception e){
+                message=readable(e)+" Check the machine state before trying another action.";
+            }
             final String result=message;
             main.post(()->{
-                if(ticket!=generation||!foreground)return;
-                sending=false;updated=0;snapshot=null;feedback.setText(result);updateControls();poll();
+                // A superseding Stop, new pairing, or background transition owns subsequent UI.
+                if(ticket!=generation || !foreground)return;
+                pendingAction=null;updated=0;snapshot=null;feedback.setText(result);updateControls();
+                poll(worker); // A delayed ordinary POST cannot obstruct the status check after Stop.
             });
         });
     }
-    @Override protected void onResume(){super.onResume();foreground=true;updateControls();poll();}
+    @Override protected void onResume(){super.onResume();screenAwake.resume();foreground=true;updateControls();poll();}
     @Override protected void onPause(){
-        foreground=false;++generation;updated=0;snapshot=null;polling=false;sending=false;main.removeCallbacksAndMessages(null);
+        screenAwake.pause();
+        foreground=false;++generation;updated=0;snapshot=null;polling=false;pendingAction=null;main.removeCallbacksAndMessages(null);
         if(confirm!=null && confirm.isShowing())confirm.dismiss();
         updateControls();super.onPause();
     }
-    @Override protected void onDestroy(){client=null;network.shutdownNow();super.onDestroy();}
+    @Override protected void onDestroy(){client=null;network.shutdownNow();priority.shutdownNow();super.onDestroy();}
 }

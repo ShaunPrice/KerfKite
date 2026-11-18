@@ -4,6 +4,7 @@ import unittest
 
 import ezdxf
 from ezdxf import units
+from ezdxf.xclip import XClip
 
 from studio.cam import generate
 from studio.program_import import import_program
@@ -41,6 +42,60 @@ class ProgramImportTests(unittest.TestCase):
         self.assertGreater(len(path), 8)
         self.assertIn('non-XY contour', ' '.join(src['warnings']))
         self.assertIn('TEXT', ' '.join(src['warnings']))
+
+    def test_dxf_xclip_retains_order_and_separate_visible_contours(self):
+        doc = ezdxf.new(units=units.MM)
+        block = doc.blocks.new('Groove')
+        # Draw from right to left across both arms of a U-shaped clip.
+        block.add_line((100, 4), (0, 4))
+        ref = doc.modelspace().add_blockref('Groove', (0, 0))
+        clip = XClip(ref)
+        clip.set_block_clipping_path([(10, 0), (35, 0), (35, 8), (30, 8),
+                                      (30, 2), (15, 2), (15, 8), (10, 8)])
+        src = read('window.dxf', drawing(doc))
+        self.assertEqual([obj['paths'][0] for obj in src['objects']],
+                         [[[35, 4], [30, 4]], [[15, 4], [10, 4]]])
+        self.assertIn('Applied XCLIP to 1', ' '.join(src['warnings']))
+        clip.disable_clipping()
+        result = read('complete.dxf', drawing(doc))
+        self.assertEqual(result['objects'][0]['paths'][0], [[100, 4], [0, 4]])
+
+    def test_dxf_nested_rotated_scaled_clip_array_and_document_units(self):
+        doc = ezdxf.new(units=units.IN)
+        child = doc.blocks.new('Line')
+        child.add_line((0, .5), (4, .5))
+        carrier = doc.blocks.new('Carrier')
+        inner = carrier.add_blockref('Line', (2, 0), dxfattribs={
+            'rotation': 90, 'row_count': 2, 'row_spacing': 1})
+        XClip(inner).set_block_clipping_path([(.5, 0), (3, 1)])
+        # In carrier space the two lines are at x=1.5 and x=.5. Both end at y=2.
+        outer = doc.modelspace().add_blockref('Carrier', (5, 9), dxfattribs={'xscale': 2, 'yscale': 3})
+        XClip(outer).set_block_clipping_path([(0, 0), (3, 2)])
+        src = read('array.dxf', drawing(doc))
+        paths = [obj['paths'][0] for obj in src['objects']]
+        self.assertEqual(len(paths), 2)
+        for path, x in zip(paths, (8, 6)):
+            self.assertEqual(len(path), 2)
+            for point, y in zip(path, (10.5, 15)):
+                self.assertAlmostEqual(point[0], x * 25.4)
+                self.assertAlmostEqual(point[1], y * 25.4)
+
+    def test_dxf_unsupported_depth_clip_skips_only_affected_nested_reference(self):
+        doc = ezdxf.new(units=units.MM)
+        child = doc.blocks.new('Clipped')
+        child.add_line((0, 4), (100, 4))
+        carrier = doc.blocks.new('Carrier')
+        ref = carrier.add_blockref('Clipped', (15, 2))
+        clip = XClip(ref)
+        clip.set_block_clipping_path([(10, 0), (35, 12)])
+        clip.get_spatial_filter().dxf.has_front_clipping_plane = 1
+        doc.modelspace().add_blockref('Carrier', (3, 1), dxfattribs={'rotation': 19})
+        with self.assertRaisesRegex(ValueError, 'XCLIP; export its visible outlines'):
+            read('clip-only.dxf', drawing(doc))
+        doc.modelspace().add_line((3, 1), (7, 1))
+        src = read('clip-and-sibling.dxf', drawing(doc))
+        self.assertEqual([o['paths'][0] for o in src['objects']], [[[3, 1], [7, 1]]])
+        self.assertIn('XCLIP; export its visible outlines', ' '.join(src['warnings']))
 
     def test_unitless_dxf_and_recursive_block(self):
         doc = ezdxf.new(units=0)

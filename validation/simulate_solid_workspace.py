@@ -185,6 +185,12 @@ def main():
                         workshop.on("dialog",lambda dialog:dialog.accept())
                         workshop.goto(page.url)
                         lesson(workshop)
+                from phone_arm_workflow import run as check_phone_arm
+                with browser.new_context(viewport={"width":1440,"height":980}) as context:
+                    workstation = context.new_page()
+                    workstation.on("dialog",lambda dialog:dialog.accept())
+                    workstation.goto(page.url)
+                    check_phone_arm(workstation, controller, jobs)
             finally:
                 browser.close()
     finally:

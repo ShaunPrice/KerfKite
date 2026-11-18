@@ -57,8 +57,12 @@ final class PendantClient {
 
     JSONObject status() throws IOException, JSONException { return request("/api/status",null); }
 
-    void command(String action, String axis, double distance, int feed) throws IOException, JSONException {
+    void command(String action, String axis, double distance, int feed, String controlEpoch) throws IOException, JSONException {
         JSONObject data=new JSONObject().put("action",action).put("request_id",UUID.randomUUID().toString());
+        if (!"stop".equals(action)) {
+            if (controlEpoch.isEmpty()) throw new IllegalArgumentException("Update the Studio receiver to use this control.");
+            data.put("control_epoch",controlEpoch);
+        }
         String path;
         switch (action) {
             case "jog":
