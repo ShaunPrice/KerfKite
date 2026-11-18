@@ -51,12 +51,16 @@ def wait_for_studio_exit():
     deadline = time.monotonic() + 12
     while True:
         try:
-            with socket.create_connection((endpoint.hostname, endpoint.port), timeout=1):
+            # On Windows, loopback refusal can take several seconds while
+            # Winsock retries the SYN. Require the explicit refusal to pass.
+            with socket.create_connection((endpoint.hostname, endpoint.port), timeout=5):
                 pass
         except ConnectionRefusedError:
             return
+        except TimeoutError:
+            pass
         if time.monotonic() >= deadline:
-            raise RuntimeError("Studio still accepts connections after its launcher exited")
+            raise RuntimeError("Studio listener shutdown could not be confirmed after its launcher exited")
         time.sleep(.2)
 
 
