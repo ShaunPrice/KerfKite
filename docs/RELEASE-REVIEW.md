@@ -19,7 +19,7 @@ KerfKite Studio can fit parts in an assembly, edit freeform surfaces, exchange g
 
 ## Test evidence
 
-The macOS ARM64 release harness passed all eleven scenarios, including **151 Python tests and 114 JavaScript tests**, with the optional STEP runtime installed. **21 Chromium workflow groups passed** against a hardware-disabled service. Separate repository checks passed on macOS ARM64 and Ubuntu ARM64 in a local container. The Windows, physical Raspberry Pi and phone results documented for previous versions do not validate these additions on those targets.
+The public source release passed **all 11 harness groups on macOS ARM64, Windows 11 Pro x86-64 and a physical Raspberry Pi 5 ARM64**. Each run included STEP exchange, native C++ relief, **151 Python tests and 114 JavaScript tests**, with no regression tests skipped. **21 Chromium workflow groups passed on the Mac** against a hardware-disabled service. Separate repository checks passed on macOS ARM64 and Ubuntu ARM64 in a local container. Physical tool motion, Windows 10, the Galaxy S23 and the smaller Raspberry Pi configurations remain outside this release's verification.
 
 The [machine-readable simulation record](../validation/advanced-cad-simulation.json), [developer handoff](DEVELOPER.md), [interactive workshop entry points](../studio/static/machining-lessons.html) and [import compatibility guide](LIGHTBURN-IMPORT.md) describe how to repeat the checks.
 
