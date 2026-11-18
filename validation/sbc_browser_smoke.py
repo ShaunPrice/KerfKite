@@ -47,8 +47,13 @@ def check(index, downloads):
             assert "G1 X" in code and ("M3 S" in code) == (mode == "router")
             assert ("M4 S" in code) == (mode == "laser")
             element("export").click()
-            exported = wait.until(lambda _: next(downloads.glob("*.nc"), None))
-            assert exported.read_text().strip() == code
+            # Chromium can expose the final filename before the download has finished.
+            def completed_export(_):
+                for candidate in downloads.glob("*.nc"):
+                    if candidate.read_bytes().strip() == code.encode("utf-8"):
+                        return candidate
+                return False
+            exported = wait.until(completed_export, f"{mode} export did not match its preview")
             exported.unlink()
         print("Offline project round trip and router, laser and knife exports passed:", index.name)
 
