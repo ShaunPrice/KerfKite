@@ -13,3 +13,5 @@ Use macOS with Go, Python 3.12, Pillow, uv, dpkg-deb, Apple command line tools a
 5. For each release file, publish its SHA-256 as a line of `SHA256SUMS.txt`. Upload the packages and checksums to a release for the corresponding source commit. In **Actions → Check desktop release installers**, run the workflow against that tag. It installs the actual release package, tests a clean first launch, generates a simulated toolpath, exercises STEP, then relaunches with uv offline.
 
 For local smoke testing, run `python validation/installer_smoke.py "/path/to/installed/KerfKite" --step` with ports 18764 and 18765 free. The test uses a temporary application-data directory. The application shortcut opens a browser tab. Platform-specific Gatekeeper, SmartScreen and desktop shell prompts need a graphical desktop to check.
+
+The Debian packaging revision for Studio 0.2.1 is `-2`. It declares `libgl1` so OpenCascade STEP loads on minimal Debian installations. A portable Linux archive expects the desktop to provide `libGL.so.1` for STEP. The application wheel is shared across all platforms.
