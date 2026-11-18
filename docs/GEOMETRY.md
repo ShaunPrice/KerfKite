@@ -45,3 +45,15 @@ The Design panel provides an explicit multi-object checklist, edge/centre alignm
 Closed router line/inside/outside contours can retain stock-bottom-relative tabs with a flat cutter. The requested cut reaches the stock bottom; tab height is less than stock thickness. For example, 10 mm stock with 2 mm tabs retains plateaus at Z −8 mm even if the main contour overcuts below −10 mm. Tab positions follow the compensated path's arc length; width includes one cutter diameter of plateau padding beyond the nominal width. Count-based placement or explicit percentages are supported, including closed-seam handling.
 
 Placement is a geometric aid, not a retention/clamping guarantee: corners and neighboring cuts need review. Open paths, relief/per-vertex depths, unsupported tools/operations, overlapping tabs and oversized plateaus are rejected. Holding tabs currently require the Python server; the offline engine rejects them explicitly. Direct dragging of tab locations on the design is not implemented.
+
+## Trim crossing lines into a corner
+
+In **Design**, choose **Draw two-point line**. Click the start and end in the work area, or open **Pick by coordinate** to enter each point in millimetres. Draw a second line that crosses the first.
+
+1. Choose **Trim & join**. Click the portion of the first line you want to keep, then the portion of the second line to keep. Pick away from the intersection so the retained sides are clear.
+2. The green preview shows the entire resulting path. The circle and coordinates mark the common vertex. Use **Pick again** to change a side or **Cancel** to discard the preview.
+3. Choose **Apply join** to replace the two trimmed contours with one continuous path. Generate a new CAM preview. **Undo** restores both source contours, and **Redo** reapplies the corner.
+
+The first picked contour runs toward the corner and the second runs away from it. Open polylines retain all vertices on the chosen sides. The picked straight sections must meet within both segments. Endpoint and T junctions work, and sampled straight sections from an SVG are supported. Two open contours can belong to the same drawing object. A join keeps the first object's name, layer and CAM overrides, and other contours keep their order within each surviving object. Distinct objects need matching layer, output and CAM assignments. Sampled depth and power are interpolated at the crossing and must agree there. Closed outlines and objects carrying editable source geometry can be edited with their own tools. The design remains unchanged if a join is rejected.
+
+Practise choosing each side in the [interactive trim lesson](../studio/static/machining-lessons.html#trim-practice). The lesson uses the same intersection and joining functions as the editor.

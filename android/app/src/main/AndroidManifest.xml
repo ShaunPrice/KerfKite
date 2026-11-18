@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
- <application android:label="KerfKite Pocket" android:theme="@style/AppTheme" android:allowBackup="false">
+ <uses-permission android:name="android.permission.INTERNET"/>
+ <application android:networkSecurityConfig="@xml/pendant_network" android:label="KerfKite Pocket" android:theme="@style/AppTheme" android:allowBackup="false">
+  <activity android:name=".PendantActivity" android:exported="false" android:windowSoftInputMode="adjustResize"/>
   <activity android:name=".WorkshopActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
    <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
   </activity>

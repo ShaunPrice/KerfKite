@@ -43,7 +43,7 @@ See the [graphical sketch tutorial](SKETCH.md) to insert, constrain and drag ver
 | Router contour | Transfer the outline, check its placement in the bed, select the required profile and generate a preview in CAM. |
 | Router top relief | Transfer the part into 3D relief, review physical width, height, depth, cutter and stepover, then generate the relief toolpaths. |
 
-Placement X and Y give the lower-left of the part in the work area. A transfer creates independent machining geometry. After editing the CAD model, remove the earlier machining snapshot or disable its output before transferring the rebuilt geometry again. A section describes the material at one height. Assigning a pocket operation to all its contours can clear the surrounding plate. Review the removal preview before choosing the stock region to machine. Top relief covers surfaces accessible from above.
+Placement X and Y give the lower-left of the part in the work area. Keep **Keep contours linked to the CAD part** selected to update the existing machining object when the part rebuilds. Its placement, layer and operation settings stay with the object. If a section disappears or the rebuilt part no longer fits, Studio blocks generation for that linked output. Correct the part or select the object in **Properties** and choose **Detach CAD link and keep current drawing**. Clear the link option before a transfer when you want an independent snapshot. A section describes the material at one height. Assigning a pocket operation to all its contours can clear the surrounding plate. Review the removal preview before choosing the stock region to machine. Top relief covers surfaces accessible from above.
 
 ## Tutorial 4. Read the toolpath
 
@@ -57,4 +57,10 @@ These exercises run independently of the workstation project. The command-line a
 
 ## Scope
 
-Studio models one ordered solid history, which may contain disconnected bodies. General assembly mates, arbitrary NURBS surfaces, STEP exchange, five-axis machining and continuous machine collision detection remain outside this release. The solid modeller requires a Studio server. The downloadable project carries the editable model between workstations.
+Studio models one ordered solid history, which may contain disconnected bodies. The [assembly editor](ASSEMBLIES.md) fits parts using datum mates and checks interference. The [surface and STEP workspace](SURFACES-STEP.md) handles editable patches and exact geometry exchange. Five-axis machining and continuous full-machine collision detection remain outside this release. The solid modeller requires a Studio server. The downloadable project carries the editable model between workstations.
+
+### Linked top relief
+
+For a relief that follows later part edits, select **Router top relief** and leave **Keep machining geometry linked to the CAD part** checked. Choose **Prepare in CAM**. Review the placement, output width, height, depth, cutter geometry, stepover, stock allowance and sampling resolution. **Generate** records that setup with this relief. For example, a 36 mm part prepared as an 18 mm relief becomes a 24 mm relief if you change the CAD dimension to 48 mm. Each axis retains its own scale. The layer, object machining settings and XY placement stay with the relief. Rebuilds recompute both the raster paths and the sampled Z values. Generate a fresh CAM preview after rebuilding.
+
+If the CAD part changes between preparing its STL and generating relief, return to **3D CAD** and prepare the current part again. Clear the link checkbox before preparing to make an independent snapshot. Choosing a separate STL or heightmap in the relief panel also creates an independent object. To keep an existing linked relief at its present dimensions, select it and choose **Detach CAD link** in Properties.

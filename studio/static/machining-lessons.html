@@ -22,7 +22,20 @@
 <p id="metrics"></p>
 <details><summary>Inspect generated G-code</summary><pre id="code"></pre></details>
 </section></div>
+<section id="trim-practice"><h2>Trim two lines at a crossing</h2>
+<p>Make an inside corner by keeping the left arm of the horizontal line and the upper arm of the vertical line. Change either side to see which ends will be trimmed.</p>
+<div class="layout"><div>
+<label for="trim-horizontal">Keep horizontal arm</label>
+<select id="trim-horizontal"><option value="">Choose a side</option><option value="left">Left</option><option value="right">Right</option></select>
+<label for="trim-vertical">Keep vertical arm</label>
+<select id="trim-vertical"><option value="">Choose a side</option><option value="upper">Upper</option><option value="lower">Lower</option></select>
+<output id="trim-feedback" aria-live="polite">Choose the two sides to keep.</output>
+</div><svg viewBox="0 0 80 50" role="img" aria-label="Crossing lines with the retained corner shown in green">
+<path d="M5 25 H75 M40 45 V5" fill="none" stroke="#879b9b" stroke-dasharray="2 1"/>
+<path id="trim-result" fill="none" stroke="#12646a" stroke-width="1.8"/>
+</svg></div>
+<p>In Studio, open <b>Design → Trim &amp; join</b>, click each side to keep, inspect the preview and choose <b>Apply join</b>.</p></section>
 <section><h2>Workshops in the editor</h2>
 <p>Open Studio to practise with editable examples. In <b>3D CAD</b>, try the bearing mate or surface tutorial. In <b>CAM</b>, move the clamp and rerun fixture clearance. In <b>Images</b>, use the sample raster or camera target. In <b>Projects</b>, choose <b>Try a sample</b> to convert a LightBurn badge.</p>
 <a href="./materials-guide.html">Explore the materials guide</a> · <a href="./index.html">Open Studio</a> · <a href="./help.html#lightburn-import">Read the import tutorial</a></section></main>
-<script src="./protocols.js"></script><script src="./offline-cam.js"></script><script src="./machining-lessons.js"></script></html>
+<script src="./protocols.js"></script><script src="./offline-cam.js"></script><script src="./corner-geometry.js"></script><script src="./machining-lessons.js"></script></html>

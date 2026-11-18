@@ -45,6 +45,7 @@ public final class WorkshopActivity extends Activity {
         setContentView(scroll);
         TextView title=label("Studio Pocket",28);title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         page.addView(title);page.addView(label("680 × 240 mm   ·   Plan view",14));
+        page.addView(button("CNC pendant",()->startActivity(new Intent(this,PendantActivity.class))));
         preview=new BedView(this,design,this::select);
         LinearLayout.LayoutParams previewSize=new LinearLayout.LayoutParams(-1,dp(205));
         previewSize.setMargins(0,dp(10),0,dp(10));page.addView(preview,previewSize);

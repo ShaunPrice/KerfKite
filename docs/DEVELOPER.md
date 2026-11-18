@@ -47,6 +47,10 @@ For future work, use the acceptance matrix and the specific workflow guides. Phy
 
 The Android and MCP clients retain their legacy 680 × 240 mm example canvas for project compatibility. These dimensions describe an editing canvas. Configure each machine using its own measured travel and origin.
 
+The paired phone listener is managed by `studio/phone_monitor_service.py`. Its authenticated API is in `studio/monitor.py`. The native client and activity are in the Android Pocket package. `tests/test_phone_pendant.py` exercises action bounds and revocation. `validation/android_pendant_workflow.py` drives an emulator against the simulator.
+
+For sketch constraints, start with `studio/sketch_constraints.py` and `studio/sketch_profile.py`. Supplementary assembly mates are solved in `studio/assembly_constraints.py`. The browser tracks linked CAD geometry in `studio/static/solid-links.js`. The browser harness exercises crossing lines, linked contours and reliefs, and parameter-driven sketches.
+
 ## Installer releases
 
 The [desktop packaging guide](INSTALLER-BUILDS.md) covers the release builds, runtime locks, Android signing and clean-install checks.

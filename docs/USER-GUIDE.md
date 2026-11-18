@@ -176,9 +176,9 @@ Dedicated XHC/USB pendant protocols and continuous handwheel jogging are not imp
 
 Phone control and file upload are separate services. The hosted HTTPS editor/receiver stores files for review; an upload never starts a job. Use **Projects** to download/upload project, SVG or current G-code files. A transfer receipt confirms checksum and byte count, not execution. If a transfer result is ambiguous, inspect the receiver before retrying. See [WEB.md](WEB.md) for accounts, certificates and upload-only tokens.
 
-For phone controls, start the local machine server with `--monitor`. Pair using its generated URL/token. TLS is available using `--monitor-cert` and `--monitor-key`; without those options the monitor is plain HTTP and intended only for a trusted local network. Do not treat the phone monitor as the internet-facing account-based editor. Restarting revokes its pairing token.
+In Studio, open **Control → Phone pendant → Enable phone pairing**. Choose the server address reachable from the phone. Paste the private pairing link into **CNC pendant** in KerfKite Pocket. The Studio server owns the controller connection. A phone can reach it through Wi-Fi, USB tethering or Bluetooth tethering. See the [connection guide](PHONE-CONNECTIONS.md) for setup and troubleshooting. Use **Disable and revoke pairing** to end access.
 
-At the local workstation, generate a current preview, confirm setup and **Arm preview for phone start**. The phone can attempt that armed job once, pause/resume or stop/abort. It cannot submit arbitrary G-code, jog or configure the machine. Stale phone data means position/control status is unknown; do not infer a successful stop from a lost connection.
+From Pocket, jog one XYZ axis by a selected increment, home the machine or zero the work coordinates. These setup actions require an idle controller and disarm any prepared job. To run a job, generate a current preview at the workstation, confirm setup and choose **Arm preview for phone start**. Pocket can start the armed job once, pause, resume and stop it. If a connection drops, inspect the machine and refresh its status before issuing another action.
 
 ## Costs, quotes and printing
 

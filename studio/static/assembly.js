@@ -29,6 +29,16 @@
     <label>Child rotation XYZ · °<input id="assembly-child-rotation"></label></div>
     <h3>Joint position</h3><p id="assembly-freedom" class="hint"></p><div class="pair">
     <label>Shift in datum XYZ · mm<input id="assembly-offset"></label><label>Turn in datum XYZ · °<input id="assembly-turn"></label></div></div>
+    <details><summary>Additional mates</summary>
+    <p class="hint">Add a mate between existing parts. The solver can slide or turn their driving joints. Independent parts stay at their world placements.</p>
+    <label>Other part<select id="assembly-target"></select></label>
+    <label>Additional mate<select id="assembly-relation"><option value="planar">Coincident planes</option>
+    <option value="concentric">Concentric axes</option><option value="point">Coincident points</option><option value="fixed">Fixed frames</option></select></label>
+    <div class="pair"><label>Other datum origin XYZ · mm<input id="assembly-extra-parent" value="0, 0, 0"></label>
+    <label>Other datum rotation XYZ · °<input id="assembly-extra-parent-turn" value="0, 0, 0"></label>
+    <label>Selected datum origin XYZ · mm<input id="assembly-extra-child" value="0, 0, 0"></label>
+    <label>Selected datum rotation XYZ · °<input id="assembly-extra-child-turn" value="0, 0, 0"></label></div>
+    <button id="assembly-add-relation">Add mate</button><div id="assembly-relations"></div></details>
     <div class="buttons"><button id="assembly-solve">Solve & check</button><button id="assembly-apply">Save assembly to project</button><button id="assembly-close">Close</button></div>`;
   document.body.append(dialog);
   const ui = key => document.getElementById('assembly-' + key);
@@ -71,6 +81,19 @@
     for (const key of ['solve', 'remove','parent','part','name','rename']) ui(key).disabled = !part;
     ui('add').disabled = !window.projectExtras?.solidCAD?.features?.length || doc.parts.length >= 24;
     ui('update').disabled = !part || !window.projectExtras?.solidCAD?.features?.length;
+    const target = ui('target').value;
+    ui('target').replaceChildren(...doc.parts.filter(p=>p.id!==active).map(p=>new Option(p.id,p.id)));
+    if (target && target!==active && doc.parts.some(p=>p.id===target)) ui('target').value=target;
+    ui('add-relation').disabled=!ui('target').value;
+    const host=ui('relations'); host.replaceChildren();
+    for (const constraint of doc.constraints || []) {
+      const row=document.createElement('p'), remove=document.createElement('button');
+      row.append(document.createTextNode(constraint.child+' ↔ '+constraint.parent+' · '+constraint.kind+' '));
+      remove.textContent='Remove mate';remove.onclick=run(()=>{
+        readForm(); doc.constraints=doc.constraints.filter(c=>c!==constraint); invalidate(); controls();
+      });
+      row.append(remove);host.append(row);
+    }
     visibility();
   }
   function visibility() {
@@ -144,7 +167,7 @@
   const run = fn => async () => { try { await fn(); } catch(err) { status(err.message); } };
   open.onclick = run(async () => {
     const saved = window.projectExtras?.assembly;
-    if (saved && (saved.version!==1 || !Array.isArray(saved.parts) || !Array.isArray(saved.mates))) {message('Unsupported assembly document.');return;}
+    if (saved && (saved.version!==1 || !Array.isArray(saved.parts) || !Array.isArray(saved.mates) || (saved.constraints!==undefined && !Array.isArray(saved.constraints)))) {message('Unsupported assembly document.');return;}
     doc=clone(saved || empty());active=doc.parts[0]?.id;solved=null;ui('lesson').hidden=true;
     controls();dialog.showModal();draw();status('Insert a solid part or try the bearing tutorial.');
     if (active) await solveNow();
@@ -153,6 +176,14 @@
     const previous=active, next=ui('part').value;
     try {readForm();} catch(err) {ui('part').value=previous;throw err;}
     active=next;controls();
+  });
+  ui('add-relation').onclick=run(async ()=>{
+    readForm();
+    const frame=side=>({origin:vector('extra-'+side),rotation:vector('extra-'+side+'-turn')});
+    const constraint={child:active,parent:ui('target').value,kind:ui('relation').value,childFrame:frame('child'),parentFrame:frame('parent')};
+    doc.constraints??=[];
+    if(doc.constraints.length>=48)throw Error('Use up to 48 additional mates.');
+    doc.constraints.push(constraint); invalidate(); controls(); await solveNow();
   });
   ui('parent').onchange=visibility;
   ui('kind').onchange=()=>{setVector('offset');setVector('turn');visibility();};
@@ -169,7 +200,7 @@
     const name=ui('name').value.trim();
     if(!name || doc.parts.some(p=>p.id===name && p.id!==active))throw Error('Choose a unique, nonempty part name.');
     doc.parts.find(p=>p.id===active).id=name;
-    for(const m of doc.mates){if(m.child===active)m.child=name;if(m.parent===active)m.parent=name;}
+    for(const m of [...doc.mates,...(doc.constraints||[])]){if(m.child===active)m.child=name;if(m.parent===active)m.parent=name;}
     active=name;invalidate();controls();
   });
   ui('update').onclick=run(async ()=>{
@@ -178,6 +209,7 @@
     await solveNow();
   });
   ui('remove').onclick = run(async () => {
+    if((doc.constraints||[]).some(c=>[c.parent,c.child].includes(active)))throw Error('Remove additional mates referencing this part before removing it.');
     if(doc.mates.some(m=>m.parent===active))throw Error('Release this part’s child mates before removing it.');
     doc.parts=doc.parts.filter(p=>p.id!==active);doc.mates=doc.mates.filter(m=>m.child!==active);
     active=doc.parts[0]?.id;invalidate();controls();if(active)await solveNow();else status('Assembly is empty.');

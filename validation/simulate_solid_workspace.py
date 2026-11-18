@@ -14,6 +14,9 @@ from pathlib import Path
 from playwright.sync_api import expect, sync_playwright
 from werkzeug.serving import make_server
 
+from studio.device import DeviceController
+from studio.phone_jobs import PhoneJobs
+from studio.phone_monitor_service import PhoneMonitor
 from studio.server import create_app
 
 
@@ -143,7 +146,11 @@ def main():
     parser.add_argument("--browser",help="Path to a Chromium executable")
     args=parser.parse_args()
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
-    server=make_server("127.0.0.1",0,create_app(allow_hardware=False),threaded=True)
+    controller = DeviceController()
+    jobs = PhoneJobs(controller)
+    monitor = PhoneMonitor(controller, jobs, port=0)
+    app = create_app(controller, jobs, allow_hardware=False, phone_monitor=monitor)
+    server=make_server("127.0.0.1",0,app,threaded=True)
     worker=threading.Thread(target=server.serve_forever,daemon=True)
     worker.start()
     try:
@@ -154,13 +161,17 @@ def main():
                 page.on("dialog",lambda dialog:dialog.accept())
                 page.goto(f"http://127.0.0.1:{server.server_port}/")
                 run(page)
+                from corner_workflow import run as corner
+                from relief_link_workflow import run as linked_relief
+                from sketch_join_workflow import run as sketch_join
+                from cad_link_workflow import run as linked_cad
                 from materials_workflow import run as materials
                 from lightburn_workflow import run as lightburn
                 from import_fixture_workflow import run as fixture_imports
                 from assembly_laser_workflow import run as assembly_laser
                 from simulate_exchange_workspace import run as exchange
                 # Each lesson can modify the example or viewport.
-                for lesson in (lightburn, fixture_imports, assembly_laser, exchange, materials):
+                for lesson in (lightburn, fixture_imports, assembly_laser, exchange, materials, corner, linked_cad, linked_relief, sketch_join):
                     with browser.new_context(viewport={"width":1440,"height":980},accept_downloads=True) as context:
                         workshop = context.new_page()
                         workshop.on("dialog",lambda dialog:dialog.accept())
@@ -169,6 +180,7 @@ def main():
             finally:
                 browser.close()
     finally:
+        monitor.disable()
         server.shutdown()
         worker.join()
         server.server_close()

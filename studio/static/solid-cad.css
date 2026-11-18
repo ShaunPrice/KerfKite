@@ -51,3 +51,5 @@
 .sketch-node.selected {fill:#ffd79d;stroke:#85541b;}
 .solid-sketch-dialog svg text {font:11px sans-serif;pointer-events:none;fill:#244456;}
 .solid-sketch-dialog [data-status] {color:#924425;}
+.solid-sketch-dialog [hidden] { display:none; }
+.solid-sketch-dialog [data-dof] { display:block; color:#38586b; font-size:.9rem; }

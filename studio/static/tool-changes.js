@@ -4,7 +4,7 @@
  panel.innerHTML='<summary>Manual tool changes</summary><label>Tool number<input id="manualToolNumber" type="number" min="1" max="999" step="1" value="1"></label><label>Tool name<input id="manualToolName" maxlength="80" value="Tool 1"></label><label>Tool shape<select id="manualToolShape"><option value="flat">Flat end mill</option><option value="ball">Ball end mill</option><option value="v">V bit</option></select></label><button id="assignManualTool">Assign tool and current settings to selected object</button><button id="generateToolPlan">Generate separate stage files</button><button id="downloadToolPlan" disabled>Download tool-change plan JSON</button><p class="hint">Router mode only. Set cutter diameter and cutting settings in CAM, then assign a tool to every object. Each stage ends retracted with spindle off. Change tools manually, set G54 Z zero for the current tool tip (desktop exports cancel tool-length offsets), check clearance, then start the next file yourself. No automatic continuation or M6 is sent.</p><div id="manualToolStages"></div>';
  document.querySelector('aside').append(panel);
  let plan=null,snapshot=null;
- function current(){if(!plan||snapshot!==JSON.stringify(project()))throw Error('The design or operation settings changed. Generate a new tool-change plan.');return plan;}
+ function current(){if(!plan||snapshot!==JSON.stringify(machiningProject()))throw Error('The design or operation settings changed. Generate a new tool-change plan.');return plan;}
  $('assignManualTool').onclick=task(()=>{
    if($('mode').value!=='router')throw Error('Manual tool changes require router mode');
    const id=Number($('manualToolNumber').value),name=$('manualToolName').value.trim();
@@ -15,9 +15,9 @@
    invalidate();draw();message(`Assigned tool ${id} · ${name}. Assign tools to all active objects before generating stages.`);
  });
  $('generateToolPlan').onclick=task(async()=>{
-   const p=project();if(p.mode!=='router')throw Error('Manual tool changes require router mode');
+   const p=machiningProject();if(p.mode!=='router')throw Error('Manual tool changes require router mode');
    const before=JSON.stringify(p),result=await api('tool-changes',{project:p});
-   if(before!==JSON.stringify(project()))throw Error('Design changed while generating. Generate the plan again.');
+   if(before!==JSON.stringify(machiningProject()))throw Error('Design changed while generating. Generate the plan again.');
    if(!Array.isArray(result.stages)||!result.manual_only)throw Error('Server returned an invalid manual tool-change plan');
    plan=result;snapshot=before;$('manualToolStages').replaceChildren();
    for(const stage of plan.stages){

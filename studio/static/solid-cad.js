@@ -1,5 +1,5 @@
 /* Feature history and camera belong to the CAD workspace. Only the editable
- * model is saved with the project. Machining transfers create 2D snapshots. */
+ * model is saved with the project. Contour transfers can retain a link to the source part. */
 (() => {
   'use strict';
   const panel = $('design-panel-solid');
@@ -46,8 +46,9 @@
       <label>Machining process<select id="solid-process"><option value="router">Router contour</option><option value="laser">Laser outline</option><option value="knife">Knife outline</option><option value="relief">Router top relief</option></select></label>
       <label id="solid-outline-choice">Contour source<select id="solid-source"><option value="project">Whole part silhouette</option><option value="section">Horizontal section at Z</option></select></label>
       <label id="solid-slice-label" hidden>Section Z (mm)<input id="solid-slice" type="number" step="any" value="1"></label>
+      <label id="solid-link-label" class="check"><input id="solid-link" type="checkbox" checked> Keep machining geometry linked to the CAD part</label>
       <button id="solid-transfer">Prepare in CAM</button>
-      <p class="hint">Placement sets the lower left of the part in the work area. Silhouettes include through holes. Sections include all boundaries at the chosen Z. Review the paths and their cutting depth in CAM. Each transfer creates an independent machining setup.</p></section>`;
+      <p class="hint">Placement sets the lower left of the part in the work area. Silhouettes include through holes. Sections include all boundaries at the chosen Z. Review the paths and their cutting depth in CAM. Linked contours update after a successful rebuild. Use Properties to detach a contour for independent drawing edits.</p></section>`;
   const kindSelect = $('solid-kind');
   for (const [key,label] of Object.entries(types)) kindSelect.add(new Option(label,key));
   function status(text, error=false) {
@@ -109,6 +110,8 @@
   function store() {
     if (!lesson) {
       window.projectExtras.solidCAD = clone(model);
+      CNCSolidLinks.newRevision();
+      if (objects.some(o=>o.solidLink)) invalidate();
       window.dispatchEvent(new Event('cnc-project-changed'));
     }
   }
@@ -124,7 +127,7 @@
     if (offline) {status('Open this project in the Studio app server to rebuild solids or prepare machining.'); return;}
     if (!model.features.length) {status('Choose a feature type and add the first solid.'); return;}
     status('Rebuild pending…');
-    if (!stage.hidden) timer = setTimeout(rebuild, 350);
+    if (!stage.hidden || (!lesson && objects.some(CNCSolidLinks.stale))) timer = setTimeout(rebuild, 350);
   }
   function restoreHistory(from,to) {
     if (!from.length) return;
@@ -209,10 +212,17 @@
       host.append(button('Edit sketch on plane',async()=>{
         const original=revision;
         try {
-          const points=await window.editSolidSketch({feature:clone(f),parameters:clone(model.parameters)});
-          if(!points)return;
+          const sketch=await window.editSolidSketch({feature:clone(f),parameters:clone(model.parameters)});
+          if(!sketch)return;
           if(revision!==original || model.features[index]!==f)throw Error('The feature changed while the sketch was open. Reopen the editor.');
-          edit(()=>{f.points=points;});
+          edit(()=>{
+            f.points=sketch.points;
+            model.parameters=sketch.parameters;
+            if(sketch.constraints.length) f.constraints=sketch.constraints;
+            else delete f.constraints;
+            if(sketch.fillets.some(r=>r!==0)) f.fillets=sketch.fillets;
+            else delete f.fillets;
+          });
         } catch(error){status(error.message,true);}
       }));
       const profile=document.createElement('details');profile.open=true;
@@ -223,10 +233,21 @@
           const label=(f.kind==='revolve'?['R','Z']:['X','Y'])[axis]+' '+(i+1);
           const input=field(row,label,value,next=>edit(()=>{point[axis]=next;},false,input));
         });
-        const drop=button('×',()=>edit(()=>{f.points.splice(i,1);}));
+        const drop=button('×',()=>{
+          try {
+            const relations=window.remapSketchRelations(f.constraints||[],f.points.length,f.points.map((_,k)=>k).filter(k=>k!==i));
+            edit(()=>{f.points.splice(i,1);f.fillets?.splice(i,1);if(f.constraints)f.constraints=relations;});
+          } catch(error){status(error.message,true);}
+        });
         drop.disabled=f.points.length<=3;drop.setAttribute('aria-label','Remove point '+(i+1));row.append(drop);profile.append(row);
       });
-      profile.append(button('Add point',()=>edit(()=>{f.points.push([0,10]);})));host.append(profile);
+      profile.append(button('Add point',()=>{
+        try {
+          const indices=[...f.points.map((_,k)=>k),null];
+          const relations=window.remapSketchRelations(f.constraints||[],f.points.length,indices);
+          edit(()=>{f.points.push([0,10]);f.fillets?.push(0);if(f.constraints)f.constraints=relations;});
+        } catch(error){status(error.message,true);}
+      }));host.append(profile);
     }
     const placement=document.createElement('details');
     const summary=document.createElement('summary');summary.textContent='Position and rotation';placement.append(summary);
@@ -277,7 +298,9 @@
       const dims=[0,1,2].map(i=>mesh.bounds[i+3]-mesh.bounds[i]);
       $('solid-size').textContent=dims.map(val=>Number(val.toFixed(2))).join(' × ');
       $('solid-volume').textContent=mesh.volume.toLocaleString(undefined,{maximumFractionDigits:2});
-      status('Solid ready.');
+      const issues = lesson ? [] : await CNCSolidLinks.refresh(model, mesh, () => ticket === request, stl);
+      if (ticket !== request) return;
+      status(issues.length ? 'Solid rebuilt. ' + issues.join(' ') : 'Solid ready.', Boolean(issues.length));
       updateLesson();
     } catch(error) {
       if (ticket!==request) return;
@@ -384,6 +407,7 @@
       const transfer=new DataTransfer();
       transfer.items.add(new File([file],'solid-part.stl',{type:'model/stl'}));
       $('reliefFile').files=transfer.files;
+      if ($('solid-link').checked) CNCSolidLinks.stageRelief($('reliefFile').files[0],mesh);
       for(const [id,val] of Object.entries({shapeX:x,shapeY:y,shapeW:x1-x0,shapeH:y1-y0,reliefDepth:z1-z0}))$(id).value=val;
       $('mode').value='router';modeUI();invalidate();
       CNCToolTabs.open('design','shapes');CNCToolTabs.open('machine','relief');
@@ -391,16 +415,19 @@
       return;
     }
     let rings=mesh.profiles, name='XY silhouette';
-    if ($('solid-source').value==='section') {
-      const stamp=revision, z=$('solid-slice').valueAsNumber;
+    const z=$('solid-source').value==='section' ? $('solid-slice').valueAsNumber : null;
+    if (z!==null) {
+      const stamp=revision;
       if(!Number.isFinite(z))throw Error('Enter a finite section Z coordinate.');
       const result=await api('solid-cad/section',{model,z});
       if(stamp!==revision || !mesh)throw Error('The model changed. Rebuild and try again.');
       rings=result.profiles;name='Section Z '+z+' mm';
     }
-    const paths=rings.map(path=>path.map(([px,py])=>[x+(px-x0),y+(py-y0)]));
-    if(!paths.length)throw Error('No contours at the selected plane.');
-    addGenerated('Solid · '+name,paths);
+    const stamp=revision;
+    const paths=CNCSolidLinks.place(rings,mesh,[x,y]);
+    const link=$('solid-link').checked ? await CNCSolidLinks.linkFor(paths,[x,y],z) : null;
+    if(stamp!==revision || !mesh)throw Error('The source changed during transfer. Try again.');
+    addGenerated('Solid · '+name,paths,link?{solidLink:link}:{});
     $('mode').value=process;$('operation').value='line';modeUI();invalidate();
     CNCToolTabs.open('design','properties');CNCToolTabs.open('machine','cam');
     message(name+' added at model scale. Review tool settings and generate a preview.');

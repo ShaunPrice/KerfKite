@@ -1,7 +1,7 @@
 'use strict';
 function artifact(kind){
  if(kind==='project')return {name:'design.cncstudio.json',content:JSON.stringify({format:'pi-cnc-studio/1',settings:project(),objects},null,2)};
- if(kind==='gcode'){if(!preview||previewProject!==JSON.stringify(project()))throw Error('Generate a current preview first');return {name:'engraving.nc',content:preview.lines.join('\n')+'\n'};}
+ if(kind==='gcode'){if(!preview||previewProject!==JSON.stringify(machiningProject()))throw Error('Generate a current preview first');return {name:'engraving.nc',content:preview.lines.join('\n')+'\n'};}
  const width=Number($('width').value),height=Number($('height').value);
  if(!objects.length)throw Error('Add artwork first');
  return {name:'design.svg',content:`<svg xmlns="${NS}" width="${width}mm" height="${height}mm" viewBox="0 0 ${width} ${height}">`+objects.flatMap(o=>o.paths).map(p=>'<polyline fill="none" stroke="black" stroke-width="0.1" points="'+p.map(([x,y])=>`${Number(x)},${height-Number(y)}`).join(' ')+'"/>').join('')+'</svg>'};

@@ -22,10 +22,16 @@ Independent parts have a world origin and XYZ rotation. To constrain a part, sel
 | Concentric axes | Translation along the common Z axis and rotation about Z. |
 | Coincident points | Rotation about all three axes at the shared point. |
 
-Moving a parent moves its descendants when you solve. The solver supports directed trees with one driving mate per child. It rejects cycles, duplicate assignments and input on locked axes. Independent roots give you multiple subassemblies in the same document. To release a mate, choose **Independent placement** and enter the desired world pose. Release child mates before removing their parent.
+Moving a parent moves its descendants when you solve. The initial placement uses one driving mate per child. Additional geometric mates can close loops and constrain the remaining sliding or rotating axes. The driving tree itself must be acyclic. Independent part placements stay fixed. Independent roots give you multiple subassemblies in the same document. To release a mate, choose **Independent placement** and enter the desired world pose. Release child mates before removing their parent.
 
 ## Interpret an interference report
 
 Studio uses bounding boxes to shortlist pairs, intersects the transformed manifold solids and measures any positive overlap over 0.000000001 mm³. Contact within 0.000001 mm is reported separately. Contact and overlap are computed on the solid kernel's tessellated geometry. Curves are approximated by facets. Fit tolerances should account for that approximation and the manufacturing process.
 
 This check describes the assembled pose. Moving through intermediate positions, evaluating machine travel and toolholder clearance requires a separate motion analysis. The solver accepts up to 24 part instances and 150,000 triangles across the assembly. Project files store parametric inputs and mates; reopening the assembly rebuilds the preview.
+
+## Seat a shaft using a second mate
+
+Open **Try bearing tutorial** and select the shaft. Its concentric driving mate leaves axial travel and rotation free. Open **Additional mates**, select the bearing plate and choose **Coincident planes**. Set the other datum origin to `0, 0, 8` and the selected datum origin to `0, 0, 2`. Choose **Add mate**. The solver seats the shaft at Z = 6 while keeping its centre on the bearing axis. **Save assembly to project** retains both relationships.
+
+Add a fixed, point, plane or concentric mate between two different parts. Up to 48 additional relationships may use local origins and orientations. The numerical solver starts from the entered driving-joint positions. If the constraints conflict, or the initial pose is unsuitable, it reports failure and prevents saving an unsolved edit. Remove a relationship or change its datums and solve again. Remaining free axes retain their starting position where possible.

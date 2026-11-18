@@ -6,6 +6,7 @@ import numpy as np
 from flask import jsonify, request
 
 from .solid_cad import _build
+from .assembly_constraints import fit
 
 CONTACT_MM = 1e-6
 MAX_PARTS = 24
@@ -94,6 +95,10 @@ def solve(document, include_mesh=False):
         return world[name]
     for name in free:
         resolve(name, set())
+
+    world = fit(world, {m['child']: m for m in mates},
+                {name: frame for name, frame in free.items() if name not in parents},
+                document.get('constraints', []), _pose)
 
     solids, result, contacts, collisions = {}, {}, [], []
     total_triangles = 0

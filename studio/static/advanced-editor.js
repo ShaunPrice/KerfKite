@@ -18,9 +18,42 @@ const baseDraw=draw;draw=function(){baseDraw();if(!nodeMode||!objects[selected])
 $('canvas').addEventListener('pointerdown',e=>{if(!e.target.dataset.node)return;e.stopImmediatePropagation();const[pi,vi]=e.target.dataset.node.split(',').map(Number);nodeDrag={id:e.pointerId,pi,vi};$('canvas').setPointerCapture(e.pointerId);},true);
 $('canvas').addEventListener('pointermove',e=>{if(!nodeDrag)return;e.stopImmediatePropagation();const p=objects[selected].paths[nodeDrag.pi],wasClosed=p.length>2&&p[0][0]===p.at(-1)[0]&&p[0][1]===p.at(-1)[1],[x,y]=canvasPoint(e);p[nodeDrag.vi]=[Math.max(0,Math.min(Number($('width').value),x)),Math.max(0,Math.min(Number($('height').value),y))];if(wasClosed&&nodeDrag.vi===0)p[p.length-1]=[...p[0]];delete objects[selected].textOptions;draw();},true);
 $('canvas').addEventListener('pointerup',e=>{if(!nodeDrag)return;e.stopImmediatePropagation();nodeDrag=null;invalidate();draw();},true);
-$('makeRelief').onclick=task(async()=>{const file=$('reliefFile').files[0];if(!file)throw Error('Choose a grayscale image or STL');if(file.size>8e6)throw Error('File exceeds 8 MB');const[x,y,width,height]=shape(),resolution=Number($('reliefResolution').value);if(!Number.isInteger(resolution)||resolution<16||resolution>128)throw Error('Resolution must be 16–128');const data={x,y,width,height,depth:Number($('reliefDepth').value),tool_diameter:Number($('tool_diameter').value),stepover:Number($('stepover').value),allowance:Number($('reliefAllowance').value),tool_shape:$('reliefTool').value,resolution};
- if(/\.stl$/i.test(file.name)){const bytes=new Uint8Array(await file.arrayBuffer());let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));data.content_base64=btoa(binary);}else{const bitmap=await createImageBitmap(file);const c=document.createElement('canvas');c.width=c.height=resolution;const ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,resolution,resolution);ctx.drawImage(bitmap,0,0,resolution,resolution);bitmap.close();const pixels=ctx.getImageData(0,0,resolution,resolution).data;data.heightmap=Array.from({length:resolution},(_,row)=>Array.from({length:resolution},(_,col)=>{const i=((resolution-row-1)*resolution+col)*4;return(.2126*pixels[i]+.7152*pixels[i+1]+.0722*pixels[i+2])/255;}));}
- message('Calculating cutter contact…');const result=await api('relief',data);$('mode').value='router';$('operation').value='line';addGenerated('Relief · '+file.name,result.paths);objects[selected].depths=result.path_depths;objects[selected].surface=result.surface;invalidate();modeUI();message((result.surface?.backend==='cpp'?'C++ accelerated relief. ':'Python relief. ')+result.warnings.join(' '));});
+$('makeRelief').onclick=task(async()=>{
+  const file=$('reliefFile').files[0];
+  if(!file) throw Error('Choose a grayscale image or STL');
+  if(file.size>8e6) throw Error('File exceeds 8 MB');
+  CNCSolidLinks.reliefStage(file);
+  const [x,y,width,height]=shape(), resolution=Number($('reliefResolution').value);
+  if(!Number.isInteger(resolution)||resolution<16||resolution>128) throw Error('Resolution must be 16–128');
+  const data={x,y,width,height,depth:Number($('reliefDepth').value),tool_diameter:Number($('tool_diameter').value),
+    stepover:Number($('stepover').value),allowance:Number($('reliefAllowance').value),tool_shape:$('reliefTool').value,resolution};
+  if(/\.stl$/i.test(file.name)) {
+    data.content_base64=await CNCSolidLinks.stlContent(file);
+  } else {
+    const bitmap=await createImageBitmap(file), c=document.createElement('canvas');
+    c.width=c.height=resolution;
+    const ctx=c.getContext('2d');
+    ctx.fillStyle='white';ctx.fillRect(0,0,resolution,resolution);ctx.drawImage(bitmap,0,0,resolution,resolution);
+    bitmap.close();
+    const pixels=ctx.getImageData(0,0,resolution,resolution).data;
+    data.heightmap=Array.from({length:resolution},(_,row)=>Array.from({length:resolution},(_,col)=>{
+      const i=((resolution-row-1)*resolution+col)*4;
+      return (.2126*pixels[i]+.7152*pixels[i+1]+.0722*pixels[i+2])/255;
+    }));
+  }
+  message('Calculating cutter contact…');
+  const result=await api('relief',data);
+  const link=await CNCSolidLinks.reliefLink(file,data,result);
+  if($('reliefFile').files[0]!==file) throw Error('The relief source changed. Generate the new selection.');
+  const [bx,by,mx,my]=bounds(result.paths);
+  if(bx<0||by<0||mx>Number($('width').value)||my>Number($('height').value)) throw Error('Relief exceeds the work area.');
+  invalidate();
+  $('mode').value='router';$('operation').value='line';
+  objects.push({name:'Relief · '+file.name,paths:result.paths,depths:result.path_depths,surface:result.surface,...(link?{solidLink:link}:{})});
+  selected=objects.length-1;
+  invalidate();modeUI();draw();
+  message((result.surface?.backend==='cpp'?'C++ accelerated relief. ':'Python relief. ')+result.warnings.join(' '));
+});
 let yaw=.6,pitch=.8,drag3D=null;
 window.render3D=()=>{const c=$('preview3d'),ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);if(!preview)return;const left=preview.bounds[0]-5,bottom=preview.bounds[1]-5,w=preview.bounds[2]-left+5,h=preview.bounds[3]-bottom+5,scale=Math.min(c.width,c.height)*.8/Math.max(w,h,1);function project3(x,y,z){x-=left+w/2;y-=bottom+h/2;const a=x*Math.cos(yaw)-y*Math.sin(yaw),b=x*Math.sin(yaw)+y*Math.cos(yaw);return[c.width/2+a*scale,c.height/2-(b*Math.cos(pitch)-z*Math.sin(pitch))*scale];}if(window.stockPreview){const map=window.stockPreview.heights,n=map.length;for(let j=0;j<n-1;j++)for(let i=0;i<n-1;i++){const z=(map[j][i]+map[j][i+1]+map[j+1][i+1]+map[j+1][i])/4;ctx.fillStyle=`hsl(${38-Math.min(30,Math.abs(z)*5)} 42% ${60-Math.min(35,Math.abs(z)*5)}%)`;ctx.beginPath();for(const[a,b]of[[i,j],[i+1,j],[i+1,j+1],[i,j+1]])ctx.lineTo(...project3(window.stockPreview.x+a*window.stockPreview.width/(n-1),window.stockPreview.y+b*window.stockPreview.height/(n-1),map[b][a]));ctx.closePath();ctx.fill();}}ctx.strokeStyle='#587482';ctx.beginPath();ctx.moveTo(...project3(left,bottom,0));for(const[x,y]of[[left+w,bottom],[left+w,bottom+h],[left,bottom+h],[left,bottom]])ctx.lineTo(...project3(x,y,0));ctx.stroke();for(const s of preview.segments){ctx.strokeStyle=`hsl(${190+Math.min(100,Math.abs(s[4])*20)} 80% 65%)`;ctx.beginPath();ctx.moveTo(...project3(s[0],s[1],s[6]??s[4]));ctx.lineTo(...project3(s[2],s[3],s[4]));ctx.stroke();}};
 $('preview3d').onpointerdown=e=>{drag3D=[e.clientX,e.clientY];$('preview3d').setPointerCapture(e.pointerId);};$('preview3d').onpointermove=e=>{if(!drag3D)return;yaw+=(e.clientX-drag3D[0])*.01;pitch=Math.max(.05,Math.min(3.05,pitch+(e.clientY-drag3D[1])*.01));drag3D=[e.clientX,e.clientY];render3D();};$('preview3d').onpointerup=()=>drag3D=null;

@@ -6,7 +6,7 @@ import operator
 import re
 import struct
 
-from shapely.geometry import Polygon
+from .sketch_profile import crossing_axis, profile_geometry
 
 _MAX_VALUE = 100_000
 _MAX_FACES = 75_000
@@ -65,6 +65,10 @@ class Dimensions:
             return _number(node.value)
         if isinstance(node, ast.Name):
             return self.resolve(node.id)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in ('cross_x', 'cross_y'):
+            if len(node.args) != 8 or node.keywords:
+                raise ValueError('A sketch crossing requires the eight endpoint coordinates')
+            return _number(crossing_axis([self._visit(arg) for arg in node.args], int(node.func.id == 'cross_y')))
         if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
             value = self._visit(node.operand)
             return -value if isinstance(node.op, ast.USub) else value
@@ -89,19 +93,7 @@ class Dimensions:
 
 
 def _sketch(feature, dimensions, kernel):
-    points = feature.get('points')
-    if not isinstance(points, list) or not 3 <= len(points) <= 256:
-        raise ValueError('A sketch needs 3–256 vertices')
-    points = [dimensions.vector(point, 2) for point in points]
-    if points[0] == points[-1]:
-        points.pop()
-    if len(set(map(tuple, points))) != len(points) or len(points) < 3:
-        raise ValueError('Sketch vertices must be distinct')
-    polygon = Polygon(points)
-    if not polygon.is_valid or polygon.area <= 1e-8:
-        raise ValueError('Sketch must enclose an area without crossing itself')
-    if feature['kind'] == 'revolve' and any(point[0] < 0 for point in points):
-        raise ValueError('Revolve profile radii must be zero or greater')
+    _, points = profile_geometry(feature, dimensions)
     return kernel.CrossSection([points], kernel.FillRule.EvenOdd)
 
 

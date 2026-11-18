@@ -1,6 +1,27 @@
 'use strict';
 (() => {
   const byId = id => document.getElementById(id);
+  const horizontal = [[5, 25], [75, 25]];
+  const vertical = [[40, 45], [40, 5]];
+  function practiseTrim() {
+    const side = byId('trim-horizontal').value;
+    const end = byId('trim-vertical').value;
+    const feedback = byId('trim-feedback');
+    const preview = byId('trim-result');
+    if (!side || !end) {
+      preview.removeAttribute('d');
+      feedback.textContent = 'Choose the two sides to keep.';
+      return;
+    }
+    const geometry = window.KerfCornerGeometry;
+    const join = geometry.joinPaths(horizontal, geometry.nearest(horizontal, horizontal[side === 'left' ? 0 : 1]),
+                                    vertical, geometry.nearest(vertical, vertical[end === 'upper' ? 1 : 0]));
+    preview.setAttribute('d', 'M' + join.path.map(point => point.join(' ')).join(' L'));
+    feedback.textContent = (side === 'left' && end === 'upper' ? 'Inside corner complete.' : 'Try left and upper for the example corner.') +
+      ' The retained path has one shared vertex at X 40, Y 25 mm.';
+  }
+  byId('trim-horizontal').onchange = practiseTrim;
+  byId('trim-vertical').onchange = practiseTrim;
   const lessons = {
     router: {title: 'Depth per pass', task: 'Cut a 3 mm groove in three depth passes. Set the maximum step-down to 1 mm and compare the Z moves.', label: 'Step-down (mm)', initial: 3, min: .25, max: 3, step: .25},
     laser: {title: 'Power at the start of a cut', task: 'Ramp from zero power to full job power over the first 5 mm. Inspect the S values at the start of the path.', label: 'Entry ramp length (mm)', initial: 0, min: 0, max: 15, step: 1},

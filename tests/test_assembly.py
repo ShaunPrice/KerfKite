@@ -81,6 +81,31 @@ class AssemblyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             solve(assembly(block('same'), block('same')))
 
+    def test_second_mate_seats_shaft_against_a_shoulder(self):
+        doc = example_assembly()
+        doc['constraints'] = [{
+            'kind': 'planar', 'parent': 'Bearing plate', 'child': 'Shaft',
+            'parentFrame': {'origin': [0, 0, 8]}, 'childFrame': {'origin': [0, 0, 2]}
+        }]
+        position = solve(doc)['parts']['Shaft']['matrix']
+        self.assertAlmostEqual(position[0][3], 20, places=5)
+        self.assertAlmostEqual(position[1][3], 15, places=5)
+        self.assertAlmostEqual(position[2][3], 6, places=5)
+        doc['constraints'].append({'kind':'planar','parent':'Bearing plate','child':'Shaft'})
+        with self.assertRaisesRegex(ValueError, 'could not be satisfied'):
+            solve(doc)
+
+    def test_secondary_point_mate_can_rotate_and_slide_a_joint(self):
+        doc = example_assembly()
+        doc['constraints'] = [{
+            'kind':'point','parent':'Bearing plate','child':'Shaft',
+            'parentFrame':{'origin':[20,17,5]},'childFrame':{'origin':[2,0,0]}
+        }]
+        transform = solve(doc)['parts']['Shaft']['matrix']
+        self.assertAlmostEqual(transform[0][0], 0, places=5)
+        self.assertAlmostEqual(transform[1][0], 1, places=5)
+        self.assertAlmostEqual(transform[2][3], 5, places=5)
+
     def test_api_example_and_solve(self):
         app = Flask(__name__)
         register(app)

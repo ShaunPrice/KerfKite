@@ -8,16 +8,19 @@ from .design_api import register_design_routes
 from .device import DeviceController as Controller
 from .profiles import PROFILES
 from .phone_jobs import PhoneJobs
+from .phone_monitor_service import PhoneMonitor
 from .protocols import get_protocol
 
 
-def create_app(controller=None, phone_jobs=None, allow_hardware=False):
+def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_monitor=None):
     app = Flask(__name__, static_folder='static')
     app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024
     ctl = controller or Controller()
     jobs = phone_jobs or PhoneJobs(ctl, allow_physical=allow_hardware)
     token = secrets.token_urlsafe(32)
     atexit.register(ctl.disconnect)
+    monitor = phone_monitor or PhoneMonitor(ctl, jobs)
+    atexit.register(monitor.disable)
 
     @app.before_request
     def protect():
@@ -87,6 +90,19 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False):
             safe=max([float(project.get('safe',5))]+[float(op.get('safe',project.get('safe',5))) for op in project.get('operations',[])])
             if '132' in settings and depth+safe>float(settings['132']):raise ValueError('Depth plus clearance exceeds configured Z travel')
         return status
+
+    @app.post('/api/phone-monitor')
+    def configure_phone():
+        action = (request.get_json() or {}).get('action')
+        if action not in ('status','enable','disable'):
+            raise ValueError('Select a phone pairing action.')
+        try:
+            info = {'status': monitor.info, 'enable': monitor.enable, 'disable': monitor.disable}[action]()
+        except OSError as exc:
+            raise ValueError('Phone listener could not start. Check the monitor port and TLS certificate.') from exc
+        response = jsonify(info)
+        response.headers['Cache-Control'] = 'no-store'
+        return response
 
     @app.post('/api/arm')
     def arm_phone():
@@ -170,28 +186,14 @@ def main():
     args = parser.parse_args()
     ctl = Controller()
     jobs = PhoneJobs(ctl, allow_physical=args.enable_hardware)
+    if bool(args.monitor_cert) != bool(args.monitor_key):
+        parser.error('Provide both --monitor-cert and --monitor-key')
+    monitor = PhoneMonitor(ctl, jobs, args.monitor_port, args.monitor_cert, args.monitor_key)
     if args.monitor:
-        import threading
-        from werkzeug.serving import make_server
-        from .monitor import create_monitor_app
-        monitor_token = secrets.token_urlsafe(32)
-        if bool(args.monitor_cert)!=bool(args.monitor_key):parser.error('Provide both --monitor-cert and --monitor-key')
-        if args.monitor_cert:
-            import ssl
-            from cheroot.wsgi import Server
-            from cheroot.ssl.builtin import BuiltinSSLAdapter
-            monitor=Server(('0.0.0.0',args.monitor_port),create_monitor_app(ctl,monitor_token,jobs))
-            monitor.ssl_adapter=BuiltinSSLAdapter(args.monitor_cert,args.monitor_key)
-            monitor.ssl_adapter.context.minimum_version=ssl.TLSVersion.TLSv1_2
-            threading.Thread(target=monitor.start,daemon=True).start();atexit.register(monitor.stop)
-            scheme='https';monitor_port=args.monitor_port
-        else:
-            monitor = make_server('0.0.0.0', args.monitor_port, create_monitor_app(ctl, monitor_token, jobs), threaded=True)
-            threading.Thread(target=monitor.serve_forever, daemon=True).start();atexit.register(monitor.shutdown)
-            scheme='http';monitor_port=monitor.server_port
-        print(f'Phone pairing: {scheme}://<PI-LAN-IP>:{monitor_port}/#token={monitor_token}', flush=True)
-        print('Use on your trusted local network. Restart to revoke the pairing token.', flush=True)
-    create_app(ctl, jobs, allow_hardware=args.enable_hardware).run(host='127.0.0.1', port=args.port, threaded=True, debug=False)
+        pairing = monitor.enable()
+        print(f"Phone pairing: {pairing['scheme']}://<PI-LAN-IP>:{pairing['port']}/#token={pairing['token']}", flush=True)
+        print('Open Control → Phone pendant to view or revoke pairing.', flush=True)
+    create_app(ctl, jobs, allow_hardware=args.enable_hardware, phone_monitor=monitor).run(host='127.0.0.1', port=args.port, threaded=True, debug=False)
 
 
 if __name__ == '__main__':

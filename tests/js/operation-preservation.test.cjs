@@ -13,6 +13,7 @@ function setup(){
  const obj={name:'Tabbed cutout',paths:[[[10,10],[30,10],[30,30],[10,30],[10,10]]],operationSettings:{tabs:{width:4,height:2,count:4},stock_thickness:10,tool_id:1,tool_name:'Original cutter',tool_shape:'flat',tool_diameter:2}};
  const context=vm.createContext({$,objects:[obj],fields:Object.keys(values),selectedObject:()=>obj,
   project:()=>({...Object.fromEntries(Object.keys(values).map(k=>[k,['mode','protocol','operation','dwell_units'].includes(k)?$(k).value:Number($(k).value)])),paths:obj.paths}),
+  machiningProject:()=>context.project(),
   task:fn=>fn,invalidate(){},draw(){},message(){},download(){},prompt(){return null;},
   window:{studioReady:{then(){}}},localStorage:{getItem(){return null;},setItem(){}},
   document:{createElement(){return {innerHTML:'',append(){}};},querySelector(){return {append(){}};}},

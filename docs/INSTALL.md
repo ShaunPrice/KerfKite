@@ -4,12 +4,12 @@ See the [single-board computer guide](SBC.md) for board-specific downloads and t
 
 ## Desktop or phone installation
 
-Download the desktop package from the [official KerfKite release](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.2.3).
+Download the desktop package from the [official KerfKite release](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.3.0).
 
 * **Windows 10/11 x64.** Open the setup wizard and choose **Install**. It installs for your account and adds KerfKite Studio to Start. Windows may display a SmartScreen warning for this unsigned installer. Check the download came from the official release. On a managed PC, follow your organisation’s software approval process.
 * **macOS.** In **Apple menu → About This Mac**, check whether the computer has an Apple chip or an Intel processor. Open the matching DMG, drag KerfKite Studio onto Applications and launch it there. This community build has an ad-hoc signature and has not been notarised by Apple. If macOS blocks it, review the app under **System Settings → Privacy & Security** after the first open attempt. Managed Macs may require administrator approval.
 * **Raspberry Pi OS, Debian and Ubuntu.** Use a 64-bit graphical desktop. Open the ARM64 DEB on a Pi 4/5 or other ARM64 system, or the AMD64 DEB on an Intel/AMD PC. Choose **Install** in the package manager and open KerfKite Studio from the applications menu. On another compatible glibc desktop with a browser and xdg-open, extract the matching Linux archive to a permanent folder and open the KerfKite executable inside.
-* **Android.** Download the [Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Pocket-Android.apk) on your phone, open **My Files → Downloads**, tap the APK and choose **Install**. If prompted, allow this source to install apps and revoke that permission afterwards. Device management and Samsung Auto Blocker can restrict sideloading. If replacing a development APK, export your draft first. Android requires the previous build to be removed if its signing certificate differs. [Pocket user guide](ANDROID.md)
+* **Android.** Download the [Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/download/v0.3.0/KerfKite-Pocket-Android.apk) on your phone, open **My Files → Downloads**, tap the APK and choose **Install**. If prompted, allow this source to install apps and revoke that permission afterwards. Device management and Samsung Auto Blocker can restrict sideloading. If replacing a development APK, export your draft first. Android requires the previous build to be removed if its signing certificate differs. [Pocket user guide](ANDROID.md)
 
 ### First launch
 
@@ -165,7 +165,9 @@ For internet hosting use a real DNS name, publicly trusted certificate and delib
 
 ## Phone monitor and controls
 
-The local controller service can expose a separate paired monitor. Install `web` first for TLS and supply a certificate valid for the phone's Pi hostname:
+In the desktop installer, choose **Start workshop → Open Studio → Control → Phone pendant → Enable phone pairing**. Enter the server address reachable from the phone. Follow the [Android connection guide](PHONE-CONNECTIONS.md) to pair over Wi-Fi, USB tethering or Bluetooth tethering.
+
+For HTTPS from the command line, install `web` and supply a certificate valid for the server hostname used on the phone:
 
 ```sh
 sh start.sh --monitor --monitor-port 8766 --monitor-cert server.pem --monitor-key server-key.pem

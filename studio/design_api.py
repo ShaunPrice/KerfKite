@@ -25,7 +25,8 @@ def register_design_routes(app):
     @app.post('/api/solid-cad/sketch-points')
     def resolve_sketch_points():
         from .solid_cad import Dimensions
-        from shapely.geometry import Polygon
+        from .sketch_profile import profile_geometry
+        from .sketch_constraints import solve_profile
 
         payload = request.get_json()
         if not isinstance(payload, dict) or not isinstance(payload.get('points'), list):
@@ -33,16 +34,25 @@ def register_design_routes(app):
         if len(payload['points']) > 256:
             raise ValueError('A sketch supports up to 256 vertices')
         dimensions = Dimensions(payload.get('parameters', {}))
-        points = [dimensions.vector(point, 2) for point in payload['points']]
-        if payload.get('validate'):
-            if len(points) < 3 or len(set(map(tuple, points))) != len(points):
-                raise ValueError('A closed sketch needs at least three distinct vertices')
-            polygon = Polygon(points)
-            if not polygon.is_valid or polygon.area <= 1e-8:
-                raise ValueError('Sketch must enclose an area without crossing itself')
-            if payload.get('kind') == 'revolve' and any(r < 0 for r, z in points):
-                raise ValueError('Revolve profile radii must be zero or greater')
-        return jsonify(points=points, parameters=dimensions.values)
+        constraint_error = None
+        try:
+            points, diagnostics = solve_profile(payload, dimensions)
+        except ValueError as exc:
+            if payload.get('validate'):
+                raise
+            points = [dimensions.vector(point, 2) for point in payload['points']]
+            diagnostics = None
+            constraint_error = str(exc)
+        outline = None
+        issue = None
+        if payload.get('validate') or 'fillets' in payload:
+            try:
+                _, outline = profile_geometry(payload, dimensions, points)
+            except ValueError as exc:
+                if payload.get('validate'):
+                    raise
+                issue = str(exc)
+        return jsonify(points=points, parameters=dimensions.values, outline=outline, issue=issue, diagnostics=diagnostics, constraint_error=constraint_error)
 
     @app.post('/api/solid-cad/section')
     def section_solid():

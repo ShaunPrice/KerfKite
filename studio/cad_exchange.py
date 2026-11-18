@@ -53,7 +53,7 @@ def _surface_spec(surface):
                 not isinstance(row, list) or len(row) != sizes[1] or any(
                     type(w) not in (int, float) or not .001 <= w <= 1000 for w in row) for row in weights):
             raise ValueError('Use a matching rectangular net of weights from 0.001 to 1000')
-        weights = np.asarray(weights)
+        weights = np.asarray(weights, dtype=float)
     return poles, weights, kind, degrees
 
 
@@ -84,11 +84,82 @@ def _basis(t, size, degree, kind):
     return basis.T
 
 
-def surface_mesh(surface):
-    poles, weights, kind, degrees = _surface_spec(surface)
+FULL_UV = (0., 1., 0., 1.)
+MAX_PATCHES = 16
+
+
+def _trim(surface):
+    bounds = surface.get('trim', FULL_UV)
+    if not isinstance(bounds, (list, tuple)) or len(bounds) != 4 or any(
+            type(value) not in (int, float) or not np.isfinite(value) for value in bounds):
+        raise ValueError('Enter finite U and V trim bounds')
+    if not all(0 <= low < high <= 1 for low, high in zip(bounds[::2], bounds[1::2])):
+        raise ValueError('Trim bounds must increase between zero and one on each axis')
+    return bounds
+
+
+def _sheet(surface):
+    """Resolve the common edge in homogeneous coordinates before either mesh or STEP export."""
+    if not isinstance(surface, dict):
+        raise ValueError('Supply a surface')
+    trim = _trim(surface)
+    if surface.get('kind') != 'sheet':
+        return [(_surface_spec(surface), trim)], []
+    patches = surface.get('patches')
+    if not isinstance(patches, list) or not 2 <= len(patches) <= MAX_PATCHES:
+        raise ValueError(f'Use 2–{MAX_PATCHES} patches in a joined surface')
+    if surface.get('axis') not in ('u', 'v'):
+        raise ValueError('Select a U or V join')
+    axis = 0 if surface['axis'] == 'u' else 1
+    transverse = 1 - axis
+    visible, resolved = [], []
+    previous = None
+    for i, patch in enumerate(patches):
+        if not isinstance(patch, dict) or 'trim' in patch:
+            raise ValueError('Apply trim bounds to the whole joined surface')
+        spec = _surface_spec(patch)
+        poles, weights, kind, degrees = spec
+        if previous is not None:
+            mode = patch.get('continuity', 'position')
+            if mode not in ('position', 'tangent'):
+                raise ValueError('Choose position or tangent continuity')
+            prev_poles, prev_weights, _, prev_degrees = previous
+            if (poles.shape[transverse] != prev_poles.shape[transverse]
+                    or degrees[transverse] != prev_degrees[transverse]):
+                raise ValueError('Joined edges need the same transverse pole count and degree')
+            # Index the join direction first. The views update spec in-place.
+            p, w = np.moveaxis(poles, axis, 0), np.moveaxis(weights, axis, 0)
+            a, aw = np.moveaxis(prev_poles, axis, 0), np.moveaxis(prev_weights, axis, 0)
+            p[0], w[0] = a[-1], aw[-1]
+            if mode == 'tangent':
+                # Endpoint derivative for an open uniform rational spline uses its
+                # degree and first knot span. Match the full homogeneous derivative.
+                prev_factor = prev_degrees[axis] * (len(a) - prev_degrees[axis])
+                factor = degrees[axis] * (len(p) - degrees[axis])
+                scale = prev_factor / factor
+                w[1] = aw[-1] + scale * (aw[-1] - aw[-2])
+                if np.any((w[1] < .001) | (w[1] > 1000)):
+                    raise ValueError('Tangent join exceeds the weight range. Adjust parent weights or use Position.')
+                h0, h1 = a[-1] * aw[-1, :, None], a[-2] * aw[-2, :, None]
+                p[1] = (h0 + scale * (h0 - h1)) / w[1, :, None]
+                if not np.all(np.abs(p[1]) <= 100000):
+                    raise ValueError('Tangent join exceeds the modelling range')
+        resolved.append({**patch, 'poles': poles.tolist(), 'weights': weights.tolist()})
+        previous = spec
+        window = list(trim)
+        lo = max(0., trim[2 * axis] * len(patches) - i)
+        hi = min(1., trim[2 * axis + 1] * len(patches) - i)
+        if lo < hi:
+            window[2 * axis:2 * axis + 2] = [lo, hi]
+            visible.append((spec, window))
+    return visible, resolved
+
+
+def _patch_mesh(spec, trim):
+    poles, weights, kind, degrees = spec
     n = 24
-    t = np.linspace(0, 1, n + 1)
-    u, v = [_basis(t, size, d, kind) for size, d in zip(poles.shape[:2], degrees)]
+    u, v = [_basis(np.linspace(lo, hi, n + 1), size, d, kind)
+            for lo, hi, size, d in zip(trim[::2], trim[1::2], poles.shape[:2], degrees)]
     numerator = np.einsum('ui,vj,ijk->uvk', u, v, poles * weights[:, :, None])
     denominator = np.einsum('ui,vj,ij->uv', u, v, weights)
     points = numerator/denominator[:, :, None]
@@ -105,6 +176,95 @@ def surface_mesh(surface):
         raise ValueError('The control net collapses to zero surface area')
     return dict(vertices=flat.tolist(), triangles=triangles.tolist(), area=float(area),
                 bounds=[*flat.min(axis=0).tolist(), *flat.max(axis=0).tolist()], faces=1, solids=0)
+
+
+def _regions(surface):
+    from shapely import Polygon, box
+    from shapely.affinity import affine_transform
+    from shapely.geometry.polygon import orient
+
+    patches, resolved = _sheet(surface)
+    loops = surface.get('boundary')
+    if loops is None:
+        return [(spec, window, None) for spec, window in patches], resolved
+    if not isinstance(loops, list) or not 1 <= len(loops) <= 9:
+        raise ValueError('Draw an outline with up to eight interior holes')
+    for ring in loops:
+        if (not isinstance(ring, list) or not 3 <= len(ring) <= 64
+                or any(not isinstance(pt, list) or len(pt) != 2 or
+                       any(type(x) not in (int, float) or not 0 <= x <= 1 for x in pt) for pt in ring)
+                or len(set(map(tuple, ring))) != len(ring)):
+            raise ValueError('Each UV loop needs 3–64 distinct points inside the unit square')
+    outline = Polygon(loops[0], loops[1:])
+    if not outline.is_valid or outline.area < 1e-10:
+        raise ValueError('Use a simple outline with non-overlapping holes inside it')
+    u0,u1,v0,v1 = _trim(surface)
+    kept = outline.intersection(box(u0,v0,u1,v1))
+    if kept.geom_type != 'Polygon' or kept.area < 1e-10:
+        raise ValueError('Trim bounds and outline must retain one connected region')
+    count = len(resolved) or 1
+    along_u = surface.get('axis', 'u') == 'u'
+    first = int((u0 if along_u else v0) * count)
+    pieces = []
+    for i, (spec, window) in enumerate(patches, first):
+        transform = [count,0,0,1,-i,0] if along_u else [1,0,0,count,0,-i]
+        local = affine_transform(kept, transform).intersection(box(0,0,1,1))
+        for item in getattr(local, 'geoms', [local]):
+            if item.geom_type == 'Polygon' and item.area > 1e-12:
+                pieces.append((spec, window, orient(item, sign=1.0)))
+    if not pieces:
+        raise ValueError('No surface remains inside this trim')
+    return pieces, resolved
+
+
+def _trimmed_mesh(spec, window, domain):
+    if domain is None:
+        return _patch_mesh(spec, window)
+    # Clip a regular UV grid against the exact trim outline. Triangulating
+    # the clipped cells preserves holes while sampling curvature across the face.
+    import shapely
+
+    u0,v0,u1,v1 = domain.bounds
+    us, vs = np.linspace(u0,u1,25), np.linspace(v0,v1,25)
+    cells = shapely.box(us[:-1,None],vs[None,:-1],us[1:,None],vs[None,1:]).ravel()
+    clipped = shapely.intersection(cells, domain)
+    polys = shapely.get_parts(shapely.get_parts(clipped))
+    polys = polys[shapely.get_type_id(polys) == 3]
+    facets = shapely.get_parts(shapely.constrained_delaunay_triangles(polys))
+    if not len(facets):
+        raise ValueError('The trimmed surface is too small to tessellate')
+    uv = shapely.get_coordinates(facets).reshape(-1,4,2)[:,:3,:].copy()
+    e1, e2 = uv[:,1,:]-uv[:,0,:], uv[:,2,:]-uv[:,0,:]
+    clockwise = e1[:,0]*e2[:,1] < e1[:,1]*e2[:,0]
+    uv[clockwise] = uv[clockwise][:,[0,2,1],:]
+    coords, indices = np.unique(uv.reshape(-1,2), axis=0,return_inverse=True)
+    triangles = indices.reshape(-1,3)
+    poles, weights, kind, degrees = spec
+    bu,bv = [_basis(coords[:,a],size,degree,kind) for a,(size,degree) in enumerate(zip(poles.shape[:2],degrees))]
+    denominator=np.einsum('ui,uj,ij->u',bu,bv,weights)
+    points=np.einsum('ui,uj,ijk->uk',bu,bv,poles*weights[:,:,None])/denominator[:,None]
+    tri=points[triangles]
+    area=float(np.linalg.norm(np.cross(tri[:,1]-tri[:,0],tri[:,2]-tri[:,0]),axis=1).sum()/2)
+    if area < 1e-8:
+        raise ValueError('The retained surface collapses to zero area')
+    return dict(vertices=points.tolist(), triangles=triangles.tolist(), area=area,
+                bounds=[*points.min(axis=0).tolist(), *points.max(axis=0).tolist()], faces=1, solids=0)
+
+
+def surface_mesh(surface):
+    patches, resolved = _regions(surface)
+    pieces = [_trimmed_mesh(*patch) for patch in patches]
+    if not resolved:
+        return pieces[0]
+    vertices, triangles = [], []
+    for piece in pieces:
+        offset = len(vertices)
+        triangles.extend([[offset + index for index in tri] for tri in piece['triangles']])
+        vertices.extend(piece['vertices'])
+    bounds = np.array([piece['bounds'] for piece in pieces])
+    return dict(vertices=vertices, triangles=triangles, area=sum(p['area'] for p in pieces),
+                bounds=[*bounds[:, :3].min(axis=0), *bounds[:, 3:].max(axis=0)],
+                faces=len(pieces), solids=0, resolvedPatches=resolved)
 
 
 def _ocp():
@@ -223,14 +383,14 @@ def step_manifold(feature, kernel):
     return part
 
 
-def _surface_face(surface):
+def _surface_face(spec, window, domain):
     from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
     from OCP.Geom import Geom_BezierSurface, Geom_BSplineSurface
     from OCP.TColStd import TColStd_Array1OfReal, TColStd_Array1OfInteger, TColStd_Array2OfReal
     from OCP.TColgp import TColgp_Array2OfPnt
     from OCP.gp import gp_Pnt
-    poles, weights, kind, degrees = _surface_spec(surface)
-    surface_mesh(surface)  # Same degeneracy checks as the editor preview.
+    poles, weights, kind, degrees = spec
+    _patch_mesh(spec, window)  # Apply the same degeneracy check as the editor.
     grid = TColgp_Array2OfPnt(1, len(poles), 1, len(poles[0]))
     for i, row in enumerate(poles):
         for j, xyz in enumerate(row):
@@ -253,17 +413,62 @@ def _surface_face(surface):
             knots.append(values)
             multiplicities.append(mults)
         geometry = Geom_BSplineSurface(grid, weight_grid, *knots, *multiplicities, *degrees)
-    maker = BRepBuilderAPI_MakeFace(geometry, 1e-7)
+    if domain is not None:
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeEdge, BRepBuilderAPI_MakeWire
+        from OCP.BRepLib import BRepLib
+        from OCP.BRepCheck import BRepCheck_Analyzer
+        from OCP.GCE2d import GCE2d_MakeSegment
+        from OCP.gp import gp_Pnt2d
+
+        def uv_wire(ring):
+            wire = BRepBuilderAPI_MakeWire()
+            coords = list(ring.coords)
+            for a,b in zip(coords, coords[1:]):
+                segment = GCE2d_MakeSegment(gp_Pnt2d(*a),gp_Pnt2d(*b)).Value()
+                wire.Add(BRepBuilderAPI_MakeEdge(segment,geometry).Edge())
+                if not wire.IsDone():
+                    raise ValueError('Could not connect a UV trim wire')
+            return wire.Wire()
+
+        maker = BRepBuilderAPI_MakeFace(geometry, uv_wire(domain.exterior), True)
+        for hole in domain.interiors:
+            maker.Add(uv_wire(hole))
+        if not maker.IsDone():
+            raise ValueError('Could not trim this STEP face')
+        face=maker.Face()
+        if not BRepLib.BuildCurves3d_s(face) or not BRepCheck_Analyzer(face).IsValid():
+            raise ValueError('The UV outline could not form a valid STEP face')
+        return face
+    maker = BRepBuilderAPI_MakeFace(geometry, *window, 1e-7)
     if not maker.IsDone():
         raise ValueError('Could not build the spline face')
     return maker.Face()
+
+
+def _surface_shape(surface):
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_Sewing
+    from OCP.BRepCheck import BRepCheck_Analyzer
+    from OCP.TopAbs import TopAbs_SHELL
+    patches, _ = _regions(surface)
+    faces = [_surface_face(*patch) for patch in patches]
+    if len(faces) == 1:
+        return faces[0]
+    sewing = BRepBuilderAPI_Sewing(1e-7)
+    for face in faces:
+        sewing.Add(face)
+    sewing.Perform()
+    shape = sewing.SewedShape()
+    if (shape.IsNull() or shape.ShapeType() != TopAbs_SHELL or sewing.NbDeletedFaces()
+            or sewing.NbMultipleEdges() or not BRepCheck_Analyzer(shape).IsValid()):
+        raise ValueError('The trimmed patches could not form a valid connected STEP shell')
+    return shape
 
 
 def _part_shape(model):
     """Translate the validated feature history into exact B-rep geometry in feature order."""
     from .solid_cad import _build
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Common, BRepAlgoAPI_Cut, BRepAlgoAPI_Fuse
-    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace, BRepBuilderAPI_MakePolygon, BRepBuilderAPI_Transform
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform
     from OCP.BRepPrimAPI import (BRepPrimAPI_MakeBox, BRepPrimAPI_MakeCone, BRepPrimAPI_MakeCylinder,
                                 BRepPrimAPI_MakePrism, BRepPrimAPI_MakeRevol, BRepPrimAPI_MakeSphere)
     from OCP.gp import gp_Ax1, gp_Dir, gp_Pnt, gp_Trsf, gp_Vec
@@ -299,14 +504,8 @@ def _part_shape(model):
             top = d.evaluate(f.get('topRadius', r))
             shape = (BRepPrimAPI_MakeCylinder(r, h) if abs(top-r) < 1e-10 else BRepPrimAPI_MakeCone(r, top, h)).Shape()
         elif kind in ('extrude', 'revolve'):
-            wire = BRepBuilderAPI_MakePolygon()
-            pts = [d.vector(pt, 2) for pt in f['points']]
-            if pts[0] == pts[-1]:
-                pts.pop()
-            for a, b in pts:
-                wire.Add(gp_Pnt(a, b, 0) if kind == 'extrude' else gp_Pnt(a, 0, b))
-            wire.Close()
-            face = BRepBuilderAPI_MakeFace(wire.Wire()).Face()
+            from .sketch_profile import step_profile_face
+            face = step_profile_face(f, d)
             if kind == 'extrude':
                 shape = BRepPrimAPI_MakePrism(face, gp_Vec(0, 0, d.positive(f['height']))).Shape()
             else:
@@ -341,7 +540,7 @@ def write_step(*, surface=None, model=None, source=None):
         raise ValueError('Choose one part, surface or imported STEP document')
     with _exchange_lock:
         try:
-            shape = (_surface_face(surface) if surface is not None else
+            shape = (_surface_shape(surface) if surface is not None else
                      _part_shape(model) if model is not None else _read_shape(source))
             writer = STEPControl_Writer()
             stream = BytesIO()
