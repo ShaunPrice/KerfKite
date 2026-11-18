@@ -54,6 +54,7 @@ jobs:
       - name: Install and exercise Debian package
         if: runner.os == 'Linux'
         run: |
+          sudo apt-get update
           sudo apt-get install -y "./$INSTALLER"
           python3 validation/installer_smoke.py /opt/kerfkite/KerfKite --step
           sudo apt-get remove -y kerfkite-studio
