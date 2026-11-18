@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 import re
+import platform
+import sys
 import socket
 import subprocess
 import tempfile
@@ -83,7 +85,37 @@ def install_directory():
                 time.sleep(.5)
 
 
-def check(exe, data, offline, step):
+def exercise_native(exe, scratch):
+    sources = Path(__file__).resolve().parents[1] / "packaging/desktop"
+    env = os.environ.copy()
+    if sys.platform.startswith("linux"):
+        host = exe.with_name("kerfkite-native")
+        assert os.access(host, os.X_OK)
+        env["KERFKITE_NATIVE_HOST"] = str(host)
+        command = ["/usr/bin/python3", str(sources / "linux/smoke.py"), STUDIO]
+    elif sys.platform == "darwin":
+        host = exe.with_name("KerfKiteNative")
+        subprocess.run(["codesign", "--verify", "--strict", host], check=True)
+        runner = scratch / "MacWindowTest"
+        subprocess.run([sys.executable, sources / "macos/build.py",
+                        "arm64" if platform.machine() == "arm64" else "amd64", runner, "--smoke"], check=True)
+        command = [runner, STUDIO]
+    elif os.name == "nt":
+        subprocess.run([sys.executable, sources / "windows/build.py", "--smoke-only", exe.parent], check=True)
+        command = [exe.with_name("KerfKiteNativeSmoke.exe"), STUDIO, scratch]
+    else:
+        raise RuntimeError("Unsupported native test platform")
+    try:
+        process = subprocess.run(command, timeout=180, env=env)
+        if os.name == "nt" and (scratch / "receipt.txt").exists():
+            print((scratch / "receipt.txt").read_text(encoding="utf-8-sig"), flush=True)
+        process.check_returncode()
+    finally:
+        if os.name == "nt":
+            exe.with_name("KerfKiteNativeSmoke.exe").unlink(missing_ok=True)
+
+
+def check(exe, data, offline, step, native=False):
     env = {**os.environ, "KERFKITE_DATA_DIR": str(data)}
     if offline:
         env["UV_OFFLINE"]="1"
@@ -116,6 +148,9 @@ def check(exe, data, offline, step):
         if step:
             python=next(data.glob("runtime-*/Scripts/python.exe" if os.name=="nt" else "runtime-*/bin/python"))
             subprocess.run([python,"-I","-c","from pypdf import PdfReader; from OCP.STEPControl import STEPControl_Writer; STEPControl_Writer()"],check=True)
+        if native and not offline:
+            with install_directory() as scratch:
+                exercise_native(exe, scratch)
         submit(page,"quit")
         assert proc.wait(timeout=12)==0
         wait_for_studio_exit()
@@ -129,11 +164,12 @@ if __name__=="__main__":
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable",type=Path)
     parser.add_argument("--step",action="store_true")
+    parser.add_argument("--native",action="store_true",help="exercise the platform window on a graphical session")
     args=parser.parse_args()
     with install_directory() as data:
         try:
             for offline in (False,True):
-                check(args.executable.resolve(),data,offline,args.step)
+                check(args.executable.resolve(),data,offline,args.step,args.native)
                 print("Offline relaunch passed" if offline else "Fresh installation and CAM preview passed",flush=True)
         except Exception:
             log=data/"setup.log"

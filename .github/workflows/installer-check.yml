@@ -5,7 +5,7 @@ on:
       tag:
         description: Release tag to verify
         required: true
-        default: v0.4.1
+        default: v0.5.0
 permissions:
   contents: read
 jobs:
@@ -20,7 +20,7 @@ jobs:
           - {os: ubuntu-24.04, file: KerfKite-Linux-amd64.deb}
           - {os: ubuntu-24.04-arm, file: KerfKite-Linux-arm64.deb}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       INSTALLER: ${{ matrix.file }}
     steps:
@@ -40,7 +40,7 @@ jobs:
           $setup = Start-Process ".\$env:INSTALLER" -ArgumentList "/S" -Wait -PassThru
           if ($setup.ExitCode -ne 0) { throw "Setup failed" }
           $dir = Join-Path $env:LOCALAPPDATA "Programs\KerfKite Studio"
-          python validation/installer_smoke.py "$dir\KerfKite.exe" --step
+          python validation/installer_smoke.py "$dir\KerfKite.exe" --step --native
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Start-Process "$dir\Uninstall.exe" -ArgumentList "/S" -Wait
       - name: Install and exercise macOS disk image
@@ -50,11 +50,11 @@ jobs:
           ditto "$RUNNER_TEMP/kerfkite-dmg/KerfKite Studio.app" "$RUNNER_TEMP/KerfKite Studio.app"
           hdiutil detach "$RUNNER_TEMP/kerfkite-dmg"
           codesign --verify --strict "$RUNNER_TEMP/KerfKite Studio.app"
-          python3 validation/installer_smoke.py "$RUNNER_TEMP/KerfKite Studio.app/Contents/MacOS/KerfKite" --step
+          python3 validation/installer_smoke.py "$RUNNER_TEMP/KerfKite Studio.app/Contents/MacOS/KerfKite" --step --native
       - name: Install and exercise Debian package
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y "./$INSTALLER"
-          python3 validation/installer_smoke.py /opt/kerfkite/KerfKite --step
+          sudo apt-get install -y "./$INSTALLER" xvfb xauth dbus-x11
+          dbus-run-session -- xvfb-run -a -s "-screen 0 1600x1000x24" python3 validation/installer_smoke.py /opt/kerfkite/KerfKite --step --native
           sudo apt-get remove -y kerfkite-studio

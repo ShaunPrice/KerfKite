@@ -5,6 +5,7 @@ import plistlib
 import shutil
 import subprocess
 import tempfile
+import sys
 from pathlib import Path
 
 from PIL import Image
@@ -49,6 +50,9 @@ def mac(work, out, wheel, arch, version):
     exe = payload(res, wheel, "darwin", arch)
     (contents / "MacOS").mkdir()
     exe.rename(contents / "MacOS/KerfKite")
+    helper = contents / "MacOS/KerfKiteNative"
+    run(sys.executable, HERE / "macos/build.py", arch, helper)
+    run("codesign", "--force", "--sign", "-", helper)
     with Image.open(ICON) as im:
         im.save(res / "KerfKite.icns")
     (contents / "Info.plist").write_bytes(plistlib.dumps({
@@ -69,6 +73,9 @@ def linux(work, out, wheel, arch, version):
     pkg = work / "package"
     dest = pkg / "opt/kerfkite"
     payload(dest, wheel, "linux", arch)
+    helper = dest / "kerfkite-native"
+    shutil.copyfile(HERE / "linux/kerfkite-native", helper)
+    helper.chmod(0o755)
     desktop = pkg / "usr/share/applications/org.kerfkite.Studio.desktop"
     desktop.parent.mkdir(parents=True)
     desktop.write_text("[Desktop Entry]\nType=Application\nName=KerfKite Studio\nComment=Design and simulate CNC jobs\n"
@@ -82,13 +89,14 @@ def linux(work, out, wheel, arch, version):
     revision = 2 if version == "0.2.1" else 1
     meta.write_text(f"Package: kerfkite-studio\nVersion: {version}-{revision}\nArchitecture: {arch}\nSection: graphics\n"
                     "Priority: optional\nMaintainer: KerfKite Studio contributors <maintainers@users.noreply.github.com>\n"
-                    "Depends: xdg-utils, ca-certificates, libgl1\nDescription: KerfKite CAD and machining simulator\n")
+                    "Depends: xdg-utils, ca-certificates, libgl1, python3, python3-gi, gir1.2-gtk-3.0, gir1.2-webkit2-4.1 | gir1.2-webkit2-4.0\nDescription: KerfKite CAD and machining simulator\n")
     run("dpkg-deb","--root-owner-group","-Zxz","--build",pkg,out / f"KerfKite-Linux-{arch}.deb")
     run("tar","-C",dest.parent,"-czf",out / f"KerfKite-Linux-{arch}.tar.gz",dest.name,env={**os.environ,"COPYFILE_DISABLE":"1"})
 
 
 def windows(work, out, wheel):
     payload(work / "payload", wheel, "windows", "amd64")
+    run(sys.executable, HERE / "windows/build.py", work / "payload")
     with Image.open(ICON) as im:
         im.save(work / "app.ico", sizes=[(16,16),(32,32),(48,48),(256,256)])
     shutil.copy(HERE / "windows.nsi",work)

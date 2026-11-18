@@ -4,18 +4,28 @@ See the [single-board computer guide](SBC.md) for board-specific downloads and t
 
 ## Desktop or phone installation
 
-Download the desktop package from the [official KerfKite release](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.4.1).
+Download the desktop package from the [official KerfKite release](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.5.0).
 
 * **Windows 10/11 x64.** Open the setup wizard and choose **Install**. It installs for your account and adds KerfKite Studio to Start. Windows may display a SmartScreen warning for this unsigned installer. Check the download came from the official release. On a managed PC, follow your organisation’s software approval process.
 * **macOS.** In **Apple menu → About This Mac**, check whether the computer has an Apple chip or an Intel processor. Open the matching DMG, drag KerfKite Studio onto Applications and launch it there. This community build has an ad-hoc signature and has not been notarised by Apple. If macOS blocks it, review the app under **System Settings → Privacy & Security** after the first open attempt. Managed Macs may require administrator approval.
 * **Raspberry Pi OS, Debian and Ubuntu.** Use a 64-bit graphical desktop. Open the ARM64 DEB on a Pi 4/5 or other ARM64 system, or the AMD64 DEB on an Intel/AMD PC. Choose **Install** in the package manager and open KerfKite Studio from the applications menu. On another compatible glibc desktop with a browser and xdg-open, extract the matching Linux archive to a permanent folder and open the KerfKite executable inside.
-* **Android.** Download the [Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.1/KerfKite-Pocket-Android.apk) on your phone, open **My Files → Downloads**, tap the APK and choose **Install**. If prompted, allow this source to install apps and revoke that permission afterwards. Device management and Samsung Auto Blocker can restrict sideloading. If replacing a development APK, export your draft first. Android requires the previous build to be removed if its signing certificate differs. [Pocket user guide](ANDROID.md)
+* **Android.** Download the [Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.0/KerfKite-Pocket-Android.apk) on your phone, open **My Files → Downloads**, tap the APK and choose **Install**. If prompted, allow this source to install apps and revoke that permission afterwards. Device management and Samsung Auto Blocker can restrict sideloading. If replacing a development APK, export your draft first. Android requires the previous build to be removed if its signing certificate differs. [Pocket user guide](ANDROID.md)
 
 ### First launch
 
 1. The desktop launcher opens a setup tab in your default browser. Keep the computer online while it downloads the private Python runtime and the design libraries. A first install can take several minutes on a Pi. The launcher shows the current stage.
-2. Choose **Start workshop**, then **Open Studio**. In **Projects → Try a sample**, load the badge and generate a preview. The simulator works offline on subsequent launches. The portable desktop packages use the Python relief engine. Select **Add STEP import and export** before starting a workshop to download the optional exchange libraries. For a commissioned machine, expand **Physical machine access** and enable controller ports for that session. Studio still requires a separate connection. Native C++ acceleration, HTTPS serving and MCP are available through the source installation below.
-3. Use **Quit KerfKite** in the launcher tab to shut down the local simulator. Reopening the application shortcut brings back that tab. Download important projects as portable files.
+2. Leave **Native desktop** selected and choose **Start workshop**. The application window opens when the simulator is ready. To use a browser instead, select **Web browser** during startup, then choose **Open in browser**. In **Projects → Try a sample**, load the badge and generate a preview. The simulator works offline on subsequent launches. The portable desktop packages use the Python relief engine. Select **Add STEP import and export** before starting a workshop to download the optional exchange libraries. For a commissioned machine, expand **Physical machine access** and enable controller ports for that session. Studio still requires a separate connection. Native C++ acceleration, HTTPS serving and MCP are available through the source installation below.
+3. Save your document and close the desktop window, then use **Quit KerfKite** in the launcher tab to shut down the local simulator. Reopening the application shortcut brings back that tab. Download important projects as portable files.
+
+When **Open directly next time** is selected, the next launch opens the native simulator window directly. Closing that window shows the launcher. Choose **Show setup next launch** there to change STEP or controller options on the next start. Controller access always requires an explicit choice in setup.
+
+### Desktop window requirements
+
+The Windows window uses .NET Framework 4.8 and the Microsoft Edge WebView2 Evergreen Runtime. Windows 11 includes WebView2. If the window reports that the runtime is missing, install the x64 Evergreen Runtime and reopen the window. [Microsoft WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
+
+The macOS window uses AppKit and the system WebKit. Keep macOS and Safari updated. On Linux the Debian package installs GTK 3, PyGObject and WebKitGTK. For a tar archive, install the distribution packages that provide Python 3 with GI, GTK 3 and the WebKit2 4.1 or 4.0 typelib. Run it from a graphical session. You can always select **Open in browser** from the launcher.
+
+[Drawing and saving in the desktop window](DESKTOP.md)
 
 ### Updates, setup problems and removal
 

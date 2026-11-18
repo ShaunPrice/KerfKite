@@ -31,7 +31,7 @@ const studioURL = "http://127.0.0.1:18765/"
 
 var form = template.Must(template.New("launcher").Parse(page))
 
-type options struct{ hardware, step bool }
+type options struct{ hardware, step, desktop, remember bool }
 
 type state struct {
 	choices  chan options
@@ -39,6 +39,8 @@ type state struct {
 	sync.Mutex
 	phase, detail string
 	active        bool
+	desktopOpen   bool
+	automatic     bool
 }
 
 func (s *state) set(phase, detail string) {
@@ -62,7 +64,48 @@ func browser(url string) {
 	}
 }
 
-func runStudio(ctx context.Context, s *state, payload, data string, output *os.File) error {
+// Keep one editable document window per launcher. Closing its window leaves the service running.
+func (s *state) openDesktop(payload string, output *os.File) {
+	s.Lock()
+	defer s.Unlock()
+	if s.phase != "Your workshop is ready" || s.desktopOpen {
+		return
+	}
+	name := filepath.Join(payload, "kerfkite-native")
+	switch runtime.GOOS {
+	case "darwin":
+		name = filepath.Join(payload, "..", "MacOS", "KerfKiteNative")
+	case "windows":
+		name = filepath.Join(payload, "KerfKiteNative.exe")
+	}
+	cmd := exec.Command(name, studioURL)
+	cmd.Stdout, cmd.Stderr = output, output
+	err := cmd.Start()
+	if err != nil {
+		if s.automatic {
+			go browser("http://" + address)
+		}
+		fmt.Fprintln(output, err)
+		s.detail = "The desktop window could not start. Choose Open in browser, or reinstall the desktop package."
+		return
+	}
+	s.desktopOpen = true
+	go func() {
+		err := cmd.Wait()
+		s.Lock()
+		defer s.Unlock()
+		s.desktopOpen = false
+		if s.automatic {
+			go browser("http://" + address)
+		}
+		if err != nil {
+			fmt.Fprintln(output, err)
+			s.detail = "The desktop window closed with an error. Choose Open in browser or check the desktop runtime in the installation guide."
+		}
+	}()
+}
+
+func runStudio(ctx context.Context, s *state, payload, data string, output *os.File, showSetup func()) error {
 	// A release gets its own environment. An interrupted setup retries on the next launch.
 	wheel, err := filepath.Glob(filepath.Join(payload, "kerfkite_studio-*-py3-none-any.whl"))
 	if err != nil || len(wheel) != 1 {
@@ -96,7 +139,13 @@ func runStudio(ctx context.Context, s *state, payload, data string, output *os.F
 		return cmd.Run()
 	}
 	marker := filepath.Join(env, ".installed")
+	preference := filepath.Join(data, "native-simulation")
+	_, prefErr := os.Stat(preference)
+	automatic := prefErr == nil
+
 	if _, err = os.Stat(marker); os.IsNotExist(err) {
+		automatic = false
+		showSetup()
 		s.set("Downloading the setup tools", "The first launch needs an internet connection.")
 		uv, err = setupTool(ctx, data)
 		if err != nil {
@@ -119,13 +168,21 @@ func runStudio(ctx context.Context, s *state, payload, data string, output *os.F
 	} else if err != nil {
 		return err
 	}
-	s.set("Choose your workshop", "Start in simulation to design, preview and test your project.")
 	var choice options
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case choice = <-s.choices:
+	if automatic {
+		choice = options{desktop: true}
+	} else {
+		s.set("Choose your workshop", "Start in simulation to design, preview and test your project.")
+		showSetup()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case choice = <-s.choices:
+		}
 	}
+	s.Lock()
+	s.automatic = automatic
+	s.Unlock()
 	if choice.step {
 		stepMarker := filepath.Join(env, ".step-installed")
 		if _, e := os.Stat(stepMarker); os.IsNotExist(e) {
@@ -166,11 +223,23 @@ func runStudio(ctx context.Context, s *state, payload, data string, output *os.F
 			s.Lock()
 			s.physical = choice.hardware
 			s.Unlock()
-			detail := "Simulation is active. Return to this tab to quit."
+			detail := "Simulation is active. Return to the launcher to reopen the window or quit."
 			if choice.hardware {
 				detail = "Controller access is enabled. Connect the machine explicitly in Studio."
 			}
+			if choice.remember && choice.desktop && !choice.hardware {
+				if err := os.WriteFile(preference, []byte("simulation\n"), 0600); err != nil {
+					fmt.Fprintln(output, err)
+				}
+			} else if !automatic {
+				if err := os.Remove(preference); err != nil && !os.IsNotExist(err) {
+					fmt.Fprintln(output, err)
+				}
+			}
 			s.set("Your workshop is ready", detail)
+			if choice.desktop {
+				s.openDesktop(payload, output)
+			}
 		} else {
 			fmt.Fprintln(output, lines.Text())
 		}
@@ -266,7 +335,12 @@ func main() {
 		worker.Add(1)
 		go func() {
 			defer worker.Done()
-			err := runStudio(ctx, st, payload, data, output)
+			var setupOnce sync.Once
+			showSetup := func() { setupOnce.Do(func() { go browser("http://" + address) }) }
+			err := runStudio(ctx, st, payload, data, output, showSetup)
+			if err != nil && ctx.Err() == nil {
+				showSetup()
+			}
 			st.Lock()
 			defer st.Unlock()
 			st.active = false
@@ -298,11 +372,27 @@ func main() {
 				st.Lock()
 				if st.phase == "Choose your workshop" {
 					st.phase = "Opening the workshop"
-					st.choices <- options{hardware: r.FormValue("hardware") == "yes", step: r.FormValue("step") == "yes"}
+					st.choices <- options{hardware: r.FormValue("hardware") == "yes", step: r.FormValue("step") == "yes", desktop: r.FormValue("interface") == "native", remember: r.FormValue("remember") == "yes"}
 				}
 				st.Unlock()
+			case "setup-next":
+				err := os.Remove(filepath.Join(data, "native-simulation"))
+				if err != nil && !os.IsNotExist(err) {
+					http.Error(w, "Could not save the startup preference", 500)
+					return
+				}
+				st.Lock()
+				st.detail = "Setup will open the next time you start KerfKite."
+				st.Unlock()
+			case "desktop":
+				st.openDesktop(payload, output)
 			case "quit":
 				st.Lock()
+				if st.desktopOpen {
+					st.Unlock()
+					http.Error(w, "Close the desktop document window first, then return here to quit KerfKite.", 409)
+					return
+				}
 				physical := st.physical
 				st.Unlock()
 				if physical && !disconnected() {
@@ -343,7 +433,6 @@ func main() {
 		mux.ServeHTTP(w, r)
 	})}
 	start()
-	go browser("http://" + address)
 	go func() {
 		<-ctx.Done()
 		stop, done := context.WithTimeout(context.Background(), 3*time.Second)

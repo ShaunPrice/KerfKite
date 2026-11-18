@@ -66,3 +66,10 @@ The desktop and hosted editors share the Python CAM service. When adding CAM alg
 ## Installer releases
 
 The [desktop packaging guide](INSTALLER-BUILDS.md) covers the release builds, runtime locks, Android signing and clean-install checks.
+
+
+## Native desktop workbench
+
+The Go launcher in `packaging/desktop/` owns the local Studio service and starts a platform window after setup. The native file and geometry controls use the document adapter in `studio/static/desktop-workspace.js` in the main editor frame. The adapter accepts no filesystem path or machine command. A host supplies a file's contents to open it and writes a returned artifact only after the operator chooses a destination. The adapter marks the offered document snapshot saved after the host confirms a successful write. An edit made during the save still counts as unsaved. The native host associates an opened file with the editor's document ID.
+
+New commands that edit documents should reuse the editor model and its existing validation, history and preview invalidation. Extend `validation/desktop_workflow.py` for shared behavior and the smoke exercise under the affected platform's source directory for host behavior. The installer validation runs both the service and native window in simulation. [Installer build guide](INSTALLER-BUILDS.md)

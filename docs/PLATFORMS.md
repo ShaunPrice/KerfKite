@@ -2,11 +2,11 @@
 
 See the [single-board computer guide](SBC.md) for board-specific downloads and the offline Browser Editor.
 
-[Download the desktop installers](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.4.1) or the [Android companion](ANDROID.md). The table below records source-installation and hardware evidence. See the [installation guide](INSTALL.md) for the graphical installers.
+[Download the desktop installers](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.5.0) or the [Android companion](ANDROID.md). The table below records source-installation and hardware evidence. See the [installation guide](INSTALL.md) for the graphical installers.
 
 **Earlier public source release (18 November).** All 11 CAD/CAM harness groups passed on macOS ARM64, Windows 11 Pro x86-64 and a physical Raspberry Pi 5 ARM64. The Windows and Pi hosts installed the public source in isolated environments. Each run exercised the STEP runtime and native C++ relief kernels, with 151 Python and 114 JavaScript tests. See the [release review](RELEASE-REVIEW.md) for the browser checks and the limits of physical verification. Earlier measurements below identify their own host and workload.
 
-Use the desktop browser editor with a local Python service on 64-bit macOS, Windows or Linux. The service provides solid modelling, CAM and simulation. The Android edition provides native 2D design, portable project and SVG exchange, and a CNC pendant paired with the Studio server.
+The desktop installers provide AppKit on macOS, Windows Forms and WebView2 on Windows, and GTK 3 with WebKitGTK on Linux. Each native window embeds the shared editor and connects to a local Python service. The browser interface remains available from the launcher. The service provides solid modelling, CAM and simulation. The Android edition provides native 2D design, portable project and SVG exchange, and a CNC pendant paired with the Studio server.
 
 | Platform | Installation and evidence |
 |---|---|
