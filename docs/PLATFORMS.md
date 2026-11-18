@@ -1,5 +1,7 @@
 # Platforms and verification
 
+[Download the desktop installers or Android app](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.2.1). The table below records source-installation and hardware evidence. See the [installation guide](INSTALL.md) for the graphical installers.
+
 **Public source release.** All 11 CAD/CAM harness groups passed on macOS ARM64, Windows 11 Pro x86-64 and a physical Raspberry Pi 5 ARM64. The Windows and Pi hosts installed the public source in isolated environments. Each run exercised the STEP runtime and native C++ relief kernels, with 151 Python and 114 JavaScript tests. See the [release review](RELEASE-REVIEW.md) for the browser checks and the limits of physical verification. Earlier measurements below identify their own host and workload.
 
 Use the desktop browser editor with a local Python service on 64-bit macOS, Windows or Linux. The service provides solid modelling, CAM and simulation. The Android edition is a native 2D design companion with portable project and SVG exchange.

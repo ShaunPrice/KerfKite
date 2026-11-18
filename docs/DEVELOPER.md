@@ -46,3 +46,7 @@ To extend DXF import, add a small, independently authored fixture to `tests/test
 For future work, use the acceptance matrix and the specific workflow guides. Physical cutting, lens distortion calibration, general constrained sketch and assembly solving, additional native vendor formats, and platform-specific binary redistribution each require their own validation.
 
 The Android and MCP clients retain their legacy 680 × 240 mm example canvas for project compatibility. These dimensions describe an editing canvas. Configure each machine using its own measured travel and origin.
+
+## Installer releases
+
+The [desktop packaging guide](INSTALLER-BUILDS.md) covers the release builds, runtime locks, Android signing and clean-install checks.

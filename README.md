@@ -6,12 +6,19 @@ KerfKite Studio is an open-source CAD/CAM workbench for interchangeable CNC rout
 
 *Workshop illustration of the three processes: cut vinyl, laser engraving and router carving.*
 
-## Run it locally
+## Install KerfKite
 
-1. Install a supported 64-bit Python and follow the [installation guide](docs/INSTALL.md).
-2. On macOS or Linux, run `sh scripts/install.sh` and `sh start.sh`. On Windows, use `scripts/install.ps1` and `start.bat`.
-3. Open the loopback address printed by the server. The default startup uses the simulator. Under **Projects**, choose **Try a sample** to import a laser badge. Under **3D CAD**, open the guided plate or bearing tutorial.
-4. For STEP exchange install the optional extra with `python -m pip install ".[step]"` inside the application's virtual environment.
+Choose the installer for the computer where you want to design. First launch needs an internet connection to set up the desktop tools. After setup, choose **Start workshop**, then **Open Studio** to enter the simulator.
+
+| Device | Download | How to open it |
+| --- | --- | --- |
+| Windows 10 or 11, 64-bit Intel/AMD | [Windows setup wizard](https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Windows-x64-Setup.exe) | Run Setup, then open **KerfKite Studio** from Start. |
+| Mac | [Apple silicon](https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-macOS-Apple-Silicon.dmg) · [Intel](https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-macOS-Intel.dmg) | Open the disk image, drag **KerfKite Studio** to **Applications**, then open it there. |
+| Raspberry Pi OS, 64-bit, or Debian/Ubuntu ARM64 | [ARM64 installer](https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Linux-arm64.deb) | Open the package in the desktop software installer, then launch **KerfKite Studio** from the applications menu. |
+| Debian/Ubuntu, 64-bit Intel/AMD | [AMD64 installer](https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Linux-amd64.deb) | Open the package in the desktop software installer. |
+| Android, including Samsung Galaxy S23 | [KerfKite Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Pocket-Android.apk) | Open the download on the phone and tap **Install** for the offline sketch editor. |
+
+The [installation guide](docs/INSTALL.md) covers first launch, security prompts, updates, removal and optional STEP exchange and controller access, and the source install for HTTPS and MCP services. The [release downloads](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.2.1) also include portable Linux archives and SHA-256 checksums.
 
 ## Inside the workshop
 

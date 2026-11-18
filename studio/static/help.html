@@ -1,14 +1,46 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#geometry">Geometry</a> <a href="#program-import">Program Import</a> <a href="#product">Product</a> <a href="#licensing">Licensing</a> <a href="#request-coverage">Request Coverage</a> <a href="#ai-vision">Ai Vision</a> <a href="#mcp">Mcp</a> <a href="#android">Android</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#assemblies">Assemblies</a> <a href="#sketch">Sketch</a> <a href="#fixtures">Fixtures</a> <a href="#status">Status</a> <a href="#install">Install</a> <a href="#developer">Developer</a> <a href="#laser-order">Laser Order</a> <a href="#user-guide">User Guide</a> <a href="#platforms">Platforms</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#branding">Branding</a> <a href="#simulation">Simulation</a> <a href="#web">Web</a> <a href="#release-review">Release Review</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#native">Native</a> <a href="#camera-register">Camera Register</a> <a href="#protocols">Protocols</a> <a href="#solid-cad">Solid Cad</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#lightburn-import">Lightburn Import</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#geometry">Geometry</a> <a href="#program-import">Program Import</a> <a href="#product">Product</a> <a href="#licensing">Licensing</a> <a href="#request-coverage">Request Coverage</a> <a href="#ai-vision">Ai Vision</a> <a href="#installer-builds">Installer Builds</a> <a href="#mcp">Mcp</a> <a href="#android">Android</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#assemblies">Assemblies</a> <a href="#sketch">Sketch</a> <a href="#fixtures">Fixtures</a> <a href="#status">Status</a> <a href="#install">Install</a> <a href="#developer">Developer</a> <a href="#laser-order">Laser Order</a> <a href="#user-guide">User Guide</a> <a href="#platforms">Platforms</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#branding">Branding</a> <a href="#simulation">Simulation</a> <a href="#web">Web</a> <a href="#release-review">Release Review</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#native">Native</a> <a href="#camera-register">Camera Register</a> <a href="#protocols">Protocols</a> <a href="#solid-cad">Solid Cad</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#lightburn-import">Lightburn Import</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
 <p>KerfKite Studio is an open-source CAD/CAM workbench for interchangeable CNC router, laser and drag-knife heads. Design in a browser, simulate a job, and prepare output for a supported controller. The Python application runs locally or as an authenticated HTTPS editor. The repository also includes a simplified Android companion.</p>
 <p><img src="workshop-artwork.jpg" alt="Layered kingfisher cut-vinyl decal beside laser-engraved reeds on maple and a router-carved wave relief in walnut" /></p>
 <p><em>Workshop illustration of the three processes: cut vinyl, laser engraving and router carving.</em></p>
-<h2>Run it locally</h2>
-<ol>
-<li>Install a supported 64-bit Python and follow the <a href="#install">installation guide</a>.</li>
-<li>On macOS or Linux, run <code>sh scripts/install.sh</code> and <code>sh start.sh</code>. On Windows, use <code>scripts/install.ps1</code> and <code>start.bat</code>.</li>
-<li>Open the loopback address printed by the server. The default startup uses the simulator. Under <strong>Projects</strong>, choose <strong>Try a sample</strong> to import a laser badge. Under <strong>3D CAD</strong>, open the guided plate or bearing tutorial.</li>
-<li>For STEP exchange install the optional extra with <code>python -m pip install &quot;.[step]&quot;</code> inside the application's virtual environment.</li>
-</ol>
+<h2>Install KerfKite</h2>
+<p>Choose the installer for the computer where you want to design. First launch needs an internet connection to set up the desktop tools. After setup, choose <strong>Start workshop</strong>, then <strong>Open Studio</strong> to enter the simulator.</p>
+<table>
+<thead>
+<tr>
+<th>Device</th>
+<th>Download</th>
+<th>How to open it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Windows 10 or 11, 64-bit Intel/AMD</td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Windows-x64-Setup.exe">Windows setup wizard</a></td>
+<td>Run Setup, then open <strong>KerfKite Studio</strong> from Start.</td>
+</tr>
+<tr>
+<td>Mac</td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-macOS-Apple-Silicon.dmg">Apple silicon</a> · <a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-macOS-Intel.dmg">Intel</a></td>
+<td>Open the disk image, drag <strong>KerfKite Studio</strong> to <strong>Applications</strong>, then open it there.</td>
+</tr>
+<tr>
+<td>Raspberry Pi OS, 64-bit, or Debian/Ubuntu ARM64</td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Linux-arm64.deb">ARM64 installer</a></td>
+<td>Open the package in the desktop software installer, then launch <strong>KerfKite Studio</strong> from the applications menu.</td>
+</tr>
+<tr>
+<td>Debian/Ubuntu, 64-bit Intel/AMD</td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Linux-amd64.deb">AMD64 installer</a></td>
+<td>Open the package in the desktop software installer.</td>
+</tr>
+<tr>
+<td>Android, including Samsung Galaxy S23</td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Pocket-Android.apk">KerfKite Pocket APK</a></td>
+<td>Open the download on the phone and tap <strong>Install</strong> for the offline sketch editor.</td>
+</tr>
+</tbody>
+</table>
+<p>The <a href="#install">installation guide</a> covers first launch, security prompts, updates, removal and optional STEP exchange and controller access, and the source install for HTTPS and MCP services. The <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.2.1">release downloads</a> also include portable Linux archives and SHA-256 checksums.</p>
 <h2>Inside the workshop</h2>
 <ul>
 <li>Parametric parts, sketches, Boolean features, assembly mates, interference checks, Bézier/NURBS surface editing and STEP exchange.</li>
@@ -245,6 +277,8 @@
 </tr>
 </tbody>
 </table>
+<h2>Desktop installers</h2>
+<p>The desktop packages include the first-party portable Studio wheel, its bundled vendor notices, a hash-pinned dependency list and a Go launcher. The launcher ships Go notices under <code>runtime-notices</code>. First launch downloads the pinned Astral uv executable after checking the release digest. uv installs a private Python runtime and the listed third-party wheels on the user’s computer. Each downloaded distribution retains its upstream terms. The Android release APK uses a dedicated project signing certificate. <a href="https://github.com/astral-sh/uv/blob/0.13.1/LICENSE-MIT">uv licence</a> · <a href="https://go.dev/LICENSE">Go licence</a></p>
 <h2>Assets included in the frontend</h2>
 <p>The bundled minified opentype.js matched the upstream 2.0.0 npm distribution byte for byte. That distribution embeds tiny-inflate 1.0.3. The accompanying vendor directory now includes the MIT notices for opentype.js and tiny-inflate and the zlib notice for the tinf decoder from which tiny-inflate was ported. <a href="https://www.npmjs.com/package/opentype.js/v/2.0.0">opentype.js release</a> · <a href="https://www.npmjs.com/package/tiny-inflate/v/1.0.3">tiny-inflate release</a> · <a href="https://github.com/jibsen/tinf/blob/master/LICENSE">tinf licence</a></p>
 <p>All three TTF payloads decoded from <code>studio/static/vendor/fonts.js</code> matched their respective upstream variable fonts byte for byte. Each retains its copyright notice and SIL Open Font License 1.1. The Lora notice reserves the name Lora. Keep these texts when moving the offline editor. Observe the OFL rules for modified fonts and reserved names. Ordinary designs made using the glyphs may use the designer's chosen licence. <a href="https://github.com/google/fonts/tree/main/ofl/lora">Lora</a> · <a href="https://github.com/google/fonts/tree/main/ofl/montserrat">Montserrat</a> · <a href="https://github.com/google/fonts/tree/main/ofl/cormorantgaramond">Cormorant Garamond</a> · <a href="https://openfontlicense.org/ofl-faq/">OFL FAQ</a></p>
@@ -296,6 +330,18 @@
 <li>https://www.raspberrypi.com/documentation/computers/ai.html</li>
 <li>https://www.raspberrypi.com/news/heating-and-cooling-raspberry-pi-5/</li>
 </ul>
+</section><section id="installer-builds"><h1>Building KerfKite installers</h1>
+<p>The desktop launcher contains only Go standard-library code. Each package carries the same portable Studio wheel and locked requirements. The launcher fetches the platform’s uv archive from the pinned upstream release, verifies its SHA-256, and uses it to install a private CPython 3.12 runtime. All application wheels are hash-checked. Python, geometry libraries and optional STEP binaries are installed on the user’s machine.</p>
+<h2>Release workstation</h2>
+<p>Use macOS with Go, Python 3.12, Pillow, uv, dpkg-deb, Apple command line tools and NSIS (makensis). Alternatively the Windows packaging step accepts a local Docker image named kerfkite-installer-nsis containing Debian’s NSIS package. All paths below are relative to the checkout root.</p>
+<ol>
+<li>Update the project and Android versions, download links and dependency locks. Rebuild the bundled help with <code>python scripts/build_help.py</code>. To refresh the locks, run <code>uv pip compile pyproject.toml --universal --python-version 3.12 --only-binary :all: --generate-hashes --no-header --no-annotate -o packaging/desktop/requirements.lock</code> and repeat with <code>--extra step -c packaging/desktop/requirements.lock -o packaging/desktop/step.lock</code>.</li>
+<li>In a clean checkout, run <code>KERFKITE_PORTABLE_WHEEL=1 uv build --wheel --out-dir dist</code>. Inspect the wheel for the editor, licences and desktop server. It uses the portable Python relief engine. The normal source installation can compile the optional native kernel.</li>
+<li>Run <code>python packaging/desktop/build.py dist/kerfkite_studio-0.2.1-py3-none-any.whl dist/installers mac-arm64 mac-amd64 linux-arm64 linux-amd64 windows-amd64</code>. The staging filesystem needs free space for each package. <code>go build -trimpath</code> strips workstation paths. The macOS application has an ad-hoc signature. Windows Setup uses per-user installation.</li>
+<li>Build the Android release from the android directory using <code>./gradlew assembleRelease</code>. Sign the aligned release APK with the project's existing release alias and Android SDK apksigner. Keep signing credentials in private storage. Verify the APK using <code>apksigner verify --verbose --print-certs</code>. Future upgrades must use the same certificate and increment the Android version code.</li>
+<li>For each release file, publish its SHA-256 as a line of <code>SHA256SUMS.txt</code>. Upload the packages and checksums to a release for the corresponding source commit. In <strong>Actions → Check desktop release installers</strong>, run the workflow against that tag. It installs the actual release package, tests a clean first launch, generates a simulated toolpath, exercises STEP, then relaunches with uv offline.</li>
+</ol>
+<p>For local smoke testing, run <code>python validation/installer_smoke.py &quot;/path/to/installed/KerfKite&quot; --step</code> with ports 18764 and 18765 free. The test uses a temporary application-data directory. The application shortcut opens a browser tab. Platform-specific Gatekeeper, SmartScreen and desktop shell prompts need a graphical desktop to check.</p>
 </section><section id="mcp"><h1>Artwork MCP interface</h1>
 <p>Local stdio server built with FastMCP 3. Optional dependency; the normal UI does not require it. This server creates artwork and files, not machine motion. It has not been registered in Claude Desktop, Codex or a hosted ChatGPT connector.</p>
 <h2>Install and launch</h2>
@@ -376,7 +422,8 @@
 </section><section id="android"><h1>Studio Pocket for Android</h1>
 <p>Studio Pocket is a native, offline vector sketch editor for Android 8 and later. It uses a touch canvas and numerical dimensions. Files saved from the app open in the desktop and Raspberry Pi workstation. The current template, solid modelling and machining workflows run on that workstation.</p>
 <h2>Install and draw</h2>
-<p>Build the debug APK using Android Studio with JDK 17 or newer, Android SDK Platform 35 and Build Tools 35 installed. Open the repository’s android directory as the project. Alternatively, from the android directory run:</p>
+<p>For normal installation, download the <a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Pocket-Android.apk">signed KerfKite Pocket APK</a> on the phone, open it from Downloads and choose <strong>Install</strong>.</p>
+<p>For development, build the debug APK using Android Studio with JDK 17 or newer, Android SDK Platform 35 and Build Tools 35 installed. Open the repository’s android directory as the project. Alternatively, from the android directory run:</p>
 <pre><code class="language-sh">./gradlew assembleDebug
 </code></pre>
 <p>On Windows run <code>gradlew.bat assembleDebug</code>. The first build fetches the pinned build tools. Subsequent builds can use <code>--offline</code> once the dependencies are cached. The installable debug APK appears at <code>app/build/outputs/apk/debug/app-debug.apk</code>. Transfer the APK to the phone and open it from Files, or choose Run in Android Studio with your development device selected.</p>
@@ -739,7 +786,48 @@
 <li><a href="#developer">Development setup</a>, <a href="#simulation">simulation</a>, <a href="#platforms">platforms</a>, <a href="#licensing">licences</a>.</li>
 </ul>
 </section><section id="install"><h1>Install KerfKite Studio</h1>
-<p>KerfKite Studio 0.2 is a source installation with a browser interface. Python 3.10 or newer is required; use 64-bit Python 3.12 where possible. Install into the project's <code>.venv</code>, not the operating system Python environment. A network connection is required to fetch Python dependencies during installation. The desktop editor runs on the same computer as the Python service.</p>
+<h2>Desktop or phone installation</h2>
+<p>Download the package for your device from the <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.2.1">official KerfKite release</a>.</p>
+<ul>
+<li><strong>Windows 10/11 x64.</strong> Open the setup wizard and choose <strong>Install</strong>. It installs for your account and adds KerfKite Studio to Start. Windows may display a SmartScreen warning for this unsigned installer. Check the download came from the official release. On a managed PC, follow your organisation’s software approval process.</li>
+<li><strong>macOS.</strong> In <strong>Apple menu → About This Mac</strong>, check whether the computer has an Apple chip or an Intel processor. Open the matching DMG, drag KerfKite Studio onto Applications and launch it there. This community build has an ad-hoc signature and has not been notarised by Apple. If macOS blocks it, review the app under <strong>System Settings → Privacy &amp; Security</strong> after the first open attempt. Managed Macs may require administrator approval.</li>
+<li><strong>Raspberry Pi OS, Debian and Ubuntu.</strong> Use a 64-bit graphical desktop. Open the ARM64 DEB on a Pi 4/5 or other ARM64 system, or the AMD64 DEB on an Intel/AMD PC. Choose <strong>Install</strong> in the package manager and open KerfKite Studio from the applications menu. On another compatible glibc desktop with a browser and xdg-open, extract the matching Linux archive to a permanent folder and open the KerfKite executable inside.</li>
+<li><strong>Android.</strong> Download the Pocket APK on your phone, open <strong>My Files → Downloads</strong>, tap the APK and choose <strong>Install</strong>. If prompted, allow this source to install apps and revoke that permission afterwards. Device management and Samsung Auto Blocker can restrict sideloading. If replacing a development APK, export your draft first. Android requires the previous build to be removed if its signing certificate differs. <a href="#android">Pocket user guide</a></li>
+</ul>
+<h3>First launch</h3>
+<ol>
+<li>The desktop launcher opens a setup tab in your default browser. Keep the computer online while it downloads the private Python runtime and the design libraries. A first install can take several minutes on a Pi. The launcher shows the current stage.</li>
+<li>Choose <strong>Start workshop</strong>, then <strong>Open Studio</strong>. In <strong>Projects → Try a sample</strong>, load the badge and generate a preview. The simulator works offline on subsequent launches. The portable desktop packages use the Python relief engine. Select <strong>Add STEP import and export</strong> before starting a workshop to download the optional exchange libraries. For a commissioned machine, expand <strong>Physical machine access</strong> and enable controller ports for that session. Studio still requires a separate connection. Native C++ acceleration, HTTPS serving and MCP are available through the source installation below.</li>
+<li>Use <strong>Quit KerfKite</strong> in the launcher tab to shut down the local simulator. Reopening the application shortcut brings back that tab. Download important projects as portable files.</li>
+</ol>
+<h3>Updates, setup problems and removal</h3>
+<p>Quit KerfKite, download the newer package and install it over the previous version. On macOS choose <strong>Replace</strong>. Studio keeps the same local browser address across launches so a browser profile can reopen its saved projects. Each desktop user has a separate runtime.</p>
+<p>If setup fails, check the internet connection and available space, then choose <strong>Retry</strong>. Setup needs access to GitHub, Python runtime downloads and the Python Package Index. For a port conflict, quit any other KerfKite launcher or Studio server using port 18764 or 18765. If the browser did not open, visit <code>http://127.0.0.1:18764/</code> on the same computer. The setup page shows the location of <code>setup.log</code> when an error occurs.</p>
+<p>Uninstall through <strong>Installed apps</strong> on Windows, move the app to Trash on macOS, or remove the package in your Linux software manager. For the portable Linux edition remove its extracted folder. To reclaim downloaded runtimes after quitting, remove only the KerfKite runtime folder for your account:</p>
+<table>
+<thead>
+<tr>
+<th>Platform</th>
+<th>Runtime folder</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Windows</td>
+<td><code>%LOCALAPPDATA%\KerfKite Studio\Data</code></td>
+</tr>
+<tr>
+<td>macOS</td>
+<td><code>~/Library/Application Support/KerfKite Studio</code></td>
+</tr>
+<tr>
+<td>Linux</td>
+<td><code>$XDG_CONFIG_HOME/KerfKite Studio</code> or <code>~/.config/KerfKite Studio</code></td>
+</tr>
+</tbody>
+</table>
+<h2>Source installation</h2>
+<p>Use 64-bit Python 3.12 where possible. The source setup below supports optional services and an explicitly enabled hardware controller.</p>
 <p>See <a href="#platforms">Platforms</a> for installation targets and measured CAD/CAM acceptance on macOS, Windows, Linux and Raspberry Pi.</p>
 <h2>1. Obtain the source</h2>
 <p>Clone the public repository with <code>git clone https://github.com/ShaunPrice/KerfKite.git</code> or download its source archive. Open a terminal in the directory containing <code>pyproject.toml</code>, <code>start.sh</code> and <code>studio/</code>. Keep the complete tree together. Do not copy a macOS <code>.venv</code> or compiled extension to a Pi or Windows computer; each host needs its own installation.</p>
@@ -888,6 +976,8 @@ bash scripts/ci-local.sh --list
 <p>To extend DXF import, add a small, independently authored fixture to <code>tests/test_program_import.py</code>. Decide how unsupported entities, XY projection and unit conversion should appear in the review. Implement the reader in <code>studio/program_import.py</code>. Verify its numerical result, handle a malformed variant, and test review → enable layer → CAM → project reopen in <code>validation/import_fixture_workflow.py</code>. Add the supported entity and limits to <a href="#program-import">Program import</a>. Importing artwork never grants permission to send a program to a device.</p>
 <p>For future work, use the acceptance matrix and the specific workflow guides. Physical cutting, lens distortion calibration, general constrained sketch and assembly solving, additional native vendor formats, and platform-specific binary redistribution each require their own validation.</p>
 <p>The Android and MCP clients retain their legacy 680 × 240 mm example canvas for project compatibility. These dimensions describe an editing canvas. Configure each machine using its own measured travel and origin.</p>
+<h2>Installer releases</h2>
+<p>The <a href="#installer-builds">desktop packaging guide</a> covers the release builds, runtime locks, Android signing and clean-install checks.</p>
 </section><section id="laser-order"><h1>Plan the laser cut order</h1>
 <p>In <strong>Layers → Laser cut order</strong>, enable <strong>Plan compatible line cuts within each layer</strong>. The preview, generated G-code and downloaded job use the planned sequence. Object geometry stays editable in its original design order. Save the project to retain the planning switches.</p>
 <ul>
@@ -1131,6 +1221,7 @@ bash scripts/ci-local.sh --list
 <p>Each stage ends retracted with the spindle off. Wait for motion and spindle to cease, install the next tool, re-establish Z zero or verified tool length, check XY origin/clearance and review the next stage before starting it manually. Do not concatenate stage files. Automatic tool changers, probing and automatic continuation are not implemented. Ordinary Run rejects differing tool numbers even if their diameters match. Tool-change generation requires the app server.</p>
 <p>Holding tabs are retained when reassigning CAM settings or a manual tool. Use <strong>Remove tabs from selected object</strong> before clearing operation settings; the editor prevents implicit removal. Incompatible tool/mode combinations retain the tab request and fail CAM validation.</p>
 </section><section id="platforms"><h1>Platforms and verification</h1>
+<p><a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.2.1">Download the desktop installers or Android app</a>. The table below records source-installation and hardware evidence. See the <a href="#install">installation guide</a> for the graphical installers.</p>
 <p><strong>Public source release.</strong> All 11 CAD/CAM harness groups passed on macOS ARM64, Windows 11 Pro x86-64 and a physical Raspberry Pi 5 ARM64. The Windows and Pi hosts installed the public source in isolated environments. Each run exercised the STEP runtime and native C++ relief kernels, with 151 Python and 114 JavaScript tests. See the <a href="#release-review">release review</a> for the browser checks and the limits of physical verification. Earlier measurements below identify their own host and workload.</p>
 <p>Use the desktop browser editor with a local Python service on 64-bit macOS, Windows or Linux. The service provides solid modelling, CAM and simulation. The Android edition is a native 2D design companion with portable project and SVG exchange.</p>
 <table>

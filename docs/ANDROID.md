@@ -4,7 +4,9 @@ Studio Pocket is a native, offline vector sketch editor for Android 8 and later.
 
 ## Install and draw
 
-Build the debug APK using Android Studio with JDK 17 or newer, Android SDK Platform 35 and Build Tools 35 installed. Open the repository’s android directory as the project. Alternatively, from the android directory run:
+For normal installation, download the [signed KerfKite Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Pocket-Android.apk) on the phone, open it from Downloads and choose **Install**.
+
+For development, build the debug APK using Android Studio with JDK 17 or newer, Android SDK Platform 35 and Build Tools 35 installed. Open the repository’s android directory as the project. Alternatively, from the android directory run:
 
 ```sh
 ./gradlew assembleDebug

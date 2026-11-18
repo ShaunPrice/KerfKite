@@ -1,0 +1,59 @@
+name: Check desktop release installers
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to verify
+        required: true
+        default: v0.2.1
+permissions:
+  contents: read
+jobs:
+  install:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: windows-2022, file: KerfKite-Windows-x64-Setup.exe}
+          - {os: macos-15, file: KerfKite-macOS-Apple-Silicon.dmg}
+          - {os: macos-15-intel, file: KerfKite-macOS-Intel.dmg}
+          - {os: ubuntu-24.04, file: KerfKite-Linux-amd64.deb}
+          - {os: ubuntu-24.04-arm, file: KerfKite-Linux-arm64.deb}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      INSTALLER: ${{ matrix.file }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch release package and verify its checksum
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          gh release download "$TAG" --pattern "$INSTALLER" --pattern SHA256SUMS.txt
+          python -c 'import hashlib,os,pathlib; p=pathlib.Path(os.environ["INSTALLER"]); assert hashlib.sha256(p.read_bytes()).hexdigest()+"  "+p.name in pathlib.Path("SHA256SUMS.txt").read_text().splitlines()'
+      - name: Install and exercise Windows setup
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = Start-Process ".\$env:INSTALLER" -ArgumentList "/S" -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw "Setup failed" }
+          $dir = Join-Path $env:LOCALAPPDATA "Programs\KerfKite Studio"
+          python validation/installer_smoke.py "$dir\KerfKite.exe" --step
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Start-Process "$dir\Uninstall.exe" -ArgumentList "/S" -Wait
+      - name: Install and exercise macOS disk image
+        if: runner.os == 'macOS'
+        run: |
+          hdiutil attach "$INSTALLER" -mountpoint "$RUNNER_TEMP/kerfkite-dmg" -nobrowse
+          ditto "$RUNNER_TEMP/kerfkite-dmg/KerfKite Studio.app" "$RUNNER_TEMP/KerfKite Studio.app"
+          hdiutil detach "$RUNNER_TEMP/kerfkite-dmg"
+          codesign --verify --strict "$RUNNER_TEMP/KerfKite Studio.app"
+          python3 validation/installer_smoke.py "$RUNNER_TEMP/KerfKite Studio.app/Contents/MacOS/KerfKite" --step
+      - name: Install and exercise Debian package
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y "./$INSTALLER"
+          python3 validation/installer_smoke.py /opt/kerfkite/KerfKite --step
+          sudo apt-get remove -y kerfkite-studio

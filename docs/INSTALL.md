@@ -1,6 +1,37 @@
 # Install KerfKite Studio
 
-KerfKite Studio 0.2 is a source installation with a browser interface. Python 3.10 or newer is required; use 64-bit Python 3.12 where possible. Install into the project's `.venv`, not the operating system Python environment. A network connection is required to fetch Python dependencies during installation. The desktop editor runs on the same computer as the Python service.
+## Desktop or phone installation
+
+Download the package for your device from the [official KerfKite release](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.2.1).
+
+* **Windows 10/11 x64.** Open the setup wizard and choose **Install**. It installs for your account and adds KerfKite Studio to Start. Windows may display a SmartScreen warning for this unsigned installer. Check the download came from the official release. On a managed PC, follow your organisation’s software approval process.
+* **macOS.** In **Apple menu → About This Mac**, check whether the computer has an Apple chip or an Intel processor. Open the matching DMG, drag KerfKite Studio onto Applications and launch it there. This community build has an ad-hoc signature and has not been notarised by Apple. If macOS blocks it, review the app under **System Settings → Privacy & Security** after the first open attempt. Managed Macs may require administrator approval.
+* **Raspberry Pi OS, Debian and Ubuntu.** Use a 64-bit graphical desktop. Open the ARM64 DEB on a Pi 4/5 or other ARM64 system, or the AMD64 DEB on an Intel/AMD PC. Choose **Install** in the package manager and open KerfKite Studio from the applications menu. On another compatible glibc desktop with a browser and xdg-open, extract the matching Linux archive to a permanent folder and open the KerfKite executable inside.
+* **Android.** Download the Pocket APK on your phone, open **My Files → Downloads**, tap the APK and choose **Install**. If prompted, allow this source to install apps and revoke that permission afterwards. Device management and Samsung Auto Blocker can restrict sideloading. If replacing a development APK, export your draft first. Android requires the previous build to be removed if its signing certificate differs. [Pocket user guide](ANDROID.md)
+
+### First launch
+
+1. The desktop launcher opens a setup tab in your default browser. Keep the computer online while it downloads the private Python runtime and the design libraries. A first install can take several minutes on a Pi. The launcher shows the current stage.
+2. Choose **Start workshop**, then **Open Studio**. In **Projects → Try a sample**, load the badge and generate a preview. The simulator works offline on subsequent launches. The portable desktop packages use the Python relief engine. Select **Add STEP import and export** before starting a workshop to download the optional exchange libraries. For a commissioned machine, expand **Physical machine access** and enable controller ports for that session. Studio still requires a separate connection. Native C++ acceleration, HTTPS serving and MCP are available through the source installation below.
+3. Use **Quit KerfKite** in the launcher tab to shut down the local simulator. Reopening the application shortcut brings back that tab. Download important projects as portable files.
+
+### Updates, setup problems and removal
+
+Quit KerfKite, download the newer package and install it over the previous version. On macOS choose **Replace**. Studio keeps the same local browser address across launches so a browser profile can reopen its saved projects. Each desktop user has a separate runtime.
+
+If setup fails, check the internet connection and available space, then choose **Retry**. Setup needs access to GitHub, Python runtime downloads and the Python Package Index. For a port conflict, quit any other KerfKite launcher or Studio server using port 18764 or 18765. If the browser did not open, visit `http://127.0.0.1:18764/` on the same computer. The setup page shows the location of `setup.log` when an error occurs.
+
+Uninstall through **Installed apps** on Windows, move the app to Trash on macOS, or remove the package in your Linux software manager. For the portable Linux edition remove its extracted folder. To reclaim downloaded runtimes after quitting, remove only the KerfKite runtime folder for your account:
+
+| Platform | Runtime folder |
+| --- | --- |
+| Windows | `%LOCALAPPDATA%\KerfKite Studio\Data` |
+| macOS | `~/Library/Application Support/KerfKite Studio` |
+| Linux | `$XDG_CONFIG_HOME/KerfKite Studio` or `~/.config/KerfKite Studio` |
+
+## Source installation
+
+Use 64-bit Python 3.12 where possible. The source setup below supports optional services and an explicitly enabled hardware controller.
 
 See [Platforms](PLATFORMS.md) for installation targets and measured CAD/CAM acceptance on macOS, Windows, Linux and Raspberry Pi.
 
