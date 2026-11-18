@@ -8,6 +8,7 @@ from .cam import generate, number
 from .design_api import register_design_routes
 from .device import DeviceController as Controller
 from .profiles import PROFILES
+from .rotary import generate_rotary, validate_rotary_machine
 from .phone_jobs import PhoneJobs
 from .phone_monitor_service import PhoneMonitor
 from .protocols import get_protocol
@@ -52,7 +53,7 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
 
     @app.get('/api/session')
     def session():
-        return jsonify(token=token, depth_paths=True, advanced_cam=True, holding_tabs=True, laser_patterns=True, router_entries=True, phone_arm_challenge=True, hardware_enabled=allow_hardware)
+        return jsonify(token=token, depth_paths=True, advanced_cam=True, holding_tabs=True, laser_patterns=True, router_entries=True, phone_arm_challenge=True, rotary_stream=True, hardware_enabled=allow_hardware)
 
     @app.get('/api/status')
     def status():
@@ -71,25 +72,39 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
         profile=get_protocol(project.get('protocol','grbl'))
         if not profile.live_transport:raise ValueError('File export only; live execution is unavailable for '+profile.name)
         if project.get('protocol','grbl')!=status.get('protocol','grbl'):raise ValueError('Job protocol differs from connected controller')
+        rotary = job.get('rotary')
+        if rotary:
+            validate_rotary_machine(rotary,status)
         if not status.get('simulated') and profile.family=='grbl':
             settings=status.get('settings',{})
             if any(not math.isfinite(float(v)) for v in settings.values()):raise ValueError('Invalid controller settings readback; reconnect')
             laser=settings.get('32',settings.get('$32'));maximum=settings.get('30',settings.get('$30'))
             if laser is None or maximum is None:raise ValueError('Wait for GRBL $30/$32 readback before running')
-            if float(maximum)<=0:raise ValueError('Invalid controller $30 maximum')
+            if rotary and profile.id == 'xpro-v5':
+                spindle_type = status.get('spindle_type')
+                if not spindle_type or (spindle_type == 'LASER') != (project['mode'] == 'laser'):
+                    raise ValueError('Verify xPRO V5 Spindle/Type for the mounted head and reconnect for readback')
+                if project['mode'] == 'laser':
+                    maximum = settings.get('Laser/FullPower')
+                    if maximum is None or float(maximum) <= 0:
+                        raise ValueError('Wait for xPRO V5 Laser/FullPower readback before running a rotary laser job')
+            if float(maximum)<=0:raise ValueError('Invalid controller maximum power readback')
             if float(laser)!=(1 if project['mode']=='laser' else 0):raise ValueError('Controller $32 does not match the selected head; configure GRBL separately')
-            if float(project['power'])>float(maximum):raise ValueError('Power/RPM exceeds controller $30')
+            if float(project['power'])>float(maximum):raise ValueError('Power/RPM exceeds controller $30 or active laser full-power limit')
             for field,key in [('width','130'),('height','131')]:
-                if key in settings and float(project[field])>float(settings[key]):raise ValueError('Work area exceeds configured controller travel')
+                if not rotary and key in settings and float(project[field])>float(settings[key]):raise ValueError('Work area exceeds configured controller travel')
             for operation in project.get('operations',[]):
-                if float(operation.get('power',project['power']))>float(maximum):raise ValueError('Operation power exceeds controller $30')
+                if float(operation.get('power',project['power']))>float(maximum):raise ValueError('Operation power exceeds controller $30 or active laser full-power limit')
         if not status.get('simulated') and project['mode']!='laser':
-            depth=max([-float(segment[4]) for segment in job['segments']]+[0])
+            lowest = min((min(segment[4],segment[6]) for segment in job['segments']), default=0.0)
+            if rotary:
+                lowest = min(lowest,rotary['radial_bounds'][0])
+            depth = max(0.0,-lowest)
             stock=number(project.get('stock_thickness'),'Stock thickness',.01,200)
             if depth>stock:raise ValueError('Cut exceeds entered stock thickness')
             settings=status.get('settings',{})
             safe=max([float(project.get('safe',5))]+[float(op.get('safe',project.get('safe',5))) for op in project.get('operations',[])])
-            if '132' in settings and depth+safe>float(settings['132']):raise ValueError('Depth plus clearance exceeds configured Z travel')
+            if not rotary and '132' in settings and depth+safe>float(settings['132']):raise ValueError('Depth plus clearance exceeds configured Z travel')
         return status
 
     @app.post('/api/phone-monitor')
@@ -105,6 +120,18 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
         response.headers['Cache-Control'] = 'no-store'
         return response
 
+    def prepared(data):
+        project = data.get('project')
+        if not isinstance(project, dict):
+            raise ValueError('Supply a design project')
+        if project.get('rotary') and 'rotary' not in data:
+            raise ValueError('Preview rotary CAM and explicitly confirm the rotary setup before running')
+        if 'rotary' not in data:
+            return generate(project)
+        if data.get('rotary_confirmed') is not True:
+            raise ValueError('Confirm independent rotary drive, calibration in degrees, tool axes, seam zero and fixture clearance.')
+        return generate_rotary(project, data['rotary'])
+
     @app.post('/api/arm')
     def arm_phone():
         data = request.get_json()
@@ -112,7 +139,7 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
             raise ValueError('Confirm setup at the Pi before arming')
         if data.get('phone_arm_challenge') is not True:
             raise ValueError('Reload the updated workstation before arming a phone Start.')
-        job=generate(data['project'])
+        job=prepared(data)
         validate_machine(data['project'],job)
         arm_id = jobs.arm(job['lines'], validator=lambda:validate_machine(data['project'],job),
                           require_workstation=True)
@@ -163,7 +190,7 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
         data = request.get_json()
         if data.get('confirmed') is not True:
             raise ValueError('Confirm work zero, tool and clear work area')
-        job = generate(data['project'])
+        job = prepared(data)
         validate_machine(data['project'],job)
         jobs.disarm()
         ctl.start(job['lines'])

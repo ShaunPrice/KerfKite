@@ -58,3 +58,23 @@ test('saved grid operations retain individual speeds and S values through genera
   assert.throws(()=>workshop.materialGrid({...grid,x:199}),/work area/);
   assert.throws(()=>workshop.materialGrid({...grid,rows:11}),/integer/);
 });
+
+test('depth engraving keeps cumulative exposures, rapid gaps and bidirectional ordering',()=>{
+  const map={cols:4,rows:2,values:[0,.25,.5,1,1,.5,.25,0]};
+  const plan=workshop.slicedPaths(map,{x:1,y:2,width:4,height:2,overscan:.5,slices:4});
+  assert.equal(plan.paths.length,8);
+  const exposures=Array.from({length:2},()=>[0,0,0,0]);
+  plan.paths.forEach((path,row)=>{
+    assert.equal(plan.powers[row][0],0);assert.equal(plan.powers[row].at(-1),0);
+    const index=row%2;
+    for(let i=1;i<path.length;i++)for(let cell=0;cell<4;cell++){
+      const x=1.5+cell;
+      if(x>Math.min(path[i-1][0],path[i][0])&&x<Math.max(path[i-1][0],path[i][0]))
+        exposures[index][cell]+=plan.powers[row][i];
+    }
+  });
+  assert.deepEqual(exposures,[[0,1,2,4],[4,2,1,0]]);
+  const job=cam.generate({...base,paths:plan.paths,path_powers:plan.powers.map(p=>p.map(v=>v*350))});
+  assert.deepEqual(new Set(job.segments.map(s=>s[5])),new Set([0,350]));
+  assert.throws(()=>workshop.slicedPaths({...map,values:Array(8).fill(0)},{...defaults,slices:4}),/zero exposure/);
+});

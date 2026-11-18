@@ -19,7 +19,7 @@
  let localSession=false,epoch=0,releaseRequired=true,neutralRequired=true,nextJog=0,frame=0;
  const note=t=>{$('pendantStatus').textContent=t;};
  function enabled(){return localSession&&$('pendantEnabled').checked&&!document.hidden&&document.hasFocus();}
- function typing(){const el=document.activeElement;return !!el&&(el.isContentEditable||['INPUT','TEXTAREA','SELECT'].includes(el.tagName));}
+ function typing(){if(document.querySelector('dialog[open]'))return true;const el=document.activeElement;return !!el&&(el.isContentEditable||['INPUT','TEXTAREA','SELECT'].includes(el.tagName));}
  function disable(reason){$('pendantEnabled').checked=false;epoch++;releaseRequired=true;neutralRequired=true;note(reason||'Disabled');}
  const jogger=createJogger({enabled,status:()=>api('status'),send:payload=>api('command',payload)});
  async function jog(intent,guard=()=>true,stepOverride=null){if(!enabled())return;const generation=epoch;try{const payload=command(intent,stepOverride??Number($('pendantStep').value),Number($('pendantFeed').value));const sent=await jogger.jog(payload,()=>generation===epoch&&guard());if(generation===epoch)note(sent?`${payload.axis} ${payload.distance} mm requested`:'Jog skipped: controller must be connected and idle');return sent;}catch(e){disable('Jog stopped: '+e.message);message(e.message,true);}}

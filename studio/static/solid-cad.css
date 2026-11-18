@@ -1,4 +1,4 @@
-.workspace.solid-active > :not(.solid-stage) { display:none !important; }
+.workspace.solid-active > :not(.solid-stage):not(.cad-console) { display:none !important; }
 .solid-stage[hidden], #solid-lesson[hidden] { display:none; }
 .solid-stage { display:flex; flex-direction:column; gap:12px; min-height:100%; color:#203744; }
 .solid-stage h1 { margin:0; font-size:clamp(20px,2.5vw,32px); letter-spacing:-.045em; }

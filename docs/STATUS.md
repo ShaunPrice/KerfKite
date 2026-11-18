@@ -10,3 +10,5 @@ The [release review](RELEASE-REVIEW.md) and [simulation results](../validation/a
 The [Android pendant](ANDROID.md) pairs with the machine-side Studio server. The [connection guide](PHONE-CONNECTIONS.md) covers Wi-Fi, Bluetooth tethering and USB tethering. See the [geometry guide](GEOMETRY.md) for the 2D Trim & Join workflow.
 
 The [0.4 feature matrix](PRODUCT.md) links the new machining, design, interchange, identification and calibration features to their guides. The retained [release review](RELEASE-REVIEW.md) records the earlier release assessment.
+
+The keyboard CAD workspace supports editable 2D and 3D scripts, reusable parameterized macros and viewport commands. The assistant workshop exposes the same editor through MCP, with optional adapters for a paired machine and hosted files. [Keyboard CAD](CAD-SCRIPTING.md) · [Macro programming](CAD-MACROS.md) · [Assistant setup](MCP.md) · [Rotary engraving](ROTARY.md)

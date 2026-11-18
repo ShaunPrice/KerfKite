@@ -4,10 +4,48 @@ const fragment=new URLSearchParams(location.hash.slice(1));
 let token=fragment.get('token')||sessionStorage.getItem('cnc-monitor-token')||'';
 if(fragment.has('token')){sessionStorage.setItem('cnc-monitor-token',token);history.replaceState(null,'',location.pathname);}
 let stopped=false, pendingAction=null, lastState=null, submission=0, stoppedEpoch=null;
+let pollRevision=0, pollTimer;
 el('forget').onclick=()=>{stopped=true;token='';sessionStorage.removeItem('cnc-monitor-token');location.reload();};
-async function poll(){if(stopped)return;if(!token){el('fresh').textContent='Open the pairing link displayed on the Pi.';el('state').textContent='Not paired';return;}
-const abort=new AbortController(),timeout=setTimeout(()=>abort.abort(),4000);
-try{const r=await fetch('/api/status',{headers:{Authorization:'Bearer '+token},cache:'no-store',signal:abort.signal});if(!r.ok)throw Error(r.status===401?'Pairing expired. Open a new link from the Pi.':'Monitor unavailable');const s=await r.json();el('fresh').textContent='Updated '+new Date().toLocaleTimeString();el('fresh').className='';el('state').textContent=s.state||'Unknown';el('badge').textContent=s.simulated?'SIMULATOR — no physical machine':s.connected?'Controller connected':'Controller disconnected';el('percent').textContent=Math.round(s.progress||0)+'%';el('progress').value=s.progress||0;el('position').textContent=s.position?JSON.stringify(s.position):'Unavailable';el('errorSection').hidden=!s.error;el('error').textContent=s.error||'';el('log').textContent=(s.log||[]).join('\n');lastState=s;updateControls(s);}catch(e){lastState=null;updateControls(null);el('fresh').textContent='STALE · '+e.message;el('fresh').className='stale';el('state').textContent='Live status unavailable';el('badge').textContent='Values below are from the last successful update';}finally{clearTimeout(timeout);if(!stopped)setTimeout(poll,1000);}}
+async function poll(){
+  clearTimeout(pollTimer);
+  const request=++pollRevision;
+  if(stopped)return;
+  if(!token){
+    el('fresh').textContent='Open the pairing link displayed on the Pi.';
+    el('state').textContent='Not paired';
+    return;
+  }
+  const abort=new AbortController(),timeout=setTimeout(()=>abort.abort(),4000);
+  try{
+    const response=await fetch('/api/status',{headers:{Authorization:'Bearer '+token},cache:'no-store',signal:abort.signal});
+    if(!response.ok)throw Error(response.status===401?'Pairing expired. Open a new link from the Pi.':'Monitor unavailable');
+    const s=await response.json();
+    if(request!==pollRevision)return;
+    el('fresh').textContent='Updated '+new Date().toLocaleTimeString();
+    el('fresh').className='';
+    el('state').textContent=s.state||'Unknown';
+    el('badge').textContent=s.simulated?'SIMULATOR — no physical machine':s.connected?'Controller connected':'Controller disconnected';
+    el('percent').textContent=Math.round(s.progress||0)+'%';
+    el('progress').value=s.progress||0;
+    el('position').textContent=s.position?JSON.stringify(s.position):'Unavailable';
+    el('errorSection').hidden=!s.error;
+    el('error').textContent=s.error||'';
+    el('log').textContent=(s.log||[]).join('\n');
+    lastState=s;
+    updateControls(s);
+  }catch(error){
+    if(request!==pollRevision)return;
+    lastState=null;
+    updateControls(null);
+    el('fresh').textContent='STALE · '+error.message;
+    el('fresh').className='stale';
+    el('state').textContent='Live status unavailable';
+    el('badge').textContent='Values below are from the last successful update';
+  }finally{
+    clearTimeout(timeout);
+    if(!stopped&&request===pollRevision)pollTimer=setTimeout(poll,1000);
+  }
+}
 poll();
 
 function updateControls(s){
@@ -43,6 +81,10 @@ for(const button of document.querySelectorAll('[data-action]'))button.onclick=as
     if(ticket===submission)el('actionResult').textContent=error.name==='AbortError'?'Response timed out. Action may have reached the controller; check status before retrying.':error.message;
   }finally{
     clearTimeout(timer);
-    if(ticket===submission){pendingAction=null;updateControls(lastState);}
+    if(ticket===submission){
+      pendingAction=null;lastState=null;updateControls(null);
+      // A completed or ambiguous request can consume an arm. Read fresh controls before re-enabling Start.
+      poll();
+    }
   }
 };

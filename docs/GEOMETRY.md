@@ -28,7 +28,7 @@ Depth is separate from font style. Text creates per-vertex negative-Z contours, 
 
 `studio/protocols.py` separates supported export dialects from controller transport. GRBL / GRBL-ESP32 retains its output. Marlin router export omits GRBL work-coordinate/modal setup and uses millisecond dwell; the controller must have CNC spindle support configured. Both GRBL and experimental Marlin live adapters have software tests. Physical ports are disabled by default and require `--enable-hardware`; no physical machine was commissioned. Marlin pause stops host scheduling and may not stop already buffered motion. Marlin dynamic-laser output remains unsupported.
 
-The separate rotary workflow exports continuous A-axis LinuxCNC G-code with diameter wrapping and seam checks; it is not a live LinuxCNC driver. The same rotary wrapping is implemented in JavaScript for supported offline contour jobs and covered by parity tests. The new file:// browser workflow was not accepted end-to-end because the automation browser blocked that URL; browser-policy blocking is not a CAM correctness result. General Mach, LinuxCNC, Duet and other live adapters remain outstanding. Do not interpret a postprocessor as a validated live controller driver.
+Use the [rotary workspace](ROTARY.md) to check the seam, preview cylindrical engraving, export a program or stream to a supported independent rotary controller.
 
 ## Area CAM, relief and preview limits
 

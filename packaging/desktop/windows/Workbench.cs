@@ -184,6 +184,9 @@ namespace KerfKite {
             foreach (string shape in new [] { "Rectangle", "Ellipse", "Line" })
                 Item(design, "Insert " + shape.ToLowerInvariant() + "…", Keys.None, () => InsertDialog(shape));
             var workspace = Group("&Workspace");
+            Item(workspace, "CAD &command…", Keys.Control | Keys.Shift | Keys.K, () => OpenAuthoring("command-line"));
+            Item(workspace, "CAD &script…", Keys.None, () => OpenAuthoring("script-editor"));
+            workspace.DropDownItems.Add(new ToolStripSeparator());
             foreach (string name in new [] { "Design", "3D CAD", "CAM", "Templates", "Layers", "Control", "Projects", "Text", "Images", "Properties", "Help" })
                 Item(workspace, name, Keys.None, () => Session.Call("tab", new { name }));
             workspace.DropDownItems.Add(new ToolStripSeparator());
@@ -203,6 +206,11 @@ namespace KerfKite {
             toolbar.Items.Add(new ToolStripSeparator());
             Tool("Preview", () => Session.Call("preview"));
             Tool("Export G-code…", () => Save(true, true));
+        }
+
+        async Task OpenAuthoring(string action) {
+            View.Focus();
+            await Session.Call(action);
         }
 
         static void Heading(TableLayoutPanel grid, string name) {

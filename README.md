@@ -12,17 +12,25 @@ Choose the installer for the computer where you want to design. First launch nee
 
 | Device | Download | How to open it |
 | --- | --- | --- |
-| Windows 10 or 11, 64-bit Intel/AMD | [Windows setup wizard](https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-Windows-x64-Setup.exe) | Run Setup, then open **KerfKite Studio** from Start. |
-| Mac | [Apple silicon](https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-macOS-Apple-Silicon.dmg) · [Intel](https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-macOS-Intel.dmg) | Open the disk image, drag **KerfKite Studio** to **Applications**, then open it there. |
-| Raspberry Pi OS, 64-bit, or Debian/Ubuntu ARM64 | [ARM64 installer](https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-Linux-arm64.deb) | Open the package in the desktop software installer, then launch **KerfKite Studio** from the applications menu. |
-| Debian/Ubuntu, 64-bit Intel/AMD | [AMD64 installer](https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-Linux-amd64.deb) | Open the package in the desktop software installer. |
-| Android, including Samsung Galaxy S23 | [KerfKite Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-Pocket-Android.apk) | Open the download on the phone and tap **Install**. Choose **CNC pendant** to pair with Studio. |
+| Windows 10 or 11, 64-bit Intel/AMD | [Windows setup wizard](https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-Windows-x64-Setup.exe) | Run Setup, then open **KerfKite Studio** from Start. |
+| Mac | [Apple silicon](https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-macOS-Apple-Silicon.dmg) · [Intel](https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-macOS-Intel.dmg) | Open the disk image, drag **KerfKite Studio** to **Applications**, then open it there. |
+| Raspberry Pi OS, 64-bit, or Debian/Ubuntu ARM64 | [ARM64 installer](https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-Linux-arm64.deb) | Open the package in the desktop software installer, then launch **KerfKite Studio** from the applications menu. |
+| Debian/Ubuntu, 64-bit Intel/AMD | [AMD64 installer](https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-Linux-amd64.deb) | Open the package in the desktop software installer. |
+| Android, including Samsung Galaxy S23 | [KerfKite Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-Pocket-Android.apk) | Open the download on the phone and tap **Install**. Choose **CNC pendant** to pair with Studio. |
 
-The [installation guide](docs/INSTALL.md) covers first launch, security prompts, updates, removal and optional STEP exchange and controller access, and the source install for HTTPS and MCP services. The [release downloads](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.5.1) also include portable Linux archives and SHA-256 checksums.
+The [installation guide](docs/INSTALL.md) covers first launch, security prompts, updates, removal and optional STEP exchange and controller access, and the source install for HTTPS and MCP services. The [release downloads](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.6.0) also include portable Linux archives and SHA-256 checksums.
 
 For Orange Pi, Radxa, Jetson, BeagleBoard, ODROID, LattePanda and RISC-V systems, the [single-board computer guide](docs/SBC.md) maps each board to its installer. It also includes a browser-only edition for drawing and file export on smaller boards.
 
 ## Applications and features
+
+Press **/** above the drawing to enter `rect 60 30 10 10`, `view front` or a solid such as `cube([40,25,5]);`. **Script…** opens a source editor with measured 2D and 3D previews. **Macros…** lets you make a reusable command sequence or a parametric part. Try `macro Mounting plate width=85 thickness=6` to create a four-hole plate. [Keyboard CAD and three worked examples](docs/CAD-SCRIPTING.md) · [Macro programming and the seven starter designs](docs/CAD-MACROS.md)
+
+[![Script editor showing the source and interactive 3D preview of a fluted knob with a centre bore](studio/static/screen-cad-script.png)](studio/static/screen-cad-script.png)
+
+[![Macro library with the mounting plate recipe and editable bore, margin and thickness inputs](studio/static/screen-cad-macros.png)](studio/static/screen-cad-macros.png)
+
+Claude and ChatGPT can create parts, run macros, adjust the workspace and return portable projects through the Studio MCP server. The assistant opens a dedicated workshop with a simulated controller. An operator can configure a separate paired pendant or hosted file service. [Assistant setup and skill installation](docs/MCP.md)
 
 The desktop window has system file dialogs, undo and redo, an object list, and numeric position and size controls for drawing. Add a rectangle, ellipse or line, select it, then move it in millimetres. Preview the toolpath before exporting G-code. The full 3D CAD workspace, CAM settings and stock simulation open inside the same window. [Desktop walkthrough](docs/DESKTOP.md)
 
@@ -53,7 +61,7 @@ The following screenshots show the Studio 0.4.0 editor and the signed Pocket 0.4
 
 * Parametric parts, sketches, Boolean features, assembly mates, interference checks, Bézier/NURBS surface editing and STEP exchange.
 * Layer-based laser editing, image processing, material test grids, camera registration and 1,768 original vector templates.
-* Router relief, profile and pocket operations, drag-knife paths, rotary file export and simulated fixture clearance.
+* Router relief, profile and pocket operations, drag-knife paths, rotary engraving and simulated fixture clearance. [Fourth-axis setup](docs/ROTARY.md) · [Laser depth slicing](docs/LASER-WORKSHOP.md)
 * Reviewed imports for LightBurn projects and settings, DXF drawings, G-code, HP-GL cutter programs and LinuxCNC workspace settings.
 
 See the [release report (PDF)](docs/KerfKite-Release-Review.pdf), [file compatibility](docs/LIGHTBURN-IMPORT.md), [controller matrix](docs/PROTOCOLS.md) and [platforms](docs/PLATFORMS.md) for tested scope and open work. The machine limits in the public profiles are example dimensions. Enter your measured setup before preparing a physical job.
@@ -76,11 +84,11 @@ Browse **Templates → Template library** to insert one of **1,768 editable desi
 
 [![Twelve examples from the stock library, including native flowers, a coastal print, a twin-lens camera and a ginkgo earring](studio/static/stock-artwork-preview.png)](docs/TEMPLATE-CATALOGUE.md)
 
-For an earlier Studio installation or another vector editor, [download the SVG library](https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-Stock-Artwork.zip). Extract it and open **index.html** to search the gallery or browse the SVG files by category. The [template catalogue](docs/TEMPLATE-CATALOGUE.md) lists every category and its design count.
+For an earlier Studio installation or another vector editor, [download the SVG library](https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-Stock-Artwork.zip). Extract it and open **index.html** to search the gallery or browse the SVG files by category. The [template catalogue](docs/TEMPLATE-CATALOGUE.md) lists every category and its design count.
 
 ## Materials guide
 
-Open **CAM → Materials guide** to choose stock for a drill bit, flat end mill, ball end mill, V-bit, blue diode laser or drag knife. Compare two materials for the same operation and keep your measured sample results in a portable notebook. To use the guide on its own, [download the single-file materials guide](https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-Materials-Guide.html) and open it in your browser. [Guide and workshop examples](docs/MATERIALS.md)
+Open **CAM → Materials guide** to choose stock for a drill bit, flat end mill, ball end mill, V-bit, blue diode laser or drag knife. Compare two materials for the same operation and keep your measured sample results in a portable notebook. To use the guide on its own, [download the single-file materials guide](https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-Materials-Guide.html) and open it in your browser. [Guide and workshop examples](docs/MATERIALS.md)
 
 ## CNC simulations
 

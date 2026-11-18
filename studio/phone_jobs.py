@@ -25,6 +25,8 @@ class PhoneJobs:
             if not require_workstation and not state['simulated']:
                 raise ValueError('A physical machine requires an armed workstation preview.')
             self.disarm()
+            # A paired action approved for an older preview must not start its replacement.
+            self.control_epoch = secrets.token_urlsafe(18)
             self.lines = list(lines)
             self.validator = validator
             if require_workstation:

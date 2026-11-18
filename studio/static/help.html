@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#geometry">Geometry</a> <a href="#program-import">Program Import</a> <a href="#product">Product</a> <a href="#licensing">Licensing</a> <a href="#request-coverage">Request Coverage</a> <a href="#ai-vision">Ai Vision</a> <a href="#installer-builds">Installer Builds</a> <a href="#sbc">Sbc</a> <a href="#svg">Svg</a> <a href="#mcp">Mcp</a> <a href="#android">Android</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#assemblies">Assemblies</a> <a href="#sketch">Sketch</a> <a href="#desktop">Desktop</a> <a href="#fixtures">Fixtures</a> <a href="#status">Status</a> <a href="#drilling">Drilling</a> <a href="#install">Install</a> <a href="#developer">Developer</a> <a href="#laser-order">Laser Order</a> <a href="#user-guide">User Guide</a> <a href="#platforms">Platforms</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#phone-connections">Phone Connections</a> <a href="#branding">Branding</a> <a href="#simulation">Simulation</a> <a href="#web">Web</a> <a href="#router-entry">Router Entry</a> <a href="#release-review">Release Review</a> <a href="#labels">Labels</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#native">Native</a> <a href="#camera-register">Camera Register</a> <a href="#protocols">Protocols</a> <a href="#solid-cad">Solid Cad</a> <a href="#materials">Materials</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#lightburn-import">Lightburn Import</a> <a href="#laser-patterns">Laser Patterns</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#geometry">Geometry</a> <a href="#cad-scripting">Cad Scripting</a> <a href="#program-import">Program Import</a> <a href="#product">Product</a> <a href="#licensing">Licensing</a> <a href="#request-coverage">Request Coverage</a> <a href="#ai-vision">Ai Vision</a> <a href="#cad-macros">Cad Macros</a> <a href="#installer-builds">Installer Builds</a> <a href="#sbc">Sbc</a> <a href="#svg">Svg</a> <a href="#mcp">Mcp</a> <a href="#android">Android</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#assemblies">Assemblies</a> <a href="#rotary">Rotary</a> <a href="#sketch">Sketch</a> <a href="#desktop">Desktop</a> <a href="#fixtures">Fixtures</a> <a href="#status">Status</a> <a href="#drilling">Drilling</a> <a href="#install">Install</a> <a href="#developer">Developer</a> <a href="#laser-order">Laser Order</a> <a href="#user-guide">User Guide</a> <a href="#platforms">Platforms</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#phone-connections">Phone Connections</a> <a href="#branding">Branding</a> <a href="#simulation">Simulation</a> <a href="#web">Web</a> <a href="#mcp-hosting">Mcp Hosting</a> <a href="#router-entry">Router Entry</a> <a href="#release-review">Release Review</a> <a href="#labels">Labels</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#native">Native</a> <a href="#camera-register">Camera Register</a> <a href="#protocols">Protocols</a> <a href="#solid-cad">Solid Cad</a> <a href="#materials">Materials</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#lightburn-import">Lightburn Import</a> <a href="#laser-patterns">Laser Patterns</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
 <p>KerfKite Studio is an open-source CAD/CAM workbench for interchangeable CNC router, laser and drag-knife heads. Design in a browser, simulate a job, and prepare output for a supported controller. The Python application runs locally or as an authenticated HTTPS editor. KerfKite Pocket on Android includes an offline sketch editor and a CNC pendant paired with the Studio server.</p>
 <p><a href="screen-desktop-workspace.png"><img src="screen-desktop-workspace.png" alt="KerfKite’s desktop editor showing wattle, banksia and scarlet gum tags on a shared sheet, with separate layers for the outlines, engraving and lettering" /></a></p>
 <p>Three botanical tags on one sheet in Studio 0.4.0. The <strong>Layers</strong> tab separates engraving, lettering and cut outlines.</p>
@@ -15,34 +15,38 @@
 <tbody>
 <tr>
 <td>Windows 10 or 11, 64-bit Intel/AMD</td>
-<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-Windows-x64-Setup.exe">Windows setup wizard</a></td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-Windows-x64-Setup.exe">Windows setup wizard</a></td>
 <td>Run Setup, then open <strong>KerfKite Studio</strong> from Start.</td>
 </tr>
 <tr>
 <td>Mac</td>
-<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-macOS-Apple-Silicon.dmg">Apple silicon</a> · <a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-macOS-Intel.dmg">Intel</a></td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-macOS-Apple-Silicon.dmg">Apple silicon</a> · <a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-macOS-Intel.dmg">Intel</a></td>
 <td>Open the disk image, drag <strong>KerfKite Studio</strong> to <strong>Applications</strong>, then open it there.</td>
 </tr>
 <tr>
 <td>Raspberry Pi OS, 64-bit, or Debian/Ubuntu ARM64</td>
-<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-Linux-arm64.deb">ARM64 installer</a></td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-Linux-arm64.deb">ARM64 installer</a></td>
 <td>Open the package in the desktop software installer, then launch <strong>KerfKite Studio</strong> from the applications menu.</td>
 </tr>
 <tr>
 <td>Debian/Ubuntu, 64-bit Intel/AMD</td>
-<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-Linux-amd64.deb">AMD64 installer</a></td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-Linux-amd64.deb">AMD64 installer</a></td>
 <td>Open the package in the desktop software installer.</td>
 </tr>
 <tr>
 <td>Android, including Samsung Galaxy S23</td>
-<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-Pocket-Android.apk">KerfKite Pocket APK</a></td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-Pocket-Android.apk">KerfKite Pocket APK</a></td>
 <td>Open the download on the phone and tap <strong>Install</strong>. Choose <strong>CNC pendant</strong> to pair with Studio.</td>
 </tr>
 </tbody>
 </table>
-<p>The <a href="#install">installation guide</a> covers first launch, security prompts, updates, removal and optional STEP exchange and controller access, and the source install for HTTPS and MCP services. The <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.5.1">release downloads</a> also include portable Linux archives and SHA-256 checksums.</p>
+<p>The <a href="#install">installation guide</a> covers first launch, security prompts, updates, removal and optional STEP exchange and controller access, and the source install for HTTPS and MCP services. The <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.6.0">release downloads</a> also include portable Linux archives and SHA-256 checksums.</p>
 <p>For Orange Pi, Radxa, Jetson, BeagleBoard, ODROID, LattePanda and RISC-V systems, the <a href="#sbc">single-board computer guide</a> maps each board to its installer. It also includes a browser-only edition for drawing and file export on smaller boards.</p>
 <h2>Applications and features</h2>
+<p>Press <strong>/</strong> above the drawing to enter <code>rect 60 30 10 10</code>, <code>view front</code> or a solid such as <code>cube([40,25,5]);</code>. <strong>Script…</strong> opens a source editor with measured 2D and 3D previews. <strong>Macros…</strong> lets you make a reusable command sequence or a parametric part. Try <code>macro Mounting plate width=85 thickness=6</code> to create a four-hole plate. <a href="#cad-scripting">Keyboard CAD and three worked examples</a> · <a href="#cad-macros">Macro programming and the seven starter designs</a></p>
+<p><a href="screen-cad-script.png"><img src="screen-cad-script.png" alt="Script editor showing the source and interactive 3D preview of a fluted knob with a centre bore" /></a></p>
+<p><a href="screen-cad-macros.png"><img src="screen-cad-macros.png" alt="Macro library with the mounting plate recipe and editable bore, margin and thickness inputs" /></a></p>
+<p>Claude and ChatGPT can create parts, run macros, adjust the workspace and return portable projects through the Studio MCP server. The assistant opens a dedicated workshop with a simulated controller. An operator can configure a separate paired pendant or hosted file service. <a href="#mcp">Assistant setup and skill installation</a></p>
 <p>The desktop window has system file dialogs, undo and redo, an object list, and numeric position and size controls for drawing. Add a rectangle, ellipse or line, select it, then move it in millimetres. Preview the toolpath before exporting G-code. The full 3D CAD workspace, CAM settings and stock simulation open inside the same window. <a href="#desktop">Desktop walkthrough</a></p>
 <p><a href="screen-native-linux.png"><img src="screen-native-linux.png" alt="GTK desktop with a pair of involute gears on the canvas and the selected gear in the native object inspector" /></a></p>
 <p>The Linux native window running on ARM64, with the 18-tooth gear selected.</p>
@@ -106,7 +110,7 @@
 <ul>
 <li>Parametric parts, sketches, Boolean features, assembly mates, interference checks, Bézier/NURBS surface editing and STEP exchange.</li>
 <li>Layer-based laser editing, image processing, material test grids, camera registration and 1,768 original vector templates.</li>
-<li>Router relief, profile and pocket operations, drag-knife paths, rotary file export and simulated fixture clearance.</li>
+<li>Router relief, profile and pocket operations, drag-knife paths, rotary engraving and simulated fixture clearance. <a href="#rotary">Fourth-axis setup</a> · <a href="#laser-workshop">Laser depth slicing</a></li>
 <li>Reviewed imports for LightBurn projects and settings, DXF drawings, G-code, HP-GL cutter programs and LinuxCNC workspace settings.</li>
 </ul>
 <p>See the <a href="docs/KerfKite-Release-Review.pdf">release report (PDF)</a>, <a href="#lightburn-import">file compatibility</a>, <a href="#protocols">controller matrix</a> and <a href="#platforms">platforms</a> for tested scope and open work. The machine limits in the public profiles are example dimensions. Enter your measured setup before preparing a physical job.</p>
@@ -123,9 +127,9 @@
 <h2>Stock artwork</h2>
 <p>Browse <strong>Templates → Template library</strong> to insert one of <strong>1,768 editable designs across 132 categories</strong>. The collection includes Australian wildflowers, natural-history plates, woodcut landscapes, workshop tools, storybook illustrations, decorative panels and stencil lettering.</p>
 <p><a href="#template-catalogue"><img src="stock-artwork-preview.png" alt="Twelve examples from the stock library, including native flowers, a coastal print, a twin-lens camera and a ginkgo earring" /></a></p>
-<p>For an earlier Studio installation or another vector editor, <a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-Stock-Artwork.zip">download the SVG library</a>. Extract it and open <strong>index.html</strong> to search the gallery or browse the SVG files by category. The <a href="#template-catalogue">template catalogue</a> lists every category and its design count.</p>
+<p>For an earlier Studio installation or another vector editor, <a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-Stock-Artwork.zip">download the SVG library</a>. Extract it and open <strong>index.html</strong> to search the gallery or browse the SVG files by category. The <a href="#template-catalogue">template catalogue</a> lists every category and its design count.</p>
 <h2>Materials guide</h2>
-<p>Open <strong>CAM → Materials guide</strong> to choose stock for a drill bit, flat end mill, ball end mill, V-bit, blue diode laser or drag knife. Compare two materials for the same operation and keep your measured sample results in a portable notebook. To use the guide on its own, <a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-Materials-Guide.html">download the single-file materials guide</a> and open it in your browser. <a href="#materials">Guide and workshop examples</a></p>
+<p>Open <strong>CAM → Materials guide</strong> to choose stock for a drill bit, flat end mill, ball end mill, V-bit, blue diode laser or drag knife. Compare two materials for the same operation and keep your measured sample results in a portable notebook. To use the guide on its own, <a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-Materials-Guide.html">download the single-file materials guide</a> and open it in your browser. <a href="#materials">Guide and workshop examples</a></p>
 <h2>CNC simulations</h2>
 <p><img src="workshop-artwork.jpg" alt="Layered kingfisher cut-vinyl decal beside laser-engraved reeds on maple and a router-carved wave relief in walnut" /></p>
 <p><em>Workshop illustration of the three processes: cut vinyl, laser engraving and router carving.</em></p>
@@ -168,7 +172,7 @@
 <p>1,768 original built-in vector templates across 132 categories, including botanical sets, ornamental borders, mandalas, seasonal designs, nautical motifs, music, space, workshop, food, travel, garden, celebrations, animals, coasters, bookmarks, jewellery and hanging ornaments. The library displays 36 previews per page, with category/search/favourites filters. The MCP snapshot contains the same artwork. Source reference sheets have not been traced or redistributed. Existing simple motifs remain available. Foreground leaf/berry masking trims underlying vector segments, so exports do not retain hidden stem lines. Natural aspect ratios are retained for built-in previews and insertion. These are engraving contours; automatic stencil bridges, automatic one-piece cutout construction and production minimum-feature validation are not provided; manual boolean editing and CAM warnings do not replace these checks. Artwork quality still needs user review at intended production size.</p>
 <h2>Protocols</h2>
 <p><code>studio/protocols.py</code> separates supported export dialects from controller transport. GRBL / GRBL-ESP32 retains its output. Marlin router export omits GRBL work-coordinate/modal setup and uses millisecond dwell; the controller must have CNC spindle support configured. Both GRBL and experimental Marlin live adapters have software tests. Physical ports are disabled by default and require <code>--enable-hardware</code>; no physical machine was commissioned. Marlin pause stops host scheduling and may not stop already buffered motion. Marlin dynamic-laser output remains unsupported.</p>
-<p>The separate rotary workflow exports continuous A-axis LinuxCNC G-code with diameter wrapping and seam checks; it is not a live LinuxCNC driver. The same rotary wrapping is implemented in JavaScript for supported offline contour jobs and covered by parity tests. The new file:// browser workflow was not accepted end-to-end because the automation browser blocked that URL; browser-policy blocking is not a CAM correctness result. General Mach, LinuxCNC, Duet and other live adapters remain outstanding. Do not interpret a postprocessor as a validated live controller driver.</p>
+<p>Use the <a href="#rotary">rotary workspace</a> to check the seam, preview cylindrical engraving, export a program or stream to a supported independent rotary controller.</p>
 <h2>Area CAM, relief and preview limits</h2>
 <p>Compensated profiles use valid closed contours and nested holes. Pockets use concentric erosion and a stepover no larger than half the cutter diameter. Sampled medial-axis V-carving is conservative and can leave material in broad regions; tool-size/inaccessible-feature warnings still need review. Heightmaps and top-access STL relief use flat/ball cutter-contact envelopes, allowances and step-downs. Undercuts, clamps, holders and out-of-stock geometry are not modeled as certified collision checks.</p>
 <p>The optional native C++ relief kernel accelerates contact calculations while Python retains validation and the reference implementation; see <a href="#native">NATIVE.md</a> for measured results. No physical cut or gear mesh is established by numerical tests.</p>
@@ -192,6 +196,216 @@
 <p>For centreline lettering, installed typefaces, numbered batches and machine-readable codes, see <a href="#labels">Engraved lettering and production labels</a>.</p>
 <h3>Place router tabs on the cutter path</h3>
 <p>In <strong>CAM → Holding tabs</strong>, select a closed router contour and choose a line, inside or outside operation. Set the cutter diameter, then choose <strong>Place tabs on cutter contour</strong>. Studio calculates the compensated tool centreline for inspection. Switch contours to inspect holes. Drag a tab marker along the contour, click the contour to add one, or edit the selected percentage numerically. <strong>Use positions</strong> copies the result to the tab settings. Set the stock thickness, tab width, tab height and cut depth, choose <strong>Assign tabs</strong>, then generate a fresh preview. The same normalized positions apply to every contour in the selected object. Use <strong>Load assigned tab settings</strong> to revise an existing operation.</p>
+</section><section id="cad-scripting"><h1>Draw and model by typing</h1>
+<p>KerfKite has a command line above the canvas and a multiline <strong>CAD script</strong> editor. Use the command line for a measured shape or camera move. Use a script for a part whose holes, dimensions or repeated features should change together. Lengths are in millimetres and angles are in degrees.</p>
+<p>To keep a command sequence or script as a named recipe, open the macro library. You can give a recipe numeric parameters and share it with another workshop. <a href="#cad-macros">Create and run CAD macros</a></p>
+<h2>First drawing from the keyboard</h2>
+<p>Open an installed Studio workshop in simulation, or sign in to a hosted workshop. Click the drawing canvas and press <strong>/</strong>. Type <code>rect 60 24 10 15</code> and press <strong>Enter</strong>. A 60 × 24 mm rectangle appears with its lower-left corner at X 10, Y 15. Enter <code>circle 3 18 27</code> to create a separate circle with a 3 mm radius. Enter <code>fit drawing</code> to frame both objects. Each command creates ordinary, selectable artwork on the active layer.</p>
+<p>For a single object with a hole, use a script. The local-file Browser Editor can open and save script text and run the quick drawing and 2D view commands. Script geometry compilation requires the installed Studio service or a hosted workshop.</p>
+<h2>A flat tag with a hole</h2>
+<ol>
+<li>Choose <strong>Script… → New</strong> and paste the following source.</li>
+<li>Press <strong>F5</strong> or <strong>Preview</strong>. Check the dimensions and the hole in the shaded 2D preview.</li>
+<li>Press <strong>Ctrl+Enter</strong> on Windows or Linux, <strong>Command+Enter</strong> on Mac, or choose <strong>Apply</strong>. The tag becomes a drawing object with an outer contour and an inner contour.</li>
+<li>Move the tag on the bed. With the object selected in the drawing workspace, type <code>edit</code>. Change <code>tag_length</code> to <code>80</code>, preview, then apply. The revised tag keeps its placement.</li>
+</ol>
+<pre><code class="language-scad">tag_length = 68;
+tag_height = 24;
+hole_diameter = 5;
+$fn = 64;
+
+difference() {
+    hull() {
+        translate([tag_height/2, tag_height/2]) circle(d=tag_height);
+        translate([tag_length-tag_height/2, tag_height/2]) circle(d=tag_height);
+    }
+    translate([8, tag_height/2]) circle(d=hole_diameter);
+}
+</code></pre>
+<p>The initial tag spans X 0–68 and Y 0–24. A new script uses its own XY coordinates on the drawing bed. If its bounds extend beyond the bed, Studio translates it just far enough to fit and reports the offset. A shape larger than the bed requires resizing in the source or a suitable work area. Rebuilding an existing scripted object preserves whole-object movement, rotation and scaling. After editing individual nodes or assigning per-vertex machining values, use <strong>New</strong> for a separate scripted copy.</p>
+<h2>A mounting plate with four holes</h2>
+<p>Start a new project to inspect this part by itself. Choose <strong>Script… → New</strong>, paste the program and preview it. The first solid in <code>difference()</code> supplies the plate. Each instance of <code>drill_at</code> removes a cylinder extending 1 mm past both faces.</p>
+<pre><code class="language-scad">plate_width = 70;
+plate_depth = 36;
+plate_height = 5;
+margin = 6;
+$fn = 48;
+
+module drill_at(x, y, diameter=4) {
+    translate([x, y, -1])
+        cylinder(h=plate_height+2, d=diameter);
+}
+
+difference() {
+    cube([plate_width, plate_depth, plate_height]);
+    for (x = [margin, plate_width-margin], y = [margin, plate_depth-margin])
+        drill_at(x, y);
+}
+</code></pre>
+<p>Apply the 70 × 36 × 5 mm solid. Enter <code>view top</code> and check the four holes. Their centres are at X 6 or 64 and Y 6 or 30. Try <code>front</code>, <code>iso</code>, <code>orbit 15 10</code> and <code>zoom 1.25</code>. A view change moves the camera without changing the part.</p>
+<p>Select the scripted feature in <strong>3D CAD</strong> and choose <strong>Edit CAD script…</strong>. Increase <code>plate_width</code> to <code>85</code> and apply. The right-hand holes move to X 79. A named part parameter with the same name overrides its script default. For a drawing, Studio stores a copy of the part parameter values used at creation. For a solid feature, rebuilding uses the part's current parameters.</p>
+<h2>A tapered dial with a circular pattern</h2>
+<p>Use a new project for a separate dial. The two end diameters define the taper. The loop rotates a radial hole around the Z axis in equal increments. Change <code>holes</code> from <code>8</code> to <code>6</code> and press <strong>F5</strong> to compare the pattern before applying.</p>
+<pre><code class="language-scad">holes = 8;
+dial_height = 12;
+pitch_radius = 9;
+$fn = 64;
+
+module through_bore(diameter) {
+    translate([0, 0, -1]) cylinder(h=dial_height+2, d=diameter);
+}
+
+difference() {
+    cylinder(h=dial_height, d1=32, d2=26);
+    through_bore(6);
+    for (i = [0:holes-1])
+        rotate([0, 0, i*360/holes])
+            translate([pitch_radius, 0, 0]) through_bore(2.4);
+}
+</code></pre>
+<p>The preview spans 32 × 32 × 12 mm. Drag the preview to inspect the taper. Use the top view of the applied model to inspect the hole spacing.</p>
+<h2>Save and exchange</h2>
+<p><strong>Open .scad…</strong> loads source for editing. <strong>Save .scad</strong> downloads the contents of the source field, including unapplied edits. Save the Studio project after applying to preserve geometry, editable source, layers and feature history together. To add a separate scripted feature while another one is selected, choose <strong>New</strong> in the script editor. A new solid uses the <strong>Join</strong> operation in the current part.</p>
+<p><strong>Export STL</strong> writes the tessellated solid for mesh exchange. Exact STEP export works with supported exact CAD features. If a part contains an active scripted feature, Studio reports that its surfaces are tessellated. Use STL for the complete result, or suppress the scripted features to export the remaining exact part. A geometry preview describes the design. To produce a machining file, transfer or select the desired geometry, set the CAM operation and generate a toolpath preview.</p>
+<h2>Commands and shortcuts</h2>
+<p>In the <strong>Command</strong> field, <strong>Enter</strong> runs one command. <strong>↑</strong> and <strong>↓</strong> recall recent entries. <strong>Escape</strong> leaves the field. Type <code>help</code> or choose <strong>?</strong> for the command reference. The <strong>/</strong> shortcut is available outside input fields and dialogs when the pendant is inactive.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rect width height [x y]</code> or <code>rectangle width height [x y]</code></td>
+<td>Add a rectangle. The default lower-left corner is (0, 0).</td>
+</tr>
+<tr>
+<td><code>circle radius [cx cy]</code></td>
+<td>Add a circle. Its default centre is (radius, radius), which keeps it on the positive bed.</td>
+</tr>
+<tr>
+<td><code>line x1 y1 x2 y2</code></td>
+<td>Add an open path between two different points.</td>
+</tr>
+<tr>
+<td><code>script</code>, <code>edit</code></td>
+<td>Open the script editor for the selected scripted drawing or solid feature.</td>
+</tr>
+<tr>
+<td><code>cube([40,25,5]);</code></td>
+<td>Compile the entered script statement and add its result. An expression such as <code>circle(r=4);</code> produces a scripted 2D region.</td>
+</tr>
+<tr>
+<td><code>top</code>, <code>bottom</code>, <code>front</code>, <code>back</code>, <code>left</code>, <code>right</code>, <code>iso</code></td>
+<td>Open the 3D viewport at the named orientation. The optional prefix <code>view</code> works with these commands.</td>
+</tr>
+<tr>
+<td><code>fit</code>, <code>fit drawing</code>, <code>fit bed</code></td>
+<td>Frame the current geometry, visible 2D artwork, or the full drawing bed.</td>
+</tr>
+<tr>
+<td><code>zoom factor</code>, <code>pan dx dy</code></td>
+<td>Zoom by a positive factor (1.25 enlarges, 0.8 reduces) or shift the picture by screen pixels.</td>
+</tr>
+<tr>
+<td><code>orbit yaw pitch</code></td>
+<td>Rotate the solid view by two angle increments in degrees.</td>
+</tr>
+</tbody>
+</table>
+<p>Click the appropriate viewport before using its keys. The <strong>Drawing view</strong> and <strong>View orientation</strong> menus provide alternatives on keyboards without a numeric keypad.</p>
+<table>
+<thead>
+<tr>
+<th>Context</th>
+<th>Keys or gesture</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Drawing or solid viewport</td>
+<td><strong>F</strong>, <strong>+</strong> / <strong>−</strong></td>
+<td>Fit visible geometry, zoom in or zoom out.</td>
+</tr>
+<tr>
+<td>Drawing viewport</td>
+<td>Arrow keys, middle-drag, scroll</td>
+<td>Pan with arrows or drag. Scroll to zoom around the pointer.</td>
+</tr>
+<tr>
+<td>Solid viewport</td>
+<td>Arrow keys or drag</td>
+<td>Orbit. Use <strong>Shift+arrow</strong>, <strong>Shift+drag</strong> or middle-drag to pan.</td>
+</tr>
+<tr>
+<td>Viewport</td>
+<td><strong>Num 0 / 1 / 9 / 3 / 4 / 7 / 2</strong></td>
+<td>Isometric / front / back / right / left / top / bottom.</td>
+</tr>
+<tr>
+<td>Script editor</td>
+<td><strong>F5</strong></td>
+<td>Build the preview. Drag a solid or scroll to inspect it.</td>
+</tr>
+<tr>
+<td>Script editor</td>
+<td><strong>Ctrl+Enter</strong>, <strong>Command+Enter</strong> or <strong>F6</strong></td>
+<td>Build and apply the current source to the project.</td>
+</tr>
+</tbody>
+</table>
+<h2>Supported script language</h2>
+<p>Studio implements a geometry-focused subset of OpenSCAD syntax. Each script produces one 2D or one 3D result. Multiple top-level shapes of the same dimension form a union. Use extrusion or projection to cross between 2D and 3D. Source errors identify the affected line and column where available.</p>
+<table>
+<thead>
+<tr>
+<th>Construct</th>
+<th>Supported forms</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2D primitives</td>
+<td><code>square(size, center)</code>, <code>circle(r=…)</code> or <code>circle(d=…)</code>, <code>polygon(points, paths)</code>. Polygon paths index into points and can describe holes.</td>
+</tr>
+<tr>
+<td>3D primitives</td>
+<td><code>cube(size, center)</code>, <code>sphere(r=…)</code> or <code>sphere(d=…)</code>, <code>cylinder(h=…,r=…)</code>, tapered cylinders with <code>r1/r2</code> or <code>d1/d2</code>, convex <code>polyhedron(points, faces)</code> with planar faces wound clockwise from outside.</td>
+</tr>
+<tr>
+<td>Shape combinations</td>
+<td><code>union()</code>, <code>difference()</code>, <code>intersection()</code>, <code>hull()</code>. Put child shapes inside braces.</td>
+</tr>
+<tr>
+<td>Transforms</td>
+<td><code>translate(v)</code>, <code>rotate(a)</code> or <code>rotate(a,v)</code>, <code>scale(v)</code>, <code>mirror(v)</code>, <code>multmatrix(m)</code> with an affine 3×4 or 4×4 matrix. A 2D drawing stays in the XY plane.</td>
+</tr>
+<tr>
+<td>Shape conversions</td>
+<td><code>linear_extrude(height=…,center=…,twist=…,slices=…,scale=…)</code>, <code>rotate_extrude(angle=…)</code>, <code>offset(r=…)</code> or <code>offset(delta=…,chamfer=…)</code>, <code>projection(cut=false)</code> for a silhouette or <code>projection(cut=true)</code> for a Z=0 section.</td>
+</tr>
+<tr>
+<td>Parameters and expressions</td>
+<td>Numeric assignments, <code>true</code> / <code>false</code>, <code>PI</code>, vectors, indexing, parentheses, <code>+ - * / % ^</code>, comparison operators, `! &amp;&amp;</td>
+</tr>
+<tr>
+<td>Math functions</td>
+<td><code>abs</code>, <code>sign</code>, <code>sqrt</code>, <code>pow</code>, <code>exp</code>, <code>ln</code>, <code>log</code> (base 10), <code>round</code>, <code>ceil</code>, <code>floor</code>, <code>min</code>, <code>max</code>, <code>sin</code>, <code>cos</code>, <code>tan</code>, <code>asin</code>, <code>acos</code>, <code>atan</code>, <code>atan2</code>, <code>len</code> and <code>norm</code>.</td>
+</tr>
+<tr>
+<td>Repetition and reuse</td>
+<td><code>module name(args) { … }</code>, <code>function name(args) = expression;</code>, positional and named arguments, parameter defaults, <code>children()</code>, <code>children(index)</code>, <code>$children</code>, <code>if (…) … else …</code>, <code>for (i = …) …</code>, vector comprehensions and inclusive ranges <code>[start:end]</code> or <code>[start:step:end]</code>. A descending range uses a negative step.</td>
+</tr>
+<tr>
+<td>Curves and comments</td>
+<td><code>$fn</code> sets facet count on supported curved geometry. Use <code>//</code> for a line comment and <code>/* … */</code> for a block comment.</td>
+</tr>
+</tbody>
+</table>
+<p>OpenSCAD library directives (<code>include</code>, <code>use</code>), file-backed <code>import</code>, string and text geometry, animation and preview modifiers are outside this subset. Open existing scripts in <strong>Preview</strong> to check compatibility. The compiler accepts up to 64 KiB of UTF-8 source, checks numeric and recursion limits, and caps range and geometry complexity. Reducing <code>$fn</code>, the number of loop instances, or extrusion slices can keep a detailed model within those limits.</p>
 </section><section id="program-import"><h1>Bringing drawings, toolpaths and cutter plots into Studio</h1>
 <p>Use the project importer in the Studio editor to open a drawing from another program. Imported outlines retain their source coordinates in millimetres and start with output disabled. Check a known dimension in the editor, choose the installed head and material, and generate a new CAM preview before enabling any imported artwork for output.</p>
 <table>
@@ -249,7 +463,7 @@
 <h2>LightBurn user bundles</h2>
 <p>Choose a <strong>.lbzip</strong> in <strong>Projects → Import artwork and settings</strong>, then select a supported member for review. Studio reads device profiles, preferences, material libraries, settings and project files present in the archive. Other bundle components are counted as skipped. An ordinary LightBurn bundle export omits standalone project files. Archives support up to 4 MB compressed, 256 members and 16 MB expanded in total, with up to 4 MB per supported member. The reader keeps archive data in memory. <a href="https://docs.lightburnsoftware.com/latest/Reference/UserBundles/">LightBurn User Bundles</a></p>
 </section><section id="product"><h1>Feature and acceptance matrix</h1>
-<p>This matrix describes the software workflows exercised for the 0.4 series. The per-feature guides record accepted inputs and tests. Hardware measurements and tests with vendor controllers are tracked separately.</p>
+<p>This matrix describes the software workflows covered by the feature guides and simulator. The per-feature guides record accepted inputs and tests. Hardware measurements and tests with vendor controllers are tracked separately.</p>
 <table>
 <thead>
 <tr>
@@ -268,6 +482,16 @@
 <td>Solid and surface CAD</td>
 <td>Driven sketches with geometric constraints, tangent fillets and Bézier edges, two-section parametric lofts, solid histories, linked CAM contours/reliefs, assembly datum mates, multi-patch surface trim/sewing, STL and STEP</td>
 <td>STEP carries exchanged geometry. Imported feature histories, arbitrary surface networks, general curve-to-curve solvers and continuous full-machine collisions remain open. <a href="#solid-cad">Solid CAD</a> · <a href="#surfaces-step">Surfaces and STEP</a></td>
+</tr>
+<tr>
+<td>Keyboard CAD and macros</td>
+<td>Command palette, 2D/3D source editor, measured geometry previews, script features, seven programmable starters, macro file exchange and viewport shortcuts</td>
+<td>See the <a href="#cad-scripting">supported language</a> and <a href="#cad-macros">macro programming guide</a>. Scripted solids export as STL.</td>
+</tr>
+<tr>
+<td>Assistant workshop</td>
+<td>Isolated Studio editor controlled by MCP, geometry calculations, reusable skill and optional paired or hosted adapters</td>
+<td>Hosted assistant setup requires a reachable authenticated endpoint. <a href="#mcp">Setup</a></td>
 </tr>
 <tr>
 <td>Text and identification</td>
@@ -296,8 +520,8 @@
 </tr>
 <tr>
 <td>Knife and rotary</td>
-<td>Drag-knife offset/swivel compensation, HP-GL cutting designs, rotary mapping, seam checks and continuous A-axis file output</td>
-<td>Live continuous four-axis transport, tangential powered knives and arbitrary simultaneous multiaxis machining remain open.</td>
+<td>Drag-knife offset/swivel compensation, HP-GL cutting designs, rotary mapping, seam checks, laser exposure passes and cylindrical router depth paths</td>
+<td>Live rotary streaming targets supported independent rotary controllers. Arbitrary simultaneous multiaxis surfacing and powered tangential knives remain open. <a href="#rotary">Rotary profiles and simulation</a></td>
 </tr>
 <tr>
 <td>Job preparation</td>
@@ -387,6 +611,8 @@
 </ul>
 <h2>Engraved labels</h2>
 <p>Workshop Mono is original MIT-licensed centreline geometry. The QR encoder is the unmodified JavaScript build of Project Nayuki’s MIT-licensed library. Its notice is included in the desktop, offline editor and wheel. Installed or imported fonts stay on the editing computer. Saved projects carry their paths and face names. <a href="https://www.nayuki.io/page/qr-code-generator-library">QR encoder</a> · <a href="vendor/qrcodegen-LICENSE.txt">Bundled notice</a></p>
+<h2>Assistant workshop and CAD scripting</h2>
+<p>The macro examples, bounded CAD interpreter and KerfKite workshop skill are original project sources covered by the repository MIT licence. The skill archive includes that licence. The optional MCP installation obtains FastMCP and Playwright (Apache-2.0) and Pydantic (MIT) from the Python package index. The browser runtime is installed separately and carries its own Chromium and third-party notices. Preserve the upstream notices if redistributing those packages. The Studio wheel includes KerfKite’s integration code. <a href="https://github.com/PrefectHQ/fastmcp/blob/main/LICENSE">FastMCP licence</a> · <a href="https://github.com/microsoft/playwright-python/blob/main/LICENSE">Playwright licence</a> · <a href="https://github.com/pydantic/pydantic/blob/main/LICENSE">Pydantic licence</a></p>
 </section><section id="request-coverage"><h1>Compatibility and acceptance</h1>
 <p>The <a href="#product">feature matrix</a> records capabilities and open work. See the <a href="#release-review">release verification</a>, <a href="#lightburn-import">format compatibility</a>, <a href="#protocols">controller support</a> and <a href="#platforms">platform measurements</a>. Device commissioning requires an independently measured work envelope, tools, clearances, work origin and controller settings.</p>
 </section><section id="ai-vision"><h1>Optional AI camera module — proposal, not implemented</h1>
@@ -413,6 +639,178 @@
 <li>https://www.raspberrypi.com/documentation/computers/ai.html</li>
 <li>https://www.raspberrypi.com/news/heating-and-cooling-raspberry-pi-5/</li>
 </ul>
+</section><section id="cad-macros"><h1>CAD macros</h1>
+<p>A macro saves a drawing recipe with named numeric parameters. Use a command macro for separate objects on a layer, such as a border and its alignment line. Use a CAD script macro for a single profile or a solid that needs holes, curves or repeated features.</p>
+<p>Open <strong>Macros…</strong> beside the drawing command field, or enter <code>macros</code> in the field. The library includes a <strong>Drawing frame</strong> and a <strong>Drilled spacer</strong>. Select one to inspect its source and defaults. Use <strong>Duplicate</strong> to make your own version.</p>
+<p><img src="screen-cad-macros.png" alt="Macro library with the editable mounting plate, its source, saved dimensions and per-run values" /></p>
+<h2>Draw a measured border and alignment line</h2>
+<ol>
+<li>Choose <strong>New macro</strong>. Name the macro <code>Border</code> and select <strong>Drawing and view commands</strong>.</li>
+<li>Add a parameter named <code>width</code> with a default of <code>18</code>.</li>
+<li>Enter the three commands below, one per line. Choose <strong>Save macro</strong> and then <strong>Run macro</strong>.</li>
+</ol>
+<pre><code class="language-text">rect {width} 6 1 2
+line 1 5 $width 5
+fit drawing
+</code></pre>
+<p>The rectangle starts at X 1, Y 2. At the default width it ends at X 19, Y 8. The independent line goes through the middle of the border from (1, 5) to (18, 5). Close the library and enter <code>macro Border width=32</code> in the drawing command field for a second set. Both rectangles start at the same point, so their left edges overlap. Move one to see them side by side.</p>
+<p>Use <code>rect</code> (or <code>rectangle</code>), <code>circle</code>, <code>line</code>, or a supported view command on each line. Both <code>{width}</code> and <code>$width</code> stand for a numeric argument. Blank lines and comment lines beginning with <code>#</code> or <code>//</code> are available for notes. Studio checks the sequence before applying it. If a later line contains an invalid command, fix that line and run the sequence again.</p>
+<h2>Make a family of solid parts</h2>
+<p>Create a macro named <code>Strip</code>, select <strong>OpenSCAD-style model</strong> and add two parameters, <code>width</code> with a default of <code>12</code> and <code>offset</code> with a default of <code>0</code>. Paste this source, save the macro and close the library.</p>
+<pre><code class="language-scad">translate([offset, 0, 0]) cube([width, 6, 3]);
+</code></pre>
+<p>From the command field, run each of the following commands separately in a fresh part.</p>
+<pre><code class="language-text">macro Strip width=20
+macro Strip offset=40
+view top
+</code></pre>
+<p>The first strip spans X 0–20. The second uses the default width and spans X 40–52. They are separate pieces of material in the same model, with a combined volume of 576 mm³ and overall dimensions of 52 × 6 × 3 mm. The model history records each run as an editable scripted feature. Dimensions are in millimetres. For a bore or a repeating feature, use the same <code>difference()</code>, <code>for</code> and <code>module</code> syntax as in the script editor. <a href="#cad-scripting">CAD script language and worked examples</a></p>
+<h2>Save and share a library</h2>
+<p><strong>Save</strong> stores a definition in the current browser profile. A parameter’s default controls future runs. Change its run value to try another size. <strong>Run</strong> can also execute the current draft. <strong>Save</strong> keeps that draft for the next session.</p>
+<p>Use <strong>Export</strong> in the macro library to download a JSON file. On the other computer, open the library and choose <strong>Import</strong> to select that file. Import merges the definitions with the destination library. An identical definition can be imported again. A different incoming definition with an existing name gets a separate name. Export also provides a backup when changing browser profiles or clearing site data.</p>
+<p>To give someone both the design and its reusable recipes, save the Studio project and export the macro library. The project carries the geometry created by each run. To regenerate a CAD script macro on the receiving machine, use an installed Studio service or a hosted workshop with script compilation.</p>
+<h2>Starter recipes</h2>
+<p>The seven recipes below are available the first time you open the library. Dimensions in the table use the shipped defaults. Search by name, select an entry and inspect its source to see how its geometry is built. In a fresh project, run <code>macro Mounting plate</code> and <code>view top</code> to inspect the plate by itself.</p>
+<table>
+<thead>
+<tr>
+<th>Macro</th>
+<th>Default result</th>
+<th>Parameters and a change to try</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Drawing frame</td>
+<td>One 60 × 30 mm rectangle at the origin, followed by a fitted drawing view.</td>
+<td><code>width</code>, <code>height</code>. Try <code>macro Drawing frame width=90 height=40</code>.</td>
+</tr>
+<tr>
+<td>Fastener layout</td>
+<td>Four 4 mm diameter circles with centres at (8, 8), (52, 8), (52, 28) and (8, 28).</td>
+<td><code>radius</code>, <code>left</code>, <code>right</code>, <code>bottom</code>, <code>top</code>. Set <code>right=72</code> to widen the spacing.</td>
+</tr>
+<tr>
+<td>Rounded tag</td>
+<td>One 60 × 24 mm flat outline with 4 mm corner radii and a 5 mm hole at (8, 12).</td>
+<td><code>width</code>, <code>height</code>, <code>corner</code>, <code>hole</code>. Keep the hole clear of the edge when changing the corner radius.</td>
+</tr>
+<tr>
+<td>Slotted panel</td>
+<td>One 80 × 40 mm flat panel with four 34 × 3 mm round-ended slots. Their centre lines fall at Y 8, 16, 24 and 32.</td>
+<td><code>width</code>, <code>height</code>, <code>slots</code>, <code>slot_length</code>, <code>slot_width</code>. Set <code>slots=3</code> to space three slots evenly. Use a positive whole number for the count.</td>
+</tr>
+<tr>
+<td>Drilled spacer</td>
+<td>An 18 mm diameter, 8 mm tall cylinder with a 6 mm through-bore.</td>
+<td><code>outer</code>, <code>bore</code>, <code>height</code>. Try <code>macro Drilled spacer outer=24 bore=8 height=12</code>.</td>
+</tr>
+<tr>
+<td>Mounting plate</td>
+<td>A 70 × 40 × 5 mm solid with four 4 mm through-bores. The holes lie 7 mm in from each adjacent edge.</td>
+<td><code>width</code>, <code>length</code>, <code>thickness</code>, <code>margin</code>, <code>bore</code>. Increase <code>width</code> to move the right-hand hole pair.</td>
+</tr>
+<tr>
+<td>Flanged bushing</td>
+<td>A 14 mm diameter body with a 22 mm diameter flange and an 8 mm through-bore. Overall length is 16 mm, including the 3 mm flange.</td>
+<td><code>body</code>, <code>flange</code>, <code>bore</code>, <code>length</code>, <code>lip</code>. Keep the bore smaller than the body to retain a wall.</td>
+</tr>
+</tbody>
+</table>
+<h2>Command and parameter reference</h2>
+<p>Macro names are unique in a library, ignoring case. Spaces are allowed. Type <code>macro Drilled spacer height=12</code> without quotation marks. Separate assignments with spaces and keep each <code>name=value</code> together. Macro names can contain 1–64 characters, excluding control characters and the equals sign. Parameter names are case-sensitive. Start with an ASCII letter or underscore and use letters, digits and underscores thereafter. Choose descriptive names such as <code>bore_diameter</code>. Language keywords such as <code>for</code> and <code>module</code>, and reserved names such as <code>constructor</code>, cannot serve as parameters.</p>
+<p>A parameter name can be up to 40 characters. Every parameter needs a finite numeric saved default from −100000 to 100000. The same range applies to run values. Blank <strong>This run</strong> fields use those defaults. A value entered for this run or supplied on the command line takes precedence for that run. A CAD script macro receives the resulting values as named parameters. They override same-named part parameters and source defaults. The applied scripted feature keeps its per-run inputs, so changing the library default later leaves that instance at the size it was built.</p>
+<table>
+<thead>
+<tr>
+<th>Command in a sequence</th>
+<th>Arguments and units</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rect width height [x y]</code> or <code>rectangle width height [x y]</code></td>
+<td>Width and height must be positive. Optional X and Y give the lower-left corner in millimetres. Both default to zero.</td>
+</tr>
+<tr>
+<td><code>circle radius [cx cy]</code></td>
+<td>A positive radius followed by an optional centre in millimetres. The default centre is (radius, radius).</td>
+</tr>
+<tr>
+<td><code>line x1 y1 x2 y2</code></td>
+<td>Two distinct endpoints in millimetres.</td>
+</tr>
+<tr>
+<td><code>fit</code>, <code>fit drawing</code>, <code>fit bed</code></td>
+<td>Frame the current workspace, visible drawing objects, or full work area.</td>
+</tr>
+<tr>
+<td><code>view top</code>, <code>bottom</code>, <code>front</code>, <code>back</code>, <code>left</code>, <code>right</code>, <code>iso</code></td>
+<td>Set the solid camera orientation. <code>view</code> is optional for named orientations.</td>
+</tr>
+<tr>
+<td><code>zoom factor</code>, <code>pan dx dy</code>, <code>orbit yaw pitch</code></td>
+<td>Zoom by a positive factor, pan by pixels or orbit by degrees.</td>
+</tr>
+</tbody>
+</table>
+<p>A parameter placeholder replaces one complete numeric token in a command sequence. For arithmetic, loops and geometry combinations, choose <strong>OpenSCAD-style model</strong> and use expressions such as <code>width/2</code> and <code>for (i=[0:3])</code>. A script can yield one planar region with several contours or one solid with several connected components. A script that combines 2D and 3D shapes needs an explicit conversion such as <code>linear_extrude()</code> or <code>projection()</code>. <a href="#cad-scripting">Script reference and examples</a></p>
+<h2>File format and limits</h2>
+<p>A library can hold 100 definitions, with up to 32 numeric parameters per definition. Each UTF-8 source can occupy up to 64 KiB. The exported or merged library must fit within 1 MiB. A command sequence can contain up to 256 executable lines. The destination project can contain up to 3,000 paths and 100,000 drawing vertices after applying a command sequence. Scripted geometry has additional tessellation and evaluation limits.</p>
+<p>To author a portable library by hand, save the following UTF-8 text in a <code>.json</code> file, choose <strong>Import JSON…</strong>, then run <code>macro Label width=45</code>. The example adds a 45 × 12 mm rectangle. <code>kind</code> accepts <code>commands</code> or <code>scad</code>. In JSON, use <code>\n</code> between source lines. Each definition supplies <code>parameters</code>, including an empty <code>{}</code> for recipes with no parameters.</p>
+<pre><code class="language-json">{
+  &quot;format&quot;: &quot;kerfkite-cad-macros&quot;,
+  &quot;version&quot;: 1,
+  &quot;macros&quot;: [
+    {
+      &quot;name&quot;: &quot;Label&quot;,
+      &quot;kind&quot;: &quot;commands&quot;,
+      &quot;source&quot;: &quot;rect {width} 12\nfit drawing&quot;,
+      &quot;parameters&quot;: {&quot;width&quot;: 30}
+    }
+  ]
+}
+</code></pre>
+<p>The manager checks the entire import before adding definitions. For a name collision with different source, kind or defaults, look for the incoming name with a numeric suffix such as <strong>Label (2)</strong>. The exported file contains the saved definitions and defaults. Choose <strong>Save macro</strong> before exporting to include your current edits. <strong>Duplicate</strong> creates an editable copy. <strong>Delete…</strong> removes the selected saved definition from this browser after confirmation. If another window changes a definition you are editing, duplicate your draft or reopen the latest saved entry.</p>
+<h2>Troubleshooting a run</h2>
+<table>
+<thead>
+<tr>
+<th>Editor feedback or symptom</th>
+<th>What to inspect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Unknown parameter</td>
+<td>Match case and spelling with the parameter table. In command sequences, use <code>{name}</code> or <code>$name</code>. In script source, use the bare name.</td>
+</tr>
+<tr>
+<td>Error on line N</td>
+<td>Inspect that line before running again. A negative circle radius or repeated line endpoint is invalid. A syntax error in script source can also identify a column.</td>
+</tr>
+<tr>
+<td>Shape exceeds the work area</td>
+<td>Check both the size and the position. A circle centred at X 0 extends past the left edge for any positive radius.</td>
+</tr>
+<tr>
+<td>Repeated run appears to do nothing</td>
+<td>Instances at identical coordinates overlap. Change a position parameter or select one instance and move it to inspect both.</td>
+</tr>
+<tr>
+<td>Empty script result or excessive geometry</td>
+<td>Check the input dimensions and booleans. Use a smaller <code>$fn</code>, fewer copied features or fewer extrusion slices.</td>
+</tr>
+<tr>
+<td>The library is missing on another device</td>
+<td>Use <strong>Export library…</strong> in the source browser, then <strong>Import JSON…</strong> in the destination browser. Project files and macro libraries have separate formats.</td>
+</tr>
+<tr>
+<td>Cannot save in this browser</td>
+<td>Check site-storage permission and available space. The local-file and hosted editors can have separate browser storage.</td>
+</tr>
+</tbody>
+</table>
 </section><section id="installer-builds"><h1>Building KerfKite installers</h1>
 <p>The desktop launcher contains only Go standard-library code. Each package carries the same portable Studio wheel and locked requirements. The launcher fetches the platform’s uv archive from the pinned upstream release, verifies its SHA-256, and uses it to install a private CPython 3.12 runtime. All application wheels are hash-checked. Python, geometry libraries and optional STEP binaries are installed on the user’s machine.</p>
 <h2>Release workstation</h2>
@@ -420,18 +818,20 @@
 <ol>
 <li>Update the Studio version and download links. Refresh dependency locks when dependencies change. For a new Android build, update its version separately. Rebuild the bundled help with <code>python scripts/build_help.py</code>. To refresh the locks, run <code>uv pip compile pyproject.toml --universal --python-version 3.12 --only-binary :all: --generate-hashes --no-header --no-annotate -o packaging/desktop/requirements.lock</code> and repeat with <code>--extra step -c packaging/desktop/requirements.lock -o packaging/desktop/step.lock</code>.</li>
 <li>In a clean checkout, run <code>KERFKITE_PORTABLE_WHEEL=1 uv build --wheel --out-dir dist</code>. Inspect the wheel for the editor, licences and desktop server. It uses the portable Python relief engine. The normal source installation can compile the optional native kernel.</li>
-<li>Run <code>python packaging/desktop/build.py dist/kerfkite_studio-0.5.1-py3-none-any.whl dist/installers mac-arm64 mac-amd64 linux-arm64 linux-amd64 windows-amd64</code>. The staging filesystem needs free space for each package. <code>go build -trimpath</code> strips workstation paths. The macOS application has an ad-hoc signature. Windows Setup uses per-user installation.</li>
+<li>Run <code>python packaging/desktop/build.py dist/kerfkite_studio-0.6.0-py3-none-any.whl dist/installers mac-arm64 mac-amd64 linux-arm64 linux-amd64 windows-amd64</code>. The staging filesystem needs free space for each package. <code>go build -trimpath</code> strips workstation paths. The macOS application has an ad-hoc signature. Windows Setup uses per-user installation.</li>
 <li>When releasing the Android companion, build its release from the android directory using <code>./gradlew assembleRelease</code>. Sign the aligned release APK with the project's existing release alias and Android SDK apksigner. Keep signing credentials in private storage. Verify the APK using <code>apksigner verify --verbose --print-certs</code>. Future upgrades must use the same certificate and increment the Android version code.</li>
 <li>For each release file, publish its SHA-256 as a line of <code>SHA256SUMS.txt</code>. Upload the packages and checksums to a release for the corresponding source commit. In <strong>Actions → Check desktop release installers</strong>, run the workflow against that tag. On Linux and macOS it installs the release, tests the window, generates a simulated toolpath, exercises STEP and relaunches offline. The hosted Windows Server runner checks that Setup rejects that operating system before installing any files. Run the graphical acceptance test on a Windows 10 or 11 x64 client.</li>
 </ol>
 <p>For local smoke testing, run <code>python validation/installer_smoke.py &quot;/path/to/installed/KerfKite&quot; --step</code> with ports 18764 and 18765 free. The test uses a temporary application-data directory. The shortcut opens the setup tab. Starting a workshop opens the selected native interface. Platform-specific Gatekeeper, SmartScreen and desktop shell prompts need a graphical desktop to check.</p>
 <p>The Debian packaging revision for Studio 0.2.1 is <code>-2</code>. It declares <code>libgl1</code> so OpenCascade STEP loads on minimal Debian installations. A portable Linux archive expects the desktop to provide <code>libGL.so.1</code> for STEP. The application wheel is shared across all platforms.</p>
+<p>Build the assistant skill with <code>python scripts/package_skill.py dist/installers/kerfkite-workshop-skill.zip</code>.
+Include the ZIP in <code>SHA256SUMS.txt</code>. Extracting it produces the <code>kerfkite-workshop</code> folder with its instructions, interface metadata and MIT license.</p>
 <h2>Native windows</h2>
 <p>The release builder compiles AppKit with the macOS SDK for both architectures and signs the helper before signing the application bundle. Linux packages carry the executable GTK script and declare their GI and WebKitGTK dependencies. Building Windows requires the .NET SDK with Roslyn. The Windows build script verifies pinned NuGet packages before compiling, bundles the WebView2 managed assemblies and x64 loader, and includes their Microsoft licence and notices. The runtime is supplied separately by Microsoft. Set <code>KERFKITE_NATIVE_BUILD_CACHE</code> to reuse verified downloads.</p>
 <p>From a signed-in desktop on a Windows 10 or 11 x64 client with Python, 7-Zip and the .NET SDK, run <code>validation/windows_client_smoke.ps1 -Installer &lt;setup.exe&gt; -Sha256 &lt;release-digest&gt;</code>. It checks the installer and both executables, exercises the extracted release in a temporary simulator, tests the native controls, and relaunches offline. The check leaves Start menu shortcuts and the installed application directory alone.</p>
 <p>The window sources and platform smoke checks are in <code>packaging/desktop/{macos,windows,linux}/</code>. The shared document adapter lives in <code>studio/static/desktop-workspace.js</code>. Its asynchronous open uses the regular project validator, including simulation of saved machining settings. Export checks that the preview still matches the current design. Run <code>validation/simulate_solid_workspace.py</code> for the shared editor regression checks.</p>
 <h2>Browser-only SBC packages</h2>
-<p>Run <code>python packaging/desktop/build_browser.py path/to/kerfkite_studio-0.5.1-py3-none-any.whl dist/sbc</code> with Python and dpkg-deb. Use the same verified wheel as the full release. It supplies the static editor and all vendor notices. The output is an architecture-independent Debian package with a desktop menu entry, and a portable ZIP with the same editor. Publish both under the release tag with <code>SBC-SHA256SUMS.txt</code>. Run <strong>Check SBC release packages</strong> in Actions against the tag to verify the downloads and exercise both installation paths.</p>
+<p>Run <code>python packaging/desktop/build_browser.py path/to/kerfkite_studio-0.6.0-py3-none-any.whl dist/sbc</code> with Python and dpkg-deb. Use the same verified wheel as the full release. It supplies the static editor and all vendor notices. The output is an architecture-independent Debian package with a desktop menu entry, and a portable ZIP with the same editor. Publish both under the release tag with <code>SBC-SHA256SUMS.txt</code>. Run <strong>Check SBC release packages</strong> in Actions against the tag to verify the downloads and exercise both installation paths.</p>
 <p>To package the interactive materials guide as one offline HTML file, run <code>python scripts/build_materials_guide.py dist/KerfKite-Materials-Guide.html</code>. Include that file in the release and its checksum in <code>SHA256SUMS.txt</code>. The wheel and browser packages already carry the guide as linked static assets.</p>
 <p>Build the stock-art SVG archive from the same source tree with <code>python scripts/export_stock_art.py dist/KerfKite-Stock-Artwork.zip</code>. Its offline index links to each individual design.</p>
 </section><section id="sbc"><h1>KerfKite on single-board computers</h1>
@@ -448,19 +848,19 @@
 <tbody>
 <tr>
 <td>A 64-bit ARM Debian, Ubuntu or Armbian desktop</td>
-<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-Linux-arm64.deb">Full Studio ARM64 DEB</a></td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-Linux-arm64.deb">Full Studio ARM64 DEB</a></td>
 </tr>
 <tr>
 <td>A 64-bit Intel/AMD Debian or Ubuntu desktop</td>
-<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-Linux-amd64.deb">Full Studio AMD64 DEB</a></td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-Linux-amd64.deb">Full Studio AMD64 DEB</a></td>
 </tr>
 <tr>
 <td>A Debian-family desktop where you want browser editing only, including ARM32 or RISC-V with a modern browser</td>
-<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-Browser-Editor-all.deb">Browser Editor DEB, all architectures</a></td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-Browser-Editor-all.deb">Browser Editor DEB, all architectures</a></td>
 </tr>
 <tr>
 <td>Another desktop OS with a modern browser, or a computer where you cannot install packages</td>
-<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-Browser-Editor.zip">Portable Browser Editor ZIP</a></td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-Browser-Editor.zip">Portable Browser Editor ZIP</a></td>
 </tr>
 </tbody>
 </table>
@@ -546,83 +946,202 @@
   &lt;path d=&quot;M5 5 h30 v10 h-30 z m35 0 h10&quot; fill=&quot;none&quot; stroke=&quot;black&quot;/&gt;
 &lt;/svg&gt;
 </code></pre>
-</section><section id="mcp"><h1>Artwork MCP interface</h1>
-<p>Local stdio server built with FastMCP 3. Optional dependency; the normal UI does not require it. This server creates artwork and files, not machine motion. It has not been registered in Claude Desktop, Codex or a hosted ChatGPT connector.</p>
-<h2>Install and launch</h2>
-<p>From the project directory:</p>
-<pre><code class="language-sh">.venv/bin/python -m pip install '.[mcp]'
-.venv/bin/python -m studio.mcp_server --output-dir ./artifacts
+</section><section id="mcp"><h1>Use Claude or ChatGPT with the KerfKite workshop</h1>
+<p>The KerfKite MCP server gives an assistant its own Studio editor, CAD/CAM calculations, template library access and file transfer. Start in the simulated workshop to make designs, test macros and export files. The assistant skill supplies the workflow. The MCP connection supplies the running tools. Set up both for interactive editing.</p>
+<h2>Install the local server</h2>
+<p>Use Python 3.12 from the <a href="#install">source installation guide</a>. In a source checkout with its virtual environment active, run the following commands. The interactive workshop uses Playwright Chromium. The template and calculation tools can run without opening a browser.</p>
+<pre><code class="language-sh">python -m pip install -e '.[mcp]'
+python -m playwright install chromium
+python -m studio.mcp_server --help
 </code></pre>
-<p>On Windows use <code>.venv\Scripts\python.exe</code> instead. Use Python 3.12 for the currently tested dependency set. A local MCP client launches the process and communicates over stdin/stdout; the command is not a web server. Logs go to stderr. No remote HTTP endpoint, OAuth service or MCPB bundle is provided yet.</p>
-<p>Example client configuration, after installation (replace all paths for your machine):</p>
+<p>For STEP operations use <code>python -m pip install -e '.[mcp,step]'</code> on a platform with compatible Open CASCADE wheels. On Windows use PowerShell for the commands shown. In <code>cmd.exe</code>, put double quotes around <code>.[mcp]</code>. An existing compatible Chromium installation can be selected using the <code>KERFKITE_MCP_CHROMIUM</code> environment variable and its executable path.</p>
+<p>Create a private working directory for each assistant workspace. The MCP process stores generated files and the workshop's browser storage in the directory chosen with <code>--output-dir</code>. Use one running server per output directory. Each user's normal Studio session keeps its own documents and browser storage. Download a project from Studio to hand it to the assistant. Export the edited result and reopen it in Studio to continue there. Add <code>--show-workshop</code> when launching the local MCP server if you want to see its separate editor window.</p>
+<h2>Install the skill and connect the client</h2>
+<p>The release asset is <strong><code>kerfkite-workshop-skill.zip</code></strong>. Its top-level directory is <code>kerfkite-workshop/</code>, containing <code>SKILL.md</code>. The same files are in the repository under <code>skills/kerfkite-workshop/</code>. <a href="https://github.com/ShaunPrice/KerfKite/releases/latest">Release downloads</a></p>
+<h3>Claude Code on the workshop computer</h3>
+<ol>
+<li>Copy the extracted <code>kerfkite-workshop</code> folder into <code>.claude/skills/</code> in your project, or into <code>~/.claude/skills/</code> for personal use across projects. The resulting file should be <code>…/.claude/skills/kerfkite-workshop/SKILL.md</code>. <a href="https://code.claude.com/docs/en/skills">Claude Code skills</a></li>
+<li>From that project directory, register the server using absolute paths. In the example below replace the interpreter and output paths with your own. On Windows select the environment's <code>Scripts\python.exe</code>. <a href="https://code.claude.com/docs/en/mcp">Claude Code MCP setup</a></li>
+</ol>
+<pre><code class="language-sh">claude mcp add --transport stdio --scope local kerfkite -- &quot;/absolute/path/to/.venv/bin/python&quot; -m studio.mcp_server --output-dir &quot;/absolute/path/to/workshop-files&quot;
+</code></pre>
+<ol start="3">
+<li>In Claude Code open <code>/mcp</code>, check <code>kerfkite</code>, then invoke <code>/kerfkite-workshop</code>. Ask it to call <code>workshop_state</code> and list the starter macros. Verify that actual tool calls return a project and macro names. A registered server name alone only confirms the configuration entry.</li>
+</ol>
+<p>Other stdio clients can launch the same server using this configuration shape. Merge the entry into the client's existing servers and use absolute paths. A Windows JSON path uses doubled backslashes. <a href="https://py.sdk.modelcontextprotocol.io/get-started/real-host/">Local MCP client configuration</a></p>
 <pre><code class="language-json">{
   &quot;mcpServers&quot;: {
-    &quot;cnc-studio-artwork&quot;: {
-      &quot;command&quot;: &quot;/absolute/path/cnc-studio/.venv/bin/python&quot;,
-      &quot;args&quot;: [&quot;-m&quot;, &quot;studio.mcp_server&quot;, &quot;--output-dir&quot;, &quot;/absolute/path/cnc-studio/artifacts&quot;]
+    &quot;kerfkite&quot;: {
+      &quot;command&quot;: &quot;/absolute/path/to/.venv/bin/python&quot;,
+      &quot;args&quot;: [&quot;-m&quot;, &quot;studio.mcp_server&quot;, &quot;--output-dir&quot;, &quot;/absolute/path/to/workshop-files&quot;]
     }
   }
 }
 </code></pre>
-<p>Windows uses an absolute path ending in <code>.venv\\Scripts\\python.exe</code>. Client configuration syntax varies; the essential contract is that executable, arguments and stdio transport. No account configuration was changed by this implementation.</p>
-<h2>Tools</h2>
+<h3>Claude chat with a hosted workshop</h3>
+<p>In <strong>Customize → Skills</strong> (or <strong>Plugins → Skills</strong>), create or upload a skill, select the release ZIP and enable it. Follow the hosting guide to deploy the protected endpoint. In <strong>Customize → Connectors</strong>, add a custom web connector using your full HTTPS URL ending in <code>/mcp</code>. Authenticate as the configured operator. In managed workspaces an administrator may need to add or enable the connector. Open a conversation with the connector enabled and ask Claude to call <code>workshop_state</code>. <a href="https://support.claude.com/en/articles/12512180-use-skills-in-claude">Upload a Claude skill</a> · <a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp">Claude remote connectors</a> · <a href="#mcp-hosting">KerfKite hosting</a></p>
+<h3>ChatGPT</h3>
+<ol>
+<li>Where your workspace supports custom skills, open <strong>Plugins → Skills → Create → Upload from your computer</strong>, select the ZIP and enable the skill after review. Skill availability and upload permissions vary with the workspace. <a href="https://help.openai.com/en/articles/20001066-skills-in-chatgpt">Skills in ChatGPT</a></li>
+<li>For a hosted server, follow the hosting guide to configure OAuth and a TLS reverse proxy for the loopback MCP listener. In ChatGPT <strong>Plugins</strong>, use <strong>+ → Add custom MCP server</strong>, supply the public HTTPS <code>/mcp</code> endpoint, configure its authentication and add the plugin. The Studio editor's web address and the machine's monitor address serve different APIs. <a href="https://developers.openai.com/plugins/deploy/connect-chatgpt">Connect a server to ChatGPT</a> · <a href="#mcp-hosting">KerfKite hosting</a></li>
+<li>An operator with a supported OpenAI workspace can alternatively use <strong>Secure MCP Tunnel</strong> for a private server. Configure the tunnel client on the workshop host with the local stdio launch command above. Associate the tunnel with the intended workspace, configure its restricted runtime credential privately and check the tunnel client health. Choose <strong>Tunnel</strong> when adding the custom MCP server. <a href="https://developers.openai.com/api/docs/guides/secure-mcp-tunnels">Secure MCP Tunnel setup and permissions</a></li>
+<li>Install the plugin, open a new conversation and select it using <code>@</code>. Ask, “Use the KerfKite workshop skill and call <code>workshop_state</code>. What project is open?” A tool response verifies that this chat reaches your server. Installation in one workspace or client is separate from authorisation in another. <a href="https://developers.openai.com/plugins/deploy/connect-chatgpt">OpenAI connection test</a></li>
+</ol>
+<h2>First part and file handoff</h2>
+<p>Ask the assistant, “Make a 70 × 40 × 5 mm mounting plate with four 4 mm holes, 7 mm from the edges. Show the top view and give me an editable project and STL.” On an empty workspace these tool inputs produce that part.</p>
 <table>
 <thead>
 <tr>
 <th>Tool</th>
-<th>Purpose</th>
-<th>Writes</th>
+<th>Arguments</th>
+<th>What to check</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>list_templates</code></td>
-<td>Search the 79 original built-ins by query/category</td>
-<td>No</td>
+<td><code>workshop_state</code></td>
+<td><code>{}</code></td>
+<td>Confirm the open project. A new script joins the current part.</td>
 </tr>
 <tr>
-<td><code>get_template</code></td>
-<td>Obtain scaled, positioned XY geometry for a template ID</td>
-<td>No</td>
+<td><code>workshop_macros</code></td>
+<td><code>{}</code></td>
+<td>Locate <strong>Mounting plate</strong> and inspect its saved inputs.</td>
 </tr>
 <tr>
-<td><code>create_artwork</code></td>
-<td>Create SVG and <code>.cncstudio.json</code> project files from ordered polylines</td>
-<td>Unique local files</td>
+<td><code>workshop_macro</code></td>
+<td><code>{&quot;name&quot;:&quot;Mounting plate&quot;,&quot;parameters&quot;:{&quot;width&quot;:70,&quot;length&quot;:40,&quot;thickness&quot;:5,&quot;bore&quot;:4,&quot;margin&quot;:7}}</code></td>
+<td>One scripted solid feature is added.</td>
 </tr>
 <tr>
-<td><code>save_template</code></td>
-<td>Create <code>.templates.json</code> for import into the browser library</td>
-<td>Unique local file</td>
+<td><code>workshop_command</code></td>
+<td><code>{&quot;line&quot;:&quot;view top&quot;}</code></td>
+<td>The camera shows the XY face.</td>
 </tr>
 <tr>
-<td><code>preview_job</code></td>
-<td>Validate using the same CAM generator as the UI, returning bounds/warnings/sample G-code</td>
-<td>No</td>
+<td><code>workshop_snapshot</code></td>
+<td><code>{}</code></td>
+<td>Check four holes at X 7 and 63, Y 7 and 33.</td>
 </tr>
 <tr>
-<td><code>export_gcode</code></td>
-<td>Generate an <code>.nc</code> file using current CAM</td>
-<td>Unique local file</td>
+<td><code>workshop_export</code></td>
+<td><code>{&quot;kind&quot;:&quot;project&quot;}</code> and, in a second call, <code>{&quot;kind&quot;:&quot;stl&quot;}</code></td>
+<td>Retain the individual <code>artifact</code>, <code>name</code> and <code>size</code> from each result.</td>
+</tr>
+<tr>
+<td><code>workshop_read_file</code></td>
+<td><code>{&quot;artifact&quot;:&quot;ID_FROM_EXPORT&quot;,&quot;offset&quot;:0,&quot;length&quot;:24576}</code></td>
+<td>Replace the example ID. Decode <code>content_base64</code>, append bytes and continue from <code>next</code> until it equals <code>size</code>.</td>
 </tr>
 </tbody>
 </table>
-<p>Resource: <code>cnc-studio://artwork-guide</code>.</p>
-<h2>Example requests to an assistant</h2>
+<p>Open the <code>.cncstudio.json</code> in Studio to edit the source and features. The STL is a mesh for exchange. Uploading a file stages its bytes in the assistant's output directory. To open it, find the corresponding Projects, import, macro or CAD file input with <code>workshop_controls</code> and use <code>workshop_action</code> with <code>action=&quot;upload&quot;</code>, the input <code>ref</code> and <code>value</code> set to the uploaded artifact identifier. Project import can replace the current drawing. Export it first if it should be retained.</p>
+<h2>Recipes for artwork, macros and toolpaths</h2>
 <ul>
-<li>“Find six-petal flower templates and arrange three flowers in a 180 × 60 mm engraving.”</li>
-<li>“Create a vine border, save it as a reusable template and give me the SVG.”</li>
-<li>“Create an eight-sided polygon from closed XY points, then save a project for review.”</li>
-<li>“Check this laser project’s bounds and lead-ins before exporting G-code.”</li>
+<li><strong>Reusable border.</strong> Ask for a command macro named <code>Frame</code> with <code>width</code> and <code>height</code>. Use <code>workshop_save_macro</code> with <code>kind=&quot;commands&quot;</code>, source <code>rect {width} {height}\nfit drawing</code> and defaults <code>{&quot;width&quot;:60,&quot;height&quot;:30}</code>. Run it at <code>width=80</code> and check the 80 × 30 mm outline. Each run adds a design instance. Use the library's <strong>Export library…</strong> for the portable definitions. <a href="#cad-macros">Macro programming guide</a></li>
+<li><strong>Custom parametric geometry.</strong> Call <code>design_actions</code> with <code>{&quot;query&quot;:&quot;cad-script&quot;}</code>, then <code>design_call</code> with <code>{&quot;action&quot;:&quot;cad-script&quot;,&quot;payload&quot;:{&quot;source&quot;:&quot;linear_extrude(height=3) difference(){ square([20,12]); translate([6,6]) circle(d=4,$fn=48); }&quot;}}</code>. Inspect the 20 × 12 × 3 mm result. To add it to the open scene, apply the same source through the editor or a named macro. <a href="#cad-scripting">CAD language and examples</a></li>
+<li><strong>Flower engraving.</strong> Search <code>list_templates</code> for <code>flower</code>, choose an ID and pass it to <code>get_template</code> with the desired X, Y, width and height. Compose the returned paths and submit them to <code>create_artwork</code> for an editable project and SVG. <code>save_template</code> produces a <code>.templates.json</code> bundle for the library manager. Repeat the first point to close a polyline and keep disconnected contours separate. Coordinates are millimetres from the lower-left work origin.</li>
+<li><strong>CAM review.</strong> Load a Studio project with the desired router, laser or knife operation. For a direct CAM call, pass the project’s CAM settings and ordered paths to <code>preview_job</code>. Inspect the bounds, warning list, time estimate and sample posted lines before requesting <code>export_gcode</code>. <code>create_artwork</code> generates a geometric project with example laser settings. Feed, power, tool geometry, stock and compensation need a material-specific setup. A simulated success verifies the program in the simulator.</li>
 </ul>
-<p>The assistant supplies geometry or composes retrieved templates. This is not an integrated generative-image model and does not automatically vectorise bitmap images. The browser's polygon/gear generators are currently UI tools; MCP can accept their exported polylines but does not expose dedicated parametric gear generation yet.</p>
-<h2>Coordinate and review rules</h2>
-<p>Coordinates are millimetres, positive XY from the bottom-left of the work area. Each path is a distinct polyline; repeat the first point at the end to close it. Put centre holes before outer outlines. Generated project files preserve object geometry; importing the SVG separately uses the UI's current SVG scaling rules instead.</p>
-<p>Open <code>.cncstudio.json</code> using <strong>Open project</strong>, or import <code>.templates.json</code> using <strong>Template library → Import library</strong>. Browser library storage and MCP artifact files are separate. Template files contain geometry, not material cutting settings.</p>
-<p>Default speed/power values are placeholders. The shared CAM supports compensated router profiles, pockets, sampled V-carving, knife offset paths, laser hatch and supplied per-vertex router depths/powers. Send the operation and tool parameters as part of the project; ordered operations must retain a compatible head, protocol and cutter. There is no dedicated MCP tool for importing heightmaps/STL, calculating relief contact, generating parametric gears, camera tracing or rotary export. Use the relevant browser/server workflow first and supply supported prepared paths when appropriate. <code>create_artwork</code> itself accepts XY polylines and supplies placeholder laser settings, not a complete material-specific CAM plan. MCP does not bypass physical commissioning. It never opens serial ports or sends machine commands.</p>
-<p>All outputs have generated unique filenames beneath the output directory chosen at server startup. Tool callers cannot specify arbitrary file paths or overwrite existing documents. Large geometry is bounded to the same limits as the UI.</p>
-<h2>Validation</h2>
-<p><code>PYTHONPATH=. .venv/bin/python validation/mcp_smoke.py</code> starts a separate real stdio MCP process and uses the MCP SDK to initialize, list tools and exercise all six tools. It creates files in a temporary directory. The successful local result is in <code>validation/mcp-smoke.json</code>. This verifies local protocol operation on Mac; it is not proof of installation in a specific assistant client or on Windows/Linux/Pi.</p>
+<h2>Tool reference</h2>
+<table>
+<thead>
+<tr>
+<th>Tools</th>
+<th>Behaviour</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>workshop_state</code>, <code>workshop_snapshot</code></td>
+<td>Read the assistant editor's project, selection, feature IDs, recent dialogs/downloads, feedback or current PNG.</td>
+</tr>
+<tr>
+<td><code>workshop_controls(query, offset, limit, visible_only)</code></td>
+<td>Find actual inputs, menus, panels and canvas controls. Limits are 1–100 per page. Inspect <code>total</code> and advance <code>offset</code> for more results.</td>
+</tr>
+<tr>
+<td><code>workshop_action(action, ref, value, points, confirm)</code></td>
+<td>Click, double-click, inspect, fill, select, check, press a key, upload, point, drag, wheel or switch open pages. For check use the string <code>true</code> or <code>false</code>. Coordinates are CSS pixels within the discovered control. For <code>page</code>, supply the page index as <code>value</code>. Rediscover references when panels change. Dialogs requiring consent default to dismissal.</td>
+</tr>
+<tr>
+<td><code>workshop_command(line)</code></td>
+<td>Run a measured drawing command, view instruction or script statement in the current document.</td>
+</tr>
+<tr>
+<td><code>workshop_macros</code>, <code>workshop_save_macro</code>, <code>workshop_macro</code></td>
+<td>List full definitions, save a new definition, or execute a named macro with numeric overrides. Existing definitions require <code>replace=true</code> to overwrite. The library lives in this assistant workspace.</td>
+</tr>
+<tr>
+<td><code>design_actions(query)</code>, <code>design_call(action, payload)</code></td>
+<td>Discover and run the Studio service’s registered design calculations, including solid/section, import, assembly, fixture and CAM simulation operations. Small responses arrive under <code>result</code>. Large JSON and binary results use artifact records. STEP requires the optional runtime.</td>
+</tr>
+<tr>
+<td><code>workshop_upload</code>, <code>workshop_export</code>, <code>workshop_read_file</code></td>
+<td>Stage up to 8 MiB per file, export <code>project</code>, <code>svg</code>, <code>stl</code> or <code>gcode</code>, or retrieve generated artifacts in chunks. Read lengths are 1–131072 decoded bytes. Identifiers are generated by the server.</td>
+</tr>
+<tr>
+<td><code>list_templates</code>, <code>get_template</code>, <code>create_artwork</code>, <code>save_template</code></td>
+<td>Search 1,768 built-in vector templates, scale and position a selected item, save SVG/project geometry, or create an importable library bundle. Local output paths point into the selected server directory.</td>
+</tr>
+<tr>
+<td><code>preview_job</code>, <code>export_gcode</code></td>
+<td>Validate prepared CAM inputs and write a reviewed program to a uniquely named <code>.nc</code> file.</td>
+</tr>
+</tbody>
+</table>
+<p>Use the current tool list in your client to discover enabled capabilities. The resource <code>cnc-studio://artwork-guide</code> provides an artwork workflow. The editor uses the application's own controls and a simulated controller. The server does not attach to an existing personal browser tab. Its separate opt-in machine interface uses the paired pendant service below.</p>
+<h2>Use a hosted file library and Pi receiver</h2>
+<p>Configure the optional hosted-file connection on the operator's MCP server to let the assistant transfer files. Set <code>KERFKITE_FILES_URL</code> to the operator's HTTPS Studio file-server origin and <code>KERFKITE_FILES_USERNAME</code> to the account that owns the files. Supply exactly one of <code>KERFKITE_FILES_PASSWORD_FILE</code> (path to a private password file) or <code>KERFKITE_FILES_PASSWORD</code>. Set <code>KERFKITE_FILES_CA_FILE</code> if this installation uses a private certificate authority. An operator registers named receiver destinations on the hosted server. <a href="#web">Hosted editor, accounts, accepted formats and receiver setup</a></p>
+<ol>
+<li>Use <code>workshop_export</code> to create a project or reviewed job artifact. Use <code>hosted_upload_file</code> with its <code>artifact</code> and a descriptive <code>name</code> to save a copy in the configured account. Use <code>hosted_list_files</code> to inspect stored file IDs.</li>
+<li>To edit a hosted project, use <code>hosted_download_file(file_id)</code> to obtain a workshop artifact. Load it through the assistant editor's Projects file input. Save the revised project as a new artifact.</li>
+<li>To send a requested file to the Pi inbox, call <code>hosted_destinations</code> for a configured name. Use <code>hosted_send_file</code> with that destination and either the stored <code>file_id</code> or the current <code>artifact</code> plus filename. Review the operator confirmation and verify the receiver's returned size and hash. If a response is lost, check the inbox before resending. The receiving operator opens and reviews the job separately.</li>
+<li><code>hosted_delete_file(file_id)</code> requests confirmation for removal of that stored file. The file account, named receiver and paired pendant are separately configured and authorised.</li>
+</ol>
+<h2>Optional paired pendant</h2>
+<p>The operator pairs the Studio workstation's phone monitor and configures the MCP server process for that specific monitor. Provide <code>KERFKITE_PENDANT_URL</code> and exactly one of <code>KERFKITE_PENDANT_TOKEN_FILE</code> (a private file containing the pairing token) or <code>KERFKITE_PENDANT_TOKEN</code>. Supply <code>KERFKITE_PENDANT_CA_FILE</code> if the HTTPS monitor uses a locally installed certificate authority. Network addresses require HTTPS. HTTP is available only on loopback. Enter these values in the operator's private environment and restart the server. Keep the token out of chats, example configuration and published projects. <a href="#phone-connections">Phone pendant setup</a></p>
+<p>A configured connection adds <code>pendant_status</code>, <code>pendant_job</code>, <code>pendant_jog</code> and <code>pendant_reference</code>. First call <code>pendant_status</code> to inspect <code>simulated</code>, connectivity, controls, local arm state, position, <code>control_epoch</code> and a <code>request_id</code>. A physical action needs a specific operator request. Supply that request ID and the current epoch for the action. Stop needs only its action and request ID. Start needs a job armed at the workstation. Start, resume, single-axis jog, home and work-zero changes use MCP client elicitation for operator confirmation. Pause and stop go through the paired monitor's existing controls. Each jog uses one of X/Y/Z, a signed 0.001–10 mm step and 0.1–1000 mm/min feed. For a lost response, check status before retrying. Reuse the original request ID for a retry of the same action. Use the workstation or paired pendant directly when the client cannot display the confirmation.</p>
+<h2>Connection checks and troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Check</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The skill loads but there are no tools</td>
+<td>Connect the MCP server in the same client and workspace. Verify tool discovery, then call <code>workshop_state</code>.</td>
+</tr>
+<tr>
+<td>Template search works but opening the workshop fails</td>
+<td>Run <code>python -m playwright install chromium</code> inside the MCP server environment. For an installed browser set <code>KERFKITE_MCP_CHROMIUM</code> to an executable accessible to the server account.</td>
+</tr>
+<tr>
+<td>A control is hidden or stale</td>
+<td>Open its tab/dialog, search by label again and inspect the fresh reference. Use <code>workshop_state</code> to read any dismissed prompt.</td>
+</tr>
+<tr>
+<td>A remote file link points to a server path</td>
+<td>Request the generated artifact by its basename with <code>workshop_read_file</code>, or collect the file directly from the operator's output directory.</td>
+</tr>
+<tr>
+<td>A hosted client gets an authentication error</td>
+<td>Check the configured issuer, audience, operator subject, scope, TLS certificate and registered client redirect. <a href="#mcp-hosting">Hosted MCP configuration</a></td>
+</tr>
+<tr>
+<td>The GUI shows an empty project after reconnecting</td>
+<td>Reopen a saved project in the assistant workshop or upload the operator's project. Keep an exported project for handoff or recovery.</td>
+</tr>
+<tr>
+<td>Pendant controls are absent or rejected</td>
+<td>Check operator pairing, the approved monitor's certificate, workstation arm state, request epoch and client elicitation support. The simulation workflow works without pairing.</td>
+</tr>
+</tbody>
+</table>
+<p>For protocol testing from a source checkout run <code>python validation/mcp_smoke.py</code> in the activated MCP environment with the repository root on the Python path. The smoke test starts a temporary stdio server and calls it using the MCP client SDK. The standalone editor simulation runs with <code>python validation/simulate_solid_workspace.py</code>. A passing local protocol test, a successfully authenticated cloud chat and a physical machine test are separate checks. Record each client connection and actual tool response before reporting that it works in a given deployment. <a href="#developer">Developer handoff</a></p>
 </section><section id="android"><h1>Studio Pocket for Android</h1>
 <p>Studio Pocket combines an offline vector sketch editor with a native CNC pendant for Android 8 and later. It uses a touch canvas and numerical dimensions. Files saved from the app open in the desktop and Raspberry Pi workstation. The current template, solid modelling and machining workflows run on that workstation.</p>
 <h2>Install and draw</h2>
@@ -819,12 +1338,12 @@ While Pocket waits for a Start or jog response, you can still tap <strong>Stop</
 </thead>
 <tbody>
 <tr>
-<td>Rotary export asks for router/GRBL source</td>
-<td>Select router mode and GRBL source geometry. The export converts that source into LinuxCNC G93/A-axis instructions; it is not sending GRBL rotary commands.</td>
+<td>Rotary target rejects the job</td>
+<td>Select a listed rotary postprocessor and supported head. Open the <a href="#rotary">rotary guide</a> for its axes, controller checks and export mode.</td>
 </tr>
 <tr>
-<td>File cannot be run by Studio's normal sender</td>
-<td>Expected: rotary is export-only for configured LinuxCNC hardware. Current GRBL/Marlin senders do not support this file.</td>
+<td>A job previews but the machine cannot start it</td>
+<td>Check the selected serial protocol and the controller’s independent-axis readback. A dual-gantry firmware profile can report only XYZ. Generate a fresh rotary preview after editing the design or dimensions.</td>
 </tr>
 <tr>
 <td>Seam endpoint check fails</td>
@@ -836,7 +1355,7 @@ While Pocket waits for a Start or jog response, you can still tap <strong>Stop</
 </tr>
 <tr>
 <td>Rotary uses X instead of the other design axis</td>
-<td>Expected: the unwrapped design coordinate becomes axial X; A rotates around X and Z is radial. Check the target machine configuration before execution.</td>
+<td>Read the axial and radial output axes for your selected rotation axis. Establish the corresponding axial origin, seam angle and surface zero on the machine.</td>
 </tr>
 <tr>
 <td>Angles exceed 360°</td>
@@ -848,7 +1367,7 @@ While Pocket waits for a Start or jog response, you can still tap <strong>Stop</
 </tr>
 </tbody>
 </table>
-<p>The rotary preview remains planar. G93 preserves nominal unwrapped movement timing; actual surface speed changes with radius, and the target controller's acceleration/axis limits still matter.</p>
+<p>The cylindrical preview shows the programmed angular travel. Controller acceleration, chuck clearance and material removal still require physical verification.</p>
 <h2>Controller and manual input</h2>
 <h3>Physical port is disabled or missing</h3>
 <p>The server defaults to simulator-only. Physical use requires explicit <code>--enable-hardware</code>; adding that flag is not calibration or commissioning. Check the selected protocol, OS serial permissions, cable and whether another sender has the port open. A power-only USB cable does not provide a serial connection. Disconnect before switching protocols.</p>
@@ -980,6 +1499,82 @@ While Pocket waits for a Start or jog response, you can still tap <strong>Stop</
 <h2>Seat a shaft using a second mate</h2>
 <p>Open <strong>Try bearing tutorial</strong> and select the shaft. Its concentric driving mate leaves axial travel and rotation free. Open <strong>Additional mates</strong>, select the bearing plate and choose <strong>Coincident planes</strong>. Set the other datum origin to <code>0, 0, 8</code> and the selected datum origin to <code>0, 0, 2</code>. Choose <strong>Add mate</strong>. The solver seats the shaft at Z = 6 while keeping its centre on the bearing axis. <strong>Save assembly to project</strong> retains both relationships.</p>
 <p>Add a fixed, point, plane or concentric mate between two different parts. Up to 48 additional relationships may use local origins and orientations. The numerical solver starts from the entered driving-joint positions. If the constraints conflict, or the initial pose is unsuitable, it reports failure and prevents saving an unsolved edit. Remove a relationship or change its datums and solve again. Remaining free axes retain their starting position where possible.</p>
+</section><section id="rotary"><h1>Rotary engraving and cylindrical machining</h1>
+<p>Open <strong>Rotary</strong> in the machining tabs to wrap a flat design around a cylinder. A full turn consumes π × stock diameter millimetres of artwork. One design coordinate becomes a continuous angle. The other coordinate runs along the cylinder. A router can vary cut depth. A laser can vary power by segment, including paths from artwork with per-vertex power values.</p>
+<h2>Simulate a full-turn border</h2>
+<ol>
+<li>In <strong>CAM</strong>, select <strong>Router</strong>, a line engraving operation and the <strong>grblHAL</strong> protocol. Start with a new design. In <strong>Rotary</strong>, enter a <strong>Cylinder diameter</strong> of <code>50</code> mm, choose <strong>Y → angle</strong>, <strong>grblHAL</strong> and <strong>A around X</strong>. One revolution is about <code>157.0796</code> mm along design Y. <strong>Set design span to one revolution</strong> changes the design area.</li>
+<li>Set <strong>Periodic border cycles</strong> to <code>3</code> and choose <strong>Add seamless periodic border</strong>. This creates one sinusoidal path with matching end position and tangent. <strong>Check seam endpoints</strong> compares both edges of the output paths. For a laser it compares terminal power, and for a router it compares depth. It checks pairs within 0.01 mm in position/depth and half a controller power unit. For arbitrary artwork inspect tangency separately.</li>
+<li>Choose <strong>Preview wrapped job</strong>. Inspect the angular range and the posted rotary words. Drag <strong>Inspect around cylinder</strong>, or use <strong>Play simulation</strong> and the percentage slider. The darkened side faces the viewer. The dashed line marks the seam. The display samples large jobs, while preview export retains every posted block. Use the posted program to inspect individual segments. The slider measures progress through cutting segments rather than real machine time.</li>
+<li>Select <strong>Reverse</strong> or change the starting angle. The old preview is invalidated. Preview again. For example a single positive turn with a 15° offset runs from 15° to 375°. Reversing it gives an angle range from −345° to 15°. Crossing the seam retains the continuous angle. The post snaps rounded source coordinates within 0.00051 mm of a whole circumference to exact turns.</li>
+<li>For an offline result select <strong>Export rotary G-code</strong> after preview. To exercise the same path through the workstation sender, open <strong>Control</strong>, choose <strong>Simulator</strong>, and connect with the matching grblHAL protocol. Return to <strong>Rotary</strong>, review the independent-axis setup and choose <strong>Stream reviewed rotary job</strong>. The target notice identifies the simulator. Use the ordinary workstation confirmation as well when using <strong>Run</strong> or <strong>Arm phone start</strong> in Control. Phone start requires the workstation's current-preview challenge. Editing the rotary setup or artwork cancels the previous review.</li>
+</ol>
+<h2>Router depth and laser power</h2>
+<p>For a variable-depth router path, import or create the depth-bearing artwork, select its machining operation and open the rotary preview. <strong>Nominal stock surface</strong> computes G93 block duration from the unwrapped artwork, axial travel and depth change. <strong>At cutting radius</strong> accounts for the changing radius along each coordinated block. Compare the <code>F</code> words at the two settings. A cut reaching the cylinder centre is rejected.</p>
+<p>For laser engraving, select <strong>Laser</strong> in CAM and a grblHAL or supported xPRO V5 rotary target. Retain the per-vertex power in the artwork and enable the intended layers for output. The posted program keeps dynamic <code>M4</code> and per-segment <code>S</code> values. Laser rapids require <code>M5</code>. Use the preview to check the wrap direction, seam placement and power transitions before exporting. A repeated pass at the same location changes the exposure. Power intensity in the drawing is a simulated command value; the actual mark depends on the laser, focus, feed and stock.</p>
+<h2>Axis and postprocessor selection</h2>
+<table>
+<thead>
+<tr>
+<th>Target</th>
+<th>Axis and working plane</th>
+<th>Output available in Studio</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>grblHAL with independent rotary drive</td>
+<td>A about X with radial Z, B about Y with radial Z, or C about Z with radial X. C requires an appropriate side-facing tool or laser fixture.</td>
+<td>Router and dynamic laser preview, export and qualified workstation streaming.</td>
+</tr>
+<tr>
+<td>xPRO V5 independent-A firmware</td>
+<td>A about X with radial Z. Requires vendor <code>CNC_xPRO_V5_XYAZ_NC</code> or <code>CNC_xPRO_V5_XYAZ_NO</code> readback, four reported coordinates and an independently calibrated A drive.</td>
+<td>Router and dynamic laser preview, export and qualified workstation streaming.</td>
+</tr>
+<tr>
+<td>LinuxCNC</td>
+<td>A, B or C with the axis mapping above. Configure the chosen rotary joint and controller limits.</td>
+<td>Router preview and <code>.ngc</code> file export for loading in LinuxCNC.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>An xPRO V5 configured for independent X, two Y motors and Z already uses four motor outputs.</strong> The secondary Y gantry drive counts as Y in that configuration. The xPRO firmware family also includes a separate independent-A configuration. Only select that target for hardware with the independent motor channel, correct physical geometry and degree calibration. Studio reads controller identification, reported axis count and settings before permitting rotary streaming. A profile selection cannot change the controller wiring or firmware. A simulator result does not verify the installed firmware or machine calibration. <a href="https://github.com/Spark-Concepts/xPro-V5">xPRO V5 firmware and hardware documentation</a> · <a href="https://github.com/Spark-Concepts/xPro-V5-Firmware">Vendor firmware source</a> · <a href="https://www.makerstore.com.au/product/elec-scxprov5/">Maker Store xPRO V5 hardware</a></p>
+<p>For xPRO V5, Studio accepts the exact controller identity <code>CNC_xPRO_V5_XYAZ_NC</code> or <code>CNC_xPRO_V5_XYAZ_NO</code>, four coordinates in status, and positive A-axis resolution, speed and acceleration settings (<code>$103</code>, <code>$113</code> and <code>$123</code>). XYAZ capability alone cannot establish what is physically connected. Rotary laser streaming also requires <code>Spindle/Type=LASER</code> and a positive <code>Laser/FullPower</code> readback. The posted laser commands must fit that laser-specific power scale. <a href="https://github.com/Spark-Concepts/xPro-V5-Firmware/blob/9fdb6695a21f56a5147cbe10508b142504b5e9a3/CNCxPROv5_20220808/src/Machines/CNC_xPRO_V5_XYAZ_NC.h">Vendor XYAZ machine definition</a> · <a href="https://github.com/Spark-Concepts/xPro-V5-Firmware/blob/9fdb6695a21f56a5147cbe10508b142504b5e9a3/CNCxPROv5_20220808/src/Report.cpp">Vendor status reporting</a> · <a href="https://github.com/Spark-Concepts/xPro-V5-Firmware/blob/9fdb6695a21f56a5147cbe10508b142504b5e9a3/CNCxPROv5_20220808/src/Spindles/Laser.cpp">Vendor laser implementation</a></p>
+<p>At the machine, confirm the rotary centreline, axial work zero, start angle, surface focus or radial Z/X tool zero as appropriate. Check the independent rotary drive direction, travel limits and units. <strong>Check fixture clearance envelope</strong> applies a tool-tip axial interval and protected core radius to posted destinations, including rapids. Enter measured limits for your fixture. This geometric envelope does not model holder length, chuck jaws, clamps, runout, backlash or stopping distance.</p>
+<p>The post uses G93 inverse-time feed on each nonzero cutting block. A G93 <code>F</code> value is the reciprocal of the programmed block duration in minutes. The program restores G94 at the end. The xPRO V5 post uses G94 for rapids and establishes G93 before subsequent cuts. <a href="https://www.linuxcnc.org/docs/stable/html/gcode/g-code.html#gcode:g93-g94-g95">LinuxCNC G93/G94 reference</a></p>
+<h2>Saved projects and troubleshooting</h2>
+<p>Rotary stock, wrap direction, drive axes, fixture and feed reference are kept in the Studio project. Reopen the project and rebuild the preview before a new run. Use <strong>CAM → Generate preview</strong> when you intentionally want the planar program again. An exported <code>.nc</code> or <code>.ngc</code> contains the posted program, while the Studio project retains the editable artwork and setup.</p>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>What to inspect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The seam check finds different ends</td>
+<td>Match path count, axial position, depth or power at the two edges of the one-turn design. Include only the layers intended for this job.</td>
+</tr>
+<tr>
+<td>Size or angle differs on the stock</td>
+<td>Verify actual diameter, full-turn design span, degree calibration, drive direction and work zero.</td>
+</tr>
+<tr>
+<td>Preview succeeds and Stream is unavailable</td>
+<td>Check the selected post, machine protocol, local workstation service, idle connection and reported independent axis. The browser file editor and hosted design editor can preview and export.</td>
+</tr>
+<tr>
+<td>Protected-core or axial-window refusal</td>
+<td>Inspect cutter-tip radius, depth, axial position and rapid clearances against the fixture limits.</td>
+</tr>
+<tr>
+<td>Multiple turns appear overlaid in simulation</td>
+<td>Angles separated by one turn project to the same physical spot. Inspect the angular range and posted lines for the continuous value.</td>
+</tr>
+</tbody>
+</table>
 </section><section id="sketch"><h1>Sketching a driven profile</h1>
 <p>Use the <strong>3D CAD</strong> tab in the running Studio application. An extrusion uses XY coordinates in millimetres. A revolution uses radius and Z, and revolves around the local Z axis. The feature’s <strong>Position and rotation</strong> settings place it in the part.</p>
 <h2>Draw a plate with a driven corner</h2>
@@ -1065,6 +1660,7 @@ While Pocket waits for a Start or jog response, you can still tap <strong>Stop</
 <p>When <strong>Open directly next time</strong> is selected, the next launch opens the native simulator window directly. Closing that window shows the launcher. Choose <strong>Show setup next launch</strong> there to change STEP or controller options on the next start. Controller access always requires an explicit choice in setup.</p>
 <p>The native file commands read and write ordinary files. Browser-library saves belong to the browser or embedded engine profile that created them. To bring an existing browser-library project into a native window, download its portable project file, then open that file from the native File menu.</p>
 <p>The full CAD, simulation and advanced machining panels use the shared editor inside the desktop window. The Android companion has its own interface and connects to the workshop service for pendant use.</p>
+<p>To work from the keyboard, focus the canvas and press <strong>/</strong> for drawing and view commands. Choose <strong>Script…</strong> to preview and edit a parameterised drawing or solid. <a href="#cad-scripting">CAD scripting tutorial and shortcut reference</a></p>
 </section><section id="fixtures"><h1>Checking tool and holder clearance</h1>
 <p>The <strong>Fixture clearance</strong> panel in <strong>CAM</strong> checks the tool and holder against measured clamp boxes along every move in the generated XYZ program. Use the app server or hosted editor. Each result identifies the G-code line, rapid or feed motion, fixture, component and first tool-tip contact position in millimetres.</p>
 <h2>Try a rapid that crosses a clamp</h2>
@@ -1093,6 +1689,7 @@ While Pocket waits for a Start or jog response, you can still tap <strong>Stop</
 </ul>
 <p>The <a href="#android">Android pendant</a> pairs with the machine-side Studio server. The <a href="#phone-connections">connection guide</a> covers Wi-Fi, Bluetooth tethering and USB tethering. See the <a href="#geometry">geometry guide</a> for the 2D Trim &amp; Join workflow.</p>
 <p>The <a href="#product">0.4 feature matrix</a> links the new machining, design, interchange, identification and calibration features to their guides. The retained <a href="#release-review">release review</a> records the earlier release assessment.</p>
+<p>The keyboard CAD workspace supports editable 2D and 3D scripts, reusable parameterized macros and viewport commands. The assistant workshop exposes the same editor through MCP, with optional adapters for a paired machine and hosted files. <a href="#cad-scripting">Keyboard CAD</a> · <a href="#cad-macros">Macro programming</a> · <a href="#mcp">Assistant setup</a> · <a href="#rotary">Rotary engraving</a></p>
 </section><section id="drilling"><h1>Drill holes and peck cycles</h1>
 <p>Use <strong>CAM → Router drilling</strong> for a single bore or a rectangular hole pattern. Each hole is a circular design outline at the bit diameter. Studio preserves the centres through moves, rotation, save and reopen. The desktop, hosted and local-file editors can generate the same drilling program.</p>
 <h2>Make a four-hole plate</h2>
@@ -1108,12 +1705,12 @@ While Pocket waits for a Start or jog response, you can still tap <strong>Stop</
 </section><section id="install"><h1>Install KerfKite Studio</h1>
 <p>See the <a href="#sbc">single-board computer guide</a> for board-specific downloads and the offline Browser Editor.</p>
 <h2>Desktop or phone installation</h2>
-<p>Download the desktop package from the <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.5.1">official KerfKite release</a>.</p>
+<p>Download the desktop package from the <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.6.0">official KerfKite release</a>.</p>
 <ul>
 <li><strong>Windows 10 or Windows 11 on Intel/AMD x64.</strong> Open the setup wizard and choose <strong>Install</strong>. It installs for your account and adds KerfKite Studio to Start. Windows may display a SmartScreen warning for this unsigned installer. Check the download came from the official release. On a managed PC, follow your organisation’s software approval process.</li>
 <li><strong>macOS.</strong> In <strong>Apple menu → About This Mac</strong>, check whether the computer has an Apple chip or an Intel processor. Open the matching DMG, drag KerfKite Studio onto Applications and launch it there. This community build has an ad-hoc signature and has not been notarised by Apple. If macOS blocks it, review the app under <strong>System Settings → Privacy &amp; Security</strong> after the first open attempt. Managed Macs may require administrator approval.</li>
 <li><strong>Raspberry Pi OS, Debian and Ubuntu.</strong> Use a 64-bit graphical desktop. Open the ARM64 DEB on a Pi 4/5 or other ARM64 system, or the AMD64 DEB on an Intel/AMD PC. Choose <strong>Install</strong> in the package manager and open KerfKite Studio from the applications menu. On another compatible glibc desktop with a browser and xdg-open, extract the matching Linux archive to a permanent folder and open the KerfKite executable inside.</li>
-<li><strong>Android.</strong> Download the <a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-Pocket-Android.apk">Pocket APK</a> on your phone, open <strong>My Files → Downloads</strong>, tap the APK and choose <strong>Install</strong>. If prompted, allow this source to install apps and revoke that permission afterwards. Device management and Samsung Auto Blocker can restrict sideloading. If replacing a development APK, export your draft first. Android requires the previous build to be removed if its signing certificate differs. <a href="#android">Pocket user guide</a></li>
+<li><strong>Android.</strong> Download the <a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-Pocket-Android.apk">Pocket APK</a> on your phone, open <strong>My Files → Downloads</strong>, tap the APK and choose <strong>Install</strong>. If prompted, allow this source to install apps and revoke that permission afterwards. Device management and Samsung Auto Blocker can restrict sideloading. If replacing a development APK, export your draft first. Android requires the previous build to be removed if its signing certificate differs. <a href="#android">Pocket user guide</a></li>
 </ul>
 <h3>First launch</h3>
 <ol>
@@ -1169,7 +1766,7 @@ sh start.sh --port 8765
 <p>If the OS Python is older than 3.10, use a supported newer OS/Python installation. <code>CNC_PYTHON</code> can choose an already installed interpreter:</p>
 <pre><code class="language-sh">CNC_PYTHON=python3.12 sh scripts/install.sh --web --mcp
 </code></pre>
-<p>The <code>--web</code> installer option adds HTTPS services; <code>--mcp</code> adds the artwork MCP server. Omit either option if you do not need it. Open <strong>http://127.0.0.1:8765</strong> on the Pi's desktop browser. This local editor listener deliberately binds to loopback.</p>
+<p>The <code>--web</code> installer option adds HTTPS services; <code>--mcp</code> adds the assistant workshop MCP server. Omit either option if you do not need it. Open <strong>http://127.0.0.1:8765</strong> on the Pi's desktop browser. This local editor listener deliberately binds to loopback.</p>
 <h2>3. Install on macOS</h2>
 <p>Install 64-bit Python 3.12 first. The old system Python is unsuitable. For the optional C++ relief engine, install Apple's command line tools and complete any displayed installation dialog:</p>
 <pre><code class="language-sh">xcode-select --install
@@ -1235,8 +1832,8 @@ sh start.sh --port 8765
 </code></pre>
 <p>The console displays a fresh pairing URL containing a random token. Replace its <code>&lt;PI-LAN-IP&gt;</code> placeholder with the certificate's matching host/IP, then open it on the phone. Treat this URL as a credential; do not include it in screenshots or repository files. Restarting revokes it. This example remains simulator-only. Omitting both certificate options selects the explicit HTTP LAN monitor; HTTPS is preferable for credential protection.</p>
 <p>Monitor control is distinct from the upload inbox. Releasing a software pendant or sending feed hold is not a physical emergency stop, and accepted/buffered motion can continue depending on firmware.</p>
-<h2>MCP artwork integration</h2>
-<p>Install with <code>--mcp</code>, then configure your MCP client to launch the absolute path to <code>.venv/bin/python</code> (Windows: <code>.venv\Scripts\python.exe</code>) with arguments <code>-m</code>, <code>studio.mcp_server</code> and the project directory as its working directory. This is a stdio artwork/template service. See <a href="#mcp">MCP.md</a> for the actual tools and a client configuration example. No MCP setup automatically connects or moves a machine.</p>
+<h2>MCP assistant workshop</h2>
+<p>Install with <code>--mcp</code>, then configure your MCP client to launch the absolute path to <code>.venv/bin/python</code> (Windows: <code>.venv\Scripts\python.exe</code>) with arguments <code>-m</code>, <code>studio.mcp_server</code> and the project directory as its working directory. The MCP installer option installs the workshop browser unless an existing Chromium executable is configured. The <a href="#mcp">assistant setup guide</a> covers Claude, ChatGPT, optional HTTP hosting and access to the workshop. No MCP setup automatically connects or moves a machine.</p>
 <h2>Updating, stopping and removing</h2>
 <p>Stop the foreground service with Ctrl+C. Before updating, download unsaved projects and back up <code>web-data</code>, exported template libraries and configuration. Install new source into the same project, rerun the installer, restart the service and refresh the browser after saving its work. Native extensions must be rebuilt for a different OS, CPU architecture or incompatible Python version.</p>
 <p>Removing <code>.venv</code> removes that installation's Python dependencies. Removing source does not delete browser IndexedDB projects; browser site-data controls manage those separately. Keep or remove <code>web-data</code> deliberately according to whether its accounts/files are still needed. Do not delete the only copy of project files when uninstalling.</p>
@@ -1349,6 +1946,12 @@ bash scripts/ci-local.sh --list
 <h2>Native desktop workbench</h2>
 <p>The Go launcher in <code>packaging/desktop/</code> owns the local Studio service and starts a platform window after setup. The native file and geometry controls use the document adapter in <code>studio/static/desktop-workspace.js</code> in the main editor frame. The adapter accepts no filesystem path or machine command. A host supplies a file's contents to open it and writes a returned artifact only after the operator chooses a destination. The adapter marks the offered document snapshot saved after the host confirms a successful write. An edit made during the save still counts as unsaved. The native host associates an opened file with the editor's document ID.</p>
 <p>New commands that edit documents should reuse the editor model and its existing validation, history and preview invalidation. Extend <code>validation/desktop_workflow.py</code> for shared behavior and the smoke exercise under the affected platform's source directory for host behavior. The installer validation runs both the service and native window in simulation. <a href="#installer-builds">Installer build guide</a></p>
+<h2>CAD command line and script geometry</h2>
+<p><code>studio/static/cad-commands.js</code> handles typed commands, source preview and applying changes to the drawing or solid feature tree. <code>cad-views.js</code> routes viewport shortcuts. The local and hosted services share the <code>/api/cad-script</code> design route. <code>studio/scad_language.py</code> expands the bounded language into data nodes, and <code>studio/scad_geometry.py</code> builds Manifold sections or solids from those nodes. Keep source and numeric parameter ownership intact through project exchange. Test representative scripts against the parser and geometry kernel, then exercise view and command entry through the editor. <a href="#cad-scripting">CAD scripting tutorial and supported syntax</a></p>
+<h2>Assistant workshop, macros and skills</h2>
+<p><code>studio/mcp_server.py</code> assembles the FastMCP tools. <code>studio/mcp_workshop.py</code> starts the assistant's isolated Chromium workshop over a simulator-only Flask server, registers stateless design actions and implements artifact transfer. <code>studio/static/mcp-controls.js</code> discovers the actual controls. Extend the standard editor and shared design route first when a new feature needs to work in the GUI and over MCP. Keep operator-paired status and actions in <code>studio/mcp_pendant.py</code>. <code>studio/mcp_transport.py</code> owns the authenticated remote transport policy. Use an independent output directory per assistant deployment.</p>
+<p>The saved macro schema, import collision rules, name validation and defaults live in <code>studio/static/cad-macros.js</code>. Commands and source application run through <code>cad-commands.js</code>. Preserve the per-instance numeric overrides on project save/open. Keep the assistant tool, interactive authoring guide and bundled Help in sync when changing a macro. The browser regression <code>validation/cad_macro_workflow.py</code> builds every starter on a fresh project. It also measures parametric solids, checks that a bad command leaves artwork and camera intact, and tests library reimport. <a href="#cad-macros">Macro authoring guide</a></p>
+<p>Assistant workflow instructions are in <code>skills/kerfkite-workshop/SKILL.md</code>. The release ZIP should contain <code>kerfkite-workshop/SKILL.md</code> inside the correspondingly named top-level folder. After changing a workflow, compare the skill examples with the server's advertised input schema, validate any changed frontmatter using the Agent Skills validator available in your development environment, and run the example against a fresh simulated editor. Check the resulting artifact content or measured geometry. Restarting the local connection and repeating a named tool call is a separate test from running the MCP SDK harness. <a href="#mcp">Tool contract and client instructions</a> · <a href="#mcp-hosting">Remote hosting</a></p>
 </section><section id="laser-order"><h1>Plan the laser cut order</h1>
 <p>In <strong>Layers → Laser cut order</strong>, enable <strong>Plan compatible line cuts within each layer</strong>. The preview, generated G-code and downloaded job use the planned sequence. Object geometry stays editable in its original design order. Save the project to retain the planning switches.</p>
 <ul>
@@ -1394,7 +1997,7 @@ bash scripts/ci-local.sh --list
 </tr>
 </tbody>
 </table>
-<p>The filesystem mode supports router, laser and knife contour generation, including supported depth/power paths and ordered contour operations. LinuxCNC rotary wrapping of supported existing contour jobs is also implemented locally. Advanced area operations, holding tabs, relief, solid extrusion and stock simulation require the Python server. The new offline rotary calculations passed parity tests, but direct file:// browser acceptance was blocked by the automation browser URL policy and remains unverified. An unavailable operation produces an error rather than silently substituting a different toolpath. See <a href="#web">HTTPS and local-file setup</a>.</p>
+<p>The filesystem editor generates supported router, laser and knife contours, including ordered operations and per-vertex depths or powers. Its rotary post supports grblHAL and independent-A xPRO V5 router or laser files, plus LinuxCNC router files. Advanced area operations, holding tabs, relief, solid extrusion and stock simulation require the Python service. <a href="#web">HTTPS and local-file setup</a></p>
 <h2>Find the tools</h2>
 <p>The centre holds the work area, toolpath controls, messages and expandable G-code/3D previews. The side panels use tabs, so a tool may be present in another tab rather than farther down the page.</p>
 <table>
@@ -1449,7 +2052,7 @@ bash scripts/ci-local.sh --list
 </tr>
 <tr>
 <td>Rotary</td>
-<td>Diameter, wrap direction, seam checks and LinuxCNC rotary export</td>
+<td>Diameter, continuous angle, seam checks, rotary preview, file export and supported simulator/controller streaming. <a href="#rotary">Rotary guide</a></td>
 </tr>
 <tr>
 <td>Control</td>
@@ -1564,10 +2167,7 @@ bash scripts/ci-local.sh --list
 </ol>
 <p>The plateau adds one cutter diameter to the nominal width along the path. Inspect corners, inner contours and nearby cuts: geometric tabs do not guarantee stock retention and do not replace clamping. Overlapping/oversized placements fail CAM validation. Relief/depth paths, non-flat cutters, open contours and unsupported operations are rejected. Direct-on-contour dragging of tab positions is not available. Holding-tab CAM currently requires the server; local-file generation explicitly rejects it.</p>
 <h2>Rotary design and export</h2>
-<p>Rotary is an <strong>export-only LinuxCNC router workflow</strong>. The current GRBL and Marlin senders do not run the exported A-axis file.</p>
-<p>Enter the measured cylinder diameter, design wrap axis, starting angle and direction. <strong>Set design span to one revolution</strong> sets that design dimension to <code>π × diameter</code>. The other design coordinate is axial; the export emits axial motion as X, rotation as continuous A degrees and radial motion as Z. Physically configure A rotation around X and establish the radial stock-surface zero.</p>
-<p>Use <strong>Add seamless periodic border</strong> for a full-turn example. <strong>Check matching seam endpoints</strong> compares endpoint axial positions and depths within 0.01 mm. Passing that check does not prove tangent continuity, true stock circumference or physical alignment.</p>
-<p>Export requires router mode and GRBL source geometry; the server or supported offline contour engine converts it to LinuxCNC G93 inverse-time feed. The JavaScript/Python parity checks cover the wrap calculations. The new direct file:// browser workflow remains unverified because the automation browser blocked the file URL; test it in your actual browser before depending on it. Angles remain continuous beyond 360° rather than wrapping to zero. Source positions within 0.00051 mm of an integer circumference are snapped to whole turns to account for source CAM decimal rounding. Preview remains planar. Review the file in the target LinuxCNC configuration before any physical execution; fixtures and holder collisions are not simulated.</p>
+<p>Use the <strong>Rotary</strong> tab to wrap a router or laser design around a cylinder, inspect the seam and preview the posted path. Enter the measured diameter, design wrap axis and physical rotary axis. A periodic border is one full-turn example. Use <strong>Stream reviewed rotary job</strong> with a qualified grblHAL or independent-A xPRO V5 workstation connection, or export the file. LinuxCNC supports router file export. The original xPRO V5 dual-Y gantry setup needs a separate independent rotary motor channel to perform independent fourth-axis machining. <a href="#rotary">Rotary setup, simulator walkthrough and controller requirements</a></p>
 <h2>Local machine, keyboard and gamepad control</h2>
 <p>The local server starts with physical ports disabled. Test with <strong>Simulator</strong>. Enabling real ports requires the explicit <code>--enable-hardware</code> startup option and a machine that has been commissioned independently. Select the correct protocol before connecting; disconnect before changing it.</p>
 <p>The Control profile is a setup aid, not a command to overwrite the controller. Check current travel, head, work origin and clearance against the actual machine. <strong>Apply mounted head mode · outputs off</strong> requests a confirmed mode transition; it does not mechanically swap or measure the head. Re-establish router/knife Z zero or laser focus after changing heads. GRBL readback checks include mode/power and available travel; firmware and physical setup still determine what happens.</p>
@@ -1601,7 +2201,7 @@ bash scripts/ci-local.sh --list
 <p><strong>Export profile</strong> writes a portable JSON file. On a different computer, choose <strong>Import profile</strong>, inspect the fields and save it to that browser. Projects carry a snapshot of the active custom profile. Opening one from another machine displays the saved profile even if that machine has no local library entry. Hosted browser libraries are scoped to the signed-in account.</p>
 </section><section id="platforms"><h1>Platforms and verification</h1>
 <p>See the <a href="#sbc">single-board computer guide</a> for board-specific downloads and the offline Browser Editor.</p>
-<p><a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.5.1">Download the desktop installers</a> or the <a href="#android">Android companion</a>. The table below records source-installation and hardware evidence. See the <a href="#install">installation guide</a> for the graphical installers.</p>
+<p><a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.6.0">Download the desktop installers</a> or the <a href="#android">Android companion</a>. The table below records source-installation and hardware evidence. See the <a href="#install">installation guide</a> for the graphical installers.</p>
 <p><strong>Studio 0.5.1 native desktop verification.</strong> The published Windows installer and both executables accepted Windows 11 Pro x64 build 26300. In a signed-in desktop session, the packaged workbench created and moved geometry, handled unsaved-document cancellation, opened the materials guide, saved and reopened a project, previewed CAM and exported G-code. The Windows Server runner verified rejection before installation. Windows 10 x64 admission cases passed automated tests. A live Windows 10 desktop run is pending.</p>
 <p>The Apple silicon and Intel macOS runners and both Linux architectures passed native window, project and simulation checks. The SBC workflow exercised the desktop package on Ubuntu 22.04 and 26.04 userlands and tested the browser packages offline. The 0.5.1 runs used simulation. <a href="https://github.com/ShaunPrice/KerfKite/actions/runs/44410337833">Desktop installer checks</a> · <a href="https://github.com/ShaunPrice/KerfKite/actions/runs/44410344003">SBC package checks</a></p>
 <p><strong>Earlier public source release (18 November).</strong> All 11 CAD/CAM harness groups passed on macOS ARM64, Windows 11 Pro x86-64 and a physical Raspberry Pi 5 ARM64. The Windows and Pi hosts installed the public source in isolated environments. Each run exercised the STEP runtime and native C++ relief kernels, with 151 Python and 114 JavaScript tests. See the <a href="#release-review">release review</a> for the browser checks and the limits of physical verification. Earlier measurements below identify their own host and workload.</p>
@@ -1685,6 +2285,10 @@ sh start.sh --port 8765
 <li>To evaluate a real coupon, record its material and thickness, focus, actual controller scale and the acceptable cell. Those measurements determine the working preset for that material. The software preview shows commanded settings.</li>
 </ol>
 <p>Raster processing supports 60,000 pixels and 2,500 scanlines per image. A material grid supports up to 10 steps per axis within the 100-operation job limit. Cropping, masks, generated rasters and outline/hatch test grids run locally in the browser.</p>
+<h2>Engrave a depth map in slices</h2>
+<p>Open <strong>Images → Bitmap raster</strong>, choose <strong>3D engraving · depth slices</strong>, then choose an image or <strong>Try stepped relief sample</strong>. For a first simulation set the image to 16 × 16 mm at 0.5 mm scan spacing and select four slices. The preview shows the quantized exposure levels. Choose <strong>Add raster</strong>, then generate a CAM preview. Black pixels receive four exposures, a 50% pixel receives two and white receives zero. Invert swaps the light and dark interpretation. Overscan has zero commanded power. The object stores its scan paths, pass order, powers and image-processing settings in the portable project.</p>
+<p>Each slice scans the pixels that still require another exposure. The object sets its operation to a single overall pass because the scan paths already contain every slice. Increasing <strong>Depth slices</strong> increases the maximum number of exposures. Actual depth depends on the stock, focus, speed and power. Measure a coupon with the intended laser and material before interpreting exposure counts as millimetres.</p>
+<p>For cylindrical stock, set the rotary diameter and design span before placing the depth map. Preview the rotary program to see axial travel, rotation and commanded power. The router's relief workflow drives radial Z from a height field. Laser depth slicing holds the focal setup and varies the exposure count. <a href="#rotary">Rotary setup and example</a></p>
 </section><section id="phone-connections"><h1>Connect a Galaxy phone to the Studio pendant</h1>
 <p>KerfKite Pocket sends pendant commands to the <strong>Studio machine server</strong>. The server owns the CNC controller connection, machining preview and job. The phone needs an IP route to the server's <strong>phone monitor</strong> port, which defaults to 8766. The same native pendant works over Wi-Fi, a USB tether network or a Bluetooth Personal Area Network (PAN). Your phone, server operating system and network drivers determine which links are available.</p>
 <h2>Choose the network</h2>
@@ -1789,11 +2393,116 @@ python -m studio.web_server --data-dir web-data serve --public-url https://your-
 <p>Omit <code>--ca-file</code> for a certificate already trusted by the OS. Restart the design server to load destination changes. The browser sees destination names, never stored receiver tokens. Uploads verify the returned SHA-256 and byte count. Redirects are not followed. A failed upload may have arrived: inspect the receiver before retrying. Use <code>revoke-tokens YOUR_USERNAME</code> on the Pi to invalidate all its upload tokens.</p>
 <p>The sender can target an explicitly configured HTTP origin with <code>--allow-http</code> for a compatible receiver/proxy, but credentials and contents would be unencrypted. CNC Studio's own receiver is HTTPS-only. The local-file upload UI also requires HTTPS.</p>
 <h2>Local filesystem editor</h2>
-<p>Open <code>studio/static/index.html</code> directly in a browser. Keep the entire static directory together, including vendor, icon and font files. No login, web server or network access is required for drawing, text outlines, templates, SVG/project/XYZ downloads. Local contour CAM and G-code export support router/laser/knife paths, per-vertex depth/power, laser ramps and ordered contour operations. LinuxCNC rotary wrapping of supported existing contour jobs is also implemented in JavaScript. Advanced polygon/area operations, holding tabs, relief/extrusion and stock simulation require the Python app server; unsupported offline operations fail explicitly. Rotary source/job parity tests passed, but the new direct file:// browser workflow could not be exercised because the automation browser URL policy blocked it. Do not interpret that blocked check as end-to-end browser acceptance.</p>
+<p>Open <code>studio/static/index.html</code> directly in a browser. Keep the entire static directory together, including vendor, icon and font files. No login, web server or network access is required for drawing, text outlines, templates, SVG/project/XYZ downloads. Local contour CAM and G-code export support router/laser/knife paths, per-vertex depth/power, laser ramps and ordered contour operations. The browser rotary post exports supported grblHAL and xPRO V5 router/laser contour jobs and LinuxCNC router contour jobs. Advanced polygon/area operations, holding tabs, relief/extrusion and stock simulation require the Python app server; unsupported offline operations fail explicitly. The browser can inspect the wrapped path and download the posted program. Controller streaming uses the workstation service. <a href="#rotary">Rotary guide</a></p>
 <p>To upload from a local file, launch the Pi receiver with <code>--allow-file-upload</code>. Enter the receiver HTTPS origin and upload token into the editor's Files &amp; receiver uploads section. The token stays in page memory, not browser persistent storage. The receiver permits opaque <code>Origin: null</code> only on its token-protected receive endpoint when this flag is enabled. Browsers cannot distinguish file origins from other opaque origins; the upload token remains mandatory. Certificate trust and browser private-network policies still apply. This flow has not been verified on every target browser/OS.</p>
 <p>Hosted mode has private server file downloads and destination uploads. Its template library and IndexedDB project library are namespaced by username in browser storage. Named projects retain up to five prior save revisions and a recovery draft. Browser data is local to that browser profile; private server files and portable downloads are separate storage choices. Project downloads preserve metadata and extra business/rotary settings; exported library backups remain portable. Save unsaved artwork locally before logout or reloading an editor update.</p>
 <h2>Current operating guidance</h2>
 <p>See <a href="#install">INSTALL.md</a> for complete platform and HTTPS setup, <a href="#user-guide">USER-GUIDE.md</a> for save/upload workflows and <a href="#status">STATUS.md</a> for current software/hardware boundaries. Cost estimates, quotes and print layouts are available in the editor; they do not change the receiver's upload-only behavior. Paired phone monitoring/control belongs to the separate local controller service, not this HTTPS inbox.</p>
+</section><section id="mcp-hosting"><h1>Connect a hosted workshop to an AI assistant</h1>
+<p>A remote assistant connects to the KerfKite workshop at an HTTPS address such as <code>https://workshop.example.org/mcp</code>. The host runs the MCP process and holds its design files. Your OAuth provider signs the access tokens. Each process accepts <strong>one operator</strong> from one issuer. Use a separate hostname, process, filesystem account and private output directory for each additional operator.</p>
+<p>For a desktop assistant on the workshop computer, the <a href="#mcp">local stdio setup</a> uses the signed-in operating system account and needs no published endpoint.</p>
+<h2>Prepare the host</h2>
+<p>Install the MCP extras and the browser needed by the workshop tools, following the <a href="#mcp">MCP installation guide</a>. Use a dedicated DNS hostname you control with a publicly trusted TLS certificate. The examples below use reserved domains. Supply your own addresses and operator identifier when configuring your service environment.</p>
+<ol>
+<li>Register the <strong>complete</strong> public MCP URL as an API resource with your OAuth provider. Its audience must match <code>https://workshop.example.org/mcp</code>, including the path and any non-default port. Assign the API scope <code>kerfkite:workshop</code> to the operator.</li>
+<li>Configure the authorization-code flow with S256 PKCE. The issuer must publish OAuth or OpenID discovery metadata and an HTTPS JWKS URL. Configure RS256-signed JWT access tokens with <code>iss</code>, <code>aud</code>, an expiry <code>exp</code>, the operator's stable <code>sub</code> claim and the required scope. Use the subject and issuer from the access token the provider issues for this resource. The provider must honour the MCP client's requested <code>resource</code> when issuing the token.</li>
+<li>Configure a client-registration method supported by both the assistant and your identity provider. Options include an administrator-registered OAuth client, client ID metadata documents and dynamic client registration. If registering a confidential client yourself, generate its secret at the identity provider and enter it in the assistant's OAuth client settings.</li>
+<li>Grant the service account write access to a private output directory. A given process shares its working data with clients signed in as the configured operator. Configure the following four variables in that process's environment.</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Example</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>KERFKITE_MCP_PUBLIC_ORIGIN</code></td>
+<td><code>https://workshop.example.org</code></td>
+<td>Public HTTPS origin of this process. The endpoint path is always <code>/mcp</code>.</td>
+</tr>
+<tr>
+<td><code>KERFKITE_MCP_ISSUER</code></td>
+<td><code>https://identity.example.org/realms/workshop</code></td>
+<td>Exact value of the issuer's <code>iss</code> claim, including its trailing slash if present.</td>
+</tr>
+<tr>
+<td><code>KERFKITE_MCP_JWKS_URL</code></td>
+<td><code>https://identity.example.org/realms/workshop/keys</code></td>
+<td>Public HTTPS signing key set from the issuer's discovery metadata.</td>
+</tr>
+<tr>
+<td><code>KERFKITE_MCP_SUBJECT</code></td>
+<td><code>operator-id-from-your-provider</code></td>
+<td>Exact allowed <code>sub</code>. Use the provider's stable subject identifier.</td>
+</tr>
+</tbody>
+</table>
+<p>The host needs outbound HTTPS access to the configured key set. Its clock must be accurate to evaluate the token expiry and any <code>nbf</code> claim. KerfKite uses the configured external provider for login and has no built-in remote password.</p>
+<h2>Serve the HTTPS endpoint</h2>
+<p>Start KerfKite on the same host as the reverse proxy. This example assumes the Python environment is active.</p>
+<pre><code class="language-sh">cnc-studio-mcp --transport http --port 8766 --output-dir /srv/kerfkite/operator/artifacts
+</code></pre>
+<p>The service listens on <code>127.0.0.1</code>. Configure the TLS reverse proxy to forward the MCP path and the protected resource metadata path, preserving the public Host header and Authorization header. Disable proxy response buffering for the MCP stream. The following Caddy site uses its automatic HTTPS support for a hostname with working public DNS. <a href="https://caddyserver.com/docs/caddyfile/directives/reverse_proxy">Caddy reverse proxy</a> · <a href="https://caddyserver.com/docs/automatic-https">Caddy automatic HTTPS</a></p>
+<pre><code class="language-caddyfile">workshop.example.org {
+    @workshop path /mcp /.well-known/oauth-protected-resource/mcp
+    handle @workshop {
+        reverse_proxy 127.0.0.1:8766 {
+            flush_interval -1
+        }
+    }
+    handle {
+        respond 404
+    }
+}
+</code></pre>
+<p>Only these two paths are required on this virtual host. OAuth login, authorization-server metadata and key distribution remain at the identity provider. A private or self-signed Studio certificate can still serve local tools. A hosted assistant must trust the public endpoint's certificate.</p>
+<h2>Connect an assistant</h2>
+<p><strong>ChatGPT.</strong> Open the custom MCP/plugin settings available to your account. Enable developer mode if your workspace requires it. Enter the complete <code>/mcp</code> URL, select OAuth and use a client registration supported by your issuer. If configuring a client manually, copy the redirect URI shown for this connection into the identity provider's redirect allowlist. Sign in as the configured operator and review the discovered workshop tools. <a href="https://developers.openai.com/plugins/deploy/connect-chatgpt">OpenAI custom MCP setup</a> · <a href="https://developers.openai.com/plugins/build/auth">OpenAI OAuth requirements and callback modes</a></p>
+<p><strong>Claude.</strong> In <strong>Customize → Connectors</strong>, add a custom remote connector using the complete <code>/mcp</code> URL. Select the sign-in option and choose a supported OAuth client identity. When using a manually registered client, configure the redirect URI that Claude documents and enter the issued client ID and secret if applicable. Complete sign-in, then enable the connector in the conversation. Organization settings can restrict who can register a connector. <a href="https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp">Claude custom remote connector setup</a></p>
+<p>Use a read-only workshop query first and inspect the reported tool list. Registration and permissions belong to the assistant account and identity provider. The repository's tests cover the MCP protocol and authorization using an ephemeral signing key. Connecting a particular live account still requires its sign-in.</p>
+<h2>Check discovery and diagnose access</h2>
+<pre><code class="language-sh">curl -i https://workshop.example.org/.well-known/oauth-protected-resource/mcp
+curl -i -X POST -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' --data '{}' https://workshop.example.org/mcp
+</code></pre>
+<p>The first request returns HTTP 200 and metadata describing the resource URL, configured issuer and <code>kerfkite:workshop</code> scope. The second, without a bearer token, returns HTTP 401 and a <code>WWW-Authenticate</code> challenge pointing back to the metadata. Discovery is public so the assistant can find the login provider. MCP tool discovery and tool calls require an authorized bearer token.</p>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Check</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Startup reports an unset variable</td>
+<td>Configure all four values in the process environment and restart it.</td>
+</tr>
+<tr>
+<td>Metadata returns 404 or the wrong resource</td>
+<td>Forward the exact discovery path. Check the dedicated public origin and the proxy's virtual host.</td>
+</tr>
+<tr>
+<td>Sign-in never starts</td>
+<td>Check certificate trust, OAuth discovery, S256 support, client registration and the assistant workspace's connector policy.</td>
+</tr>
+<tr>
+<td>Token receives 401</td>
+<td>Check RS256, signing key ID, exact issuer, full resource audience, operator subject, scope, token expiry, <code>nbf</code> and the host clock. Check JWKS reachability from the KerfKite host.</td>
+</tr>
+<tr>
+<td>Unexpected Host or Origin response</td>
+<td>Preserve the configured public Host in the proxy. A browser request with an Origin header must come from the allowed origin.</td>
+</tr>
+<tr>
+<td>Tools work locally but the remote model operation fails</td>
+<td>Check the hosted service account's browser installation and write permissions on its output directory.</td>
+</tr>
+</tbody>
+</table>
+<p>For a local protocol check after installing the MCP extras, run <code>python -m unittest discover -s tests -p test_mcp_transport.py</code> from the checkout. The tests verify discovery, sign-in challenges, rejection of unauthorized requests, authenticated initialization, tool listing and an authorized tool call. <a href="https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization">MCP authorization specification</a> · <a href="https://gofastmcp.com/docs/servers/auth/remote-oauth">FastMCP remote OAuth</a></p>
 </section><section id="router-entry"><h1>Enter a router cut with a ramp or helix</h1>
 <p>Open <strong>CAM → Router entry</strong>. Choose a flat end mill rated by its maker for the intended axial and ramping work. <strong>Maximum entry angle</strong> is measured from the stock plane. Studio uses enough complete turns to stay at or below that slope. Each pass observes the configured step-down, starting from the prior machined level. Entry feeds are limited by both the cutting feed and plunge feed.</p>
 <table>
@@ -2006,7 +2715,7 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <p><strong>Try lens calibration card</strong> loads a synthetic barrel-distorted image with known target coordinates. Solve or recall its fit, inspect the bed overlay, measure the check point and place its rectangle through <strong>Preview trace → Place previewed trace on bed</strong>. Long traced line segments are subdivided as needed when the lens transformation bends them in work coordinates. <strong>Save for this profile</strong> retains the measured correspondences, model, allowed error, bed size and aspect ratio. Earlier four-point calibrations still open.</p>
 <p>The trace input is downsampled to at most 384 pixels per side. Both models assume a flat work plane. Tangential or decentered lens distortion, fisheye optics, parallax above the measured surface and 3D camera pose require other models or measurements. Test a known target on the actual stock plane before relying on placement accuracy. <a href="https://www.robots.ox.ac.uk/~vgg/publications/2001/Fitzgibbon01b/fitzgibbon01b.pdf">Radial division model</a></p>
 </section><section id="protocols"><h1>Controller compatibility</h1>
-<p>The CAM selector now has eight implemented profiles. A G-code postprocessor is not a live machine driver. None of these profiles has been physically commissioned in this project.</p>
+<p>The CAM selector lists the implemented profiles. A G-code postprocessor is not a live machine driver. None of these profiles has been physically commissioned in this project.</p>
 <table>
 <thead>
 <tr>
@@ -2022,6 +2731,11 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <td>Router, dynamic laser, passive drag knife</td>
 </tr>
 <tr>
+<td>xPRO V5 independent A</td>
+<td>GRBL-ESP32 serial, 115200</td>
+<td>Router and dynamic laser, including a commissioned independent rotary A setup. Confirm the firmware and machine readback in the <a href="#rotary">rotary guide</a>.</td>
+</tr>
+<tr>
 <td>FluidNC</td>
 <td>Experimental GRBL-compatible USB serial, 115200</td>
 <td>Router, dynamic laser, passive drag knife</td>
@@ -2029,7 +2743,7 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <tr>
 <td>grblHAL</td>
 <td>Experimental GRBL-compatible USB serial, 115200</td>
-<td>Router, dynamic laser, passive drag knife</td>
+<td>Router, dynamic laser, passive drag knife and supported independent rotary axes</td>
 </tr>
 <tr>
 <td>Marlin CNC</td>
@@ -2039,7 +2753,7 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <tr>
 <td>LinuxCNC</td>
 <td>Export only</td>
-<td>XYZ router/relief and passive drag knife; separate continuous-A rotary exporter</td>
+<td>XYZ router/relief and passive drag knife; continuous A/B/C cylindrical router export</td>
 </tr>
 <tr>
 <td>Mach3 Mill</td>

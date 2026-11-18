@@ -15,6 +15,12 @@
     <div class="buttons"><button id="rasterSample">Try tonal wedge</button><button id="rasterRestore">Recall selected raster settings</button></div>
     <canvas id="rasterTonePreview" width="240" height="120" style="width:100%;max-height:145px;object-fit:contain;image-rendering:pixelated" aria-label="Predicted image power. Black is maximum power."></canvas>
     <p id="rasterToneStatus" role="status" class="hint">Choose an image or try the tonal wedge.</p>`;
+  $('rasterStyle').add(new Option('3D engraving · depth slices','sliced'));
+  const slicePanel=document.createElement('section');
+  slicePanel.hidden=true;
+  slicePanel.innerHTML=numeric('rasterSlices','Depth slices',6,2,64,1)+
+    '<p class="hint">White receives zero exposures. Black receives one exposure per slice at the selected layer power. Use a coupon to measure the depth each exposure removes.</p><button type="button" id="rasterDome">Try stepped relief sample</button>';
+  settings.prepend(slicePanel);
   $('addRaster').before(settings);
   const grid=document.createElement('details');
   grid.innerHTML=`<summary>Laser material test</summary><p class="hint">Power increases to the right; speed increases upwards. Cells use the controller S scale given below.</p>
@@ -34,7 +40,7 @@
   function config() {
     return {x:read('rasterX'),y:read('rasterY'),width:read('rasterW'),height:read('rasterH'),interval:read('rasterInterval'),
       overscan:read('rasterOverscan'),brightness:read('rasterBrightness'),contrast:read('rasterContrast'),gamma:read('rasterGamma'),
-      threshold:read('rasterThreshold'),style:$('rasterStyle').value,mask:$('rasterMask').value,invert:$('rasterInvert').checked,
+      slices:read('rasterSlices'),threshold:read('rasterThreshold'),style:$('rasterStyle').value,mask:$('rasterMask').value,invert:$('rasterInvert').checked,
       crop:Object.fromEntries(['Left','Top','Right','Bottom'].map(key=>[key.toLowerCase(),read('rasterCrop'+key)]))};
   }
   function prepare() {
@@ -49,12 +55,13 @@
     return {opts,map:workshop.powerMap(ctx.getImageData(0,0,cols,rows).data,opts)};
   }
   function paint() {
+    slicePanel.hidden=$('rasterStyle').value!=='sliced';
     const out=$('rasterTonePreview'), ctx=out.getContext('2d');
     try{
-      const {map}=prepare();out.width=map.cols;out.height=map.rows;
+      const {map,opts}=prepare();out.width=map.cols;out.height=map.rows;
       const preview=ctx.createImageData(map.cols,map.rows);
-      map.values.forEach((power,i)=>{const v=Math.round((1-power)*255);preview.data.set([v,v,v,255],4*i);});
-      ctx.putImageData(preview,0,0);$('rasterToneStatus').textContent=name+' · '+map.cols+' × '+map.rows+' samples. Black is maximum power.';
+      map.values.forEach((power,i)=>{const fraction=opts.style==='sliced'?Math.round(power*opts.slices)/opts.slices:power;const v=Math.round((1-fraction)*255);preview.data.set([v,v,v,255],4*i);});
+      ctx.putImageData(preview,0,0);$('rasterToneStatus').textContent=name+' · '+map.cols+' × '+map.rows+' samples. '+(opts.style==='sliced'?'Black receives '+opts.slices+' exposures.':'Black is maximum power.');
     }catch(err){ctx.clearRect(0,0,out.width,out.height);$('rasterToneStatus').textContent=err.message;}
   }
   group.addEventListener('input',e=>{if(e.target.id.startsWith('raster')&&e.target!==$('rasterFile')){clearTimeout(pending);pending=setTimeout(paint,60);}});
@@ -74,10 +81,22 @@
     c.fillStyle=g;c.fillRect(0,0,160,80);c.clearRect(68,28,24,24);
     replaceSource(sample,'Tonal wedge');
   };
+  $('rasterDome').onclick=()=>{
+    ++revision;$('rasterFile').value='';
+    const sample=document.createElement('canvas');sample.width=96;sample.height=96;
+    const ctx=sample.getContext('2d'),img=ctx.createImageData(96,96);
+    for(let j=0;j<96;j++)for(let i=0;i<96;i++){
+      const radius=Math.hypot((i-47.5)/46,(j-47.5)/46);
+      const gray=Math.round(255*Math.min(1,radius));
+      img.data.set([gray,gray,gray,255],4*(96*j+i));
+    }
+    ctx.putImageData(img,0,0);replaceSource(sample,'Radial depth map');
+  };
   $('rasterRestore').onclick=task(()=>{
     const recipe=objects[selected]?.rasterRecipe;
     if(!recipe)throw Error('Select a raster created with the image workshop.');
     for(const [id,key] of Object.entries({X:'x',Y:'y',W:'width',H:'height',Interval:'interval',Overscan:'overscan',Brightness:'brightness',Contrast:'contrast',Gamma:'gamma',Threshold:'threshold',Style:'style',Mask:'mask'}))$('raster'+id).value=recipe[key];
+    $('rasterSlices').value=recipe.slices??6;
     $('rasterInvert').checked=recipe.invert;
     for(const edge of ['Left','Top','Right','Bottom'])$('rasterCrop'+edge).value=recipe.crop[edge.toLowerCase()];
     paint();message('Processing settings restored. Choose the source image and select any artwork mask to create a new raster.');
@@ -86,14 +105,17 @@
     $('mode').value='laser';$('operation').value='line';modeUI();
   }
   $('addRaster').onclick=task(()=>{
-    const {opts,map}=prepare(), geometry=workshop.scanPaths(map,opts);
+    const {opts,map}=prepare(), sliced=opts.style==='sliced';
+    const geometry=sliced?workshop.slicedPaths(map,opts):workshop.scanPaths(map,opts);
+    const count=[...objects,geometry].flatMap(o=>o.paths);
+    if(count.length>3000||count.reduce((n,p)=>n+p.length,0)>100000)throw Error('Result exceeds the project path or vertex limit.');
     if(opts.x-opts.overscan<0||opts.y<0||opts.x+opts.width+opts.overscan>read('width')||opts.y+opts.height>read('height'))throw Error('Raster and overscan must fit within the work area.');
     if(objects.length>=100)throw Error('Studio supports up to 100 ordered operations per job.');
     const recipe={...opts};delete recipe.contours;
     laserSettings();
-    const values={mode:'laser',operation:'line',laser_pattern:'continuous',lead_shape:'straight',feed:read('feed'),power:read('power'),passes:read('passes'),lead_in:0,lead_out:0,ramp_in:0,ramp_out:0,start_power:100,end_power:100};
-    objects.push({name:'Raster · '+name,...geometry,rasterRecipe:recipe,operationSettings:values});selected=objects.length-1;
-    invalidate();draw();message('Raster added with saved laser settings. Preview the scanlines before export.');
+    const values={mode:'laser',operation:'line',laser_pattern:'continuous',lead_shape:'straight',feed:read('feed'),power:read('power'),passes:sliced?1:read('passes'),lead_in:0,lead_out:0,ramp_in:0,ramp_out:0,start_power:100,end_power:100};
+    objects.push({designLayerId:window.CNCDesignLayers?.activeId?.()||'default',name:(sliced?'Depth engraving · ':'Raster · ')+name,...geometry,rasterRecipe:recipe,operationSettings:values});selected=objects.length-1;
+    invalidate();draw();message(sliced?('Depth engraving added · '+opts.slices+' exposure levels. Generate a preview to inspect the passes.'):'Raster added with saved laser settings. Preview the scanlines before export.');
   });
   $('materialGridAdd').onclick=task(()=>{
     const settings=Object.fromEntries(Object.entries({x:'GridX',y:'GridY',rows:'GridRows',cols:'GridCols',size:'CellSize',gap:'Gap',feedMin:'FeedMin',feedMax:'FeedMax',powerMin:'PowerMin',powerMax:'PowerMax',maxS:'MaxS',interval:'Hatch'}).map(([k,id])=>[k,read('material'+id)]));

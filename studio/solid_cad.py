@@ -33,6 +33,14 @@ class Dimensions:
         for name in definitions:
             self.resolve(name)
 
+    def script_parameters(self, overrides):
+        """Resolve part dimensions first, then shadow them for this one macro instance."""
+        if not isinstance(overrides, dict) or len(overrides) > 64:
+            raise ValueError('Define at most 64 macro parameters')
+        if any(not isinstance(name, str) or not _NAME.fullmatch(name) for name in overrides):
+            raise ValueError('Invalid macro parameter name')
+        return {**self.values, **{name: _number(value) for name, value in overrides.items()}}
+
     def resolve(self, name):
         if name in self.values:
             return self.values[name]
@@ -97,11 +105,17 @@ def _sketch(feature, dimensions, kernel):
     return kernel.CrossSection([points], kernel.FillRule.EvenOdd)
 
 
-def _primitive(feature, dimensions, kernel):
+def _primitive(feature, dimensions, kernel, script_budget=None):
     kind = feature.get('kind')
     if kind == 'step':
         from .cad_exchange import step_manifold
         solid = step_manifold(feature, kernel)
+    elif kind == 'script':
+        from .scad_geometry import build_script
+        parameters = dimensions.script_parameters(feature.get('scriptParameters', {}))
+        dimension, solid = build_script(feature.get('source'), parameters, budget=script_budget)
+        if dimension != 3:
+            raise ValueError('A solid feature needs a 3D script. Use linear_extrude() to give a drawing thickness.')
     elif kind == 'box':
         size = dimensions.vector(feature.get('size'), 3)
         if min(size) <= 0:
@@ -175,6 +189,10 @@ def _build(model):
         raise ValueError('A solid model needs 1–64 features')
     solid = None
     identifiers = set()
+    script_budget = None
+    if any(isinstance(f, dict) and f.get('kind')=='script' and f.get('enabled', True) for f in features):
+        from .scad_geometry import ScriptGeometryBudget
+        script_budget = ScriptGeometryBudget()
     for i, feature in enumerate(features, 1):
         if not isinstance(feature, dict):
             raise ValueError(f'Invalid feature {i}')
@@ -192,7 +210,7 @@ def _build(model):
                 raise ValueError('Choose add, cut or intersect')
             if solid is None and op != 'add':
                 raise ValueError('First enabled feature must add material')
-            tool = _instances(_primitive(feature, dimensions, kernel), feature.get('pattern'), dimensions, kernel)
+            tool = _instances(_primitive(feature, dimensions, kernel, script_budget), feature.get('pattern'), dimensions, kernel)
             if solid is None:
                 solid = tool
             elif op == 'add':

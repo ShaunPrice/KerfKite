@@ -1,5 +1,6 @@
 """Single-owner, acknowledgement-paced GRBL transport with an explicit simulator."""
 import math
+import re
 import threading
 import time
 from collections import deque
@@ -16,6 +17,8 @@ class Controller:
         self.init_remaining = deque()
         self.initialized = False
         self.identification = []
+        self.position_count = 0
+        self.spindle_type = None
         self.serial = None
         self.thread = None
         self.stop = threading.Event()
@@ -48,7 +51,7 @@ class Controller:
     def status(self):
         with self.lock:
             return dict(connected=self.connected, simulated=self.simulated, state=self.state,
-                        error=self.error, position=self.position, settings=dict(self.settings), identification=list(self.identification),
+                        error=self.error, position=dict(self.position) if self.position else None, settings=dict(self.settings), position_count=self.position_count, spindle_type=self.spindle_type, identification=list(self.identification),
                         progress=self.progress, log=list(self.log), active=self.active)
 
     def connect(self, port):
@@ -59,6 +62,8 @@ class Controller:
             self.error = None
             self.settings = {}
             self.position = None
+            self.position_count = 0
+            self.spindle_type = None
             self.progress = 0
             self.init_remaining = deque(self.initialization_queries)
             self.initialized = False
@@ -261,10 +266,13 @@ class Controller:
                 if part.startswith(('MPos:', 'WPos:')):
                     try:
                         values = list(map(float, part.split(':')[1].split(',')))
-                        self.position = dict(zip(('x', 'y', 'z'), values[:3]))
+                        if not 3 <= len(values) <= 9 or not all(math.isfinite(v) for v in values):
+                            raise ValueError('Invalid position')
+                        self.position_count = len(values)
+                        self.position = dict(zip('xyzabcuvw', values))
                         self.position['basis'] = part.split(':')[0]
                     except ValueError:
-                        pass
+                        self.position_count = 0
             if reported == 'Alarm':
                 self._fault('Controller alarm; reconnect after resolving it')
                 return
@@ -278,6 +286,11 @@ class Controller:
                 self.ready = True
         elif line.startswith('$') and '=' in line:
             key, value = line[1:].split('=', 1)
+            if key.lower() == 'spindle/type':
+                self.spindle_type = value.strip().upper()
+                return
+            if key.lower() == 'laser/fullpower':
+                key = 'Laser/FullPower'
             try:
                 parsed = float(value.split()[0])
                 if not math.isfinite(parsed):
@@ -288,6 +301,12 @@ class Controller:
         elif line == 'ok':
             if self.pending is None:
                 return
+            if self.pending == '$I' and '[FIRMWARE:grblHAL]' in self.identification and '376' not in self.settings:
+                if any(re.fullmatch(r'\[AXS:[4-9]:XYZ[A-Z]+\]', line) for line in self.identification):
+                    self.init_remaining.append('$376')
+            if self.pending == '$I' and any(
+                    re.fullmatch(r'\[MSG:Using machine:CNC_xPRO_V5_XYAZ_(?:NC|NO)\]', row) for row in self.identification):
+                self.init_remaining.extend(('$Spindle/Type','$Laser/FullPower'))
             self.pending = None
             if not self.active and self.init_remaining and not self.error:
                 self.pending = self.init_remaining.popleft()
@@ -305,11 +324,14 @@ class Controller:
                     self._write(b'?')
         elif line.startswith(('error:', 'ALARM:')):
             self._fault(line)
-        elif line.startswith(('[VER:', '[OPT:', '[FIRMWARE:')):
+        elif line.startswith(('[VER:', '[OPT:', '[FIRMWARE:', '[AXS:', '[MSG:Using machine:')):
             self.identification.append(line)
             self.identification = self.identification[-8:]
         elif line.startswith(('Grbl', 'FluidNC')):
             self.settings.clear()
+            self.identification.clear()
+            self.position_count = 0
+            self.spindle_type = None
             self.ready = False
             if self.active or self.initialized:
                 self._fault('Unexpected controller reset; reconnect and verify settings')
@@ -325,7 +347,13 @@ class Controller:
                     if self.simulated:
                         if self.active and not self.paused:
                             if self.queue:
-                                self.log.append(self.queue.popleft())
+                                line = self.queue.popleft()
+                                self.log.append(line)
+                                if line.startswith(('G0 ', 'G1 ')):
+                                    for word in line.split()[1:]:
+                                        if re.fullmatch(r'[XYZABC][+-]?(?:\d+(?:\.\d*)?|\.\d+)', word):
+                                            self.position = self.position or {'basis':'WPos','x':0.0,'y':0.0,'z':0.0}
+                                            self.position[word[0].lower()] = float(word[1:])
                                 self.acked += 1
                                 self.progress = min(99, self.acked / self.total * 100)
                             else:

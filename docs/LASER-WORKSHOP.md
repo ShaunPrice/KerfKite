@@ -24,3 +24,11 @@ Expand **Laser material test** in the same Images tab. The grid places selectabl
 5. To evaluate a real coupon, record its material and thickness, focus, actual controller scale and the acceptable cell. Those measurements determine the working preset for that material. The software preview shows commanded settings.
 
 Raster processing supports 60,000 pixels and 2,500 scanlines per image. A material grid supports up to 10 steps per axis within the 100-operation job limit. Cropping, masks, generated rasters and outline/hatch test grids run locally in the browser.
+
+## Engrave a depth map in slices
+
+Open **Images → Bitmap raster**, choose **3D engraving · depth slices**, then choose an image or **Try stepped relief sample**. For a first simulation set the image to 16 × 16 mm at 0.5 mm scan spacing and select four slices. The preview shows the quantized exposure levels. Choose **Add raster**, then generate a CAM preview. Black pixels receive four exposures, a 50% pixel receives two and white receives zero. Invert swaps the light and dark interpretation. Overscan has zero commanded power. The object stores its scan paths, pass order, powers and image-processing settings in the portable project.
+
+Each slice scans the pixels that still require another exposure. The object sets its operation to a single overall pass because the scan paths already contain every slice. Increasing **Depth slices** increases the maximum number of exposures. Actual depth depends on the stock, focus, speed and power. Measure a coupon with the intended laser and material before interpreting exposure counts as millimetres.
+
+For cylindrical stock, set the rotary diameter and design span before placing the depth map. Preview the rotary program to see axial travel, rotation and commanded power. The router's relief workflow drives radial Z from a height field. Laser depth slicing holds the focal setup and varies the exposure count. [Rotary setup and example](ROTARY.md)

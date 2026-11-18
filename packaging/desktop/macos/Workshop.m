@@ -181,6 +181,11 @@ static NSMenu *Submenu(NSMenu *root, NSString *title) {
     [edit addItem:NSMenuItem.separatorItem]; Menu(edit,@"Cut",@"x",@selector(cut:),nil); Menu(edit,@"Copy",@"c",@selector(copy:),nil);
     Menu(edit,@"Paste",@"v",@selector(paste:),nil); Menu(edit,@"Select All",@"a",@selector(selectAll:),nil);
     NSMenu *workspace = Submenu(bar,@"Workspace");
+    NSMenuItem *command = Menu(workspace,@"CAD Command…",@"k",@selector(openAuthoring:),self);
+    command.keyEquivalentModifierMask = NSEventModifierFlagCommand|NSEventModifierFlagShift;
+    command.representedObject = @"command-line";
+    Menu(workspace,@"CAD Script…",@"",@selector(openAuthoring:),self).representedObject = @"script-editor";
+    [workspace addItem:NSMenuItem.separatorItem];
     for (NSString *name in Tabs()) Menu(workspace,name,@"",@selector(menuTab:),self);
     [workspace addItem:NSMenuItem.separatorItem]; Menu(workspace,@"Preview Toolpaths",@"",@selector(preview:),self);
     NSApp.mainMenu = bar;
@@ -289,6 +294,11 @@ static NSMenu *Submenu(NSMenu *root, NSString *title) {
 - (void)undoDesign:(id)sender { [self perform:@"undo" payload:nil]; }
 - (void)redoDesign:(id)sender { [self perform:@"redo" payload:nil]; }
 - (void)preview:(id)sender { [self perform:@"preview" payload:nil]; }
+- (void)openAuthoring:(NSMenuItem *)sender {
+    if (self.busy || self.window.attachedSheet || self.closing) return;
+    [self.window makeFirstResponder:self.web];
+    [self perform:sender.representedObject payload:nil];
+}
 - (void)tab:(NSPopUpButton *)sender { [self perform:@"tab" payload:@{@"name":sender.titleOfSelectedItem}]; }
 - (void)menuTab:(NSMenuItem *)sender { [self.workspace selectItemWithTitle:sender.title]; [self perform:@"tab" payload:@{@"name":sender.title}]; }
 - (void)confirmClosing:(void (^)(BOOL))completion {

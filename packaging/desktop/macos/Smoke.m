@@ -48,6 +48,13 @@ static void JS(WKWebView *web, NSString *script) {
     [web evaluateJavaScript:script completionHandler:^(id value,NSError *error){ failure = error; done = YES; }];
     Check(Wait(20,^BOOL{ return done; }),@"page action timeout"); Check(!failure,failure.localizedDescription);
 }
+static void ActivateMenu(KKWorkshop *host, NSString *menu, NSString *item) {
+    NSMenu *submenu = [NSApp.mainMenu itemWithTitle:menu].submenu;
+    NSInteger index = [submenu indexOfItemWithTitle:item];
+    Check(submenu && index >= 0,item);
+    [submenu performActionForItemAtIndex:index];
+    Check(Wait(5,^BOOL{ return ![[host valueForKey:@"busy"] boolValue]; }),item);
+}
 static BOOL CaptureOwnWindow(NSWindow *window,NSString *path) {
     if (@available(macOS 14.4,*)) {
         __block BOOL done = NO; __block NSData *png = nil;
@@ -91,6 +98,16 @@ static void Run(KKWorkshop *host,NSURL *url,NSString *imagePath) {
     Invoke(host,@"redo",nil);
     // Use the editor's stock art workflow to exercise a richer engraving.
     WKWebView *web = [host valueForKey:@"web"];
+    [host.window makeFirstResponder:fields[0]];
+    ActivateMenu(host,@"Workspace",@"CAD Command…");
+    JS(web,@"if (document.activeElement.id !== 'cad-command') throw Error('Command focus'); document.execCommand('insertText',false,'view top');");
+    ActivateMenu(host,@"Edit",@"Undo");
+    JS(web,@"if (document.activeElement.value !== '') throw Error('Command undo');");
+    ActivateMenu(host,@"Edit",@"Redo");
+    JS(web,@"if (document.activeElement.value !== 'view top') throw Error('Command redo');");
+    ActivateMenu(host,@"Workspace",@"CAD Script…");
+    JS(web,@"if (!document.getElementById('cad-script-dialog').open || document.activeElement.id !== 'cad-script-source') throw Error('Script focus'); document.getElementById('cad-script-dialog').close();");
+    Check([Invoke(host,@"state",nil)[@"objects"] count] == 2,@"CAD authoring preserved the drawing");
     JS(web,@"(()=>{const t=CNCTemplates.templates.find(t=>/rosette/i.test(t.name)); if(!t) throw Error('missing rosette'); addGenerated(t.name,t.paths.map(p=>p.map(([x,y])=>[90+x,65+y])));})()");
     Invoke(host,@"preview",nil);
     NSDictionary *code = Invoke(host,@"export",nil); Check([code[@"content"] containsString:@"G1"],@"G-code after preview");

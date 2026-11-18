@@ -22,6 +22,22 @@ def register_design_routes(app):
     def rebuild_solid():
         return jsonify(build_submitted_model())
 
+    @app.post('/api/cad-script')
+    def preview_script():
+        from .scad_geometry import build_script
+        from .solid_cad import Dimensions, _rings
+
+        payload = request.get_json()
+        if not isinstance(payload, dict):
+            raise ValueError('Supply a CAD script')
+        parameters = Dimensions(payload.get('parameters', {})).script_parameters(payload.get('overrides', {}))
+        dimension, shape = build_script(payload.get('source'), parameters)
+        if dimension == 2:
+            return jsonify(dimension=2, profiles=_rings(shape), bounds=shape.bounds(), area=shape.area())
+        mesh = shape.to_mesh64()
+        return jsonify(dimension=3, vertices=mesh.vert_properties[:, :3].tolist(),
+                       triangles=mesh.tri_verts.tolist(), bounds=shape.bounding_box(), volume=shape.volume())
+
     @app.post('/api/solid-cad/sketch-points')
     def resolve_sketch_points():
         from .solid_cad import Dimensions
@@ -97,12 +113,11 @@ def register_design_routes(app):
 
     @app.post('/api/rotary')
     def rotary_export():
-        from .cam import generate
-        from .rotary import wrap_job
+        from .rotary import generate_rotary
         data=request.get_json()
         if not isinstance(data,dict) or not isinstance(data.get('project'),dict):
             raise ValueError('Provide a project and rotary setup')
-        return jsonify(wrap_job(generate(data['project']),data.get('options',{})))
+        return jsonify(generate_rotary(data['project'],data.get('options',{})))
 
     @app.post('/api/geometry')
     def geometry():

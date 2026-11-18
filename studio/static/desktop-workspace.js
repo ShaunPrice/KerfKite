@@ -86,8 +86,16 @@
       objects = CNCLayout.apply(objects,[{index:selected,dx:p.x-x,dy:p.y-y}]);
       invalidate(); draw(); break;
     }
-    case 'undo': restore(-1); break;
-    case 'redo': restore(1); break;
+    case 'undo':
+    case 'redo': {
+      // Native menu accelerators arrive here before the web view handles text editing.
+      const focus = document.activeElement;
+      if (focus?.matches('#cad-command, dialog[open] input, dialog[open] textarea, [contenteditable=true]')) document.execCommand(action);
+      else if (!document.querySelector('dialog[open]')) restore(action === 'undo' ? -1 : 1);
+      break;
+    }
+    case 'command-line': window.KerfKiteCAD.focusCommand(); break;
+    case 'script-editor': window.KerfKiteCAD.openSelected(); break;
     case 'tab': {
       const tab = document.getElementById(tabs.get(p.name));
       if (!tab) throw Error('Unknown workspace tab');

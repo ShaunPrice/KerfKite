@@ -1,7 +1,7 @@
 // Preview conversions in a draft before adding anything to the open document.
 (() => {
   'use strict';
-  const extensions = 'lbrn lbrn2 lbdev lbprefs lbzip clb lbset settings dxf pdf nc ngc cnc tap gcode plt hpgl hpg ini'.split(' ');
+  const extensions = 'scad lbrn lbrn2 lbdev lbprefs lbzip clb lbset settings dxf pdf nc ngc cnc tap gcode plt hpgl hpg ini'.split(' ');
   const program = /\.(dxf|nc|ngc|cnc|tap|gcode|plt|hpgl|hpg|ini)$/i;
   const ext = name => name.split('.').pop().toLowerCase();
   const panel=document.createElement('section');
@@ -72,6 +72,7 @@
     reader.readAsDataURL(file);
   });
   async function inspect(file, member=false){
+    if(file && ext(file.name)==='scad'){clear();await window.KerfKiteCAD.openFile(file);return;}
     if(member){revision++;draft=null;$('import-review').hidden=true;}else clear();
     const id=revision;
     if(!file)throw Error('Choose a project, settings file or cutter program');

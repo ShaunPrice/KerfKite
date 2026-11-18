@@ -517,6 +517,8 @@ def _part_shape(model):
         elif kind == 'step':
             shape = _read_shape(_decode(f.get('content')))
         else:
+            if kind == 'script':
+                raise ValueError('Script surfaces are tessellated. Export this part as STL, or suppress scripted features for exact STEP exchange.')
             raise ValueError('This feature has no STEP translation')
         for axis, degrees in zip(np.eye(3), d.vector(f.get('rotation', [0, 0, 0]), 3)):
             if degrees:

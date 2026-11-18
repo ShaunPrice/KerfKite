@@ -116,15 +116,15 @@ Check that every enabled object uses the same head, protocol, work area and comp
 
 | Symptom | Check and next action |
 | --- | --- |
-| Rotary export asks for router/GRBL source | Select router mode and GRBL source geometry. The export converts that source into LinuxCNC G93/A-axis instructions; it is not sending GRBL rotary commands. |
-| File cannot be run by Studio's normal sender | Expected: rotary is export-only for configured LinuxCNC hardware. Current GRBL/Marlin senders do not support this file. |
+| Rotary target rejects the job | Select a listed rotary postprocessor and supported head. Open the [rotary guide](ROTARY.md) for its axes, controller checks and export mode. |
+| A job previews but the machine cannot start it | Check the selected serial protocol and the controller’s independent-axis readback. A dual-gantry firmware profile can report only XYZ. Generate a fresh rotary preview after editing the design or dimensions. |
 | Seam endpoint check fails | Check the `π × diameter` design span and align opposite-edge endpoints in axial position and depth. The comparison tolerance is 0.01 mm. |
 | Seam check passes but physical seam is wrong | Measure the real diameter and verify seam zero, axis direction and physical alignment. The endpoint check does not establish tangency or compensate an inaccurate stock diameter. |
-| Rotary uses X instead of the other design axis | Expected: the unwrapped design coordinate becomes axial X; A rotates around X and Z is radial. Check the target machine configuration before execution. |
+| Rotary uses X instead of the other design axis | Read the axial and radial output axes for your selected rotation axis. Establish the corresponding axial origin, seam angle and surface zero on the machine. |
 | Angles exceed 360° | Expected for a continuous unwrapped A axis. Do not apply modulo-360 rewriting: it can change the intended movement direction/path. |
 | Cut crosses the cylinder centre | Reduce depth or use an appropriate cylinder; the exporter rejects Z at or beyond the centre radius. |
 
-The rotary preview remains planar. G93 preserves nominal unwrapped movement timing; actual surface speed changes with radius, and the target controller's acceleration/axis limits still matter.
+The cylindrical preview shows the programmed angular travel. Controller acceleration, chuck clearance and material removal still require physical verification.
 
 ## Controller and manual input
 

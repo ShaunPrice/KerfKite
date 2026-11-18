@@ -1,1 +1,36 @@
-{"stdio_initialize": true, "tools": ["list_templates", "get_template", "create_artwork", "save_template", "preview_job", "export_gcode"], "artwork_files_created": true, "template_bundle_created": true, "cam_lines": 208, "gcode_export": true, "invalid_id_rejected": true}
+{
+    "stdio_initialize": true,
+    "tools": [
+        "design_actions",
+        "design_call",
+        "workshop_state",
+        "workshop_controls",
+        "workshop_action",
+        "workshop_command",
+        "workshop_macros",
+        "workshop_save_macro",
+        "workshop_macro",
+        "workshop_export",
+        "workshop_upload",
+        "workshop_read_file",
+        "workshop_text",
+        "workshop_print",
+        "workshop_snapshot",
+        "list_templates",
+        "get_template",
+        "create_artwork",
+        "save_template",
+        "preview_job",
+        "export_gcode"
+    ],
+    "artwork_files_created": true,
+    "template_bundle_created": true,
+    "cam_lines": 208,
+    "gcode_export": true,
+    "invalid_id_rejected": true,
+    "editor_discovery": true,
+    "macro_part_round_trip": true,
+    "pdf_and_stl_export": true,
+    "artifact_content_round_trip": true,
+    "snapshot": true
+}

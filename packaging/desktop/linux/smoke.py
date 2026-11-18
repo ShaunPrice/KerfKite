@@ -60,6 +60,19 @@ def run(url):
             win.view.evaluate_javascript(script, -1, None, None, None, None, None)
         else:
             win.view.run_javascript(script, None, None, None)
+    def check_web(expression, label):
+        result = []
+        def done(view, value, *_):
+            if hasattr(view, "evaluate_javascript_finish"):
+                result.append(view.evaluate_javascript_finish(value).to_boolean())
+            else:
+                result.append(view.run_javascript_finish(value).get_js_value().to_boolean())
+        if hasattr(win.view, "evaluate_javascript"):
+            win.view.evaluate_javascript(expression, -1, None, None, None, done, None)
+        else:
+            win.view.run_javascript(expression, None, done, None)
+        until(lambda: bool(result), label)
+        assert result[0], label
     win.error = failed
     until(lambda: "documentId" in win.last, "the simulator bridge")
     initial = len(win.store)
@@ -93,6 +106,18 @@ def run(url):
     win.command("redo")
     until(lambda: not win.busy, "redo")
     print("Shapes, selection, positioning and history passed", flush=True)
+    bar = next(widget for widget in win.get_child().get_children() if isinstance(widget, Gtk.MenuBar))
+    workspace = next(item for item in bar.get_children() if item.get_label().replace("_", "") == "Workspace")
+    entries = {item.get_label().replace("_", ""): item for item in workspace.get_submenu().get_children()}
+    win.move_x.grab_focus()
+    entries["CAD command…"].activate()
+    until(lambda: not win.busy, "command menu")
+    check_web("document.activeElement.id === 'cad-command'", "keyboard focus in command line")
+    entries["CAD script…"].activate()
+    until(lambda: not win.busy, "script menu")
+    check_web("document.activeElement.id === 'cad-script-source' && document.getElementById('cad-script-dialog').open", "keyboard focus in script editor")
+    check_web("(document.getElementById('cad-script-dialog').close(), true)", "close script editor")
+    print("Native CAD command and script menus passed", flush=True)
 
     with tempfile.TemporaryDirectory() as directory:
         project = Path(directory, "sample.cncstudio.json")

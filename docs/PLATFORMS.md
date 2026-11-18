@@ -2,7 +2,7 @@
 
 See the [single-board computer guide](SBC.md) for board-specific downloads and the offline Browser Editor.
 
-[Download the desktop installers](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.5.1) or the [Android companion](ANDROID.md). The table below records source-installation and hardware evidence. See the [installation guide](INSTALL.md) for the graphical installers.
+[Download the desktop installers](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.6.0) or the [Android companion](ANDROID.md). The table below records source-installation and hardware evidence. See the [installation guide](INSTALL.md) for the graphical installers.
 
 **Studio 0.5.1 native desktop verification.** The published Windows installer and both executables accepted Windows 11 Pro x64 build 26300. In a signed-in desktop session, the packaged workbench created and moved geometry, handled unsaved-document cancellation, opened the materials guide, saved and reopened a project, previewed CAM and exported G-code. The Windows Server runner verified rejection before installation. Windows 10 x64 admission cases passed automated tests. A live Windows 10 desktop run is pending.
 

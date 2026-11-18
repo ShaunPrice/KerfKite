@@ -12,7 +12,7 @@ Use **Find a tool** in the header or press **Ctrl+K** (**Command+K** on Mac). Se
 | Hosted HTTPS editor | Open the configured HTTPS address and log in | Design, server CAM, private server files and receiver uploads; no machine-start endpoint |
 | Local filesystem | Open `studio/static/index.html`, keeping the complete static folder together | Design and supported contour CAM without login; portable project/SVG/G-code export; authenticated HTTPS receiver upload |
 
-The filesystem mode supports router, laser and knife contour generation, including supported depth/power paths and ordered contour operations. LinuxCNC rotary wrapping of supported existing contour jobs is also implemented locally. Advanced area operations, holding tabs, relief, solid extrusion and stock simulation require the Python server. The new offline rotary calculations passed parity tests, but direct file:// browser acceptance was blocked by the automation browser URL policy and remains unverified. An unavailable operation produces an error rather than silently substituting a different toolpath. See [HTTPS and local-file setup](WEB.md).
+The filesystem editor generates supported router, laser and knife contours, including ordered operations and per-vertex depths or powers. Its rotary post supports grblHAL and independent-A xPRO V5 router or laser files, plus LinuxCNC router files. Advanced area operations, holding tabs, relief, solid extrusion and stock simulation require the Python service. [HTTPS and local-file setup](WEB.md)
 
 ## Find the tools
 
@@ -31,7 +31,7 @@ The centre holds the work area, toolpath controls, messages and expandable G-cod
 | --- | --- |
 | CAM | Head, protocol, operation, feeds/depths, compensation, laser settings and ordered object operations |
 | 3D relief | Heightmap/STL preparation and cutter-contact settings |
-| Rotary | Diameter, wrap direction, seam checks and LinuxCNC rotary export |
+| Rotary | Diameter, continuous angle, seam checks, rotary preview, file export and supported simulator/controller streaming. [Rotary guide](ROTARY.md) |
 | Control | Machine profile, connection-related setup, jogging, head mode, job/phone controls and manual pendant input |
 | Quote | Cost estimates, quote output and design printing |
 
@@ -151,13 +151,7 @@ The plateau adds one cutter diameter to the nominal width along the path. Inspec
 
 ## Rotary design and export
 
-Rotary is an **export-only LinuxCNC router workflow**. The current GRBL and Marlin senders do not run the exported A-axis file.
-
-Enter the measured cylinder diameter, design wrap axis, starting angle and direction. **Set design span to one revolution** sets that design dimension to `π × diameter`. The other design coordinate is axial; the export emits axial motion as X, rotation as continuous A degrees and radial motion as Z. Physically configure A rotation around X and establish the radial stock-surface zero.
-
-Use **Add seamless periodic border** for a full-turn example. **Check matching seam endpoints** compares endpoint axial positions and depths within 0.01 mm. Passing that check does not prove tangent continuity, true stock circumference or physical alignment.
-
-Export requires router mode and GRBL source geometry; the server or supported offline contour engine converts it to LinuxCNC G93 inverse-time feed. The JavaScript/Python parity checks cover the wrap calculations. The new direct file:// browser workflow remains unverified because the automation browser blocked the file URL; test it in your actual browser before depending on it. Angles remain continuous beyond 360° rather than wrapping to zero. Source positions within 0.00051 mm of an integer circumference are snapped to whole turns to account for source CAM decimal rounding. Preview remains planar. Review the file in the target LinuxCNC configuration before any physical execution; fixtures and holder collisions are not simulated.
+Use the **Rotary** tab to wrap a router or laser design around a cylinder, inspect the seam and preview the posted path. Enter the measured diameter, design wrap axis and physical rotary axis. A periodic border is one full-turn example. Use **Stream reviewed rotary job** with a qualified grblHAL or independent-A xPRO V5 workstation connection, or export the file. LinuxCNC supports router file export. The original xPRO V5 dual-Y gantry setup needs a separate independent rotary motor channel to perform independent fourth-axis machining. [Rotary setup, simulator walkthrough and controller requirements](ROTARY.md)
 
 ## Local machine, keyboard and gamepad control
 

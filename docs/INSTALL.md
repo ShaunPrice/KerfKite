@@ -4,12 +4,12 @@ See the [single-board computer guide](SBC.md) for board-specific downloads and t
 
 ## Desktop or phone installation
 
-Download the desktop package from the [official KerfKite release](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.5.1).
+Download the desktop package from the [official KerfKite release](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.6.0).
 
 * **Windows 10 or Windows 11 on Intel/AMD x64.** Open the setup wizard and choose **Install**. It installs for your account and adds KerfKite Studio to Start. Windows may display a SmartScreen warning for this unsigned installer. Check the download came from the official release. On a managed PC, follow your organisation’s software approval process.
 * **macOS.** In **Apple menu → About This Mac**, check whether the computer has an Apple chip or an Intel processor. Open the matching DMG, drag KerfKite Studio onto Applications and launch it there. This community build has an ad-hoc signature and has not been notarised by Apple. If macOS blocks it, review the app under **System Settings → Privacy & Security** after the first open attempt. Managed Macs may require administrator approval.
 * **Raspberry Pi OS, Debian and Ubuntu.** Use a 64-bit graphical desktop. Open the ARM64 DEB on a Pi 4/5 or other ARM64 system, or the AMD64 DEB on an Intel/AMD PC. Choose **Install** in the package manager and open KerfKite Studio from the applications menu. On another compatible glibc desktop with a browser and xdg-open, extract the matching Linux archive to a permanent folder and open the KerfKite executable inside.
-* **Android.** Download the [Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-Pocket-Android.apk) on your phone, open **My Files → Downloads**, tap the APK and choose **Install**. If prompted, allow this source to install apps and revoke that permission afterwards. Device management and Samsung Auto Blocker can restrict sideloading. If replacing a development APK, export your draft first. Android requires the previous build to be removed if its signing certificate differs. [Pocket user guide](ANDROID.md)
+* **Android.** Download the [Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-Pocket-Android.apk) on your phone, open **My Files → Downloads**, tap the APK and choose **Install**. If prompted, allow this source to install apps and revoke that permission afterwards. Device management and Samsung Auto Blocker can restrict sideloading. If replacing a development APK, export your draft first. Android requires the previous build to be removed if its signing certificate differs. [Pocket user guide](ANDROID.md)
 
 ### First launch
 
@@ -71,7 +71,7 @@ If the OS Python is older than 3.10, use a supported newer OS/Python installatio
 CNC_PYTHON=python3.12 sh scripts/install.sh --web --mcp
 ```
 
-The `--web` installer option adds HTTPS services; `--mcp` adds the artwork MCP server. Omit either option if you do not need it. Open **http://127.0.0.1:8765** on the Pi's desktop browser. This local editor listener deliberately binds to loopback.
+The `--web` installer option adds HTTPS services; `--mcp` adds the assistant workshop MCP server. Omit either option if you do not need it. Open **http://127.0.0.1:8765** on the Pi's desktop browser. This local editor listener deliberately binds to loopback.
 
 ## 3. Install on macOS
 
@@ -189,9 +189,9 @@ The console displays a fresh pairing URL containing a random token. Replace its 
 
 Monitor control is distinct from the upload inbox. Releasing a software pendant or sending feed hold is not a physical emergency stop, and accepted/buffered motion can continue depending on firmware.
 
-## MCP artwork integration
+## MCP assistant workshop
 
-Install with `--mcp`, then configure your MCP client to launch the absolute path to `.venv/bin/python` (Windows: `.venv\Scripts\python.exe`) with arguments `-m`, `studio.mcp_server` and the project directory as its working directory. This is a stdio artwork/template service. See [MCP.md](MCP.md) for the actual tools and a client configuration example. No MCP setup automatically connects or moves a machine.
+Install with `--mcp`, then configure your MCP client to launch the absolute path to `.venv/bin/python` (Windows: `.venv\Scripts\python.exe`) with arguments `-m`, `studio.mcp_server` and the project directory as its working directory. The MCP installer option installs the workshop browser unless an existing Chromium executable is configured. The [assistant setup guide](MCP.md) covers Claude, ChatGPT, optional HTTP hosting and access to the workshop. No MCP setup automatically connects or moves a machine.
 
 ## Updating, stopping and removing
 

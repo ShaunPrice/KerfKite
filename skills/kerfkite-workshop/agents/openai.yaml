@@ -1,0 +1,4 @@
+interface:
+  display_name: "KerfKite Workshop"
+  short_description: "Design, simulate and exchange KerfKite CNC projects"
+  default_prompt: "Use $kerfkite-workshop to build a 70 × 40 × 5 mm mounting plate with four 4 mm holes and export the editable project."

@@ -16,3 +16,5 @@ When **Open directly next time** is selected, the next launch opens the native s
 The native file commands read and write ordinary files. Browser-library saves belong to the browser or embedded engine profile that created them. To bring an existing browser-library project into a native window, download its portable project file, then open that file from the native File menu.
 
 The full CAD, simulation and advanced machining panels use the shared editor inside the desktop window. The Android companion has its own interface and connects to the workshop service for pendant use.
+
+To work from the keyboard, focus the canvas and press **/** for drawing and view commands. Choose **Script…** to preview and edit a parameterised drawing or solid. [CAD scripting tutorial and shortcut reference](CAD-SCRIPTING.md)

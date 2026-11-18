@@ -1,14 +1,15 @@
 # Controller compatibility
 
-The CAM selector now has eight implemented profiles. A G-code postprocessor is not a live machine driver. None of these profiles has been physically commissioned in this project.
+The CAM selector lists the implemented profiles. A G-code postprocessor is not a live machine driver. None of these profiles has been physically commissioned in this project.
 
 | Profile | Studio connection | File operations |
 | --- | --- | --- |
 | GRBL / GRBL-ESP32 | USB serial, 115200 | Router, dynamic laser, passive drag knife |
+| xPRO V5 independent A | GRBL-ESP32 serial, 115200 | Router and dynamic laser, including a commissioned independent rotary A setup. Confirm the firmware and machine readback in the [rotary guide](ROTARY.md). |
 | FluidNC | Experimental GRBL-compatible USB serial, 115200 | Router, dynamic laser, passive drag knife |
-| grblHAL | Experimental GRBL-compatible USB serial, 115200 | Router, dynamic laser, passive drag knife |
+| grblHAL | Experimental GRBL-compatible USB serial, 115200 | Router, dynamic laser, passive drag knife and supported independent rotary axes |
 | Marlin CNC | Experimental USB serial, checksum/resend and M400 | Router, passive drag knife; CNC spindle configuration required |
-| LinuxCNC | Export only | XYZ router/relief and passive drag knife; separate continuous-A rotary exporter |
+| LinuxCNC | Export only | XYZ router/relief and passive drag knife; continuous A/B/C cylindrical router export |
 | Mach3 Mill | Export only | XYZ router/relief and passive drag knife |
 | Mach4 Mill / Router | Export only | XYZ router/relief and passive drag knife |
 | UCCNC | Export only | XYZ router/relief and passive drag knife |

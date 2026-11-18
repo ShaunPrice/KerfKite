@@ -36,8 +36,24 @@ def run(editor, controller, jobs):
             phone.goto(f'http://127.0.0.1:{receiver.server_port}/#token={token}')
             connect_editor(editor)
 
+            def wait_for_new_arm():
+                # Start displays the epoch from the last real status poll. Wait for this
+                # workstation preview, even if the previous arm had also enabled Start.
+                phone.wait_for_function("epoch => lastState?.armed && lastState.control_epoch === epoch",
+                                       arg=jobs.control_epoch)
+                expect(phone.locator('#start')).to_be_enabled()
+
             arm_preview(editor)
-            expect(phone.locator('#start')).to_be_enabled()
+            wait_for_new_arm()
+            # A phone seeing the earlier armed state cannot authorize a replacement preview.
+            previous_status = phone.evaluate('() => lastState')
+            phone.route('**/api/status', lambda route: route.fulfill(json=previous_status))
+            arm_preview(editor)
+            phone.locator('#start').click()
+            expect(phone.locator('#actionResult')).to_contain_text('Controller controls changed')
+            assert not controller.status()['active'] and jobs.status()['armed']
+            phone.unroute('**/api/status')
+            wait_for_new_arm()
             editor.get_by_role('tab', name='CAM', exact=True).click()
             # A temporarily failed disarm can outlast a normal status poll after reconnection.
             editor.route('**/api/disarm', lambda route: route.abort())
@@ -54,7 +70,7 @@ def run(editor, controller, jobs):
             editor.unroute('**/api/disarm')
 
             arm_preview(editor)
-            expect(phone.locator('#start')).to_be_enabled()
+            wait_for_new_arm()
             phone.locator('#start').click()
             expect(phone.locator('#actionResult')).to_contain_text('start accepted', timeout=5000)
             expect(phone.locator('#start')).to_be_disabled()
@@ -62,7 +78,7 @@ def run(editor, controller, jobs):
             expect(phone.locator('#state')).to_have_text('Idle')
 
             arm_preview(editor)
-            expect(phone.locator('#start')).to_be_enabled()
+            wait_for_new_arm()
             # Stop is available on the same phone while an owner reply is pending.
             checks = []
             editor.route('**/api/arm/check', lambda route: checks.append(route))
@@ -79,7 +95,7 @@ def run(editor, controller, jobs):
             assert not controller.status()['active']
             expect(phone.locator('#actionResult')).to_contain_text('stop accepted')
             arm_preview(editor)
-            expect(phone.locator('#start')).to_be_enabled()
+            wait_for_new_arm()
             editor.context.set_offline(True)
             editor.close()
             phone.locator('#start').click()

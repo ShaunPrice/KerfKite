@@ -123,7 +123,9 @@ class Workbench(Gtk.Window):
                        ("_Export G-code…", None, self.export), ("_Close", "<Ctrl>w", self.close)])
         menu("_Edit", [("_Undo", "<Ctrl>z", lambda: self.command("undo")),
                        ("_Redo", "<Ctrl><Shift>z", lambda: self.command("redo"))])
-        menu("_Workspace", [(tab, None, lambda tab=tab: self.command("tab", {"name": tab})) for tab in TABS])
+        menu("_Workspace", [("CAD _command…", "<Ctrl><Shift>k", lambda: self.open_authoring("command-line")),
+                            ("CAD _script…", None, lambda: self.open_authoring("script-editor"))] +
+             [(tab, None, lambda tab=tab: self.command("tab", {"name": tab})) for tab in TABS])
         return bar
 
     def toolbar(self):
@@ -371,6 +373,11 @@ class Workbench(Gtk.Window):
         self.last = state
         self.set_title(("• " if state.get("dirty") else "") + state["title"] + " — KerfKite Studio")
         self.status.set_text(f"{state.get('mode', '')}   ·   {len(objects)} objects")
+
+    def open_authoring(self, action):
+        if not self.busy:
+            self.view.grab_focus()
+            self.command(action)
 
     def command(self, action, payload=None, success=None):
         if self.busy:

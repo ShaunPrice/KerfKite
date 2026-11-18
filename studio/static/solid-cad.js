@@ -12,7 +12,13 @@
   const operations = {add:'Join', cut:'Cut', intersect:'Intersect'};
   const empty = () => ({version:1,parameters:{},features:[]});
   const clone = value => JSON.parse(JSON.stringify(value));
-  const view = {yaw:-.72, pitch:.6, zoom:1};
+  const isometric = [-Math.PI / 4, Math.asin(1 / Math.sqrt(3))];
+  const orientations = new Map([
+    ['iso',isometric], ['top',[0,Math.PI/2]], ['bottom',[0,-Math.PI/2]],
+    ['front',[0,0]], ['back',[Math.PI,0]], ['right',[-Math.PI/2,0]], ['left',[Math.PI/2,0]]
+  ]);
+  const defaultView = () => ({yaw:isometric[0],pitch:isometric[1],zoom:1,panX:0,panY:0});
+  const view = defaultView();
   let model = empty(), index = -1, mesh = null, revision = 0, timer, request = 0;
   let history = [], future = [], lesson = null, loadFailed = false;
 
@@ -35,7 +41,7 @@
     <section id="solid-lesson" hidden><strong id="solid-lesson-title"></strong><p id="solid-instruction"></p>
       <button id="solid-keep" hidden>Keep lesson model</button> <button id="solid-exit">Exit tutorial</button></section>
     <div class="solid-view"><canvas id="solid-canvas" tabindex="0" aria-label="3D model viewport. Arrow keys orbit. Plus and minus zoom."></canvas>
-      <span class="solid-view-units">mm</span><span class="solid-view-hint">Drag to orbit · Scroll to zoom</span></div>
+      <span class="solid-view-units">mm</span><span class="solid-view-hint">Drag to orbit · Shift-drag to pan · Scroll to zoom</span></div>
     <div class="solid-tools"><button id="solid-fit">Fit isometric</button><button id="solid-top">Top view</button>
       <button id="solid-build">Rebuild</button><button id="solid-export">Export STL</button></div>
     <p id="solid-status" role="status"></p>
@@ -187,7 +193,18 @@
   function featureForm() {
     const host=$('solid-form');host.replaceChildren();
     const f=model.features[index];if (!f) return;
-    const title=document.createElement('h3');title.textContent=f.kind==='step'?'Imported STEP solid':(types[f.kind]||'Unknown feature');host.append(title);
+    const title=document.createElement('h3');title.textContent=f.kind==='script'?'Scripted solid':f.kind==='step'?'Imported STEP solid':(types[f.kind]||'Unknown feature');host.append(title);
+    if(f.kind==='script'){
+      host.append(button('Edit CAD script…',()=>window.KerfKiteCAD.openSelected()));
+      for(const [param,value] of Object.entries(f.scriptParameters||{})){
+        const input=field(host,param,value,()=>{});
+        input.type='number';input.step='any';input.min='-100000';input.max='100000';
+        input.onchange=()=>{
+          if(input.value===''||!input.validity.valid){input.value=f.scriptParameters[param];return;}
+          edit(()=>{f.scriptParameters[param]=input.valueAsNumber;});
+        };
+      }
+    }
     const name=field(host,'Feature name',f.id,value=>{edit(()=>{f.id=value;},false,name);features();});
     select(host,'Boolean operation',operations,f.op||'add',op=>edit(()=>{f.op=op;}));
     function scalar(label,key,value) {
@@ -329,7 +346,10 @@
   $('solid-build').onclick=rebuild;
   const canvas=$('solid-canvas');
   function paint() {
-    if(stage.hidden) return;
+    if(!stage.hidden) paintMesh(canvas,mesh,view,model.features.length?'Awaiting solid geometry':'Add a feature to start modelling');
+  }
+  function paintMesh(canvas,mesh,camera,emptyMessage='No geometry to display') {
+    const view={...defaultView(),...camera};
     const rect=canvas.getBoundingClientRect();
     if(!rect.width || !rect.height) return;
     const pixelRatio=Math.min(window.devicePixelRatio||1,2);
@@ -340,7 +360,7 @@
     ctx.clearRect(0,0,w,h);
     if(!mesh){
       ctx.fillStyle='#d6e2e8';ctx.textAlign='center';ctx.font=(14*pixelRatio)+'px system-ui';
-      ctx.fillText(model.features.length?'Awaiting solid geometry':'Add a feature to start modelling',w/2,h/2);
+      ctx.fillText(emptyMessage,w/2,h/2);
       return;
     }
     const centre=[0,1,2].map(i=>(mesh.bounds[i+3]+mesh.bounds[i])/2);
@@ -362,7 +382,7 @@
     }).sort((a,b)=>a.depth-b.depth);
     for(const {tri,light} of faces){
       ctx.beginPath();
-      tri.forEach((i,j)=>{const p=pts[i];ctx[j===0?'moveTo':'lineTo'](w/2+p[0]*scale,h/2-p[1]*scale);});
+      tri.forEach((i,j)=>{const p=pts[i];ctx[j===0?'moveTo':'lineTo'](w/2+view.panX*pixelRatio+p[0]*scale,h/2+view.panY*pixelRatio-p[1]*scale);});
       ctx.closePath();ctx.fillStyle='hsl(188 40% '+(43+light*33)+'%)';
       ctx.fill();ctx.strokeStyle=ctx.fillStyle;ctx.lineWidth=.6*pixelRatio;ctx.stroke();
     }
@@ -374,24 +394,53 @@
     });
   }
   new ResizeObserver(paint).observe(canvas);
-  let drag=null;
-  canvas.onpointerdown=e=>{drag=[e.clientX,e.clientY];canvas.setPointerCapture(e.pointerId);};
-  function orbit(dx,dy) {
-    view.yaw+=dx;view.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,view.pitch+dy));paint();
+  // Pan is expressed in CSS pixels, independent of display pixel ratio.
+  function camera(command, args=[]) {
+    const orientation = orientations.get(command);
+    if (orientation) {
+      [view.yaw,view.pitch]=orientation;
+    } else if (command==='fit') {
+      Object.assign(view,{zoom:1,panX:0,panY:0});
+    } else if (command==='orbit') {
+      view.yaw=(view.yaw+args[0]*Math.PI/180)%(2*Math.PI);
+      view.pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,view.pitch+args[1]*Math.PI/180));
+    } else if (command==='pan') {
+      view.panX+=args[0]; view.panY+=args[1];
+    } else if (command==='zoom') {
+      view.zoom=Math.max(.05,Math.min(128,view.zoom*args[0]));
+    } else {
+      throw Error('Unknown 3D view command.');
+    }
+    paint();
+    return {...view};
   }
-  canvas.onpointermove=e=>{if(drag){orbit((e.clientX-drag[0])*.012,(e.clientY-drag[1])*.012);drag=[e.clientX,e.clientY];}};
-  canvas.onlostpointercapture=()=>drag=null;
-  function zoom(factor){view.zoom=Math.max(.25,Math.min(6,view.zoom*factor));paint();}
-  canvas.addEventListener('wheel',e=>{e.preventDefault();zoom(Math.exp(-e.deltaY*.0015));},{passive:false});
-  canvas.onkeydown=e=>{
-    const key=e.key;
-    if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','+','=','-'].includes(key))return;
-    e.preventDefault();e.stopPropagation();
-    if(key.startsWith('Arrow'))orbit((key==='ArrowLeft'?-.1:key==='ArrowRight'?.1:0),(key==='ArrowDown'?-.1:key==='ArrowUp'?.1:0));
-    else zoom(key==='-'?.9:1.1);
+  window.CNCSolidCamera = {apply:camera,state:()=>({...view}),paintMesh,
+    restore(saved){for(const key of Object.keys(view))view[key]=saved[key];paint();}
   };
-  $('solid-fit').onclick=()=>{Object.assign(view,{yaw:-.72,pitch:.6,zoom:1});paint();};
-  $('solid-top').onclick=()=>{Object.assign(view,{yaw:0,pitch:Math.PI/2,zoom:1});paint();};
+  let drag=null;
+  canvas.onpointerdown=e=>{
+    if (drag || (e.button!==0 && e.button!==1)) return;
+    drag={id:e.pointerId,pan:e.button===1||e.shiftKey,x:e.clientX,y:e.clientY};
+    canvas.focus({preventScroll:true});
+    canvas.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  };
+  canvas.onpointermove=e=>{
+    if (!drag || drag.id!==e.pointerId) return;
+    const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
+    if (drag.pan) camera('pan',[dx,dy]);
+    else camera('orbit',[dx*.7,dy*.7]);
+    drag.x=e.clientX; drag.y=e.clientY;
+  };
+  canvas.onlostpointercapture=()=>{drag=null;};
+  canvas.addEventListener('wheel',e=>{
+    if (e.ctrlKey || e.metaKey) return;
+    e.preventDefault();
+    const delta=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?canvas.clientHeight:1);
+    camera('zoom',[Math.exp(-Math.max(-1000,Math.min(1000,delta))*.0015)]);
+  },{passive:false});
+  $('solid-fit').onclick=()=>{Object.assign(view,defaultView());paint();};
+  $('solid-top').onclick=()=>{Object.assign(view,{zoom:1,panX:0,panY:0});camera('top');};
   async function stl() {
     if (!mesh) throw Error('Rebuild the solid before exporting.');
     const stamp=revision;
@@ -513,6 +562,29 @@
   }
   window.CNCSolidExchange = {
     model: () => clone(model),
+    selectedScript: () => model.features[index]?.kind==='script' ? clone(model.features[index]) : null,
+    async applyScript(source, id, expectedModel, options={}) {
+      if (lesson || loadFailed) throw Error('Exit the CAD tutorial or open a supported project before editing scripted features.');
+      if (JSON.stringify(model)!==expectedModel) throw Error('The part changed. Reopen the script before applying.');
+      const proposed=clone(model);
+      let position=id===null ? -1 : proposed.features.findIndex(f=>f.id===id && f.kind==='script');
+      if (id!==null && position===-1) throw Error('The scripted feature has been removed.');
+      if (position===-1) {
+        if (proposed.features.length>=64) throw Error('A part may contain up to 64 features.');
+        const stem=options.name?.slice(0,64)||'script';
+        let n=1; while (proposed.features.some(f=>f.id===stem+n)) n++;
+        position=proposed.features.length;
+        proposed.features.push({id:stem+n,kind:'script',op:'add',source,
+          ...(options.overrides?{scriptParameters:clone(options.overrides)}:{})});
+      } else {
+        proposed.features[position].source=source;
+      }
+      const start=revision;
+      await api('solid-cad',{model:proposed});
+      if (start!==revision) throw Error('The part changed during the build. Reopen the script before applying.');
+      edit(()=>{model=proposed;index=position;});
+      return proposed.features[position].id;
+    },
     async addStep(content) {
       if (lesson || loadFailed) throw Error('Exit the part lesson or open a supported project before adding STEP geometry.');
       if (model.features.length >= 64) throw Error('A part may contain up to 64 features.');

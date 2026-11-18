@@ -43,6 +43,22 @@ namespace KerfKite {
                 "Cancelling New lost the current drawing.");
         }
 
+        static async Task CheckCadMenus(Workbench form) {
+            var workspace = form.MainMenuStrip.Items.OfType<ToolStripMenuItem>().Single(menu => menu.Text == "&Workspace");
+            var items = workspace.DropDownItems.OfType<ToolStripMenuItem>().ToArray();
+            var command = items.Single(item => item.Text == "CAD &command…");
+            Require(command.ShortcutKeys == (Keys.Control | Keys.Shift | Keys.K), "Command shortcut missing.");
+            form.Objects.Focus();
+            foreach (var item in new[] { command, items.Single(candidate => candidate.Text == "CAD &script…") }) {
+                item.PerformClick();
+                for (int i = 0; i < 100 && !item.Enabled; i++) await Task.Delay(50);
+                string id = item == command ? "cad-command" : "cad-script-source";
+                var focused = await form.View.CoreWebView2.ExecuteScriptAsync("document.activeElement.id === '" + id + "'");
+                Require(focused == "true", "Native menu failed to focus " + id);
+            }
+            await form.View.CoreWebView2.ExecuteScriptAsync("document.getElementById('cad-script-dialog').close()");
+        }
+
         [STAThread]
         static int Main(string[] args) {
             if (!Program.ApprovedWindowsClient()) return 1150;
@@ -77,6 +93,8 @@ namespace KerfKite {
                         }
                         Require(form.Objects.Items.Count == 1 && Convert.ToBoolean(state["dirty"]), "Native rectangle insertion failed.");
                         await CheckCancelNew(form);
+                        await CheckCadMenus(form);
+                        output.Add("Native CAD command and script menus focused the editor from the inspector.");
                         output.Add("Native toolbar and dimensions dialog inserted a rectangle; cancelling New preserved the drawing.");
                         await session.Call("shape", new { kind = "line", x = 5, y = 5, width = 9, height = 2 });
                         await form.RefreshState();

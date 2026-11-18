@@ -32,7 +32,7 @@
     const [cols,rows]=scanSize(options);
     if(pixels.length!==cols*rows*4)throw Error('Image samples do not match the scan resolution.');
     limit(brightness,'Brightness',-100,100);limit(contrast,'Contrast',-100,100);limit(gamma,'Gamma',.1,5);limit(threshold,'Threshold',0,100);
-    if(!['gray','threshold','dither'].includes(style)||!['none','ellipse','selection'].includes(mask))throw Error('Unknown raster mode or mask.');
+    if(!['gray','threshold','dither','sliced'].includes(style)||!['none','ellipse','selection'].includes(mask))throw Error('Unknown raster mode or mask.');
     const contours=mask==='selection'?options.contours:[];
     if(mask==='selection' && maskContours(contours)*rows>3000000)throw Error('Reduce mask complexity or scan resolution.');
     const allowed=new Uint8Array(rows*cols), values=new Float64Array(rows*cols);
@@ -55,7 +55,7 @@
         values[index]=(invert?light:1-light)*pixels[k+3]/255;
       }
     }
-    if(style!=='gray'){
+    if(style==='threshold'||style==='dither'){
       const diffuse=(i,j,error)=>{const k=j*cols+i;if(i>=0&&i<cols&&j<rows&&allowed[k])values[k]+=error;};
       for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){
         const k=j*cols+i;if(!allowed[k])continue;
@@ -80,6 +80,38 @@
       if(overscan){points.push([to+direction*overscan,py]);s.push(0);}
       paths.push(points);powers.push(s);
     }
+    return {paths,powers};
+  }
+  function slicedPaths(map, options) {
+    const {cols,rows,values}=map, {x,y,width,height,overscan,slices}=options;
+    limit(slices,'Depth slices',2,64,true);
+    if(rows*cols*slices>2000000)throw Error('Reduce the image size, resolution or depth slices.');
+    const counts=Uint8Array.from(values,v=>Math.round(clamp(v)*slices));
+    const paths=[],powers=[];
+    let pointsTotal=0;
+    // Each threshold receives one exposure. Join adjacent equal-power pixels into a single move.
+    for(let pass=1;pass<=slices;pass++){
+      for(let row=0;row<rows;row++){
+        const reverse=(row%2)===1, dir=reverse?-1:1, from=reverse?x+width:x;
+        const py=y+height*(1-(row+.5)/rows);
+        const points=[[from-dir*overscan,py]],intensity=[0];
+        if(overscan){points.push([from,py]);intensity.push(0);}
+        let active=false;
+        for(let col=0;col<cols;col++){
+          const power=Number(counts[row*cols+(reverse?cols-1-col:col)]>=pass);
+          const end=[from+dir*(col+1)*width/cols,py];
+          if(col>0 && power===intensity.at(-1))points[points.length-1]=end;
+          else {points.push(end);intensity.push(power);}
+          active ||= power===1;
+        }
+        if(!active)continue;
+        if(overscan){points.push([from+dir*(width+overscan),py]);intensity.push(0);}
+        pointsTotal+=points.length;
+        if(pointsTotal>60000||paths.length>=2500)throw Error('Reduce the slice count, size or resolution to fit 60,000 vertices and 2,500 scanlines.');
+        paths.push(points);powers.push(intensity);
+      }
+    }
+    if(!paths.length)throw Error('The depth map gives zero exposure at every pixel.');
     return {paths,powers};
   }
   function materialGrid({x,y,rows,cols,size,gap,feedMin,feedMax,powerMin,powerMax,maxS,pattern,interval,bedWidth,bedHeight}) {
@@ -113,7 +145,7 @@
     }
     return cells;
   }
-  const api={scanSize,sourceRect,powerMap,scanPaths,materialGrid};
+  const api={scanSize,sourceRect,powerMap,scanPaths,slicedPaths,materialGrid};
   root.CNCLaserWorkshop=api;
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

@@ -12,6 +12,18 @@
     ]
   },
   {
+    "id": "xpro-v5",
+    "name": "xPRO V5 · Grbl_Esp32",
+    "live_transport": true,
+    "family": "grbl",
+    "notes": "Original xPRO V5 serial. Rotary A requires an independent vendor XYAZ build and operator-confirmed degree calibration.",
+    "modes": [
+      "router",
+      "laser",
+      "knife"
+    ]
+  },
+  {
     "id": "marlin",
     "name": "Marlin CNC",
     "live_transport": true,
@@ -39,7 +51,7 @@
     "name": "grblHAL",
     "live_transport": true,
     "family": "grbl",
-    "notes": "Experimental GRBL 1.1-compatible USB serial connection. XYZ only; requires numeric $30/$32 readback. Extended axes and plugins are not enabled.",
+    "notes": "Experimental GRBL-compatible USB serial. Rotary streaming requires independent axis, rotary mask and calibration readback.",
     "modes": [
       "router",
       "laser",

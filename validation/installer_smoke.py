@@ -131,6 +131,12 @@ def check(exe, data, offline, step, native=False):
         def post(path, payload):
             return json.loads(read(STUDIO + path, data=json.dumps(payload).encode(), headers=headers))
 
+        sketch = post("api/cad-script", {"source": "difference(){square([w,20]);translate([5,5]) circle(r=2);}", "overrides": {"w": 42}})
+        assert sketch["bounds"] == [0, 0, 42, 20] and len(sketch["profiles"]) == 2
+        block = {"id": "Spacer", "kind": "script", "source": "cube([w,5,3]);", "scriptParameters": {"w": 12}}
+        part = post("api/solid-cad", {"model": {"version": 1, "parameters": {"w": 99}, "features": [block]}})
+        assert part["bounds"] == [0, 0, 0, 12, 5, 3] and abs(part["volume"] - 180) < 1e-8
+        assert b"KerfKiteMacros" in read(STUDIO + "cad-macros.js")
         project = {"mode": "laser", "protocol": "grbl", "paths": [[[10, 10], [30, 10], [30, 20]]],
                    "width": 80, "height": 55, "operation": "line", "feed": 400, "power": 500, "passes": 1}
         assert post("api/generate", project)["cut_length"] == 30

@@ -1,0 +1,54 @@
+#cad-macro-dialog {
+  width: min(900px, 94vw);
+  max-width: 94vw;
+  max-height: 92vh;
+  max-height: 92dvh;
+  padding: clamp(14px, 2vw, 24px);
+  border: 1px solid #94a9ad;
+  border-radius: 12px;
+  background: #f5f8f8;
+  color: var(--ink);
+  box-shadow: 0 16px 55px #15313f44;
+}
+#cad-macro-dialog::backdrop { background: #13273191; }
+.macro-heading, .macro-section-title, .macro-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.macro-heading, .macro-section-title { justify-content: space-between; }
+.macro-heading { margin-bottom: 16px; }
+.macro-heading h2 { margin: 0; font-size: 1.5rem; }
+.macro-heading p { margin: .25em 0 0; color: #4b6167; }
+.macro-layout { display: grid; grid-template-columns: minmax(170px, 1fr) minmax(0, 2.5fr); gap: 20px; }
+.macro-library { padding-right: 15px; border-right: 1px solid var(--line); }
+#cad-macro-list { min-height: 12rem; background: white; padding: 4px; margin-top: 8px; }
+#cad-macro-list option { padding: 5px; white-space: normal; overflow-wrap: anywhere; }
+#cad-macro-count, .macro-hint, #cad-macro-dirty { color: #4b6167; font-size: .78rem; }
+#cad-macro-count { display: block; margin: 6px 0 12px; }
+.macro-actions button, .macro-heading button, .macro-section-title button { min-height: 32px; }
+.macro-files { margin-top: 18px; }
+.macro-fields { display: grid; grid-template-columns: 1.2fr 1fr; gap: 8px; margin-bottom: 12px; }
+#cad-macro-source { display: block; width: 100%; min-height: 136px; height: 21vh; margin: 5px 0 0; padding: 10px; resize: vertical; background: #192f38; color: #ecf5ef; border: 1px solid #738b8f; border-radius: 6px; font: 13px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; tab-size: 2; }
+#cad-macro-source:focus-visible { outline: 3px solid #d69741; outline-offset: 2px; }
+.macro-hint { margin: 6px 0 12px; line-height: 1.45; }
+.macro-section-title h3 { margin: 0; font-size: .87rem; color: var(--ink); text-transform: none; letter-spacing: normal; }
+#cad-macro-params { width: 100%; margin: 6px 0; border-collapse: collapse; table-layout: fixed; }
+#cad-macro-params th { text-align: left; font-size: .76rem; color: #4b6167; }
+#cad-macro-params td, #cad-macro-params th { padding: 2px; }
+#cad-macro-params :is(input,button) { min-height: 32px; margin: 0; padding: 6px; }
+#cad-macro-params tr > :last-child { width: 30px; text-align: right; }
+.macro-footer { justify-content: flex-end; margin-top: 14px; }
+#cad-macro-delete { margin-right: auto; }
+#cad-macro-status:not(:empty) { display: block; margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; font-size: .87rem; overflow-wrap: anywhere; }
+#cad-macro-status[data-error="true"] { color: #963827; }
+.macro-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media (max-width: 660px) {
+  .macro-layout { grid-template-columns: 1fr; gap: 12px; }
+  .macro-library { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 10px; }
+  #cad-macro-list { min-height: 0; height: 4.75rem; }
+  .macro-library .macro-actions { display: inline-flex; margin: 0 6px 0 0; }
+  #cad-macro-count { margin: 4px 0; }
+}
+@media (max-width: 415px) { .macro-fields { grid-template-columns: 1fr; } }

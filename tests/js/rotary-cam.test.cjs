@@ -8,3 +8,25 @@ test('continuous reverse angles exceed a full turn and coordinated feed includes
 test('reject unsupported source, numeric values and missing final spindle off',()=>{for(const command of ['G91','G2 X1 Y2 I0 J1','M4 S100','G1 X1 Y1 S20 F100','G1 X1 Y1','G1 X1 X2 F100','G1 Z-5 F100','G1 X1 Y1 F0','G1 Xnan Y1 F100','G1 X1 Y1 F100 ;comment','G20']){const s=source();s.lines[11]=command;assert.throws(()=>wrap(s,options),command);}for(const changes of [{diameter:NaN},{diameter:true},{direction:0},{postprocessor:'grbl'},{wrap_axis:'Z'}])assert.throws(()=>wrap(source(),{...options,...changes}));const s=source();s.lines.pop();assert.throws(()=>wrap(s,options));assert.throws(()=>wrap({...source(),mode:'laser'},options));});
 test('offline contour CAM feeds rotary export without a server',()=>{const p={mode:'router',protocol:'grbl',width:100,height:100,feed:600,power:1000,depth:1,step:1,plunge:100,safe:5,paths:[[[0,0],[31.416,7]]]};const r=wrap(generate(p),options);assert.ok(r.lines.some(l=>l.includes('A360.000000')));});
 test('browser implementation agrees with Python output across axes and directions',()=>{const {spawnSync}=require('node:child_process'),path=require('node:path'),fs=require('node:fs'),local=path.resolve(__dirname,'../../.venv/bin/python'),python=process.env.CNC_TEST_PYTHON||(fs.existsSync(local)?local:'python');const fixtures=[];for(const axis of ['X','Y'])for(const direction of [-1,1])fixtures.push({job:source(),options:{...options,wrap_axis:axis,direction}});const result=spawnSync(python,['-c','import json,sys;from studio.rotary import wrap_job; print(json.dumps([wrap_job(x["job"],x["options"])["lines"] for x in json.load(sys.stdin)]))'],{cwd:path.resolve(__dirname,'../..'),input:JSON.stringify(fixtures),encoding:'utf8'});assert.equal(result.status,0,result.stderr);const expected=JSON.parse(result.stdout);fixtures.forEach((f,i)=>assert.deepEqual(wrap(f.job,f.options).lines,expected[i]));});
+test('laser moves preserve individual powers, with reverse second-turn wrapping and fixture limits',()=>{
+  const laser={mode:'laser',lines:['G21','G90','G17','G94','G54','M5','G0 X0 Y0','M4 S0','G1 X3 Y31.416 F600 S125','G1 X5 Y62.832 F600 S750','M5']};
+  const opts={diameter:10,wrap_axis:'Y',postprocessor:'grblhal',direction:-1,output_axis:'B',fixture:{axial_min:0,axial_max:5,min_radius:5}};
+  const r=wrap(laser,opts);
+  assert.deepEqual(r.rotary.angle_bounds,[-720,0]);assert.deepEqual(r.rotary.axial_bounds,[0,5]);assert.deepEqual(r.rotary.radial_bounds,[0,0]);
+  assert.match(r.lines.join('\n'),/G1 Y3\.000000 B-360\.000000 F[\d.]+ S125\nG1 Y5\.000000 B-720\.000000 F[\d.]+ S750/);
+  assert.throws(()=>wrap(laser,{...opts,fixture:{...opts.fixture,axial_max:4}}));
+  assert.throws(()=>wrap({...laser,lines:laser.lines.toSpliced(-1,0,'G0 X4')},opts));
+  assert.throws(()=>wrap(laser,{...opts,postprocessor:'xpro-v5'}));
+});
+test('Python and portable post agree on laser power, target words and radius-aware helical feeds',()=>{
+  const p={mode:'laser',width:100,height:100,feed:350,power:500,paths:[[[0,4],[20,6],[33,8]]],path_powers:[[100,150,350]]};
+  const r={mode:'router',width:100,height:100,feed:300,power:800,depth:2,step:2,plunge:100,safe:2,paths:[[[0,4],[20,6],[33,8]]],path_depths:[[-.2,-1.3,-.5]]};
+  const fixtures=[];
+  for(const design of [p,r])for(const postprocessor of ['grblhal','xpro-v5'])for(const output_axis of (postprocessor==='xpro-v5'?['A']:['A','B','C'])){
+    fixtures.push({job:generate({...design,protocol:'grbl'}),options:{diameter:14,wrap_axis:'X',postprocessor,output_axis,feed_reference:'cut',fixture:{axial_min:0,axial_max:10,min_radius:4}}});
+  }
+  const {spawnSync}=require('node:child_process');const python=process.env.CNC_TEST_PYTHON||'python';
+  const response=spawnSync(python,['-c','import json,sys;from studio.rotary import wrap_job; print(json.dumps([wrap_job(j["job"],j["options"]) for j in json.load(sys.stdin)]))'],{cwd:require('node:path').resolve(__dirname,'../..'),input:JSON.stringify(fixtures),encoding:'utf8'});
+  assert.equal(response.status,0,response.stderr);
+  JSON.parse(response.stdout).forEach((job,i)=>{const {job:input,options:opts}=fixtures[i],js=wrap(input,opts);assert.deepEqual(js.lines,job.lines);assert.deepEqual(js.rotary.radial_bounds,job.rotary.radial_bounds);assert.ok(Math.abs(js.rotary.feed_minutes-job.rotary.feed_minutes)<1e-10);});
+});

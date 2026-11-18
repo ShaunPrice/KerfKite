@@ -41,7 +41,7 @@ class ProtocolCatalogTests(unittest.TestCase):
     def test_export_cannot_connect_or_run(self):
         c=DeviceController();self.addCleanup(c.disconnect)
         app=create_app(c);client=app.test_client();headers={'X-Studio-Token':client.get('/api/session').json['token']}
-        self.assertEqual(len(client.get('/api/protocols').json),8)
+        self.assertEqual({p['id'] for p in client.get('/api/protocols').json},set(PROTOCOLS))
         for id in ('linuxcnc','mach3','mach4','uccnc'):
             self.assertEqual(client.post('/api/connect',json={'port':'simulator','protocol':id},headers=headers).status_code,400)
             self.assertEqual(client.post('/api/run',json={'confirmed':True,'project':sample(id,dwell_units='seconds')},headers=headers).status_code,400)

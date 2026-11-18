@@ -48,3 +48,7 @@ To refresh the inventory in a build environment, run `python -m pip install --dr
 ## Engraved labels
 
 Workshop Mono is original MIT-licensed centreline geometry. The QR encoder is the unmodified JavaScript build of Project Nayuki’s MIT-licensed library. Its notice is included in the desktop, offline editor and wheel. Installed or imported fonts stay on the editing computer. Saved projects carry their paths and face names. [QR encoder](https://www.nayuki.io/page/qr-code-generator-library) · [Bundled notice](../studio/static/vendor/qrcodegen-LICENSE.txt)
+
+## Assistant workshop and CAD scripting
+
+The macro examples, bounded CAD interpreter and KerfKite workshop skill are original project sources covered by the repository MIT licence. The skill archive includes that licence. The optional MCP installation obtains FastMCP and Playwright (Apache-2.0) and Pydantic (MIT) from the Python package index. The browser runtime is installed separately and carries its own Chromium and third-party notices. Preserve the upstream notices if redistributing those packages. The Studio wheel includes KerfKite’s integration code. [FastMCP licence](https://github.com/PrefectHQ/fastmcp/blob/main/LICENSE) · [Playwright licence](https://github.com/microsoft/playwright-python/blob/main/LICENSE) · [Pydantic licence](https://github.com/pydantic/pydantic/blob/main/LICENSE)

@@ -22,6 +22,10 @@ $CncPackage = '.'
 if ($CncExtras.Count -gt 0) { $CncPackage = '.[' + ($CncExtras -join ',') + ']' }
 & $CncVenvPython -m pip install $CncPackage
 if ($LASTEXITCODE -ne 0) { throw 'Package installation failed.' }
+if ($Mcp -and -not $env:KERFKITE_MCP_CHROMIUM) {
+    & $CncVenvPython -m playwright install chromium
+    if ($LASTEXITCODE -ne 0) { throw 'Assistant workshop browser installation failed.' }
+}
 & $CncVenvPython -c "from studio.relief import _relief_native; print('Relief engine:', 'C++ available' if _relief_native is not None else 'Python fallback (optional C++ compiler not available)')"
 if ($LASTEXITCODE -ne 0) { throw 'Installed package import failed.' }
 Write-Output 'Installed. Start simulator: .\start.bat --port 8765'
