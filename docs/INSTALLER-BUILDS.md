@@ -15,3 +15,7 @@ Use macOS with Go, Python 3.12, Pillow, uv, dpkg-deb, Apple command line tools a
 For local smoke testing, run `python validation/installer_smoke.py "/path/to/installed/KerfKite" --step` with ports 18764 and 18765 free. The test uses a temporary application-data directory. The application shortcut opens a browser tab. Platform-specific Gatekeeper, SmartScreen and desktop shell prompts need a graphical desktop to check.
 
 The Debian packaging revision for Studio 0.2.1 is `-2`. It declares `libgl1` so OpenCascade STEP loads on minimal Debian installations. A portable Linux archive expects the desktop to provide `libGL.so.1` for STEP. The application wheel is shared across all platforms.
+
+## Browser-only SBC packages
+
+Run `python packaging/desktop/build_browser.py path/to/kerfkite_studio-0.2.1-py3-none-any.whl dist/sbc` with Python and dpkg-deb. Use the same verified wheel as the full release. It supplies the static editor and all vendor notices. The output is an architecture-independent Debian package with a desktop menu entry, and a portable ZIP with the same editor. Publish both under the release tag with `SBC-SHA256SUMS.txt`. Run **Check SBC release packages** in Actions against the tag to verify the downloads and exercise both installation paths.

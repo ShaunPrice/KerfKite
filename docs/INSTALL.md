@@ -1,5 +1,7 @@
 # Install KerfKite Studio
 
+See the [single-board computer guide](SBC.md) for board-specific downloads and the offline Browser Editor.
+
 ## Desktop or phone installation
 
 Download the package for your device from the [official KerfKite release](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.2.1).

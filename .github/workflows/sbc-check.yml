@@ -1,0 +1,58 @@
+name: Check SBC release packages
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: KerfKite release containing the desktop and browser installers
+        required: true
+        default: v0.2.1
+permissions:
+  contents: read
+jobs:
+  installers:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, arch: amd64 }
+          - { runner: ubuntu-24.04-arm, arch: arm64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify installer downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          mkdir packages
+          cd packages
+          gh release download "$TAG" -p "KerfKite-Linux-$ARCH.deb" -p 'KerfKite-Browser-Editor*' -p '*SHA256SUMS.txt'
+          sha256sum --check --ignore-missing SHA256SUMS.txt
+          sha256sum --check SBC-SHA256SUMS.txt
+      - name: Exercise Studio on the Ubuntu 22.04 and 26.04 userlands
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          for version in 22.04 26.04; do
+            docker run --rm --cpus 2 --memory 2g -e ARCH -v "$PWD/packages:/packages:ro" -v "$PWD/validation:/checks:ro" "ubuntu:$version" sh -ec '
+              apt-get update -qq
+              DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 "/packages/KerfKite-Linux-$ARCH.deb" >/dev/null
+              python3 /checks/installer_smoke.py /opt/kerfkite/KerfKite --step
+            '
+          done
+      - name: Exercise the Browser Editor DEB and ZIP with networking disabled
+        run: |
+          docker build -t sbc-browser - <<'DOCKER'
+          FROM debian:trixie-slim
+          RUN apt-get update && apt-get install -y --no-install-recommends chromium chromium-driver python3-selenium xdg-utils desktop-file-utils unzip
+          DOCKER
+          docker run --rm --network none --memory 2g --cpus 2 -v "$PWD/packages:/packages:ro" -v "$PWD/validation:/checks:ro" sbc-browser sh -ec '
+            dpkg -i /packages/KerfKite-Browser-Editor-all.deb
+            desktop-file-validate /usr/share/applications/org.kerfkite.BrowserEditor.desktop
+            python3 /checks/sbc_browser_smoke.py /usr/share/kerfkite-browser/index.html
+            unzip -q /packages/KerfKite-Browser-Editor.zip -d /tmp
+            python3 /checks/sbc_browser_smoke.py "/tmp/KerfKite Browser Editor/index.html"
+            dpkg -r kerfkite-browser
+          '

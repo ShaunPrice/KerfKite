@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#geometry">Geometry</a> <a href="#program-import">Program Import</a> <a href="#product">Product</a> <a href="#licensing">Licensing</a> <a href="#request-coverage">Request Coverage</a> <a href="#ai-vision">Ai Vision</a> <a href="#installer-builds">Installer Builds</a> <a href="#mcp">Mcp</a> <a href="#android">Android</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#assemblies">Assemblies</a> <a href="#sketch">Sketch</a> <a href="#fixtures">Fixtures</a> <a href="#status">Status</a> <a href="#install">Install</a> <a href="#developer">Developer</a> <a href="#laser-order">Laser Order</a> <a href="#user-guide">User Guide</a> <a href="#platforms">Platforms</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#branding">Branding</a> <a href="#simulation">Simulation</a> <a href="#web">Web</a> <a href="#release-review">Release Review</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#native">Native</a> <a href="#camera-register">Camera Register</a> <a href="#protocols">Protocols</a> <a href="#solid-cad">Solid Cad</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#lightburn-import">Lightburn Import</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#geometry">Geometry</a> <a href="#program-import">Program Import</a> <a href="#product">Product</a> <a href="#licensing">Licensing</a> <a href="#request-coverage">Request Coverage</a> <a href="#ai-vision">Ai Vision</a> <a href="#installer-builds">Installer Builds</a> <a href="#sbc">Sbc</a> <a href="#mcp">Mcp</a> <a href="#android">Android</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#assemblies">Assemblies</a> <a href="#sketch">Sketch</a> <a href="#fixtures">Fixtures</a> <a href="#status">Status</a> <a href="#install">Install</a> <a href="#developer">Developer</a> <a href="#laser-order">Laser Order</a> <a href="#user-guide">User Guide</a> <a href="#platforms">Platforms</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#branding">Branding</a> <a href="#simulation">Simulation</a> <a href="#web">Web</a> <a href="#release-review">Release Review</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#native">Native</a> <a href="#camera-register">Camera Register</a> <a href="#protocols">Protocols</a> <a href="#solid-cad">Solid Cad</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#lightburn-import">Lightburn Import</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
 <p>KerfKite Studio is an open-source CAD/CAM workbench for interchangeable CNC router, laser and drag-knife heads. Design in a browser, simulate a job, and prepare output for a supported controller. The Python application runs locally or as an authenticated HTTPS editor. The repository also includes a simplified Android companion.</p>
 <p><img src="workshop-artwork.jpg" alt="Layered kingfisher cut-vinyl decal beside laser-engraved reeds on maple and a router-carved wave relief in walnut" /></p>
 <p><em>Workshop illustration of the three processes: cut vinyl, laser engraving and router carving.</em></p>
@@ -41,6 +41,7 @@
 </tbody>
 </table>
 <p>The <a href="#install">installation guide</a> covers first launch, security prompts, updates, removal and optional STEP exchange and controller access, and the source install for HTTPS and MCP services. The <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.2.1">release downloads</a> also include portable Linux archives and SHA-256 checksums.</p>
+<p>For Orange Pi, Radxa, Jetson, BeagleBoard, ODROID, LattePanda and RISC-V systems, the <a href="#sbc">single-board computer guide</a> maps each board to its installer. It also includes a browser-only edition for drawing and file export on smaller boards.</p>
 <h2>Inside the workshop</h2>
 <ul>
 <li>Parametric parts, sketches, Boolean features, assembly mates, interference checks, Bézier/NURBS surface editing and STEP exchange.</li>
@@ -342,6 +343,108 @@
 <li>For each release file, publish its SHA-256 as a line of <code>SHA256SUMS.txt</code>. Upload the packages and checksums to a release for the corresponding source commit. In <strong>Actions → Check desktop release installers</strong>, run the workflow against that tag. It installs the actual release package, tests a clean first launch, generates a simulated toolpath, exercises STEP, then relaunches with uv offline.</li>
 </ol>
 <p>For local smoke testing, run <code>python validation/installer_smoke.py &quot;/path/to/installed/KerfKite&quot; --step</code> with ports 18764 and 18765 free. The test uses a temporary application-data directory. The application shortcut opens a browser tab. Platform-specific Gatekeeper, SmartScreen and desktop shell prompts need a graphical desktop to check.</p>
+<p>The Debian packaging revision for Studio 0.2.1 is <code>-2</code>. It declares <code>libgl1</code> so OpenCascade STEP loads on minimal Debian installations. A portable Linux archive expects the desktop to provide <code>libGL.so.1</code> for STEP. The application wheel is shared across all platforms.</p>
+<h2>Browser-only SBC packages</h2>
+<p>Run <code>python packaging/desktop/build_browser.py path/to/kerfkite_studio-0.2.1-py3-none-any.whl dist/sbc</code> with Python and dpkg-deb. Use the same verified wheel as the full release. It supplies the static editor and all vendor notices. The output is an architecture-independent Debian package with a desktop menu entry, and a portable ZIP with the same editor. Publish both under the release tag with <code>SBC-SHA256SUMS.txt</code>. Run <strong>Check SBC release packages</strong> in Actions against the tag to verify the downloads and exercise both installation paths.</p>
+</section><section id="sbc"><h1>KerfKite on single-board computers</h1>
+<p><strong>For a full CAD/CAM workstation</strong>, use the Studio installer that matches the board’s desktop operating system. Studio connects to a supported CNC controller over USB serial. The CAD and toolpath calculations run on the CPU. A board-specific GPIO driver, AI accelerator or custom firmware image is unnecessary for this workflow.</p>
+<p><strong>For drawing and file export</strong>, install <strong>KerfKite Browser Editor</strong>. It opens directly from local storage in a current graphical browser. You can draw, reopen portable projects, preview supported contour operations and export G-code for a router, laser or drag knife. For STEP, server-side solids, relief generation or machine control, transfer the project to full Studio. The browser package includes the editor and its artwork, fonts and help. It requires no Python runtime or local service.</p>
+<h2>Choose a download</h2>
+<table>
+<thead>
+<tr>
+<th>What your board runs</th>
+<th>Package</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A 64-bit ARM Debian, Ubuntu or Armbian desktop</td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Linux-arm64.deb">Full Studio ARM64 DEB</a></td>
+</tr>
+<tr>
+<td>A 64-bit Intel/AMD Debian or Ubuntu desktop</td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Linux-amd64.deb">Full Studio AMD64 DEB</a></td>
+</tr>
+<tr>
+<td>A Debian-family desktop where you want browser editing only, including ARM32 or RISC-V with a modern browser</td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Browser-Editor-all.deb">Browser Editor DEB, all architectures</a></td>
+</tr>
+<tr>
+<td>Another desktop OS with a modern browser, or a computer where you cannot install packages</td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Browser-Editor.zip">Portable Browser Editor ZIP</a></td>
+</tr>
+</tbody>
+</table>
+<p>Open the DEB in the desktop package manager and choose <strong>Install</strong>. Open <strong>KerfKite Studio</strong> or <strong>KerfKite Browser Editor</strong> from the applications menu. For the ZIP, extract the entire folder and open <strong>index.html</strong>. Save work through <strong>Projects → Download project</strong>. Browser storage is specific to the browser profile and can change when a portable folder moves. To remove the Browser Editor use the package manager, or delete the extracted ZIP folder. Saved project downloads stay where you chose to put them.</p>
+<p>Choose a graphical desktop image with a current browser for local use. Check the installed OS architecture under system information. A 64-bit CPU can run a 32-bit OS. Debian’s <code>dpkg --print-architecture</code> reports <code>arm64</code>, <code>amd64</code>, <code>armhf</code> or <code>riscv64</code>. The full installer downloads architecture-specific geometry wheels. Its locked releases lack ARM32 and RISC-V wheels. These installations use the browser edition or the authenticated web editor on another computer. <a href="https://pypi.org/project/manifold3d/3.5.5/#files">Manifold release files</a> · <a href="https://pypi.org/project/cadquery-ocp-novtk/7.9.3.1.1/#files">OpenCascade wrapper release files</a></p>
+<h2>Board guide</h2>
+<p>These board matches are inferred from the manufacturer’s hardware and the available operating-system images. Physical testing to date covers the Raspberry Pi 5. The following alternatives have software-level validation described below.</p>
+<table>
+<thead>
+<tr>
+<th>Board</th>
+<th>Edition to try</th>
+<th>Hardware or image source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Radxa ROCK 5B</td>
+<td>Full ARM64 on Radxa’s Debian Bookworm KDE desktop. A practical alternative for a larger workshop project on an 8 GB configuration.</td>
+<td><a href="https://docs.radxa.com/en/rock5/rock5b/download">Radxa desktop downloads</a></td>
+</tr>
+<tr>
+<td>Orange Pi 5 Plus</td>
+<td>Full ARM64 on the Armbian Ubuntu desktop image. Select a desktop variant when you want to work directly at the board.</td>
+<td><a href="https://armbian.com/boards/orangepi5-plus">Armbian board images</a></td>
+</tr>
+<tr>
+<td>NVIDIA Jetson Orin Nano / Orin Nano Super Developer Kit</td>
+<td>Full ARM64 on the JetPack 6 Ubuntu 22.04 desktop. KerfKite does not use CUDA or TensorRT for CAD/CAM.</td>
+<td><a href="https://developer.nvidia.com/embedded/jetpack-sdk-62">NVIDIA JetPack</a></td>
+</tr>
+<tr>
+<td>BeagleBone AI-64</td>
+<td>Full ARM64 on the board’s Debian Xfce image. Start with a small design before loading a detailed relief.</td>
+<td><a href="https://docs.beagleboard.org/boards/beaglebone/ai-64/01-introduction.html">BeagleBoard hardware</a> · <a href="https://www.beagleboard.org/distros">Desktop images</a></td>
+</tr>
+<tr>
+<td>PINE64 ROCKPro64</td>
+<td>Full ARM64 on the 4 GB board with Armbian Xfce. Start with Browser Editor for 2 GB configurations.</td>
+<td><a href="https://pine64.org/documentation/ROCKPro64/">PINE64 specifications</a> · <a href="https://armbian.com/boards/rockpro64">Armbian images</a></td>
+</tr>
+<tr>
+<td>LattePanda 3 Delta</td>
+<td>Full AMD64 on its documented 64-bit Ubuntu 22.04 desktop.</td>
+<td><a href="https://docs.lattepanda.com/content/3rd_delta_edition/Operating_Systems_Ubuntu/">LattePanda Ubuntu guide</a></td>
+</tr>
+<tr>
+<td>Hardkernel ODROID-H4 or H5</td>
+<td>Full AMD64 on a compatible 64-bit Ubuntu desktop. These are Intel boards.</td>
+<td><a href="https://www.hardkernel.com/shop/odroid-h4/">H4 specifications</a> · <a href="https://www.hardkernel.com/shop/odroid-h5/">H5 specifications</a></td>
+</tr>
+<tr>
+<td>BeaglePlay</td>
+<td>Browser Editor on its Debian desktop. The board has 2 GB of RAM, shared with the browser and desktop.</td>
+<td><a href="https://docs.beagleboard.org/boards/beagleplay/01-introduction.html">BeaglePlay specifications</a> · <a href="https://www.beagleboard.org/distros">BeagleBoard images</a></td>
+</tr>
+<tr>
+<td>StarFive VisionFive 2</td>
+<td>Browser Editor on a RISC-V desktop image with a current browser. Board graphics and response time still need an on-device check.</td>
+<td><a href="https://wiki.debian.org/InstallingDebianOn/StarFive/VisionFiveV2">Debian board guide</a> · <a href="https://github.com/starfive-tech/VisionFive2/releases">StarFive software releases</a></td>
+</tr>
+<tr>
+<td>Original ASUS Tinker Board S</td>
+<td>Browser Editor only when the installed 32-bit ARM desktop can run a current graphical browser. The vendor’s older stock browser needs individual verification.</td>
+<td><a href="https://tinker-board.asus.com/series/tinker-board-s.html">ASUS board specifications</a> · <a href="https://tinkerboard.github.io/docs/tinker_os-releases/tinker_board">Vendor OS releases</a></td>
+</tr>
+</tbody>
+</table>
+<h2>What was tested</h2>
+<p>The full Studio installer was previously exercised on 64-bit Ubuntu 24.04 for ARM and Intel/AMD and on a minimal Debian Bookworm ARM64 userland. The source application and its browser workflows have also been exercised on a physical Pi 5. <a href="https://github.com/ShaunPrice/KerfKite/actions/runs/44299310815">Installer checks</a> · <a href="#platforms">Pi verification</a></p>
+<p>The SBC package check installs the released DEB in Ubuntu 22.04 and 26.04 userlands, opens the optional STEP library, generates a simulated laser path and repeats the launch with the runtime installer offline. In Debian 13 it opens both Browser Editor packages in Chromium with networking disabled, draws a rectangle, saves and reopens the project, then verifies the exported router, laser and knife programs against their previews. The containers are limited to two CPUs and 2 GiB. This tests package installation and a small project. The board’s GPU driver, thermal behaviour, USB serial connection, physical cutting and larger CAD jobs need testing on the target hardware. <a href="https://github.com/ShaunPrice/KerfKite/actions/workflows/sbc-check.yml">SBC package check runs</a></p>
+<p>For full Studio, 8 GB gives more room for the browser and geometry calculations. On a 4 GB board, start with one tab and a small job. For a 2 GB board, try the Browser Editor first and move larger jobs to a workstation. These are starting points for testing your designs. <a href="#install">Installation and first launch</a></p>
 </section><section id="mcp"><h1>Artwork MCP interface</h1>
 <p>Local stdio server built with FastMCP 3. Optional dependency; the normal UI does not require it. This server creates artwork and files, not machine motion. It has not been registered in Claude Desktop, Codex or a hosted ChatGPT connector.</p>
 <h2>Install and launch</h2>
@@ -786,6 +889,7 @@
 <li><a href="#developer">Development setup</a>, <a href="#simulation">simulation</a>, <a href="#platforms">platforms</a>, <a href="#licensing">licences</a>.</li>
 </ul>
 </section><section id="install"><h1>Install KerfKite Studio</h1>
+<p>See the <a href="#sbc">single-board computer guide</a> for board-specific downloads and the offline Browser Editor.</p>
 <h2>Desktop or phone installation</h2>
 <p>Download the package for your device from the <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.2.1">official KerfKite release</a>.</p>
 <ul>
@@ -1221,6 +1325,7 @@ bash scripts/ci-local.sh --list
 <p>Each stage ends retracted with the spindle off. Wait for motion and spindle to cease, install the next tool, re-establish Z zero or verified tool length, check XY origin/clearance and review the next stage before starting it manually. Do not concatenate stage files. Automatic tool changers, probing and automatic continuation are not implemented. Ordinary Run rejects differing tool numbers even if their diameters match. Tool-change generation requires the app server.</p>
 <p>Holding tabs are retained when reassigning CAM settings or a manual tool. Use <strong>Remove tabs from selected object</strong> before clearing operation settings; the editor prevents implicit removal. Incompatible tool/mode combinations retain the tab request and fail CAM validation.</p>
 </section><section id="platforms"><h1>Platforms and verification</h1>
+<p>See the <a href="#sbc">single-board computer guide</a> for board-specific downloads and the offline Browser Editor.</p>
 <p><a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.2.1">Download the desktop installers or Android app</a>. The table below records source-installation and hardware evidence. See the <a href="#install">installation guide</a> for the graphical installers.</p>
 <p><strong>Public source release.</strong> All 11 CAD/CAM harness groups passed on macOS ARM64, Windows 11 Pro x86-64 and a physical Raspberry Pi 5 ARM64. The Windows and Pi hosts installed the public source in isolated environments. Each run exercised the STEP runtime and native C++ relief kernels, with 151 Python and 114 JavaScript tests. See the <a href="#release-review">release review</a> for the browser checks and the limits of physical verification. Earlier measurements below identify their own host and workload.</p>
 <p>Use the desktop browser editor with a local Python service on 64-bit macOS, Windows or Linux. The service provides solid modelling, CAM and simulation. The Android edition is a native 2D design companion with portable project and SVG exchange.</p>
