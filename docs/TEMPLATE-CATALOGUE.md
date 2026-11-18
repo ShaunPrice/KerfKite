@@ -147,4 +147,4 @@ Artwork is original procedural vector line art, included under the project MIT l
 
 Templates contain geometry, not preconfigured cutting jobs. Toy designs and learning boards are scalable craft patterns, not validated mechanical assembly plans or certified children's products. Set dimensions, material thickness, hole sizes and fit allowances before fabrication. Some designs combine closed outlines and open engraving detail; assign appropriate operations. Stencil bridges, one-piece silhouette unions and automatic assembly tolerances are not included. Physical cut quality and suitability require review.
 
-Regenerate this catalogue and the MCP snapshot with `node scripts/build_templates.cjs`.
+MCP searches the bundled index and loads geometry when you select a template. Offline SVG export uses the same indexed artwork. Regenerate the catalogue and its packed geometry with `node scripts/build_templates.cjs`.

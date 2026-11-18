@@ -1,10 +1,15 @@
 """Reproducible CAM-only stress test. Never imports a controller or opens devices.
 
 Run from repository root: python -m validation.stress_cam --output report.json
-Native comparison is a benchmark prototype, not an application backend.
+The standalone relief executable is a historical prototype. The native backend
+selects the installed application kernels for relief and stock simulation.
 """
 import argparse, concurrent.futures, hashlib, json, math, os, platform
-import resource, statistics, subprocess, sys, threading, time
+import statistics, subprocess, sys, threading, time
+try:
+    import resource
+except ImportError:  # Windows
+    resource = None
 from pathlib import Path
 from studio.relief import prepare_relief
 from studio.cam import generate
@@ -26,6 +31,8 @@ def fixture(n=256):
 
 
 def memory_mib():
+    if resource is None:
+        return None
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/(1048576 if sys.platform=='darwin' else 1024)
 
 
@@ -45,23 +52,34 @@ def native_relief(data, executable):
     return dict(paths=paths,path_depths=[depths[j*(nx+1):(j+1)*(nx+1)] for j in range(ny+1)])
 
 
-def workload(native=None, backend="python"):
+def workload(native=None, backend="python", capture_grid=False, measure_rotary=False):
     stages={}; data=fixture()
     def timed(name,fn):
         t=time.perf_counter(); result=fn(); stages[name]=time.perf_counter()-t; return result
     relief=timed('relief',lambda:native_relief(data,native) if native else prepare_relief(data, backend=backend))
-    job=timed('gcode',lambda:generate(dict(mode='router',protocol='grbl',width=680,height=240,
+    project=dict(mode='router',protocol='grbl',width=680,height=240,
         feed=1200,plunge=300,power=1000,safe=5,depth=6,step=3,tool_diameter=3.175,
-        paths=relief['paths'],path_depths=relief['path_depths'])))
+        paths=relief['paths'],path_depths=relief['path_depths'])
+    job=timed('gcode',lambda:generate(project,packed_segments=backend=='native'))
     preview=timed('stock_preview',lambda:simulate(dict(segments=job['segments'],width=320,height=200,
-        resolution=96,stock_thickness=12,tool_diameter=3.175,tool_shape='ball')))
+        resolution=96,stock_thickness=12,tool_diameter=3.175,tool_shape='ball'),backend=backend))
     text='\n'.join(job['lines'])
     assert len(job['lines'])<=200000
     assert all(math.isfinite(v) and -6<=v<=0 for row in relief['path_depths'] for v in row)
     assert all(math.isfinite(v) and -12<=v<=0 for row in preview['heights'] for v in row)
-    return dict(stages=stages,vertices=sum(map(len,relief['paths'])),lines=len(job['lines']),
+    result = dict(stages=stages,vertices=sum(map(len,relief['paths'])),lines=len(job['lines']),
         segments=len(job['segments']),gcode_bytes=len(text.encode()),sha256=hashlib.sha256(text.encode()).hexdigest(),
-        peak_rss_mib=memory_mib())
+        peak_rss_mib=memory_mib(), **({'grid':preview['heights']} if capture_grid else {}))
+    if measure_rotary:
+        from studio.rotary import generate_rotary, wrap_job
+        del job, text
+        options = dict(diameter=100,wrap_axis='X',postprocessor='xpro-v5',output_axis='A')
+        start = time.perf_counter()
+        rotary = generate_rotary(project,options) if backend=='native' else wrap_job(generate(project),options)
+        result['rotary_seconds'] = time.perf_counter()-start
+        result['rotary_lines'] = len(rotary['lines'])
+        result['rotary_sha256'] = hashlib.sha256('\n'.join(rotary['lines']).encode()).hexdigest()
+    return result
 
 
 def thermal():

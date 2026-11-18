@@ -1,5 +1,6 @@
 """Explicit router drilling moves for point markers and circular hole outlines."""
 import math
+from .cam_moves import PackedSegments
 from .protocols import get_protocol, postprocess
 
 
@@ -34,7 +35,7 @@ def hole_center(path, diameter):
     return center
 
 
-def generate_drill(project, paths, number):
+def generate_drill(project, paths, number, *, packed_segments=False):
     if project['mode']!='router' or project.get('path_depths') is not None or project.get('path_powers') is not None:
         raise ValueError('Drilling requires a router and a single target depth')
     diameter = number(project.get('tool_diameter',3.175),'Drill diameter',.01,100)
@@ -58,7 +59,7 @@ def generate_drill(project, paths, number):
     if any(x-radius < -1e-8 or y-radius < -1e-8 or x+radius > width+1e-8 or y+radius > height+1e-8 for x,y in centers):
         raise ValueError('Drill footprint crosses the work area boundary')
     lines=['G21','G90','G17','G94','G54','M5',f'G0 Z{safe:.3f}',f'M3 S{power:.0f}','G4 P2']
-    segments=[]
+    segments=PackedSegments() if packed_segments else []
     length=0
     for x,y in centers:
         lines.append(f'G0 X{x:.3f} Y{y:.3f}')

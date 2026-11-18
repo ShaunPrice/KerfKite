@@ -17,7 +17,31 @@ function compareArtwork(actual,expected,path='templates') {
     for(const key of Object.keys(expected))compareArtwork(actual[key],expected[key],`${path}.${key}`);
   } else assert.equal(actual,expected,path);
 }
-test('MCP built-in snapshot matches browser artwork',()=>compareArtwork(require('../studio/builtin_templates.json'),templates));
+test('packed MCP and SVG catalog matches every browser template', async () => {
+  const {spawn} = require('node:child_process');
+  const {once} = require('node:events');
+  const {createInterface} = require('node:readline');
+  const path = require('node:path');
+  const script = 'import json\nfrom studio.template_catalog import TemplateCatalog\n' +
+    'for item in TemplateCatalog(): print(json.dumps(item, separators=(",", ":")))';
+  const child = spawn(process.platform === 'win32' ? 'python' : 'python3', ['-c', script],
+    {cwd: path.resolve(__dirname, '..'), stdio: ['ignore', 'pipe', 'inherit']});
+  const finished = once(child, 'close');
+  const lines = createInterface({input: child.stdout, crlfDelay: Infinity});
+  let count = 0;
+  try {
+    for await (const line of lines) {
+      assert.ok(count < templates.length);
+      compareArtwork(JSON.parse(line), templates[count], templates[count].id);
+      count++;
+    }
+    assert.equal((await finished)[0], 0);
+    assert.equal(count, templates.length);
+  } finally {
+    lines.close();
+    if (child.exitCode === null) child.kill();
+  }
+});
 test('artwork comparison rejects changed geometry and topology',()=>{
   assert.throws(()=>compareArtwork([[1,2]],[[1,2.000001]]));
   assert.throws(()=>compareArtwork([[1,2]],[[1,2],[3,4]]));

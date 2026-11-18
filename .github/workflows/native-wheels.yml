@@ -1,0 +1,47 @@
+name: Build desktop CAM wheels
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  wheel:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: macos-15, target: mac-arm64}
+          - {runner: macos-15-intel, target: mac-amd64}
+          - {runner: windows-2022, target: windows-amd64}
+          - {runner: ubuntu-24.04, target: linux-amd64, arch: x86_64}
+          - {runner: ubuntu-24.04-arm, target: linux-arm64, arch: aarch64}
+    runs-on: ${{ matrix.runner }}
+    env:
+      KERFKITE_REQUIRE_NATIVE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile macOS or Windows wheel
+        if: runner.os != 'Linux'
+        run: |
+          python -m pip install build
+          python -m build --wheel --outdir dist
+      - name: Compile and repair Linux wheel
+        if: runner.os == 'Linux'
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          docker run --rm -e KERFKITE_REQUIRE_NATIVE -v "$PWD:/src" -w /src "quay.io/pypa/manylinux_2_28_$ARCH" bash -ec '
+            /opt/python/cp312-cp312/bin/python -m pip wheel --no-deps . -w /tmp/wheels
+            auditwheel repair --plat manylinux_2_28_$(uname -m) /tmp/wheels/*.whl -w dist
+          '
+      - name: Exercise the installed native wheel outside the checkout
+        shell: bash
+        run: |
+          python -m pip install dist/*.whl
+          python -I validation/check_installed_cam.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-wheel
+          path: dist/*.whl
+          if-no-files-found: error

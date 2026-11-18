@@ -4,12 +4,12 @@ See the [single-board computer guide](SBC.md) for board-specific downloads and t
 
 ## Desktop or phone installation
 
-Download the desktop package from the [official KerfKite release](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.6.0).
+Download the desktop package from the [official KerfKite release](https://github.com/ShaunPrice/KerfKite/releases/latest).
 
 * **Windows 10 or Windows 11 on Intel/AMD x64.** Open the setup wizard and choose **Install**. It installs for your account and adds KerfKite Studio to Start. Windows may display a SmartScreen warning for this unsigned installer. Check the download came from the official release. On a managed PC, follow your organisation’s software approval process.
 * **macOS.** In **Apple menu → About This Mac**, check whether the computer has an Apple chip or an Intel processor. Open the matching DMG, drag KerfKite Studio onto Applications and launch it there. This community build has an ad-hoc signature and has not been notarised by Apple. If macOS blocks it, review the app under **System Settings → Privacy & Security** after the first open attempt. Managed Macs may require administrator approval.
 * **Raspberry Pi OS, Debian and Ubuntu.** Use a 64-bit graphical desktop. Open the ARM64 DEB on a Pi 4/5 or other ARM64 system, or the AMD64 DEB on an Intel/AMD PC. Choose **Install** in the package manager and open KerfKite Studio from the applications menu. On another compatible glibc desktop with a browser and xdg-open, extract the matching Linux archive to a permanent folder and open the KerfKite executable inside.
-* **Android.** Download the [Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/download/v0.6.0/KerfKite-Pocket-Android.apk) on your phone, open **My Files → Downloads**, tap the APK and choose **Install**. If prompted, allow this source to install apps and revoke that permission afterwards. Device management and Samsung Auto Blocker can restrict sideloading. If replacing a development APK, export your draft first. Android requires the previous build to be removed if its signing certificate differs. [Pocket user guide](ANDROID.md)
+* **Android.** The minimum supported configuration is Android 8.0 (API 26) and 2 GB of device RAM. Download the [Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/latest/download/KerfKite-Pocket-Android.apk) on your phone, open **Downloads** in the file manager, tap the APK and choose **Install**. If prompted, allow this source to install apps and revoke that permission afterwards. Device management policies can restrict app installation. If replacing a development APK, export your draft first. Android requires the previous build to be removed if its signing certificate differs. [Pocket user guide](ANDROID.md)
 
 ### First launch
 
@@ -198,3 +198,7 @@ Install with `--mcp`, then configure your MCP client to launch the absolute path
 Stop the foreground service with Ctrl+C. Before updating, download unsaved projects and back up `web-data`, exported template libraries and configuration. Install new source into the same project, rerun the installer, restart the service and refresh the browser after saving its work. Native extensions must be rebuilt for a different OS, CPU architecture or incompatible Python version.
 
 Removing `.venv` removes that installation's Python dependencies. Removing source does not delete browser IndexedDB projects; browser site-data controls manage those separately. Keep or remove `web-data` deliberately according to whether its accounts/files are still needed. Do not delete the only copy of project files when uninstalling.
+
+## Reopening a project in an older Studio version
+
+Version 0.6.1 upgrades the browser project library the first time it opens. Before downgrading, open each design and revision you want to keep and choose **Download project**. Older releases can open the downloaded project files. The upgraded browser library requires version 0.6.1 or later.

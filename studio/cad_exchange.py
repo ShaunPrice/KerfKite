@@ -580,12 +580,12 @@ def register(app):
 
     @app.post('/api/solid-cad/exchange-stl')
     def exchange_stl():
-        from .solid_cad import binary_stl, rebuild
+        from .solid_cad import binary_stl, model_stl
         data = payload()
         if 'surface' in data:
             mesh = surface_mesh(data['surface'])
         elif 'content' in data:
             mesh = inspect_step(_decode(data['content']))
         else:
-            mesh = rebuild(data.get('model'))
+            return Response(model_stl(data.get('model')), mimetype='model/stl')
         return Response(binary_stl(mesh), mimetype='model/stl')

@@ -535,16 +535,20 @@ function buildGroup(key) {
     }
 }
 
-// scripts/build_templates.cjs uses this entry point to generate metadata from the recipes.
-function buildCatalog() {
-    const index = [], templates = [];
+// Build tooling walks one recipe group at a time, independent of the generated browser index.
+function* catalogEntries() {
     for (const key of recipes.keys()) {
-        for (const template of buildGroup(key)) {
-            templates.push(template);
-            index.push([key, template.id, template.name, template.category, template.aspect]);
-        }
+        for (const template of buildGroup(key)) yield [key, template];
     }
-    return {index, templates};
+}
+
+function buildCatalog() {
+    const templates = [], index = [];
+    for (const [key, template] of catalogEntries()) {
+        templates.push(template);
+        index.push([key, template.id, template.name, template.category, template.aspect]);
+    }
+    return {templates, index};
 }
 
 // Bound retained geometry independently of the number of categories the operator visits.
@@ -2353,5 +2357,5 @@ const templates = templateIndex.map(([recipe, id, name, category, aspect]) => ({
 }));
 const api = {templates, normalize};
 root.CNCTemplates = api;
-if (typeof module !== 'undefined') module.exports = {...api, buildCatalog};
+if (typeof module !== 'undefined') module.exports = {...api, buildCatalog, catalogEntries};
 })(globalThis);

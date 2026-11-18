@@ -105,6 +105,8 @@ static PyObject *contact(PyObject *, PyObject *args) {
     } catch(const std::bad_alloc &) { return PyErr_NoMemory(); }
 }
 
-static PyMethodDef methods[]={{"contact",contact,METH_VARARGS,"Compute bounded conservative cutter contact depths from cell maxima."},{nullptr,nullptr,0,nullptr}};
+PyObject* stock_heights(PyObject*, PyObject*);
+
+static PyMethodDef methods[]={{"stock_heights",stock_heights,METH_VARARGS,"Compute a bounded stock-removal grid from planar moves."},{"contact",contact,METH_VARARGS,"Compute bounded conservative cutter contact depths from cell maxima."},{nullptr,nullptr,0,nullptr}};
 static PyModuleDef module={PyModuleDef_HEAD_INIT,"_relief_native","Optional CNC Studio relief contact kernel.",-1,methods};
 PyMODINIT_FUNC PyInit__relief_native(void) {return PyModule_Create(&module);}

@@ -8,7 +8,22 @@ function harness(){
  const element=()=>({value:'',childNodes:[],append(...v){this.childNodes.push(...v);},replaceChildren(...v){this.childNodes=v;},prepend(){},setAttribute(){}});
  const $=id=>{if(!elements.has(id))elements.set(id,element());return elements.get(id);};
  $('projectName').value='Untitled project';
- const database={close(){},transaction(){const tx={};const store={get(k){return {result:structuredClone(records.get(k))};},getAll(){return {result:structuredClone([...records.values()])};},put(r){records.set(r.key,structuredClone(r));return {result:r.key};},delete(k){records.delete(k);return {};}};tx.objectStore=()=>store;tx.abort=()=>{};setImmediate(()=>{const complete=()=>tx.oncomplete?.();if(gate.paused)gate.pending.push(complete);else complete();});return tx;}};
+ const summaries=new Map();
+ const database={close(){},transaction(){
+   const tx={};
+   tx.objectStore=name=>{
+     const store=name==='summaries'?summaries:records;
+     return {
+       get(k){const req={result:structuredClone(store.get(k))};queueMicrotask(()=>req.onsuccess?.());return req;},
+       index(field){return {getAll(value){return {result:structuredClone([...store.values()].filter(row=>row[field]===value))};}};},
+       put(r){store.set(r.key,structuredClone(r));return {result:r.key};},
+       delete(k){store.delete(k);return {};}
+     };
+   };
+   tx.abort=()=>{};
+   setImmediate(()=>{const complete=()=>tx.oncomplete?.();if(gate.paused)gate.pending.push(complete);else complete();});
+   return tx;
+ }};
  const context={$,console,File,TextEncoder,crypto:require('node:crypto').webcrypto,Option:function(text,value){return {text,value};},CustomEvent:function(type,o){return {type,detail:o.detail};},document:{createElement:element,querySelector:element,addEventListener(){}},setTimeout:()=>1,clearTimeout(){},indexedDB:{open(){const req={result:database};setImmediate(()=>req.onsuccess());return req;}},objects:[{name:'Shape',paths:[[[0,0],[10,0],[10,10],[0,0]]]}],selected:0,project:()=>({mode:'router',depth:1}),invalidate(){},draw(){},message(){},download(...args){context.downloaded=args;},artifact:kind=>({name:kind,content:'old'}),task:fn=>fn,confirm:()=>true,studioReady:Promise.resolve({web_mode:true,username:'alice'}),addEventListener:(name,fn)=>listeners.set(name,fn),dispatchEvent:e=>events.push(e),loadFile:async function(file){const d=JSON.parse(await file.text());if(d.invalid)throw Error('Invalid project geometry');context.objects=d.objects;}};
  context.window=context;vm.createContext(context);vm.runInContext(fs.readFileSync('studio/static/projects.js','utf8'),context);return {context,records,events,$,listeners,gate};
 }

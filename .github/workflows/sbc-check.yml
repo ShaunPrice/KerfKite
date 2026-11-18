@@ -5,7 +5,7 @@ on:
       tag:
         description: KerfKite release containing the desktop and browser installers
         required: true
-        default: v0.6.0
+        default: v0.6.1
 permissions:
   contents: read
 jobs:
@@ -20,6 +20,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
       - name: Verify installer downloads
         env:
           GH_TOKEN: ${{ github.token }}

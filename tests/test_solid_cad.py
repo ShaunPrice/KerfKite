@@ -4,7 +4,7 @@ import struct
 import unittest
 from collections import Counter
 
-from studio.solid_cad import binary_stl, horizontal_section, rebuild
+from studio.solid_cad import binary_stl, horizontal_section, model_stl, rebuild
 
 
 def plate():
@@ -34,6 +34,13 @@ class SolidCadTests(unittest.TestCase):
         updated = rebuild(model)
         self.assertEqual(updated['bounds'][3], 50)
         self.assertAlmostEqual(updated['volume'] - part['volume'], 1800)
+
+    def test_direct_model_export_preserves_facet_order_normals_and_coordinates(self):
+        # A sphere spans several batches of the STL writer.
+        model = {'version': 1, 'features': [{'id': 'ball', 'kind': 'sphere', 'radius': 4}]}
+        part = rebuild(model)
+        self.assertGreater(len(part['triangles']), 2048)
+        self.assertEqual(model_stl(model), binary_stl(part))
 
     def test_sketch_extrusion_transform_and_feature_suppression(self):
         model = {'version': 1, 'features': [

@@ -40,7 +40,7 @@
     <div class="solid-top"><h1>Solid modeller</h1><button id="solid-guide">Guided plate tutorial</button></div>
     <section id="solid-lesson" hidden><strong id="solid-lesson-title"></strong><p id="solid-instruction"></p>
       <button id="solid-keep" hidden>Keep lesson model</button> <button id="solid-exit">Exit tutorial</button></section>
-    <div class="solid-view"><canvas id="solid-canvas" tabindex="0" aria-label="3D model viewport. Arrow keys orbit. Plus and minus zoom."></canvas>
+    <div class="solid-view mesh-viewport"><canvas id="solid-canvas" tabindex="0" aria-label="3D model viewport. Arrow keys orbit. Plus and minus zoom."></canvas>
       <span class="solid-view-units">mm</span><span class="solid-view-hint">Drag to orbit · Shift-drag to pan · Scroll to zoom</span></div>
     <div class="solid-tools"><button id="solid-fit">Fit isometric</button><button id="solid-top">Top view</button>
       <button id="solid-build">Rebuild</button><button id="solid-export">Export STL</button></div>
@@ -346,6 +346,7 @@
   $('solid-build').onclick=rebuild;
   const canvas=$('solid-canvas');
   function paint() {
+    if(stage.hidden&&!mesh)KerfKiteMeshRenderer.clear(canvas);
     if(!stage.hidden) paintMesh(canvas,mesh,view,model.features.length?'Awaiting solid geometry':'Add a feature to start modelling');
   }
   function paintMesh(canvas,mesh,camera,emptyMessage='No geometry to display') {
@@ -357,8 +358,9 @@
     if(canvas.width!==w || canvas.height!==h){canvas.width=w;canvas.height=h;}
     const ctx=canvas.getContext('2d');
     if (!ctx) return;
-    ctx.clearRect(0,0,w,h);
+    ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,w,h);
     if(!mesh){
+      KerfKiteMeshRenderer.clear(canvas);
       ctx.fillStyle='#d6e2e8';ctx.textAlign='center';ctx.font=(14*pixelRatio)+'px system-ui';
       ctx.fillText(emptyMessage,w/2,h/2);
       return;
@@ -371,20 +373,26 @@
       const horizontal=ca*x-sa*y, depth=sa*x+ca*y;
       return [horizontal,sb*depth+cb*z,-cb*depth+sb*z];
     }
-    const pts=mesh.vertices.map(v=>rotate(v[0]-centre[0],v[1]-centre[1],v[2]-centre[2]));
-    const faces=mesh.triangles.map(tri=>{
-      const [a,b,c]=tri.map(i=>pts[i]);
-      const ab=b.map((v,i)=>v-a[i]),ac=c.map((v,i)=>v-a[i]);
-      const normal=[ab[1]*ac[2]-ab[2]*ac[1],ab[2]*ac[0]-ab[0]*ac[2],ab[0]*ac[1]-ab[1]*ac[0]];
-      const length=Math.hypot(...normal)||1;
-      const light=Math.max(0,(-.32*normal[0]+.56*normal[1]+.72*normal[2])/length);
-      return {tri,depth:a[2]+b[2]+c[2],light};
-    }).sort((a,b)=>a.depth-b.depth);
-    for(const {tri,light} of faces){
-      ctx.beginPath();
-      tri.forEach((i,j)=>{const p=pts[i];ctx[j===0?'moveTo':'lineTo'](w/2+view.panX*pixelRatio+p[0]*scale,h/2+view.panY*pixelRatio-p[1]*scale);});
-      ctx.closePath();ctx.fillStyle='hsl(188 40% '+(43+light*33)+'%)';
-      ctx.fill();ctx.strokeStyle=ctx.fillStyle;ctx.lineWidth=.6*pixelRatio;ctx.stroke();
+    const accelerated=KerfKiteMeshRenderer.draw(canvas,ctx,mesh,centre,[ca,sa,cb,sb],
+      [2*scale/w,2*scale/h,-1.9/Math.max(.001,diagonal)],
+      [2*view.panX*pixelRatio/w,-2*view.panY*pixelRatio/h]);
+    canvas.dataset.meshRenderer=accelerated?'webgl2':'canvas2d';
+    if(!accelerated){
+      const pts=mesh.vertices.map(v=>rotate(v[0]-centre[0],v[1]-centre[1],v[2]-centre[2]));
+      const faces=mesh.triangles.map(tri=>{
+        const [a,b,c]=tri.map(i=>pts[i]);
+        const ab=b.map((v,i)=>v-a[i]),ac=c.map((v,i)=>v-a[i]);
+        const normal=[ab[1]*ac[2]-ab[2]*ac[1],ab[2]*ac[0]-ab[0]*ac[2],ab[0]*ac[1]-ab[1]*ac[0]];
+        const length=Math.hypot(...normal)||1;
+        const light=Math.max(0,(-.32*normal[0]+.56*normal[1]+.72*normal[2])/length);
+        return {tri,depth:a[2]+b[2]+c[2],light};
+      }).sort((a,b)=>a.depth-b.depth);
+      for(const {tri,light} of faces){
+        ctx.beginPath();
+        tri.forEach((i,j)=>{const p=pts[i];ctx[j===0?'moveTo':'lineTo'](w/2+view.panX*pixelRatio+p[0]*scale,h/2+view.panY*pixelRatio-p[1]*scale);});
+        ctx.closePath();ctx.fillStyle='hsl(188 40% '+(43+light*33)+'%)';
+        ctx.fill();ctx.strokeStyle=ctx.fillStyle;ctx.lineWidth=.6*pixelRatio;ctx.stroke();
+      }
     }
     ctx.lineWidth=2*pixelRatio;ctx.textAlign='center';ctx.font=(10*pixelRatio)+'px system-ui';
     [[1,0,0,'X','#ffa997'],[0,1,0,'Y','#aad697'],[0,0,1,'Z','#8dcdf1']].forEach(([x,y,z,symbol,color])=>{
@@ -393,6 +401,7 @@
       ctx.fillText(symbol,ox+26*pixelRatio*v[0],oy-26*pixelRatio*v[1]+3*pixelRatio);
     });
   }
+  canvas.addEventListener('mesh-renderer-changed',paint);
   new ResizeObserver(paint).observe(canvas);
   // Pan is expressed in CSS pixels, independent of display pixel ratio.
   function camera(command, args=[]) {

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kerfkite-studio"
-version = "0.6.0"
+version = "0.6.1"
 description = "Cross-platform CNC, laser and knife design workspace"
 requires-python = ">=3.10"
 license = "MIT AND OFL-1.1 AND Zlib"
@@ -22,4 +22,4 @@ cnc-studio-web = "studio.web_server:main"
 cnc-studio-mcp = "studio.mcp_server:main"
 
 [tool.setuptools.package-data]
-studio = ["static/*", "static/icons/*", "static/vendor/*", "builtin_templates.json"]
+studio = ["static/*", "static/icons/*", "static/vendor/*", "builtin_templates.kkart"]

@@ -1,7 +1,42 @@
 'use strict';
-let snapshots=[JSON.stringify({objects:[],settings:project()})],historyIndex=0,restoring=false;
-window.recordHistory=()=>{if(restoring)return;const s=JSON.stringify({objects,settings:project(),designLayers:window.projectExtras?.designLayers});if(s===snapshots[historyIndex])return;snapshots=snapshots.slice(0,historyIndex+1);snapshots.push(s);if(snapshots.length>40)snapshots.shift();historyIndex=snapshots.length-1;};
-function restore(delta){const i=historyIndex+delta;if(i<0||i>=snapshots.length)return;historyIndex=i;const s=JSON.parse(snapshots[i]);objects=s.objects;window.projectExtras??={};if(s.designLayers===undefined)delete window.projectExtras.designLayers;else window.projectExtras.designLayers=s.designLayers;selected=objects.length-1;for(const k of fields)if(s.settings[k]!==undefined)$(k).value=s.settings[k];restoring=true;invalidate();restoring=false;modeUI();draw();window.dispatchEvent(new Event('cnc-layers-changed'));}
+// Editable inputs are sufficient to reconstruct CAM operations, depths and
+// powers. Reuse unchanged object strings across the bounded undo history.
+function drawingSnapshot(previous) {
+  const settings=JSON.stringify(editorSettings()), layers=JSON.stringify(window.projectExtras?.designLayers);
+  let unchanged=previous?.objects.length===objects.length && previous.settings===settings && previous.layers===layers;
+  const items=objects.map((object,i)=>{
+    const encoded=JSON.stringify(object);
+    if(previous && previous.objects[i]===encoded)return previous.objects[i];
+    unchanged=false;
+    return encoded;
+  });
+  return unchanged?previous:{objects:items,settings,layers};
+}
+let snapshots=[drawingSnapshot()],historyIndex=0,restoring=false;
+window.recordHistory=()=>{
+  if(restoring)return;
+  const previous=snapshots[historyIndex],next=drawingSnapshot(previous);
+  if(next===previous)return;
+  snapshots.splice(historyIndex+1);
+  snapshots.push(next);
+  if(snapshots.length>40)snapshots.shift();
+  historyIndex=snapshots.length-1;
+};
+function restore(delta){
+  const i=historyIndex+delta;
+  if(i<0||i>=snapshots.length)return;
+  historyIndex=i;
+  const s=snapshots[i],settings=JSON.parse(s.settings);
+  objects=s.objects.map(text=>JSON.parse(text));
+  window.projectExtras??={};
+  if(s.layers===undefined)delete window.projectExtras.designLayers;
+  else window.projectExtras.designLayers=JSON.parse(s.layers);
+  selected=objects.length-1;
+  for(const k of fields)if(settings[k]!==undefined)$(k).value=settings[k];
+  restoring=true;
+  try{invalidate();}finally{restoring=false;}
+  modeUI();draw();window.dispatchEvent(new Event('cnc-layers-changed'));
+}
 $('undo').onclick=()=>restore(-1);$('redo').onclick=()=>restore(1);
 function selectedObject(){if(selected<0)throw Error('Select an object');return objects[selected];}
 function askNumber(label,initial,min,max){const raw=prompt(label,String(initial));if(raw===null)return null;const n=Number(raw);if(!Number.isFinite(n)||n<min||n>max)throw Error(`Enter a number between ${min} and ${max}`);return n;}
@@ -14,9 +49,9 @@ $('offsetObject').onclick=task(async()=>{const o=selectedObject(),d=askNumber('O
 $('bezierObject').onclick=task(()=>{const[x,y,w,h]=shape();addGenerated('Bézier curve',[CNCOrnaments.bezier?CNCOrnaments.bezier([x,y],[x,y+h],[x+w,y+h],[x+w,y]):Array.from({length:81},(_,i)=>{const t=i/80,u=1-t;return[x+w*(3*u*t*t+t*t*t),y+3*h*t*u];})]);});
 let nodeMode=false,nodeDrag=null;
 $('editNodes').onclick=task(()=>{const o=selectedObject();if(o.gear)throw Error('Regenerate gears using their parameters');if(o.paths.flat().length>500)throw Error('This object exceeds 500 editable vertices');nodeMode=!nodeMode;draw();});
-const baseDraw=draw;draw=function(){baseDraw();if(!nodeMode||!objects[selected])return;objects[selected].paths.forEach((p,pi)=>p.forEach(([x,y],vi)=>{if(vi&&vi===p.length-1&&p[0][0]===x&&p[0][1]===y)return;const n=svgNode('circle',{cx:x,cy:Number($('height').value)-y,r:1.2,fill:'#b63170','data-node':`${pi},${vi}`});$('selection').append(n);}));};
+const nodeSelection=renderSelection;renderSelection=function(){nodeSelection();if(!nodeMode||!objects[selected])return;objects[selected].paths.forEach((p,pi)=>p.forEach(([x,y],vi)=>{if(vi&&vi===p.length-1&&p[0][0]===x&&p[0][1]===y)return;const n=svgNode('circle',{cx:x,cy:Number($('height').value)-y,r:1.2,fill:'#b63170','data-node':`${pi},${vi}`});$('selection').append(n);}));};
 $('canvas').addEventListener('pointerdown',e=>{if(!e.target.dataset.node)return;e.stopImmediatePropagation();const[pi,vi]=e.target.dataset.node.split(',').map(Number);nodeDrag={id:e.pointerId,pi,vi};$('canvas').setPointerCapture(e.pointerId);},true);
-$('canvas').addEventListener('pointermove',e=>{if(!nodeDrag)return;e.stopImmediatePropagation();const p=objects[selected].paths[nodeDrag.pi],wasClosed=p.length>2&&p[0][0]===p.at(-1)[0]&&p[0][1]===p.at(-1)[1],[x,y]=canvasPoint(e);p[nodeDrag.vi]=[Math.max(0,Math.min(Number($('width').value),x)),Math.max(0,Math.min(Number($('height').value),y))];if(wasClosed&&nodeDrag.vi===0)p[p.length-1]=[...p[0]];delete objects[selected].textOptions;draw();},true);
+$('canvas').addEventListener('pointermove',e=>{if(!nodeDrag)return;e.stopImmediatePropagation();const p=objects[selected].paths[nodeDrag.pi],wasClosed=p.length>2&&p[0][0]===p.at(-1)[0]&&p[0][1]===p.at(-1)[1],[x,y]=canvasPoint(e);p[nodeDrag.vi]=[Math.max(0,Math.min(Number($('width').value),x)),Math.max(0,Math.min(Number($('height').value),y))];if(wasClosed&&nodeDrag.vi===0)p[p.length-1]=[...p[0]];delete objects[selected].textOptions;repaintActiveObject();},true);
 $('canvas').addEventListener('pointerup',e=>{if(!nodeDrag)return;e.stopImmediatePropagation();nodeDrag=null;invalidate();draw();},true);
 $('makeRelief').onclick=task(async()=>{
   const file=$('reliefFile').files[0];

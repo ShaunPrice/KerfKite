@@ -28,6 +28,13 @@ Open the printed loopback address. Keep the server's default simulator setting. 
 
 Browser scripts are loaded as classic scripts from `studio/static/index.html`. Several editor modules extend common functions in load order. Features that reference the tab panels mount after `tool-tabs.js`. When a project opens or resets, listen for `cnc-project-loaded` to refresh controls. Notify project persistence through `cnc-project-changed` for edits stored in extras.
 
+
+Large stock previews POST to the authenticated `/api/simulate` design route. A session advertises
+`stock_wire_v1` when it accepts the little-endian `application/vnd.kerfkite.stock-v1` layout in
+`studio/stock_wire.py` and `studio/static/stock-wire.js`. The header and its segment count bound
+the request before the grid calculation. JSON clients use the same parameter validation and result
+shape. The file editor runs its existing JavaScript simulator locally.
+
 ## Run the checks
 
 ```sh
@@ -85,3 +92,11 @@ New commands that edit documents should reuse the editor model and its existing 
 The saved macro schema, import collision rules, name validation and defaults live in `studio/static/cad-macros.js`. Commands and source application run through `cad-commands.js`. Preserve the per-instance numeric overrides on project save/open. Keep the assistant tool, interactive authoring guide and bundled Help in sync when changing a macro. The browser regression `validation/cad_macro_workflow.py` builds every starter on a fresh project. It also measures parametric solids, checks that a bad command leaves artwork and camera intact, and tests library reimport. [Macro authoring guide](CAD-MACROS.md)
 
 Assistant workflow instructions are in `skills/kerfkite-workshop/SKILL.md`. The release ZIP should contain `kerfkite-workshop/SKILL.md` inside the correspondingly named top-level folder. After changing a workflow, compare the skill examples with the server's advertised input schema, validate any changed frontmatter using the Agent Skills validator available in your development environment, and run the example against a fresh simulated editor. Check the resulting artifact content or measured geometry. Restarting the local connection and repeating a named tool call is a separate test from running the MCP SDK harness. [Tool contract and client instructions](MCP.md) · [Remote hosting](MCP-HOSTING.md)
+
+## CAM, mesh and editor performance
+
+Desktop installers include the native relief and stock module for their platform. A source install uses the Python implementation when its optional C++ build is unavailable. The filesystem-only editor runs its browser CAM implementation. To compare the reference and native service on identical data, run `python -m validation.benchmark_native /tmp/kerfkite-cam.json` from a checkout with the extension built. The benchmark measures each backend in a fresh process, checks the complete stock grid and hashes the planar and rotary output.
+
+Generated fourth-axis jobs keep repeating moves in packed double-precision buffers until the postprocessor emits text. Keep the raw-text path for external callers and compare complete output when changing rounding, modal feeds, variable depth, laser power or rotary seam handling. STL export uses the kernel mesh directly and computes facet normals in batches. The interactive mesh response still supports JSON clients.
+
+The editor keeps editable inputs in its undo history and reconstructs the toolpath after restoration. The project library indexes search metadata separately from document and revision contents. The solid viewport reuses indexed WebGL geometry during camera changes and has a Canvas renderer for systems without suitable acceleration. Run the browser harness to exercise undo, library migration, drag cancellation and mesh rendering. Use `python validation/benchmark_viewport.py --browser PATH` to compare frame times for the same part and camera motions on the local GPU.

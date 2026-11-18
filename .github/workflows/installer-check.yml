@@ -5,7 +5,7 @@ on:
       tag:
         description: Release tag to verify
         required: true
-        default: v0.6.0
+        default: v0.6.1
 permissions:
   contents: read
 jobs:
@@ -25,6 +25,8 @@ jobs:
       INSTALLER: ${{ matrix.file }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
       - name: Fetch release package and verify its checksum
         shell: bash
         env:

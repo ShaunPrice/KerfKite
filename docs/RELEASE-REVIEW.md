@@ -2,7 +2,7 @@
 
 ## 0.4.1 pendant and workflow update · 19 November 2026
 
-Pocket adds an optional **Keep screen awake** switch to its editor and pendant. A signed upgrade retained the previous version’s project. With the emulator set to a 10-second screen timeout, Pocket kept the foreground editor visible until the option was switched off. Leaving Pocket restored Android’s normal display behaviour. A physical Galaxy S23 and CNC were unavailable.
+Pocket adds an optional **Keep screen awake** switch to its editor and pendant. A signed upgrade retained the previous version’s project. With the emulator set to a 10-second screen timeout, Pocket kept the foreground editor visible until the option was switched off. Leaving Pocket restored Android’s normal display behaviour. Physical handset and CNC testing remained pending.
 
 The GRBL simulator now exercises long confirmed feed holds and the remaining timeout budget on resume. DXF import handles planar block clipping before exposing artwork to CAM. In the regression drawing, a 100 mm source line clipped from X=10 to X=35 imports as a 25 mm path and survives project reopening at that size. See the [Android guide](ANDROID.md), [troubleshooting guide](TROUBLESHOOTING.md) and [program import coverage](PROGRAM-IMPORT.md).
 
@@ -18,7 +18,7 @@ The new router operations generate explicit peck, ramp and helix moves. The lase
 | Vector exchange | The editor preserved the bore and perimeter of a gear as separate SVG contours. A two-page vector PDF was reviewed at physical size before enabling output. |
 | Pocket | A signed APK upgraded a previous installation and retained its editable draft. A grouped 228,565-byte desktop project with labelled parts and machining settings survived byte-for-byte re-export. Pendant tests used the Studio simulator. |
 
-The [feature matrix](PRODUCT.md) records present scope. The [installer checks](INSTALLER-BUILDS.md) exercise separate desktop and SBC packages. The [interactive lessons](../studio/static/machining-lessons.html) and [simulation guide](SIMULATION.md) describe how to repeat workshop exercises without a machine. Physical cutting and handheld Galaxy S23 acceptance remain outstanding for this release.
+The [feature matrix](PRODUCT.md) records present scope. The [installer checks](INSTALLER-BUILDS.md) exercise separate desktop and SBC packages. The [interactive lessons](../studio/static/machining-lessons.html) and [simulation guide](SIMULATION.md) describe how to repeat workshop exercises without a machine. Physical cutting and physical Android handset acceptance remain outstanding for this release.
 
 ## Earlier CAD release review · 18 November 2026
 
@@ -37,9 +37,9 @@ KerfKite Studio can fit parts in an assembly, edit freeform surfaces, exchange g
 | Camera placement | Register a flat image to the bed from four landmarks, inspect an independent check point, overlay the image and place traced paths. | A synthetic target exercised projective registration, profile recall and trace placement. Accuracy with a physical lens and fixture remains unmeasured. |
 | File interchange | Review LightBurn vector projects, supported preferences, materials, device setups and selected bundle members. Import DXF entities, G-code geometry, HP-GL pen paths and numeric LinuxCNC setup data. | A saved LightBurn project regenerated its laser power and feed. Replayed HP-GL produced 21 knife segments. Additional compatibility checks read public LightBurn vector, material and preference samples. |
 
-## Test evidence
+## Earlier public source release tests
 
-The public source release passed **all 11 harness groups on macOS ARM64, Windows 11 Pro x86-64 and a physical Raspberry Pi 5 ARM64**. Each run included STEP exchange, native C++ relief, **151 Python tests and 114 JavaScript tests**, with no regression tests skipped. **21 Chromium workflow groups passed on the Mac** against a hardware-disabled service. Separate repository checks passed on macOS ARM64 and Ubuntu ARM64 in a local container. Physical tool motion, Windows 10, the Galaxy S23 and the smaller Raspberry Pi configurations remain outside this release's verification.
+The original public source release passed **all 11 harness groups on macOS ARM64, Windows 11 Pro x86-64 and a physical Raspberry Pi 5 ARM64**. Each run included STEP exchange, native C++ relief, **151 Python tests and 114 JavaScript tests**, with no regression tests skipped. **21 Chromium workflow groups passed on the Mac** against a hardware-disabled service. Separate repository checks passed on macOS ARM64 and Ubuntu ARM64 in a local container. Physical tool motion, Windows 10, physical Android handsets and the smaller Raspberry Pi configurations remain outside this release's verification.
 
 The [machine-readable simulation record](../validation/advanced-cad-simulation.json), [developer handoff](DEVELOPER.md), [interactive workshop entry points](../studio/static/machining-lessons.html) and [import compatibility guide](LIGHTBURN-IMPORT.md) describe how to repeat the checks.
 

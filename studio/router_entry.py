@@ -5,6 +5,7 @@ from shapely.geometry import LineString, Point
 from shapely.ops import nearest_points
 
 from .operations import polygons, region, value
+from .cam_moves import PackedSegments, CutRun
 from .protocols import get_protocol, postprocess
 
 
@@ -39,7 +40,7 @@ def _pocket_entries(source, paths, bit_radius, radius):
     return result
 
 
-def generate_entry(project, source, paths, caps, depth, step, safe, feed, plunge, rpm, warnings):
+def generate_entry(project, source, paths, caps, depth, step, safe, feed, plunge, rpm, warnings, *, packed_segments=False, rotary_blocks=False):
     strategy=project['router_entry']
     op=project.get('operation','line')
     if strategy not in ('ramp','helix'):
@@ -71,19 +72,27 @@ def generate_entry(project, source, paths, caps, depth, step, safe, feed, plunge
         turn_length=2*radius*math.sin(math.pi/chords)*chords
     protocol=project.get('protocol','grbl')
     lines=['G21','G90','G17','G94','G54','M5',f'G0 Z{safe:.3f}',f'M3 S{rpm:.0f}','G4 P2']
-    segments=[]
+    segments=PackedSegments() if packed_segments or rotary_blocks else []
+    line_count = len(lines)
     length=minutes=0.0
     bounds=[math.inf,math.inf,-math.inf,-math.inf]
     state=None
 
     def move(x,y,z,rate):
-        nonlocal state,length,minutes
-        if len(lines)>=199996:
+        nonlocal state,length,minutes,line_count
+        if line_count>=199996:
             raise ValueError('Entry exceeds the 200000-line limit; simplify the contour or adjust the depth and angle')
         ax,ay,az=state
         if [x,y,z]==state:
             return
-        lines.append(f'G1 X{x:.3f} Y{y:.3f} Z{z:.3f} F{rate:.1f}')
+        if rotary_blocks:
+            if isinstance(lines[-1], CutRun) and lines[-1].feed == rate:
+                lines[-1].stop += 1
+            else:
+                lines.append(CutRun(segments, len(segments), len(segments)+1, rate, True, False))
+        else:
+            lines.append(f'G1 X{x:.3f} Y{y:.3f} Z{z:.3f} F{rate:.1f}')
+        line_count += 1
         segments.append([ax,ay,x,y,z,None,az])
         d=math.dist((ax,ay,az),(x,y,z))
         length += d
@@ -107,11 +116,12 @@ def generate_entry(project, source, paths, caps, depth, step, safe, feed, plunge
                 cx,cy,start_angle=helices[i]
                 x=cx+radius*math.cos(start_angle);y=cy+radius*math.sin(start_angle)
             lines += [f'G0 Z{safe:.3f}',f'G0 X{x:.3f} Y{y:.3f}']
+            line_count += 2
             state=[x,y,safe]
             move(x,y,max(previous,limit[0]) if limit else previous,plunge)
             if helices is None:
                 turns=max(1,math.ceil(drop/(slope*perimeter)))
-                if len(lines)+turns*(len(path)-1)>200000:
+                if line_count+turns*(len(path)-1)>200000:
                     raise ValueError('Contour ramp exceeds the path segment limit')
                 total=turns*perimeter
                 along=0
@@ -123,7 +133,7 @@ def generate_entry(project, source, paths, caps, depth, step, safe, feed, plunge
             else:
                 turns=max(1,math.ceil(drop/(slope*turn_length)))
                 count=turns*chords
-                if len(lines)+count>200000:
+                if line_count+count>200000:
                     raise ValueError('Helix exceeds the path segment limit')
                 for j in range(1,count+1):
                     theta=start_angle+2*math.pi*(j%chords)/chords
@@ -135,6 +145,7 @@ def generate_entry(project, source, paths, caps, depth, step, safe, feed, plunge
                 z=max(bottom,limit[j]) if limit else bottom
                 move(px,py,z,min(feed,plunge) if limit else feed)
             lines.append(f'G0 Z{safe:.3f}')
+            line_count += 1
         previous=bottom
     lines.append('M5')
     return dict(lines=postprocess(lines,protocol,'router',project.get('dwell_units','')),segments=segments,

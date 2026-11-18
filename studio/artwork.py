@@ -4,6 +4,7 @@ import json
 import uuid
 from pathlib import Path
 from .cam import generate, number
+from .template_catalog import TemplateCatalog
 
 
 def label(value, field, limit):
@@ -36,7 +37,7 @@ class ArtworkStore:
     def __init__(self, output_dir):
         self.root = Path(output_dir).expanduser().resolve()
         self.root.mkdir(parents=True, exist_ok=True)
-        self.builtins = json.loads(Path(__file__).with_name('builtin_templates.json').read_text())
+        self.builtins = TemplateCatalog()
 
     def write(self, suffix, content):
         # Callers supply content only. Names are generated, never caller-controlled paths.
@@ -46,16 +47,18 @@ class ArtworkStore:
         return str(target)
 
     def list_templates(self, query='', category='', limit=30):
-        query = query.casefold()
-        return [{'id': t['id'], 'name': t['name'], 'category': t['category']} for t in self.builtins
-                if query in (t['name']+' '+t['category']).casefold() and (not category or category == t['category'])][:max(1,min(100,limit))]
+        return self.builtins.search(query, category, limit)
 
     def template(self, template_id, x=0, y=0, width=100, height=100):
-        t = next((t for t in self.builtins if t['id'] == template_id), None)
+        t = self.builtins.get(template_id)
         if t is None:
             raise ValueError('Unknown template id; use list_templates')
         x,y,width,height = [number(v,n,0 if n in ('X','Y') else .1,2000) for v,n in zip((x,y,width,height),('X','Y','Width','Height'))]
-        paths = validate_paths([[[x+px*width/100,y+py*height/100] for px,py in p] for p in t['paths']])
+        paths = t['paths']
+        for path in paths:
+            for point in path:
+                point[0] = number(x + point[0] * width / 100, 'Coordinate', 0, 2000)
+                point[1] = number(y + point[1] * height / 100, 'Coordinate', 0, 2000)
         return {'name':t['name'],'category':t['category'],'paths':paths}
 
     def create_artwork(self, name, paths, width=750, height=400):

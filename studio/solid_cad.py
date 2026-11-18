@@ -261,10 +261,30 @@ def binary_stl(result):
     """Encode the oriented mesh produced by rebuild() as a binary STL in mm."""
     import numpy as np
 
-    points = np.asarray(result['vertices'], dtype=np.float64)[result['triangles']]
-    normals = np.cross(points[:, 1] - points[:, 0], points[:, 2] - points[:, 0])
-    lengths = np.linalg.norm(normals, axis=1)
-    normals /= np.where(lengths == 0, 1, lengths)[:, None]
-    records = np.zeros(len(points), dtype=[('normal', '<f4', 3), ('vertices', '<f4', (3, 3)), ('attr', '<u2')])
-    records['normal'], records['vertices'] = normals, points
-    return b'KerfKite Studio solid, mm'.ljust(80,b'\0') + struct.pack('<I',len(points)) + records.tobytes()
+    return _encode_stl(np.asarray(result['vertices'], dtype=np.float64), np.asarray(result['triangles']))
+
+
+def model_stl(model):
+    """Export directly from the kernel's indexed mesh, without building the JSON preview."""
+    solid, _, _ = _build(model)
+    mesh = solid.to_mesh64()
+    return _encode_stl(mesh.vert_properties[:, :3], mesh.tri_verts)
+
+
+def _encode_stl(vertices, triangles):
+    from io import BytesIO
+    import numpy as np
+
+    output = BytesIO()
+    output.write(b'KerfKite Studio solid, mm'.ljust(80, b'\0'))
+    output.write(struct.pack('<I', len(triangles)))
+    layout = [('normal', '<f4', 3), ('vertices', '<f4', (3, 3)), ('attr', '<u2')]
+    for start in range(0, len(triangles), 2048):
+        points = vertices[triangles[start:start + 2048]]
+        normals = np.cross(points[:, 1] - points[:, 0], points[:, 2] - points[:, 0])
+        lengths = np.linalg.norm(normals, axis=1)
+        normals /= np.where(lengths == 0, 1, lengths)[:, None]
+        records = np.zeros(len(points), dtype=layout)
+        records['normal'], records['vertices'] = normals, points
+        output.write(records.tobytes())
+    return output.getvalue()

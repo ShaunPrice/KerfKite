@@ -16,6 +16,7 @@ import (
 	"time"
 )
 
+const runtimePlatform = runtime.GOOS + "-" + runtime.GOARCH
 const uvVersion = "0.13.1"
 
 type asset struct{ name, digest string }
@@ -80,7 +81,7 @@ func setupTool(ctx context.Context, dir string) (string, error) {
 	if runtime.GOOS == "windows" {
 		name += ".exe"
 	}
-	dir = filepath.Join(dir, "tools", uvVersion)
+	dir = filepath.Join(dir, "tools", uvVersion, runtimePlatform)
 	dest := filepath.Join(dir, name)
 	if _, e := os.Stat(dest); e == nil {
 		return dest, nil

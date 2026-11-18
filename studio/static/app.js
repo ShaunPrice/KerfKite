@@ -6,12 +6,30 @@ let objects=[], selected=-1, preview=null, previewProject=null, token='', latest
 let previewEpoch=0;
 const fields=['stock_thickness','operation','tool_diameter','stepover','kerf','interval','hatch_angle','crosshatch','v_angle','v_resolution','knife_offset','knife_lead','dwell_units','protocol','width','height','mode','feed','power','depth','step','safe','plunge','passes','lead_in','lead_out','start_power','end_power','ramp_in','ramp_out','lead_shape','laser_pattern','laser_dash','laser_gap','laser_bridge_count','drill_peck','drill_point_angle','router_entry','entry_angle','entry_radius'];
 function message(text,error=false){$('message').textContent=text;$('message').className=error?'error':'';}
-async function api(path,data){const tabProject=data?.project||data;const needsEntry=op=>op?.mode==='router'&&op.router_entry&&op.router_entry!=='plunge';if(!offline&&['generate','arm','run','rotary','tool-changes'].includes(path)&&(needsEntry(tabProject)||tabProject?.operations?.some(op=>needsEntry({...tabProject,...op})))&&!window.studioSession?.router_entries)throw Error('Restart Studio before posting ramp or helical entries with this editor.');const patterned=op=>op?.mode==='laser'&&(op.laser_pattern&&op.laser_pattern!=='continuous'||op.lead_shape&&op.lead_shape!=='straight'&&(op.lead_in||op.lead_out));if(!offline&&['generate','arm','run','rotary','tool-changes'].includes(path)&&(patterned(tabProject)||tabProject?.operations?.some(op=>patterned({...tabProject,...op})))&&!window.studioSession?.laser_patterns)throw Error('Restart Studio and reload before using laser cut patterns and curved leads.');const needsTabs=tabProject?.tabs||tabProject?.operations?.some(op=>op?.tabs);if(!offline&&needsTabs&&['generate','rotary','tool-changes'].includes(path)&&!window.studioSession?.holding_tabs)throw Error('Restart CNC Studio and reload to enable holding tabs; this server cannot preserve them.');if(path==='generate'&&!offline&&(data?.operation&&data.operation!=='line'||data?.operations||data?.path_powers)&&!window.studioSession?.advanced_cam)throw Error('Restart CNC Studio and reload to enable the new CAM operations');if(path==='generate'&&data?.path_depths&&!offline&&!window.studioSession?.depth_paths)throw Error('Restart CNC Studio and reload the editor to enable the new varying-depth CAM');if(offline){if(path==='simulate')return CNCOffline.simulate(data);if(path==='rotary')return CNCRotary.generate(data.project,data.options);if(path==='generate')return CNCOffline.generate(data);if(path==='session')return {token:'',offline:true,depth_paths:true};if(path==='profiles')return [{id:'offline',name:'Local file editor',width:750,height:400,firmware:'Offline design'}];if(path==='ports')return [];throw Error('This advanced design operation requires the app server; basic CAM and G-code work offline.');}const r=await fetch('/api/'+path,{method:data===undefined?'GET':'POST',headers:{'Content-Type':'application/json','X-Studio-Token':token},body:data===undefined?undefined:JSON.stringify(data)});const result=await r.json();if(!r.ok)throw Error(result.error||'Request failed');return result;}
+async function api(path,data){const tabProject=data?.project||data;const needsEntry=op=>op?.mode==='router'&&op.router_entry&&op.router_entry!=='plunge';if(!offline&&['generate','arm','run','rotary','tool-changes'].includes(path)&&(needsEntry(tabProject)||tabProject?.operations?.some(op=>needsEntry({...tabProject,...op})))&&!window.studioSession?.router_entries)throw Error('Restart Studio before posting ramp or helical entries with this editor.');const patterned=op=>op?.mode==='laser'&&(op.laser_pattern&&op.laser_pattern!=='continuous'||op.lead_shape&&op.lead_shape!=='straight'&&(op.lead_in||op.lead_out));if(!offline&&['generate','arm','run','rotary','tool-changes'].includes(path)&&(patterned(tabProject)||tabProject?.operations?.some(op=>patterned({...tabProject,...op})))&&!window.studioSession?.laser_patterns)throw Error('Restart Studio and reload before using laser cut patterns and curved leads.');const needsTabs=tabProject?.tabs||tabProject?.operations?.some(op=>op?.tabs);if(!offline&&needsTabs&&['generate','rotary','tool-changes'].includes(path)&&!window.studioSession?.holding_tabs)throw Error('Restart CNC Studio and reload to enable holding tabs; this server cannot preserve them.');if(path==='generate'&&!offline&&(data?.operation&&data.operation!=='line'||data?.operations||data?.path_powers)&&!window.studioSession?.advanced_cam)throw Error('Restart CNC Studio and reload to enable the new CAM operations');if(path==='generate'&&data?.path_depths&&!offline&&!window.studioSession?.depth_paths)throw Error('Restart CNC Studio and reload the editor to enable the new varying-depth CAM');if(offline){if(path==='simulate')return CNCOffline.simulate(data);if(path==='rotary')return CNCRotary.generate(data.project,data.options);if(path==='generate')return CNCOffline.generate(data);if(path==='session')return {token:'',offline:true,depth_paths:true};if(path==='profiles')return [{id:'offline',name:'Local file editor',width:750,height:400,firmware:'Offline design'}];if(path==='ports')return [];throw Error('This advanced design operation requires the app server; basic CAM and G-code work offline.');}
+const packedStock=path==='simulate' && window.studioSession?.stock_wire_v1;
+const body=packedStock?KerfKiteStockWire.encode(data):(data===undefined?undefined:JSON.stringify(data));
+const r=await fetch('/api/'+path,{method:data===undefined?'GET':'POST',headers:{'Content-Type':packedStock?KerfKiteStockWire.mime:'application/json','X-Studio-Token':token},body});const result=await r.json();if(!r.ok)throw Error(result.error||'Request failed');return result;}
 function task(fn){return async()=>{try{await fn();}catch(e){message(e.message,true);}};}
-function project(){const p={};for(const k of fields)p[k]=['mode','protocol','operation','dwell_units','lead_shape','laser_pattern','router_entry'].includes(k)?$(k).value:Number($(k).value);p.paths=objects.flatMap(o=>o.paths);if(p.mode==='laser'&&objects.some(o=>o.powers))p.path_powers=objects.flatMap(o=>o.paths.map((path,i)=>o.powers?.[i]?.map(v=>v*p.power)||path.map(()=>p.power)));if(p.mode==='router'&&objects.some(o=>o.depths))p.path_depths=objects.flatMap(o=>o.paths.map((path,i)=>o.depths?.[i]||path.map(()=>-p.depth)));return p;}
+function editorSettings(){const p={};for(const k of fields)p[k]=['mode','protocol','operation','dwell_units','lead_shape','laser_pattern','router_entry'].includes(k)?$(k).value:Number($(k).value);return p;}
+function project(){const p=editorSettings();p.paths=objects.flatMap(o=>o.paths);if(p.mode==='laser'&&objects.some(o=>o.powers))p.path_powers=objects.flatMap(o=>o.paths.map((path,i)=>o.powers?.[i]?.map(v=>v*p.power)||path.map(()=>p.power)));if(p.mode==='router'&&objects.some(o=>o.depths))p.path_depths=objects.flatMap(o=>o.paths.map((path,i)=>o.depths?.[i]||path.map(()=>-p.depth)));return p;}
 function machiningProject(){window.CNCSolidLinks?.requireCurrent();return project();}
 function invalidate(){previewEpoch++;window.stockPreview=null;window.recordHistory?.();preview=null;previewProject=null;$('confirmed').checked=false;$('gcode').textContent='Generate a new preview after editing.';$('summary').textContent=`${objects.length} objects · preview needs generating`;$('playhead').replaceChildren();$('toolpaths').replaceChildren();cancelPhoneArm();}
-function draw(){const w=Number($('width').value)||300,h=Number($('height').value)||180;$('canvas').setAttribute('viewBox',window.KerfKiteViews?.drawingBox(w,h) || `-12 -12 ${w+24} ${h+24}`);$('stock').setAttribute('width',w);$('stock').setAttribute('height',h);$('dimensions').textContent=`${w} × ${h} mm`;$('drawing').replaceChildren();$('objects').replaceChildren();objects.forEach((o,i)=>{const g=document.createElementNS(NS,'path');g.setAttribute('d',o.paths.map(p=>'M'+p.map(([x,y])=>`${x},${h-y}`).join(' L')).join(' '));g.setAttribute('fill','none');g.setAttribute('stroke',i===selected?'#c77829':'#176a9a');g.setAttribute('stroke-width',i===selected?'2.5':'1.5');g.dataset.object=i;g.style.pointerEvents='bounding-box';$('drawing').append(g);const b=document.createElement('button');b.className='object'+(i===selected?' selected':'');b.textContent=`${i+1}. ${o.output===false?'[OFF] ':''}${o.name}${o.operationSettings?' · '+o.operationSettings.operation:''}`;b.onclick=()=>{selected=i;draw();};$('objects').append(b);});renderSelection();}
+function drawingPath(paths,height){
+ return paths.map(path=>'M'+path.map(([x,y])=>`${x},${height-y}`).join(' L')).join(' ');
+}
+let objectFrame=0;
+function repaintActiveObject(){
+ if(objectFrame)return;
+ objectFrame=requestAnimationFrame(()=>{
+   objectFrame=0;
+   const o=objects[selected],node=$('drawing').children[selected];
+   if(!node||!o)return;
+   node.setAttribute('d',drawingPath(o.paths,Number($('height').value)));
+   renderSelection();
+ });
+}
+function draw(){if(objectFrame){cancelAnimationFrame(objectFrame);objectFrame=0;}const w=Number($('width').value)||300,h=Number($('height').value)||180;$('canvas').setAttribute('viewBox',window.KerfKiteViews?.drawingBox(w,h) || `-12 -12 ${w+24} ${h+24}`);$('stock').setAttribute('width',w);$('stock').setAttribute('height',h);$('dimensions').textContent=`${w} × ${h} mm`;$('drawing').replaceChildren();$('objects').replaceChildren();objects.forEach((o,i)=>{const g=document.createElementNS(NS,'path');g.setAttribute('d',drawingPath(o.paths,h));g.setAttribute('fill','none');g.setAttribute('stroke',i===selected?'#c77829':'#176a9a');g.setAttribute('stroke-width',i===selected?'2.5':'1.5');g.dataset.object=i;g.style.pointerEvents='bounding-box';$('drawing').append(g);const b=document.createElement('button');b.className='object'+(i===selected?' selected':'');b.textContent=`${i+1}. ${o.output===false?'[OFF] ':''}${o.name}${o.operationSettings?' · '+o.operationSettings.operation:''}`;b.onclick=()=>{selected=i;draw();};$('objects').append(b);});renderSelection();}
 function add(name,paths,properties={}){objects.push({designLayerId:window.CNCDesignLayers?.activeId?.()||'default',...properties,name,paths});selected=objects.length-1;invalidate();draw();}
 function shape(){const a=['shapeX','shapeY','shapeW','shapeH'].map(k=>Number($(k).value));if(a.some(x=>!Number.isFinite(x))||a[2]<=0||a[3]<=0)throw Error('Enter a positive shape width and height');return a;}
 function insertPrimitive(kind,x,y,w,h){
@@ -99,7 +117,7 @@ function renderSelection(){const layer=$('selection');layer.replaceChildren();if
 function canvasPoint(event){const p=new DOMPoint(event.clientX,event.clientY).matrixTransform($('canvas').getScreenCTM().inverse());return[p.x,Number($('height').value)-p.y];}
 let gesture=null;
 $('canvas').addEventListener('pointerdown',e=>{
- if(e.button!==0)return;
+ if(e.button!==0||gesture)return;
  const handle=e.target.dataset.handle,index=e.target.dataset.object;
  if(!handle&&index===undefined){selected=-1;draw();return;}
  if(index!==undefined)selected=Number(index);
@@ -111,7 +129,15 @@ $('canvas').addEventListener('pointerdown',e=>{
  const ctm=$('canvas').getScreenCTM();
  const anchor=placement?placement.nearest(start,o.paths.flat(),8/Math.max(.001,Math.hypot(ctm.a,ctm.b))):start;
  gesture={id:e.pointerId,start,anchor,original:o.paths,originals:objects.slice(),indices,box,candidates,handle,index:selected,moved:false};
- $('canvas').setPointerCapture(e.pointerId);draw();e.preventDefault();
+ $('canvas').setPointerCapture(e.pointerId);draw();
+ if(handle){
+   gesture.handles=Array.from($('selection').querySelectorAll('rect.handle,circle'),node=>{
+     const circle=node.localName==='circle';
+     return {node,x:circle?node.cx.baseVal.value:node.x.baseVal.value+node.width.baseVal.value/2,
+       y:circle?node.cy.baseVal.value:node.y.baseVal.value+node.height.baseVal.value/2};
+   });
+ }
+ e.preventDefault();
 });
 $('canvas').addEventListener('pointermove',e=>{
  if(!gesture||e.pointerId!==gesture.id)return;
@@ -121,27 +147,53 @@ $('canvas').addEventListener('pointermove',e=>{
  if(!g.moved){invalidate();g.moved=true;}
  if(!g.handle){
    const target=snap(p.map((v,i)=>g.anchor[i]+v-g.start[i]));
-   const dx=Math.max(-x,Math.min(w-mx,target[0]-g.anchor[0])),dy=Math.max(-y,Math.min(h-my,target[1]-g.anchor[1]));
-   objects=CNCLayout.apply(g.originals,g.indices.map(index=>({index,dx,dy})));
+   g.dx=Math.max(-x,Math.min(w-mx,target[0]-g.anchor[0]));
+   g.dy=Math.max(-y,Math.min(h-my,target[1]-g.anchor[1]));
+   g.transform=`translate(${g.dx} ${-g.dy})`;
  }else{
    const [px,py]=snap(p);let nx=x,ny=y,nmx=mx,nmy=my;
    if(g.handle.includes('w'))nx=Math.max(0,Math.min(mx-.1,px));
    if(g.handle.includes('e'))nmx=Math.min(w,Math.max(x+.1,px));
    if(g.handle.includes('s'))ny=Math.max(0,Math.min(my-.1,py));
    if(g.handle.includes('n'))nmy=Math.min(h,Math.max(y+.1,py));
-   const paths=g.original.map(path=>path.map(([vx,vy])=>[mx===x?x:nx+(vx-x)*(nmx-nx)/(mx-x),my===y?y:ny+(vy-y)*(nmy-ny)/(my-y)]));
-   objects[g.index]={...g.originals[g.index],paths};
+   g.sx=mx===x?1:(nmx-nx)/(mx-x);g.sy=my===y?1:(nmy-ny)/(my-y);
+   g.tx=mx===x?0:nx-x*g.sx;g.ty=my===y?0:ny-y*g.sy;
+   g.transform=`matrix(${g.sx} 0 0 ${g.sy} ${g.tx} ${h*(1-g.sy)-g.ty})`;
  }
- draw();e.preventDefault();
+ // Keep the original vertices and group metadata until release. A drag frame
+ // touches only the selected SVG paths and overlay, regardless of drawing size.
+ if(!g.frame)g.frame=requestAnimationFrame(()=>{
+   g.frame=0;
+   if(gesture!==g)return;
+   for(const index of g.indices)$('drawing').children[index]?.setAttribute('transform',g.transform);
+   $('selection').setAttribute('transform',g.transform);
+   if(g.handle)for(const {node,x,y} of g.handles){
+     // The overlay follows the scaled geometry, while handles retain their screen size.
+     node.setAttribute('transform',`translate(${x} ${y}) scale(${1/g.sx} ${1/g.sy}) translate(${-x} ${-y})`);
+   }
+ });
+ e.preventDefault();
 });
 function endGesture(cancel=false){
  if(!gesture)return;const g=gesture;gesture=null;
- if(cancel&&g.moved){objects=g.originals;invalidate();}
+ if(g.frame)cancelAnimationFrame(g.frame);
+ $('selection').removeAttribute('transform');
  if($('canvas').hasPointerCapture(g.id))$('canvas').releasePointerCapture(g.id);
- if(g.moved){const[x,y,mx,my]=bounds(objects[g.index].paths);for(const[id,value]of [['shapeX',x],['shapeY',y],['shapeW',mx-x],['shapeH',my-y]])$(id).value=value.toFixed(2);}
- draw();window.recordHistory?.();
+ if(!cancel&&g.moved&&objects.length===g.originals.length&&g.indices.every(i=>objects[i]===g.originals[i])){
+   if(g.handle){
+     const paths=g.original.map(path=>path.map(([x,y])=>[x*g.sx+g.tx,y*g.sy+g.ty]));
+     objects[g.index]={...objects[g.index],paths};
+   }else objects=CNCLayout.apply(objects,g.indices.map(index=>({index,dx:g.dx,dy:g.dy})));
+   const[x,y,mx,my]=bounds(objects[g.index].paths);
+   for(const[id,value]of [['shapeX',x],['shapeY',y],['shapeW',mx-x],['shapeH',my-y]])$(id).value=value.toFixed(2);
+   invalidate();
+ }
+ draw();
 }
-$('canvas').addEventListener('pointerup',()=>endGesture());$('canvas').addEventListener('pointercancel',()=>endGesture(true));window.addEventListener('keydown',e=>{if(e.key==='Escape')endGesture(true);});window.addEventListener('resize',renderSelection);
+$('canvas').addEventListener('pointerup',e=>{if(e.pointerId===gesture?.id)endGesture();});
+for(const type of ['pointercancel','lostpointercapture'])$('canvas').addEventListener(type,e=>{if(e.pointerId===gesture?.id)endGesture(true);});
+window.addEventListener('keydown',e=>{if(e.key==='Escape')endGesture(true);});
+window.addEventListener('blur',()=>endGesture(true));window.addEventListener('resize',renderSelection);
 for(const id of ['rect','ellipse','line','polygon','gear'])$(id).addEventListener('dragstart',e=>{e.dataTransfer.setData('application/x-cnc-shape',id);e.dataTransfer.effectAllowed='copy';});
 const bed=document.querySelector('.bed');bed.addEventListener('dragover',e=>{e.preventDefault();bed.classList.add('drop-target');e.dataTransfer.dropEffect='copy';});bed.addEventListener('dragleave',e=>{if(!bed.contains(e.relatedTarget))bed.classList.remove('drop-target');});bed.addEventListener('drop',async e=>{e.preventDefault();bed.classList.remove('drop-target');try{const id=e.dataTransfer.getData('application/x-cnc-shape');if(['rect','ellipse','line','polygon','gear'].includes(id)){const[x,y]=canvasPoint(e);$('shapeX').value=Math.max(0,Math.min(Number($('width').value)-Number($(id==='gear'?'gearDiameter':'shapeW').value),x)).toFixed(2);$('shapeY').value=Math.max(0,Math.min(Number($('height').value)-Number($(id==='gear'?'gearDiameter':'shapeH').value),y)).toFixed(2);$(id).click();}else{const files=[...e.dataTransfer.files];if(files.length!==1)throw Error('Drop one SVG or project file at a time');const file=files[0];if(window.CNCInterchange?.recognises(file)){await CNCInterchange.open(file);return;}if(!/\.(svg|json)$/i.test(file.name))throw Error('Drop an SVG or .cncstudio.json project');await loadFile(file,/\.json$/i.test(file.name)?'project':'svg');}}catch(error){message(error.message,true);}});
 function renderToolpaths(){const layer=$('toolpaths');layer.replaceChildren();if(!preview)return;const h=Number($('height').value);if(preview.drill_holes){for(const [x,y,diameter] of preview.drill_holes)layer.append(svgNode('circle',{cx:x,cy:h-y,r:diameter/2,fill:'none',stroke:'#116d80','stroke-width':2,'vector-effect':'non-scaling-stroke'}));}const groups=new Map();for(const s of preview.segments){if(preview.mode==='laser'&&s[5]===0)continue;const ratio=s[5]===null?1:s[5]/Number($('power').value),bin=Math.max(0,Math.min(10,Math.round(ratio*10)));groups.set(bin,(groups.get(bin)||'')+`M${s[0]},${h-s[1]}L${s[2]},${h-s[3]} `);}for(const[bin,d]of groups){layer.append(svgNode('path',{d,fill:'none',stroke:`hsl(${210-bin*16} 75% 45%)`,'stroke-width':6,'stroke-opacity':.55,'vector-effect':'non-scaling-stroke'}));}}

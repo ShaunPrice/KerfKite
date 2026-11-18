@@ -115,7 +115,7 @@ def exercise_native(exe, scratch):
             exe.with_name("KerfKiteNativeSmoke.exe").unlink(missing_ok=True)
 
 
-def check(exe, data, offline, step, native=False):
+def check(exe, data, offline, step, native=False, target=None):
     env = {**os.environ, "KERFKITE_DATA_DIR": str(data)}
     if offline:
         env["UV_OFFLINE"]="1"
@@ -151,8 +151,14 @@ def check(exe, data, offline, step, native=False):
         assert len(loops) == 1
         x, y = zip(*loops[0])
         assert abs(max(x) - min(x) - 29) < .01 and abs(max(y) - min(y) - 21) < .01
+        runtime_dir = f"runtime-{target}-*" if target else "runtime-*"
+        interpreter = "Scripts/python.exe" if os.name == "nt" else "bin/python"
+        [python] = data.glob(f"{runtime_dir}/{interpreter}")
+        if target:
+            machine = subprocess.check_output([python, "-I", "-c", "import platform; print(platform.machine())"], text=True).strip()
+            assert machine == {"darwin-arm64": "arm64", "darwin-amd64": "x86_64"}[target], machine
+        subprocess.run([python, "-I", Path(__file__).with_name("check_installed_cam.py")], check=True)
         if step:
-            python=next(data.glob("runtime-*/Scripts/python.exe" if os.name=="nt" else "runtime-*/bin/python"))
             subprocess.run([python,"-I","-c","from pypdf import PdfReader; from OCP.STEPControl import STEPControl_Writer; STEPControl_Writer()"],check=True)
         if native and not offline:
             with install_directory() as scratch:
@@ -178,12 +184,20 @@ if __name__=="__main__":
     parser.add_argument("executable",type=Path)
     parser.add_argument("--step",action="store_true")
     parser.add_argument("--native",action="store_true",help="exercise the platform window on a graphical session")
+    parser.add_argument("--also-intel", type=Path, help="On Apple Silicon, test the Intel launcher sharing the same user data")
     args=parser.parse_args()
+    if args.also_intel and (sys.platform != "darwin" or platform.machine() != "arm64"):
+        parser.error("--also-intel requires an Apple Silicon Mac with Rosetta")
     with install_directory() as data:
         try:
-            for offline in (False,True):
-                check(args.executable.resolve(),data,offline,args.step,args.native)
-                print("Offline relaunch passed" if offline else "Fresh installation and CAM preview passed",flush=True)
+            launches = [(args.executable, None)]
+            if args.also_intel:
+                launches = [(args.executable, "darwin-arm64"), (args.also_intel, "darwin-amd64")]
+            for offline in (False, True):
+                for executable, target in launches:
+                    check(executable.resolve(), data, offline, args.step, args.native, target)
+                    result = "Offline relaunch passed" if offline else "Fresh installation and CAM preview passed"
+                    print(f"{target or executable.name}: {result}", flush=True)
         except Exception:
             log=data/"setup.log"
             if log.exists():

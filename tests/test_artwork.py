@@ -1,8 +1,10 @@
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from studio.artwork import ArtworkStore
+from studio.template_catalog import TemplateCatalog, _paths
 
 
 class ArtworkTests(unittest.TestCase):
@@ -19,6 +21,19 @@ class ArtworkTests(unittest.TestCase):
         t=self.store.template(result[0]['id'],10,20,30,40)
         for path in t['paths']:
             for x,y in path:self.assertTrue(10<=x<=40 and 20<=y<=60)
+    def test_search_skips_geometry_and_lookup_decodes_only_one_template(self):
+        with patch('studio.template_catalog._paths', wraps=_paths) as decode:
+            catalog = TemplateCatalog()
+            result = catalog.search('FLOWER', limit=1)
+            self.assertEqual(len(result), 1)
+            self.assertEqual(decode.call_count, 0)
+            self.assertIsNone(catalog.get('missing'))
+            item = catalog.get(result[0]['id'])
+            self.assertEqual(decode.call_count, 1)
+            item['paths'][0][0][0] = -1
+            self.assertGreaterEqual(catalog.get(item['id'])['paths'][0][0][0], 0)
+            self.assertEqual(decode.call_count, 2)
+
     def test_portable_project_and_escaped_svg(self):
         paths=[[[1,1],[9,1],[9,9],[1,1]],[[4,4],[5,5]]]
         result=self.store.create_artwork('<test>',paths,100,100)

@@ -22,7 +22,7 @@
     <div class="cad-script-panes"><div class="cad-code-pane"><label for="cad-script-source">Source</label>
     <textarea id="cad-script-source" spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="cad-script-feedback"></textarea></div>
     <div class="cad-preview-pane"><div class="cad-preview-title"><strong>Geometry preview</strong><button id="cad-preview-fit">Reset view</button></div>
-    <canvas id="cad-script-canvas" aria-label="Script geometry preview, drag a solid to orbit"></canvas>
+    <div class="mesh-viewport cad-script-stage"><canvas id="cad-script-canvas" aria-label="Script geometry preview, drag a solid to orbit"></canvas></div>
     <output id="cad-script-metrics"></output></div></div>
     <div class="cad-script-bottom"><output id="cad-script-feedback" role="status"></output>
     <button id="cad-script-preview">Preview <kbd>F5</kbd></button><button class="primary" id="cad-script-apply">Apply <kbd>Ctrl ↵</kbd></button></div>`;
@@ -54,7 +54,8 @@
   }
   function clearPreview() {
     request++;preview=null;previewText='';
-    canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
+    KerfKiteMeshRenderer.clear(canvas);
+    const ctx=canvas.getContext('2d');ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,canvas.width,canvas.height);
     $('cad-script-metrics').textContent='';
   }
   function setSource(target,text,name='design.scad') {
@@ -88,6 +89,7 @@
       KerfKiteViews.paintMesh(canvas,preview,{yaw,pitch,zoom:magnification,panX:0,panY:0});
       return;
     }
+    KerfKiteMeshRenderer.clear(canvas);
     const rect=canvas.getBoundingClientRect(),ratio=Math.min(devicePixelRatio||1,2);
     canvas.width=Math.max(1,Math.round(rect.width*ratio));canvas.height=Math.max(1,Math.round(rect.height*ratio));
     const ctx=canvas.getContext('2d'), [l,b,r,t]=preview.bounds;
@@ -211,6 +213,7 @@
   canvas.onpointermove=e=>{if(drag){yaw+=(e.clientX-drag[0])*.012;pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,pitch+(e.clientY-drag[1])*.012));drag=[e.clientX,e.clientY];paintPreview();}};
   canvas.onlostpointercapture=()=>{drag=null;};
   canvas.addEventListener('wheel',e=>{if(preview){e.preventDefault();magnification=Math.max(.2,Math.min(8,magnification*(e.deltaY<0?1.15:1/1.15)));paintPreview();}},{passive:false});
+  canvas.addEventListener('mesh-renderer-changed',paintPreview);
   new ResizeObserver(paintPreview).observe(canvas);
   const history=[];let cursor=0, draft='',running=false;
   function reference(show){$('cad-reference').hidden=!show;$('cad-command-help').setAttribute('aria-expanded',String(show));}

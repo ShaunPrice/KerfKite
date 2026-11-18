@@ -57,3 +57,7 @@
 .sketch-handle-guide {stroke:#786429;stroke-dasharray:5 3;stroke-width:1.5;pointer-events:none}
 .sketch-handle {fill:#fff3c7;stroke:#805621;stroke-width:2;cursor:grab}
 [data-control-fields] input {width:10em}
+
+.mesh-viewport {position:relative;}
+.mesh-viewport > canvas:not(.mesh-surface) {position:relative;}
+.mesh-viewport > .mesh-surface {position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}

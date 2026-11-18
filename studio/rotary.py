@@ -1,6 +1,7 @@
 """Cylindrical 4-axis CAM. Input to the postprocessor is generated planar CAM."""
 import math
 import re
+from .cam_moves import CutRun, PackedSegments, block_count
 
 _WORD = re.compile(r'([A-Z])([+-]?(?:\d+(?:\.\d*)?|\.\d+))')
 # Conventional machine axis about which the stock spins, then radial tool axis.
@@ -53,10 +54,34 @@ def generate_rotary(project, options):
     # changes in the rotary post; incoming files or raw lines are never executed.
     if protocol == 'linuxcnc' and options.get('postprocessor') in STREAM_POSTS:
         raise ValueError('Choose a GRBL-family source for this rotary postprocessor')
-    return wrap_job(generate(project), options)
+    return _wrap_job(generate(project, _rotary_blocks=True), options, generated=True)
+
+
+def _blocks(source, generated):
+    for item in source:
+        if generated and isinstance(item, CutRun):
+            yield from item.blocks()
+            continue
+        if not isinstance(item, str) or len(item) > 256:
+            raise ValueError('Invalid or oversized source G-code line')
+        raw = item.strip()
+        tokens = raw.split()
+        if not tokens:
+            raise ValueError('Blank source lines are unsupported')
+        words = {}
+        for token in tokens:
+            match = _WORD.fullmatch(token)
+            if not match or match[1] in words:
+                raise ValueError('Rotary requires canonical generated G-code without comments or duplicate words')
+            words[match[1]] = _number(float(match[2]), 'Source word', -1e9, 1e9)
+        yield tokens[0], words, raw
 
 
 def wrap_job(job, options):
+    return _wrap_job(job, options, generated=False)
+
+
+def _wrap_job(job, options, *, generated):
     if not isinstance(job, dict) or not isinstance(options, dict):
         raise ValueError('Rotary job and options must be objects')
     post, mode = options.get('postprocessor'), job.get('mode')
@@ -83,9 +108,9 @@ def wrap_job(job, options):
     if reference not in ('surface', 'cut'):
         raise ValueError('Choose surface or cut radius as the rotary feed reference')
     source = job.get('lines')
-    if not isinstance(source, list) or not 1 <= len(source) <= 200000:
+    if not isinstance(source, list) or not 1 <= (block_count(source) if generated else len(source)) <= 200000:
         raise ValueError('Rotary source must contain 1..200000 G-code lines')
-    if any(not isinstance(line, str) or len(line) > 256 for line in source):
+    if not generated and any(not isinstance(line, str) or len(line) > 256 for line in source):
         raise ValueError('Invalid or oversized source G-code line')
     if source[-1] == 'M30':
         source = source[:-1]
@@ -94,22 +119,13 @@ def wrap_job(job, options):
     state = dict.fromkeys('XYZ')
     if mode == 'laser':
         state['Z'] = 0.0  # Laser focus at the stock surface.
-    output, angles, axial_positions, z_positions = [], [], [], []
+    output = []
+    min_angle = min_axial = min_z = math.inf
+    max_angle = max_axial = max_z = -math.inf
     units = absolute = feed_mode = inverse_active = emitting = False
     last_feed, minutes = None, 0.0
-    for raw in source:
-        tokens = raw.strip().split()
-        if not tokens:
-            raise ValueError('Blank source lines are unsupported')
-        words = {}
-        for token in tokens:
-            match = _WORD.fullmatch(token)
-            if not match or match[1] in words:
-                raise ValueError('Rotary requires canonical generated G-code without comments or duplicate words')
-            value = float(match[2])
-            words[match[1]] = _number(value, 'Source word', -1e9, 1e9)
-        command = tokens[0]
-        if command in ('G21', 'G90', 'G17', 'G54', 'G94', 'M5', 'G40', 'G49', 'G80', 'G61') and len(tokens) == 1:
+    for command, words, raw in _blocks(source, generated):
+        if command in ('G21', 'G90', 'G17', 'G54', 'G94', 'M5', 'G40', 'G49', 'G80', 'G61') and len(words) == 1:
             if post in STREAM_POSTS and command in ('G40', 'G49', 'G80', 'G61'):
                 raise ValueError('Source contains a LinuxCNC-only setup command')
             if command == 'G21': units = True
@@ -125,10 +141,10 @@ def wrap_job(job, options):
         if command == spindle and set(words) == {'M', 'S'}:
             _number(words['S'], 'Spindle power', 0 if mode == 'laser' else .001, 100000)
             emitting = True
-            output.append(raw.strip())
+            output.append(raw)
             continue
         if mode == 'router' and command == 'G4' and set(words) == {'G', 'P'} and 0 <= words['P'] <= 60:
-            output.append(raw.strip())
+            output.append(raw)
             continue
         if command not in ('G0', 'G1'):
             raise ValueError('Unsupported rotary source command')
@@ -153,12 +169,14 @@ def wrap_job(job, options):
                 raise ValueError('Cut depth reaches or crosses the cylinder center')
             if fixture and radius + z < fixture['min_radius'] - 1e-9:
                 raise ValueError('Rotary toolpath enters the protected fixture core')
-            z_positions.append(z)
+            if z < min_z: min_z = z
+            if z > max_z: max_z = z
         if axial in coords:
             x = coords[axial]
             if fixture and not fixture['axial_min'] - 1e-9 <= x <= fixture['axial_max'] + 1e-9:
                 raise ValueError('Rotary toolpath exceeds the fixture axial window')
-            axial_positions.append(x)
+            if x < min_axial: min_axial = x
+            if x > max_axial: max_axial = x
         if linear:
             last_feed = _number(words.get('F'), 'Source linear feed', .001, 100000)
             if any(state[k] is None for k in coords):
@@ -173,7 +191,8 @@ def wrap_job(job, options):
                 angle = offset + direction * 360 * arc / circumference
                 if abs(angle) > 360000:
                     raise ValueError('Rotary extent exceeds 1000 revolutions')
-                angles.append(angle)
+                if angle < min_angle: min_angle = angle
+                if angle > max_angle: max_angle = angle
                 transformed.append(f'{drive}{angle:.6f}')
             else:
                 transformed.append(f'{along if k == axial else radial}{destination:.6f}')
@@ -195,13 +214,13 @@ def wrap_job(job, options):
             output.append('G94')
             inverse_active = False
         output.append(command + ' ' + ' '.join(transformed))
-    if not angles or not axial_positions or not z_positions or not minutes or last_feed is None:
+    if min_angle == math.inf or min_axial == math.inf or min_z == math.inf or not minutes or last_feed is None:
         raise ValueError('Rotary job requires initialized axial and angular coordinates and a nonzero cutting move')
     output.append(f'G94 F{last_feed:.6f}')
     meta = dict(postprocessor=post, export_only=post == 'linuxcnc', diameter=diameter, circumference=circumference,
                 wrap_axis=wrapped, output_axis=drive, axial_output_axis=along, radial_output_axis=radial,
-                angle_offset=offset, direction=direction, angle_bounds=[min(angles), max(angles)],
-                axial_bounds=[min(axial_positions), max(axial_positions)], radial_bounds=[min(z_positions),max(z_positions)],
+                angle_offset=offset, direction=direction, angle_bounds=[min_angle, max_angle],
+                axial_bounds=[min_axial, max_axial], radial_bounds=[min_z,max_z],
                 feed_mode='G93', feed_reference=reference, feed_minutes=minutes, fixture=fixture,
                 seam_snap_tolerance_mm=.00051, preview_coordinates='planar')
     warnings = list(job.get('warnings', [])) + [
@@ -210,7 +229,10 @@ def wrap_job(job, options):
     ]
     if post == 'linuxcnc':
         warnings.append('LinuxCNC rotary output is file export only.')
-    return {**job, 'lines': output, 'warnings': warnings, 'rotary': meta}
+    result = {**job, 'lines': output, 'warnings': warnings, 'rotary': meta}
+    if isinstance(result.get('segments'), PackedSegments):
+        result['segments'] = list(result['segments'])
+    return result
 
 
 def controller_rotary_axes(protocol, state):

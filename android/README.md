@@ -1,6 +1,6 @@
 # Studio Pocket for Android
 
-Studio Pocket combines an offline vector sketch editor with a native CNC pendant for Android 8 and later. It uses a touch canvas and numerical dimensions. Files saved from the app open in the desktop and Raspberry Pi workstation. The current template, solid modelling and machining workflows run on that workstation.
+Studio Pocket combines an offline vector sketch editor with a native CNC pendant for Android. Pocket supports Android 8.0 (API 26) or later with a minimum supported device RAM of 2 GB. It uses a touch canvas and numerical dimensions. Files saved from the app open in the desktop and Raspberry Pi workstation. The current template, solid modelling and machining workflows run on that workstation.
 
 ## Install and draw
 

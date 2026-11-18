@@ -107,7 +107,7 @@ func (s *state) openDesktop(payload string, output *os.File) {
 
 func runStudio(ctx context.Context, s *state, payload, data string, output *os.File, showSetup func()) error {
 	// A release gets its own environment. An interrupted setup retries on the next launch.
-	wheel, err := filepath.Glob(filepath.Join(payload, "kerfkite_studio-*-py3-none-any.whl"))
+	wheel, err := filepath.Glob(filepath.Join(payload, "kerfkite_studio-*.whl"))
 	if err != nil || len(wheel) != 1 {
 		return fmt.Errorf("the application files are incomplete. Reinstall KerfKite")
 	}
@@ -124,7 +124,7 @@ func runStudio(ctx context.Context, s *state, payload, data string, output *os.F
 			return e
 		}
 	}
-	env := filepath.Join(data, fmt.Sprintf("runtime-%x", hash.Sum(nil)[:8]))
+	env := filepath.Join(data, fmt.Sprintf("runtime-%s-%x", runtimePlatform, hash.Sum(nil)[:8]))
 	python := filepath.Join(env, "bin", "python")
 	var uv string
 	if runtime.GOOS == "windows" {
@@ -134,7 +134,7 @@ func runStudio(ctx context.Context, s *state, payload, data string, output *os.F
 		cmd := exec.CommandContext(ctx, uv, args...)
 		configure(cmd)
 		cmd.Dir = data
-		cmd.Env = append(os.Environ(), "UV_PYTHON_INSTALL_DIR="+filepath.Join(data, "python"), "UV_CACHE_DIR="+filepath.Join(data, "cache"), "UV_NO_CONFIG=1", "UV_NO_PROGRESS=1", "UV_PYTHON_PREFERENCE=only-managed", "UV_PYTHON_INSTALL_BIN=0")
+		cmd.Env = append(os.Environ(), "UV_PYTHON_INSTALL_DIR="+filepath.Join(data, "python", runtimePlatform), "UV_CACHE_DIR="+filepath.Join(data, "cache"), "UV_NO_CONFIG=1", "UV_NO_PROGRESS=1", "UV_PYTHON_PREFERENCE=only-managed", "UV_PYTHON_INSTALL_BIN=0")
 		cmd.Stdout, cmd.Stderr = output, output
 		return cmd.Run()
 	}

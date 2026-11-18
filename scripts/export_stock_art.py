@@ -4,10 +4,14 @@ import html
 import json
 import math
 import re
+import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from zipfile import ZipFile, ZIP_DEFLATED
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from studio.template_catalog import TemplateCatalog
 
 
 def svg(template):
@@ -28,6 +32,14 @@ def svg(template):
 
 
 def export(destination, templates):
+    destination = Path(destination)
+    with TemporaryDirectory(dir=destination.parent) as scratch:
+        pending = Path(scratch) / "stock.zip"
+        _write_archive(pending, templates)
+        pending.replace(destination)
+
+
+def _write_archive(destination, templates):
     rows = []
     names = set()
     with ZipFile(destination, "w", ZIP_DEFLATED) as archive:
@@ -52,4 +64,4 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path)
     args = parser.parse_args()
-    export(args.output, json.loads((ROOT / "studio/builtin_templates.json").read_bytes()))
+    export(args.output, TemplateCatalog())

@@ -35,7 +35,7 @@ canvas.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return
  try{const p=canvasPoint(e),w=Number($('width').value),h=Number($('height').value);let result;
  if(g.kind==='pivot'){const q=[Math.max(0,Math.min(w,p[0])),Math.max(0,Math.min(h,p[1]))];result={...g.original,rotationPivot:relative(g.original.paths,q)};}
  else {if(Math.hypot(p[0]-g.p[0],p[1]-g.p[1])<1e-6)return;result=rotate(g.original,delta(g.start,p,g.p,e.shiftKey),w,h);}
- if(!g.changed){invalidate();g.changed=true;}g.object.paths=result.paths;g.object.rotationPivot=result.rotationPivot;draw();
+ if(!g.changed){invalidate();g.changed=true;}g.object.paths=result.paths;g.object.rotationPivot=result.rotationPivot;repaintActiveObject();
  }catch(err){message(err.message,true);}},true);
 function finish(cancel=false){if(!drag)return;const g=drag;drag=null;
  if(cancel&&objects[g.index]===g.object){g.object.paths=g.original.paths;if(g.original.rotationPivot===undefined)delete g.object.rotationPivot;else g.object.rotationPivot=g.original.rotationPivot;if(g.changed)invalidate();}

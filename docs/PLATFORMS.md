@@ -2,7 +2,7 @@
 
 See the [single-board computer guide](SBC.md) for board-specific downloads and the offline Browser Editor.
 
-[Download the desktop installers](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.6.0) or the [Android companion](ANDROID.md). The table below records source-installation and hardware evidence. See the [installation guide](INSTALL.md) for the graphical installers.
+[Download the desktop installers](https://github.com/ShaunPrice/KerfKite/releases/latest) or the [Android companion](ANDROID.md). The table below records source-installation and hardware evidence. See the [installation guide](INSTALL.md) for the graphical installers.
 
 **Studio 0.5.1 native desktop verification.** The published Windows installer and both executables accepted Windows 11 Pro x64 build 26300. In a signed-in desktop session, the packaged workbench created and moved geometry, handled unsaved-document cancellation, opened the materials guide, saved and reopened a project, previewed CAM and exported G-code. The Windows Server runner verified rejection before installation. Windows 10 x64 admission cases passed automated tests. A live Windows 10 desktop run is pending.
 
@@ -21,7 +21,7 @@ The desktop installers provide AppKit on macOS, Windows Forms and WebView2 on Wi
 | Linux, x86-64 | Use 64-bit Python 3.11 or 3.12 on a recent glibc distribution. Installation and all four core scenarios passed on Ubuntu 24.04 x86-64 under WSL. |
 | Linux, ARM64 | Use a 64-bit OS and Python environment. The four core scenarios passed on Debian ARM64 on a physical Raspberry Pi 5. |
 | Raspberry Pi 4B or 5, 4 GB or 8 GB | Use 64-bit Raspberry Pi OS with a supported Python. On a Pi 5 with 8 GB, the server fixture passed under a 1.5 GiB memory ceiling and a two-core CPU quota in 5.49 s. Peak Python process RSS was 54,048 KiB. The Chromium browser and server also passed all nine CAD workflow groups together under a 2 GiB ceiling and two-core quota on that Pi 5, including sketch drag, project reopening, STL and router relief transfer. Pi 4 and whole-browser use on a physical 4 GB board still need measurement. |
-| Samsung Galaxy S23 | Install the Android APK or build it from source. Drawing, editing, draft persistence and project/SVG export were exercised in an ARM64 emulator at S23 display dimensions. The exported polygon generated six laser segments on the workstation. Physical S23 testing is pending. See [Android](ANDROID.md). |
+| Android 8.0 (API 26) or later, minimum supported RAM 2 GB | Install the Android APK or build it from source. The editor, project and SVG exchange, cold-relaunch persistence and server-paired pendant controls were exercised on a 2 GB ARM64 emulator running API 37. Physical handset testing is pending. See [Android](ANDROID.md). |
 
 ## Desktop commands
 

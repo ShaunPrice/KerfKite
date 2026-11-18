@@ -10,17 +10,16 @@ def register_design_routes(app):
     for module in (assembly, cad_exchange, fixture_collision, program_import, import_bundle):
         module.register(app)
 
-    def build_submitted_model():
-        from .solid_cad import rebuild
-
+    def submitted_model():
         payload = request.get_json()
         if not isinstance(payload, dict) or not isinstance(payload.get('model'), dict):
             raise ValueError('Supply a CAD model in the model field')
-        return rebuild(payload['model'])
+        return payload['model']
 
     @app.post('/api/solid-cad')
     def rebuild_solid():
-        return jsonify(build_submitted_model())
+        from .solid_cad import rebuild
+        return jsonify(rebuild(submitted_model()))
 
     @app.post('/api/cad-script')
     def preview_script():
@@ -91,9 +90,9 @@ def register_design_routes(app):
 
     @app.post('/api/solid-cad/stl')
     def export_solid():
-        from .solid_cad import binary_stl
+        from .solid_cad import model_stl
 
-        data = binary_stl(build_submitted_model())
+        data = model_stl(submitted_model())
         return Response(data, mimetype='model/stl', headers={
             'Content-Disposition': 'attachment; filename="part.stl"'
         })
@@ -140,7 +139,16 @@ def register_design_routes(app):
     @app.post('/api/simulate')
     def stock_preview():
         from .simulation import simulate
-        return jsonify(simulate(request.get_json()))
+        from . import stock_wire
+        if request.mimetype == stock_wire.MIME:
+            request.max_content_length = stock_wire.MAX_BINARY_BYTES + 1  # Allow one EOF probe on chunked bodies.
+            data = stock_wire.from_stream(request.stream, request.content_length)
+        else:
+            # Older clients post seven decimal numbers per row. Apply this bound
+            # only after normal request authentication, on this design route.
+            request.max_content_length = 36 * 1024 * 1024
+            data = request.get_json()
+        return jsonify(simulate(data))
 
     @app.post('/api/extrude')
     def extrude_artwork():

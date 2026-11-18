@@ -1,6 +1,7 @@
 """Conservative centreline engraving CAM, dimensions in millimetres."""
 import math
 from bisect import bisect_right
+from .cam_moves import CutRun, PackedSegments, block_count
 from .laser import cut_options, prepare
 from .drilling import generate_drill
 from .router_entry import generate_entry
@@ -112,12 +113,13 @@ def _holding_tabs(project, paths, depth):
     return result, depths, warnings
 
 
-def generate(project):
+def generate(project, *, packed_segments=False, _rotary_blocks=False):
     if not isinstance(project, dict):raise ValueError('Project must be an object')
     if 'operations' in project:
         operations=project['operations']
         if not isinstance(operations,list) or not 1<=len(operations)<=100:raise ValueError('Use 1–100 ordered operations')
         jobs=[]
+        combined_lines = 0
         tool_signature=None
         common = {k:v for k,v in project.items() if k not in ('operations','paths','path_depths','path_powers')}
         for operation in operations:
@@ -135,8 +137,11 @@ def generate(project):
                 if tool_signature is not None and signature != tool_signature:
                     raise ValueError('Tool identity or geometry differs between operations; export separate jobs and change tools explicitly')
                 tool_signature=signature
-            jobs.append(generate(merged))
-            if sum(len(j['lines']) for j in jobs)>200000:raise ValueError('Combined job exceeds line limit')
+            jobs.append(generate(merged, packed_segments=packed_segments, _rotary_blocks=_rotary_blocks))
+            lines = jobs[-1]['lines']
+            combined_lines += block_count(lines) if _rotary_blocks else len(lines)
+            if combined_lines > 200000:
+                raise ValueError('Combined job exceeds line limit')
         drill_data = {}
         holes = [hole for j in jobs for hole in j.get('drill_holes',[])]
         if holes:
@@ -144,14 +149,17 @@ def generate(project):
             tool = jobs[0].get('simulation_tool')
             if tool and all(j.get('simulation_tool') == tool for j in jobs):
                 drill_data['simulation_tool'] = tool
-        return {'lines':[l for j in jobs for l in j['lines'] if l != 'M30'] + (['M30'] if jobs[-1]['lines'][-1]=='M30' else []), 'segments':[s for j in jobs for s in j['segments']],
+        segments = PackedSegments() if packed_segments else []
+        for job in jobs:
+            segments.extend(job['segments'])
+        return {'lines':[l for j in jobs for l in j['lines'] if l != 'M30'] + (['M30'] if jobs[-1]['lines'][-1]=='M30' else []), 'segments':segments,
                 'cut_length':round(sum(j['cut_length'] for j in jobs),2),'cut_minutes':round(sum(j['cut_minutes'] for j in jobs),2),
                 'mode':project['mode'],'bounds':[min(j['bounds'][0] for j in jobs),min(j['bounds'][1] for j in jobs),max(j['bounds'][2] for j in jobs),max(j['bounds'][3] for j in jobs)],
                 'warnings':list(dict.fromkeys(w for j in jobs for w in j['warnings'])),'operations':len(jobs), **drill_data}
-    return _generate_single(project)
+    return _generate_single(project, packed_segments, _rotary_blocks)
 
 
-def _generate_single(project):
+def _generate_single(project, packed_segments, rotary_blocks):
     mode = project.get('mode')
     if mode not in ('router', 'laser', 'knife'):
         raise ValueError('Choose router, laser or knife')
@@ -193,7 +201,7 @@ def _generate_single(project):
     if mode=='router' and entry != 'plunge' and project.get('operation')=='drill':
         raise ValueError('Use the drill peck setting for drilling; select plunge as the router entry')
     if project.get('operation')=='drill':
-        return generate_drill(project,clean,number)
+        return generate_drill(project,clean,number,packed_segments=packed_segments)
     if mode=='router' and project.get('tool_shape')=='drill':
         raise ValueError('Choose a milling cutter for a contour or pocket; a drill bit is for drilling')
     source = clean
@@ -218,7 +226,8 @@ def _generate_single(project):
         depth = max(-v for path in depths for v in path)
         if depth <= 0:raise ValueError('No contour cuts below the stock surface')
     if mode=='router' and entry!='plunge':
-        return generate_entry(project,source,clean,depths,depth,step,safe,feed,plunge,power,operation_warnings)
+        return generate_entry(project,source,clean,depths,depth,step,safe,feed,plunge,power,operation_warnings,
+                              packed_segments=packed_segments, rotary_blocks=rotary_blocks)
     laser_paths = []
     options = None
     if mode == 'laser':
@@ -249,7 +258,7 @@ def _generate_single(project):
     if mode != 'laser':
         lines += [f'G0 Z{safe:.3f}']
         if mode == 'router':lines += [f'M3 S{power:.0f}', 'G4 P2']
-    segments = []
+    segments = PackedSegments() if packed_segments or rotary_blocks else []
     length = 0
     for z in levels:
         for path_index, original in enumerate(clean):
@@ -260,15 +269,21 @@ def _generate_single(project):
                 lines += [f'G0 Z{safe:.3f}', f'G0 X{x:.3f} Y{y:.3f}', f'G1 Z{current_z:.3f} F{plunge:.1f}']
             else:
                 lines += ['M5', f'G0 X{x:.3f} Y{y:.3f}', f'M4 S{path[0][2]:.0f}']
+            run_start = len(segments)
+            cut_feed = min(feed, plunge) if depths is not None else feed
             for vertex_index, (nx, ny, segment_power) in enumerate(path[1:], 1):
-                suffix = f' S{segment_power:.0f}' if mode == 'laser' else ''
                 next_z = max(z, depths[path_index][vertex_index]) if depths is not None else current_z
-                if depths is not None:suffix += f' Z{next_z:.3f}'
-                lines.append(f'G1 X{nx:.3f} Y{ny:.3f} F{min(feed, plunge) if depths is not None else feed:.1f}' + suffix)
-                segments.append([x, y, nx, ny, next_z or 0, segment_power, current_z or 0])
+                if not rotary_blocks:
+                    suffix = f' S{segment_power:.0f}' if mode == 'laser' else ''
+                    if depths is not None:
+                        suffix += f' Z{next_z:.3f}'
+                    lines.append(f'G1 X{nx:.3f} Y{ny:.3f} F{cut_feed:.1f}' + suffix)
+                segments.append([x, y, nx, ny, 0 if next_z is None else next_z, segment_power, 0 if current_z is None else current_z])
                 length += math.sqrt((nx-x)**2 + (ny-y)**2 + ((next_z or 0)-(current_z or 0))**2)
                 current_z = next_z
                 x, y = nx, ny
+            if rotary_blocks:
+                lines.append(CutRun(segments, run_start, len(segments), cut_feed, depths is not None, mode == 'laser'))
             if mode == 'laser':
                 lines.append('M5')
             else:

@@ -53,7 +53,7 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
 
     @app.get('/api/session')
     def session():
-        return jsonify(token=token, depth_paths=True, advanced_cam=True, holding_tabs=True, laser_patterns=True, router_entries=True, phone_arm_challenge=True, rotary_stream=True, hardware_enabled=allow_hardware)
+        return jsonify(token=token, depth_paths=True, advanced_cam=True, holding_tabs=True, laser_patterns=True, router_entries=True, stock_wire_v1=True, phone_arm_challenge=True, rotary_stream=True, hardware_enabled=allow_hardware)
 
     @app.get('/api/status')
     def status():

@@ -2,6 +2,8 @@
 import argparse
 import os
 import plistlib
+import re
+import zipfile
 import shutil
 import subprocess
 import tempfile
@@ -17,6 +19,30 @@ ICON = ROOT / "studio/static/app-icon.png"
 
 def run(*cmd, **kwargs):
     subprocess.run(cmd, check=True, **kwargs)
+
+
+def release_wheel(source, target):
+    """Select the CPython wheel for the runtime installed by the launcher."""
+    target_platforms = {
+        "mac-arm64": r"macosx_\d+_\d+_(arm64|universal2)",
+        "mac-amd64": r"macosx_\d+_\d+_(x86_64|universal2)",
+        "linux-arm64": r"(linux|manylinux(?:\d+|_\d+_\d+))_aarch64",
+        "linux-amd64": r"(linux|manylinux(?:\d+|_\d+_\d+))_x86_64",
+        "windows-amd64": r"win_amd64",
+    }
+    candidates = source.glob("kerfkite_studio-*.whl") if source.is_dir() else [source]
+    matches = []
+    for wheel in candidates:
+        tags = re.fullmatch(r"kerfkite_studio-[^-]+-cp312-cp312-([^.]+(?:\.[^.]+)*)\.whl", wheel.name)
+        if tags and any(re.fullmatch(target_platforms[target], tag) for tag in tags[1].split(".")):
+            matches.append(wheel)
+    if len(matches) != 1:
+        raise ValueError(f"Expected one native CPython 3.12 wheel for {target} in {source}, found {len(matches)}")
+    with zipfile.ZipFile(matches[0]) as archive:
+        suffix = ".pyd" if target == "windows-amd64" else ".so"
+        if not any(n.startswith("studio/_relief_native.") and n.endswith(suffix) for n in archive.namelist()):
+            raise ValueError(f"Wheel for {target} is missing the native CAM extension")
+    return matches[0]
 
 
 def payload(dest, wheel, goos, arch):
@@ -109,17 +135,20 @@ def windows(work, out, wheel):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("wheel",type=Path)
+    parser.add_argument("wheels",type=Path,help="Directory of platform wheels, or one matching native wheel")
     parser.add_argument("output",type=Path)
     parser.add_argument("targets",nargs="+",choices=["mac-arm64","mac-amd64","linux-arm64","linux-amd64","windows-amd64"])
     args=parser.parse_args()
-    wheel=args.wheel.resolve()
-    if not wheel.name.endswith("-py3-none-any.whl"):
-        parser.error("Provide the portable Studio wheel")
-    version=wheel.name.split("-")[1]
+    try:
+        wheels = {target: release_wheel(args.wheels.resolve(), target) for target in args.targets}
+    except ValueError as exc:
+        parser.error(str(exc))
+    if len({wheel.name.split("-")[1] for wheel in wheels.values()}) != 1:
+        parser.error("All desktop targets must use the same Studio version")
     out=args.output.resolve()
     out.mkdir(parents=True,exist_ok=True)
-    for target in args.targets:
+    for target, wheel in wheels.items():
+        version = wheel.name.split("-")[1]
         with tempfile.TemporaryDirectory(dir=out.parent) as tmp:
             work=Path(tmp)
             platform,arch=target.split("-")
