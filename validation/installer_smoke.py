@@ -156,8 +156,15 @@ def check(exe, data, offline, step, native=False):
         wait_for_studio_exit()
     finally:
         if proc.poll() is None:
-            proc.terminate()
-            proc.wait(timeout=10)
+            # Let the launcher stop its Python child even when a native GUI check fails.
+            try:
+                submit(read(LAUNCH).decode(), "quit")
+                proc.wait(timeout=12)
+                wait_for_studio_exit()
+            except (OSError, ValueError, AttributeError, subprocess.TimeoutExpired):
+                if proc.poll() is None:
+                    proc.terminate()
+                    proc.wait(timeout=10)
 
 
 if __name__=="__main__":

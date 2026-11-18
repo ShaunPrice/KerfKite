@@ -6,6 +6,9 @@ param(
     [string]$Python = 'python'
 )
 $ErrorActionPreference = 'Stop'
+if ([Diagnostics.Process]::GetCurrentProcess().SessionId -eq 0) {
+    throw 'Run the graphical smoke test from a signed-in Windows desktop session.'
+}
 $Installer = (Resolve-Path -LiteralPath $Installer).Path
 if ($Sha256 -notmatch '^[0-9a-fA-F]{64}$' -or (Get-FileHash $Installer -Algorithm SHA256).Hash -ne $Sha256) {
     throw 'The installer does not match the release checksum.'
@@ -39,5 +42,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Windows client simulation failed.' }
 } finally {
     $env:KERFKITE_NATIVE_BUILD_CACHE = $previousCache
-    Remove-Item -LiteralPath $stage -Recurse -Force
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    while (Test-Path -LiteralPath $stage) {
+        try { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction Stop }
+        catch {
+            if ([DateTime]::UtcNow -ge $deadline) { throw }
+            Start-Sleep -Milliseconds 500
+        }
+    }
 }
