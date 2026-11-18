@@ -1,0 +1,69 @@
+{
+  "version": "0.6.1",
+  "verification_date": "2026-11-19",
+  "transport": "simulator",
+  "python_tests": 279,
+  "javascript_tests": 143,
+  "skipped_tests": 0,
+  "simulation_groups": 11,
+  "browser_checks": 55,
+  "cam_comparison": {
+    "planar_sha256": "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc",
+    "rotary_sha256": "cfe252049e5c0fefb97252c43f6451e885b2e414e5caf4bb274fdae4884a2c09",
+    "max_stock_error_mm": 2.6645352591003757e-14,
+    "medians": {
+      "python": {
+        "relief": 0.9691172502934933,
+        "gcode": 0.2737783747725189,
+        "stock_preview": 0.8888915833085775,
+        "rotary_generation": 2.5860003330744803,
+        "pipeline": 2.1235557082109153,
+        "peak_rss_mib": 94.40625
+      },
+      "native": {
+        "relief": 0.081538500264287,
+        "gcode": 0.30965283419936895,
+        "stock_preview": 0.009652082808315754,
+        "rotary_generation": 1.28836958296597,
+        "pipeline": 0.4159289160743356,
+        "peak_rss_mib": 90.4375
+      }
+    }
+  },
+  "installer_archive_checks": [
+    "KerfKite-Browser-Editor-all.deb",
+    "KerfKite-Browser-Editor.zip",
+    "KerfKite-Linux-amd64.deb",
+    "KerfKite-Linux-amd64.tar.gz",
+    "KerfKite-Linux-arm64.deb",
+    "KerfKite-Linux-arm64.tar.gz",
+    "KerfKite-Windows-x64-Setup.exe",
+    "KerfKite-macOS-Apple-Silicon.dmg",
+    "KerfKite-macOS-Intel.dmg"
+  ],
+  "macOS": {
+    "apple_silicon": "Fresh install, native window and offline relaunch",
+    "intel_under_rosetta": "Fresh install, native window and offline relaunch sharing data directory with Apple Silicon"
+  },
+  "linux": {
+    "arm64": "Native desktop and offline relaunch in ARM64 Debian container",
+    "x86_64": "Installed wheel, compiled relief and stock simulation exercised under x86_64 Linux user-mode emulation"
+  },
+  "windows_initial_validation": "Windows x64 package, CPython extension imports and PE/installer contents checked",
+  "android": {
+    "apk_sha256": "bc04dc2c89dab13c65d3b67577e052cd61e957cdb1722f1813b8347c9fa502de",
+    "api": 37,
+    "emulator_ram_mib": 2048,
+    "editor_scenarios": [
+      "SAF desktop import and byte-preserving reference export",
+      "independent extraction, resized paths, open and closed SVG",
+      "export reopening, duplicate names and invalid import recovery",
+      "create, rename, duplicate, delete, switch and cold-start persistence"
+    ],
+    "pendant_transports": [
+      "adb_reverse",
+      "virtual_lan"
+    ],
+    "machine": "simulator"
+  }
+}
