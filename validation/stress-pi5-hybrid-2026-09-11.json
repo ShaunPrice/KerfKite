@@ -1,0 +1,41 @@
+[
+  {
+    "stages": {
+      "relief": 0.22493445000145584,
+      "gcode": 0.5239681870443746,
+      "stock_preview": 1.2049234108999372
+    },
+    "vertices": 67335,
+    "lines": 135886,
+    "segments": 134268,
+    "gcode_bytes": 4749814,
+    "sha256": "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc",
+    "peak_rss_mib": 97.09375
+  },
+  {
+    "stages": {
+      "relief": 0.2196631389670074,
+      "gcode": 0.5155410410370678,
+      "stock_preview": 1.1920834219781682
+    },
+    "vertices": 67335,
+    "lines": 135886,
+    "segments": 134268,
+    "gcode_bytes": 4749814,
+    "sha256": "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc",
+    "peak_rss_mib": 97.09375
+  },
+  {
+    "stages": {
+      "relief": 0.21780984906945378,
+      "gcode": 0.5236156100872904,
+      "stock_preview": 1.2161449999548495
+    },
+    "vertices": 67335,
+    "lines": 135886,
+    "segments": 134268,
+    "gcode_bytes": 4749814,
+    "sha256": "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc",
+    "peak_rss_mib": 97.09375
+  }
+]

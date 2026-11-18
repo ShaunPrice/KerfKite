@@ -1,0 +1,141 @@
+{
+  "format": "cnc-studio-simulation/1",
+  "transport": "in-process simulator",
+  "cases": [
+    {
+      "name": "Rebuild plate, resize and export STL",
+      "status": "passed",
+      "evidence": {
+        "widths_mm": [
+          32,
+          40
+        ],
+        "volume_mm3": 2328.0,
+        "stl_facets": 32,
+        "projected_area_mm2": 776.0
+      }
+    },
+    {
+      "name": "router",
+      "status": "passed",
+      "evidence": {
+        "cutting_moves": 272,
+        "posted_lines": 298,
+        "stock_min_z_mm": -3.0,
+        "controller": "Idle"
+      }
+    },
+    {
+      "name": "laser",
+      "status": "passed",
+      "evidence": {
+        "cutting_moves": 8,
+        "posted_lines": 23,
+        "controller": "Idle"
+      }
+    },
+    {
+      "name": "knife",
+      "status": "passed",
+      "evidence": {
+        "cutting_moves": 154,
+        "posted_lines": 170,
+        "controller": "Idle"
+      }
+    },
+    {
+      "name": "Assembly mate and interference",
+      "status": "passed",
+      "evidence": {
+        "parts": 2,
+        "offset_mm": 4,
+        "overlap_mm3": 175.0224599425777
+      }
+    },
+    {
+      "name": "Parametric surface patch",
+      "status": "passed",
+      "evidence": {
+        "centre_mm": [
+          10.0,
+          6.0,
+          2.0
+        ],
+        "area_mm2": 245.95584631571347
+      }
+    },
+    {
+      "name": "Swept holder and clamp",
+      "status": "passed",
+      "evidence": {
+        "moves": 11,
+        "rapid_holder_contact": true,
+        "relocated_clamp_clear": true
+      }
+    },
+    {
+      "name": "Plotter import to knife program",
+      "status": "passed",
+      "evidence": {
+        "knife_segments": 21
+      }
+    },
+    {
+      "name": "STEP surface and solid exchange",
+      "status": "passed",
+      "evidence": {
+        "open_patch_faces": 1,
+        "cylinder_faces": 3,
+        "volume_mm3": 197.920337176157
+      }
+    },
+    {
+      "name": "Python regression suite",
+      "status": "passed",
+      "evidence": {
+        "tests_run": 151,
+        "skipped": []
+      }
+    },
+    {
+      "name": "JavaScript regression suite",
+      "status": "passed",
+      "evidence": {
+        "files": [
+          "tests/js/api-capabilities.test.cjs",
+          "tests/js/camera-register.test.cjs",
+          "tests/js/design-layers.test.cjs",
+          "tests/js/laser-order.test.cjs",
+          "tests/js/laser-workshop.test.cjs",
+          "tests/js/layout-tools.test.cjs",
+          "tests/js/operation-preservation.test.cjs",
+          "tests/js/pendant.test.cjs",
+          "tests/js/projects.test.cjs",
+          "tests/js/protocols.test.cjs",
+          "tests/js/rotary-cam.test.cjs",
+          "tests/js/rotation-handles.test.cjs",
+          "tests/js/shape-editing.test.cjs",
+          "tests/js/text-layout.test.cjs",
+          "tests/test_offline_cam.cjs",
+          "tests/test_shapes.cjs",
+          "tests/test_templates.cjs",
+          "validation/business.test.js",
+          "validation/test_camera_trace.cjs"
+        ],
+        "tests": 114,
+        "pass": 114,
+        "fail": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    }
+  ],
+  "totals": {
+    "passed": 11
+  },
+  "outside_simulation": [
+    "Physical travel limits, tool calibration, material response and measured machine clearances",
+    "GUI interaction and visual tutorial acceptance",
+    "External controller execution of exported files"
+  ]
+}

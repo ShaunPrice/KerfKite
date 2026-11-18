@@ -1,0 +1,199 @@
+# KerfKite Studio user guide
+
+This guide describes the development application. It includes design, CAM, file transfer and machine controls, but it does not establish full LightBurn parity or certify a machine setup. Read the current [acceptance status](STATUS.md), [installation entry point](../README.md) and [troubleshooting guide](TROUBLESHOOTING.md).
+
+## Choose how to open Studio
+
+| Mode | Open it with | What it provides |
+| --- | --- | --- |
+| Local workstation | Start the Python application; open its localhost URL | Design tools, Python CAM, optional native relief acceleration, simulator and operator-enabled serial control |
+| Hosted HTTPS editor | Open the configured HTTPS address and log in | Design, server CAM, private server files and receiver uploads; no machine-start endpoint |
+| Local filesystem | Open `studio/static/index.html`, keeping the complete static folder together | Design and supported contour CAM without login; portable project/SVG/G-code export; authenticated HTTPS receiver upload |
+
+The filesystem mode supports router, laser and knife contour generation, including supported depth/power paths and ordered contour operations. LinuxCNC rotary wrapping of supported existing contour jobs is also implemented locally. Advanced area operations, holding tabs, relief, solid extrusion and stock simulation require the Python server. The new offline rotary calculations passed parity tests, but direct file:// browser acceptance was blocked by the automation browser URL policy and remains unverified. An unavailable operation produces an error rather than silently substituting a different toolpath. See [HTTPS and local-file setup](WEB.md).
+
+## Find the tools
+
+The centre holds the work area, toolpath controls, messages and expandable G-code/3D previews. The side panels use tabs, so a tool may be present in another tab rather than farther down the page.
+
+| Left tab | Main tools |
+| --- | --- |
+| Design | Rectangle, ellipse, line, polygon, gear, dimensions and work area |
+| Text | Fonts, straight/down/curved layouts, rotation, depth outlines, relief and extrusion controls |
+| Images | SVG import, laser raster images and image/camera tracing |
+| Templates | Template library and template creation |
+| Projects | Browser project library, recovery, portable files and hosted transfers |
+| Objects | Selection, position, resize and available geometry-editing tools |
+
+| Right tab | Main tools |
+| --- | --- |
+| CAM | Head, protocol, operation, feeds/depths, compensation, laser settings and ordered object operations |
+| 3D relief | Heightmap/STL preparation and cutter-contact settings |
+| Rotary | Diameter, wrap direction, seam checks and LinuxCNC rotary export |
+| Control | Machine profile, connection-related setup, jogging, head mode, job/phone controls and manual pendant input |
+| Quote | Cost estimates, quote output and design printing |
+
+Click a tab to select it. When a tab button has keyboard focus, Left/Right changes tabs and Home/End selects the first/last tab. In a server session, machine connection controls also appear in the application header. Hosted/file modes hide unavailable live-control functions.
+
+## First project: design, preview and save
+
+1. In **Design**, check the work-area dimensions and enter X/Y plus shape width/height in millimetres. Add a rectangle or another shape. Shape buttons can also be dragged onto the work area.
+2. Select the shape. Drag to move it; use the handles to resize it. Escape cancels the current drag. Position and resize commands also use the numeric fields.
+3. In **CAM**, choose the head and operation. For a simple demonstration choose the simulator workflow and a line operation. Enter the feed and relevant depth or laser power settings.
+4. Select **Generate preview**. Inspect its warnings, path placement and generated G-code. The cut slider steps through cutting segments; the time estimate excludes travel, acceleration, plunge and startup.
+5. Name the project in **Projects**, then save it to the browser and download a portable project copy. Export G-code only after generating a current preview.
+
+Editing artwork or machining settings invalidates the previous preview and setup confirmation. Generate another preview before exporting or starting that job. A rendered design alone is not evidence that cutter compensation, material clearance or machine coordinates are correct.
+
+## Projects, recovery and portability
+
+**Save to this browser** stores the complete project in IndexedDB. **Save as a copy** creates a separate project. Search, open, delete and saved-revision controls appear in the same panel. Up to five earlier saves are retained per saved project.
+
+Changes schedule a recovery draft after a short delay. **Recover latest draft** explicitly opens the available draft; startup does not automatically replace your canvas. There is one latest draft per local account namespace, not a permanent history of every unsaved document. Closing the browser immediately after a change can precede recovery storage.
+
+**Download project** creates a `.cncstudio.json` file containing artwork, settings and supported project extras, including quote/rotary settings. Use this file to move work between computers. `Ctrl+S`/`Cmd+S` saves to the browser library; use Download project when you need a portable backup. Project files have a 4 MB import/save limit.
+
+Browser storage belongs to the browser profile and origin. Clearing site data, changing the hostname/port, using a private window or switching browser profiles can make a library unavailable. Hosted accounts use separate library namespaces. This is not a substitute for downloaded backups or private server file storage. Concurrent editing in several tabs is not a collaborative document service.
+
+SVG exports contain vector geometry, not the full editable project settings. G-code exports contain machine instructions, not an editable design. Custom font outlines remain in saved artwork, but reimport the custom font when regenerating that text in a new session. Browser template libraries and material presets should be backed up separately where export controls are provided.
+
+## Shapes, gears and objects
+
+Polygons accept a side count, rotation and centre-hole diameter. Width/height can stretch a polygon. The bore must fit within its actual edge clearance.
+
+Gears use metric external involute geometry. Set teeth, module, pressure angle, centre hole and pitch-circle tooth thinning. Outside diameter is derived from module and tooth count. For a standard pair, use matching module and pressure angle; nominal centre distance is `module × (teeth A + teeth B) / 2`. Tooth thinning is specified per gear, so both gears contribute to pair backlash.
+
+New gears cannot be stretched with ordinary resize controls; regenerate them with a different module. Low tooth counts and invalid bores are rejected. Existing decorative gears in old projects are not automatically upgraded. Use the correct cutter diameter or measured laser kerf for compensated cutting, and verify a test pair: no load rating or physical mesh certification is implied. See [gear geometry notes](GEOMETRY.md).
+
+Available object tools include undo/redo, rotation, mirroring, rectangular arrays, a basic Bézier curve, node editing, weld/difference and offset. Node editing is limited to 500 vertices on the selected object. Advanced boolean/offset operations need the server. Avoid treating these tools as a complete illustration or parametric CAD system.
+
+### Align and distribute several objects
+
+Open **Design → Align & distribute**. Tick the objects in its list, use **Select all**, or select an object on the canvas and choose **Add canvas selection**. This selection is separate from the canvas's single highlighted object.
+
+Choose **Selected objects’ bounds** or **Entire work area**. Left/right/top/bottom and centre controls translate the chosen objects without scaling them. Top means the maximum Y edge in the bottom-left coordinate system. Equal horizontal/vertical gaps require three or more objects; increase their spread or use the work area if the current span cannot fit them without overlap. One object can align to the entire work area.
+
+Depths, power values, text settings and gear proportions are preserved. Use **Undo** to restore the previous arrangement and generate a fresh preview after edits. Alignment can intentionally put objects on top of one another; inspect the result before CAM.
+
+## Text and depth
+
+1. Open **Text**, enter the text and choose a bundled font or import a TTF/OTF file.
+2. Set size and spacing, then choose straight, text-down or Bézier-baseline layout. Adjust page rotation or Y-axis rotation as required.
+3. Set the shallowest depth and select **Add text as paths**. The font style controls letter outlines; the depth controls their Z values.
+4. To revise the wording/settings, select that text object, load its text settings, make changes and use **Replace selected text**.
+
+Y-axis rotation creates varying negative-Z depths. Large tilts across wide text can exceed the supported depth range. Router line CAM follows the outline at those depths; it does not clear the entire letter interior. Choose the separate V-carve, raised/recessed relief or extrusion workflow for those results. XYZ path export preserves depth coordinates; solid STL extrusion is an export, not an automatically machined solid.
+
+For Bézier text, choose **Symmetric · use curve rise** or **Custom · independent control points**. In custom mode, enter Control 1/2 X as a percentage of the original text width and Y in millimetres, or drag either orange handle in the baseline preview. The endpoints stay fixed. **Copy symmetric rise into custom controls** initializes the custom shape from the simple rise setting. Apply changes with **Add text as paths** or **Replace selected text**; editing controls alone does not change existing outlines. Independent values are restored with the selected text settings. Tight curves can overlap letters, and stationary/cusp tangents are rejected. Complex-script shaping and automatic ligatures are incomplete; import correctly shaped outlines when required. Check missing-glyph errors rather than accepting replacement characters.
+
+## Images: raster versus tracing
+
+**Laser raster** samples an image into alternating scan rows. Choose grayscale, threshold or Floyd–Steinberg dithering, physical dimensions, pixel interval, inversion and overscan. Smaller intervals increase the job size. Raster output is capped at 60,000 pixels before later CAM limits. Overscan adds zero-power travel beyond both sides of the artwork, so allow physical space for it.
+
+**Image/camera tracing** creates actual editable vector paths:
+
+1. Upload an image, or explicitly open the camera and capture a frame. Camera access depends on browser permission and a supported secure context such as HTTPS or localhost.
+2. Choose **Closed shape outlines** for silhouette boundaries and holes, or **Stroke centrelines** for line drawings. Centrelines are skeletonized, split at junctions and remain open unless the source contains a genuine loop.
+3. Set threshold, optional inversion and minimum feature size. In outline mode the filter uses pixel area, including small holes. In centreline mode it uses stroke length and can remove short branches.
+4. Set the physical width and height of the **entire image rectangle**, then preview. Changing their ratio stretches the trace. Dimensions are not inferred from the camera.
+5. Inspect the paths and select **Add preview to project**. They are inserted at the design X/Y placement. Use a line engraving operation for open centrelines.
+
+Tracing reduces input to at most 384 pixels per side and caps contour/stroke complexity. It removes collinear vertices without smoothing away gaps. Expect pixel-scale corners, approximate endpoints and possible skeleton spurs. This is not camera-bed calibration, lens correction, perspective correction, automatic registration or a live machine overlay. Capture, Stop, closing the trace section and leaving the page release camera tracks. No trace action moves the machine.
+
+SVG import supports a restricted geometry subset. Convert unsupported text/effects to plain paths before importing; do not assume arbitrary SVG, DXF or PDF document support.
+
+## Templates
+
+Open **Templates → Template library** to browse, search, filter categories and mark favourites. Select a template to insert it at the design placement and requested size. Built-in artwork retains its natural aspect ratio. The library includes simple motifs and original botanical/ornamental examples; preview them at the intended production size.
+
+To create a reusable template, select artwork or choose the whole design, then provide its name/category. Custom templates are stored in this browser. Export/import library JSON for a portable backup; the custom library is limited to 200 templates.
+
+Leaf/berry occlusion in the newer botanical artwork is applied to actual vector paths. These are still engraving contours: one-piece silhouette union, cutout bridges and tool-size/minimum-feature checks are not automatically constructed. Inspect whether a cutout would release unwanted islands. See [MCP setup](MCP.md) for external artwork/template creation through the local stdio interface.
+
+## CAM and ordered operations
+
+| Operation | Use and important limits |
+| --- | --- |
+| Line / depth contour | Follows the path centreline; no radius compensation. Supports router depths, laser vectors/raster powers and knife preparation. |
+| Outside / inside | Compensates closed valid contours using cutter radius or laser kerf. Nested contours use even-odd holes. A tool may not reach narrow features. |
+| Pocket | Concentric router clearing around preserved islands. Stepover is limited to half cutter diameter. Plunge entry needs a suitable centre-cutting tool; inaccessible corners can remain. |
+| Laser hatch fill | Scans an even-odd region at the specified interval/angle, with optional crosshatch. |
+| V-carve | Sampled medial-axis paths with V-angle, depth and cutter-diameter limits. Fine detail and wide-area clearing need inspection. |
+| Vinyl drag knife | Offset pivot paths, alignment leads and corner swivels, with powered outputs off. The alignment lead marks material before each contour. |
+
+Assign current operation settings to a selected object when objects need different operations or feeds. Object order becomes operation order; output can be disabled per object. Continuous jobs reject changes of head, protocol or cutter geometry. Make separate reviewed jobs for tool changes. Saving a material/tool preset records your entered settings; it does not calibrate feeds, cutter dimensions or machine limits.
+
+Laser lead-ins/outs are straight tangent **cutting** moves. Start/end power ramps extend over the chosen distances and can mark beyond the original outline. Preview shows commanded power; GRBL dynamic laser mode additionally changes effective output with motion speed. The laser's optical watts are not the controller S-value: validate the controller's configured range and your material tests.
+
+## 3D relief and native acceleration
+
+In **3D relief**, choose a grayscale image or ASCII/binary STL and set placement, physical dimensions, depth, resolution, tool diameter/shape, stepover and stock allowance. Generate the relief, then review its normal router step-downs and clearance moves.
+
+Image heights map white to the stock top and black to the selected depth. STL processing makes a top-access height field; undercuts and inaccessible sides are not represented. Flat/ball cutter-contact preparation is conservative and can leave material on a coarse grid. It does not model the holder, chuck, clamps or material outside the input rectangle.
+
+The optional C++ extension accelerates the relief contact calculation. The UI reports **C++ accelerated relief** when that backend is used, otherwise **Python relief**. An install without a compiler can still use the Python backend. This is CPU acceleration, not a claim of Metal/GPU/Hailo acceleration for CAM. See [platform notes](PLATFORMS.md) and the installation instructions for the selected host.
+
+The central 3D view rotates by mouse drag. **Simulate sampled stock removal** adds an approximate stock surface. Resolution limits can hide thin remaining material or small defects; this is not a clamp/holder collision check or a guarantee against gouging.
+
+## Holding tabs for router contours
+
+1. Select a closed contour object and choose router **line**, **inside** or **outside** with a flat end mill. Set cut depth to reach the stock bottom.
+2. In **CAM → Holding tabs · router contours**, enter stock thickness, nominal tab width and tab height above the stock bottom. Height must be positive and below stock thickness.
+3. Choose an evenly spaced count or explicit positions as comma-separated percentages from 0 up to, but not including, 100. Positions are measured around each compensated contour.
+4. Click **Assign tabs and current CAM settings to selected object**. Draft fields alone do not modify the job. Assignment also updates the project stock-thickness default.
+5. Generate a fresh preview and inspect the depth plateaus. With 10 mm stock and 2 mm tabs, plateaus should stop at Z −8 mm while the main cut reaches the bottom. Use **Remove tabs from selected object** and regenerate to remove them.
+
+The plateau adds one cutter diameter to the nominal width along the path. Inspect corners, inner contours and nearby cuts: geometric tabs do not guarantee stock retention and do not replace clamping. Overlapping/oversized placements fail CAM validation. Relief/depth paths, non-flat cutters, open contours and unsupported operations are rejected. Direct-on-contour dragging of tab positions is not available. Holding-tab CAM currently requires the server; local-file generation explicitly rejects it.
+
+## Rotary design and export
+
+Rotary is an **export-only LinuxCNC router workflow**. The current GRBL and Marlin senders do not run the exported A-axis file.
+
+Enter the measured cylinder diameter, design wrap axis, starting angle and direction. **Set design span to one revolution** sets that design dimension to `π × diameter`. The other design coordinate is axial; the export emits axial motion as X, rotation as continuous A degrees and radial motion as Z. Physically configure A rotation around X and establish the radial stock-surface zero.
+
+Use **Add seamless periodic border** for a full-turn example. **Check matching seam endpoints** compares endpoint axial positions and depths within 0.01 mm. Passing that check does not prove tangent continuity, true stock circumference or physical alignment.
+
+Export requires router mode and GRBL source geometry; the server or supported offline contour engine converts it to LinuxCNC G93 inverse-time feed. The JavaScript/Python parity checks cover the wrap calculations. The new direct file:// browser workflow remains unverified because the automation browser blocked the file URL; test it in your actual browser before depending on it. Angles remain continuous beyond 360° rather than wrapping to zero. Source positions within 0.00051 mm of an integer circumference are snapped to whole turns to account for source CAM decimal rounding. Preview remains planar. Review the file in the target LinuxCNC configuration before any physical execution; fixtures and holder collisions are not simulated.
+
+## Local machine, keyboard and gamepad control
+
+The local server starts with physical ports disabled. Test with **Simulator**. Enabling real ports requires the explicit `--enable-hardware` startup option and a machine that has been commissioned independently. Select the correct protocol before connecting; disconnect before changing it.
+
+The Control profile is a setup aid, not a command to overwrite the controller. Check current travel, head, work origin and clearance against the actual machine. **Apply mounted head mode · outputs off** requests a confirmed mode transition; it does not mechanically swap or measure the head. Re-establish router/knife Z zero or laser focus after changing heads. GRBL readback checks include mode/power and available travel; firmware and physical setup still determine what happens.
+
+For keyboard/gamepad jogging, explicitly enable manual control in **Control**. The machine must be connected and idle.
+
+- Arrow keys request one X/Y step; Page Up/Down request one Z step. Held-key repeats are ignored. Typing in inputs does not jog the machine.
+- For a browser-standard gamepad, press a button if necessary, then **Find gamepads** and select it. Check the mapping in the simulator.
+- Release the selected hold-to-jog button, centre the stick, then hold the button and deflect for one increment. Return to centre before another increment. Only the strongest axis moves; gamepad increments are capped at 1 mm.
+- Losing window focus, hiding the page, changing the mapping or disconnecting the gamepad disables manual input. Releasing the button prevents new requests; already accepted movement can continue.
+
+Dedicated XHC/USB pendant protocols and continuous handwheel jogging are not implemented. GRBL feed hold and Marlin host pause have different behavior. Marlin pause stops transmission while buffered moves may continue; its abort uses M112 and requires reconnect. Software hold/reset is not a physical emergency stop.
+
+## Phone control and uploads
+
+Phone control and file upload are separate services. The hosted HTTPS editor/receiver stores files for review; an upload never starts a job. Use **Projects** to download/upload project, SVG or current G-code files. A transfer receipt confirms checksum and byte count, not execution. If a transfer result is ambiguous, inspect the receiver before retrying. See [WEB.md](WEB.md) for accounts, certificates and upload-only tokens.
+
+For phone controls, start the local machine server with `--monitor`. Pair using its generated URL/token. TLS is available using `--monitor-cert` and `--monitor-key`; without those options the monitor is plain HTTP and intended only for a trusted local network. Do not treat the phone monitor as the internet-facing account-based editor. Restarting revokes its pairing token.
+
+At the local workstation, generate a current preview, confirm setup and **Arm preview for phone start**. The phone can attempt that armed job once, pause/resume or stop/abort. It cannot submit arbitrary G-code, jog or configure the machine. Stale phone data means position/control status is unknown; do not infer a successful stop from a lost connection.
+
+## Costs, quotes and printing
+
+In **Quote**, enter your own material, waste, machine-time, hourly-rate, setup, finishing, consumables and other costs. Use the current preview time as a starting point, then add travel/startup and realistic production allowances. There are no built-in authoritative material prices or calibrated production rates.
+
+Gross margin is profit as a percentage of selling price, not a markup on cost. Choose the quantity, currency and tax rate appropriate to the quote. Calculate, then download quote JSON or print/save PDF. Unit prices are rounded; order totals use the unrounded estimate before final currency rounding. These are estimates, not accounting or tax determinations.
+
+For design printing, choose **Fit on A4 landscape** or **1:1 tiled A4 landscape**. Allow the print popup. For 1:1 output, use A4 landscape and 100%/actual-size scaling in the browser/printer dialog; turn off any additional fit-to-page scaling. Measure the printed **50 mm reference** with a physical ruler before using the print as a machining template. Printer margins, drivers and PDF viewers can change scale even when the on-screen dimensions are correct.
+
+## Reporting a problem
+
+Keep a portable copy before restarting or clearing any browser data. Record the application revision, operating system/browser, server mode, selected head/protocol, operation settings and exact error. Include a minimal project that reproduces the issue and distinguish simulator behavior from physical hardware behavior. Redact passwords, upload/pairing tokens and private keys. Use the symptom-specific [fault-finding guide](TROUBLESHOOTING.md).
+
+## Manual tool changes
+
+In CAM, open Manual tool changes. Set the cutter diameter, operation, depth and feeds; select an object, assign a tool number/name/shape and its current settings. Repeat for every active object. Generate separate stage files, then download each G-code file and the plan JSON. Consecutive operations using the same tool geometry/number share a stage. Returning to a previous tool creates another stage.
+
+Each stage ends retracted with the spindle off. Wait for motion and spindle to cease, install the next tool, re-establish Z zero or verified tool length, check XY origin/clearance and review the next stage before starting it manually. Do not concatenate stage files. Automatic tool changers, probing and automatic continuation are not implemented. Ordinary Run rejects differing tool numbers even if their diameters match. Tool-change generation requires the app server.
+
+Holding tabs are retained when reassigning CAM settings or a manual tool. Use **Remove tabs from selected object** before clearing operation settings; the editor prevents implicit removal. Incompatible tool/mode combinations retain the tab request and fail CAM validation.

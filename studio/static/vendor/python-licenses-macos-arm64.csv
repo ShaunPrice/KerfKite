@@ -1,0 +1,84 @@
+Distribution,Version,Publisher license metadata,Exact wheel SHA256,PyPI release
+aiofile,3.12.3,Apache-2.0,5c1bcc9e929c50834608e8cc1a4cc1d7503eb60c15a535b779fd39e2f372c017,https://pypi.org/project/aiofile/3.12.3/
+annotated-types,0.8.0,MIT,f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0,https://pypi.org/project/annotated-types/0.8.0/
+anyio,4.16.0,MIT,c66ae634e0b8228396b801741beb3294326d4b6102f7bba4041c0dfb58c29026,https://pypi.org/project/anyio/4.16.0/
+attrs,26.1.0,MIT,c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309,https://pypi.org/project/attrs/26.1.0/
+Authlib,1.9.9,BSD-3-Clause,0199649865fefb4304fc57683eaebb15614523073e41e09d98c72f3268ce5cbc,https://pypi.org/project/Authlib/1.9.9/
+beartype,0.23.1,MIT,4461b4dc57e3fdd6c8a8464b22cf118002eea107c33e9fef651c69068ab3cce3,https://pypi.org/project/beartype/0.23.1/
+blinker,1.9.0,MIT License,ba0efaa9080b619ff2f3459d1d500c57bddea4a6b424b60a91141db6fd2f08bc,https://pypi.org/project/blinker/1.9.0/
+cachetools,8.0.1,MIT,9e54fbdef4b24e8059e8a430893122febbaf9f5673f236fdb82256cdd090d506,https://pypi.org/project/cachetools/8.0.1/
+cadquery-ocp-novtk,7.9.3.1.1,Apache-2.0,50931ba2d20aa57d5e3fe2bac790093fc65c8257f7899ec5071b9e8d13dbf4bd,https://pypi.org/project/cadquery-ocp-novtk/7.9.3.1.1/
+cadquery-ocp-proxy,7.9.3.1.1,Apache-2.0,ca4164ec4b54956d9fc3e68c67d555b5486cb963c2f71e18df005ba16b921c91,https://pypi.org/project/cadquery-ocp-proxy/7.9.3.1.1/
+caio,0.12.10,Apache-2.0,c396c9a850681bf51dcc9943468260f6fa7861498f84b5f3b9413e9d3283cbec,https://pypi.org/project/caio/0.12.10/
+certifi,2026.10.23,MPL-2.0,e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1,https://pypi.org/project/certifi/2026.10.23/
+cffi,2.1.1,MIT-0,f81b3b8f3d4e343550fa4baa0e479bba9f2d29ce9c2e9b51d1ce1718d7442fcf,https://pypi.org/project/cffi/2.1.1/
+cheroot,11.1.2,BSD License,0f6c0ba05c00fbc869fb46b1de4ec2384e1d85418ae963d3bc10ae83b688dbfa,https://pypi.org/project/cheroot/11.1.2/
+click,8.5.1,BSD-3-Clause,8bb5376d2006950386f8c6427613334a2acadc5f559cb80e638d00b4df957e37,https://pypi.org/project/click/8.5.1/
+cryptography,50.0.2,Apache-2.0 OR BSD-3-Clause,fa8f5efb344d6908a1ce62f4a24e2e5780f825d6f53f5f50ec5ffacac72936cb,https://pypi.org/project/cryptography/50.0.2/
+cyclopts,5.5.2,Apache-2.0,4fbe863ebace1c65dafc6520c82217915b103d27fbd1d8fcd168f2abcca3a12a,https://pypi.org/project/cyclopts/5.5.2/
+dnspython,2.9.2,ISC,af15f7d385a6ae2fb35a796fde2138004c8c42c7389090e2addc83e3b3340fd8,https://pypi.org/project/dnspython/2.9.2/
+docstring_parser,0.18.0,MIT,b3fcbed555c47d8479be0796ef7e19c2670d428d72e96da63f3a40122860374b,https://pypi.org/project/docstring_parser/0.18.0/
+email-validator,2.4.0,Unlicense,4454e41c4e1c6b6caee34a1dc71d5e736791562be8fd179b02e298f796522684,https://pypi.org/project/email-validator/2.4.0/
+exceptiongroup,1.3.1,MIT License,a7a39a3bd276781e98394987d3a5701d0c4edffb633bb7a5144577f82c773598,https://pypi.org/project/exceptiongroup/1.3.1/
+ezdxf,1.4.5,MIT License,e78a6b6aaac31f915026694f669cb3172636380caad9ec41007636f034013106,https://pypi.org/project/ezdxf/1.4.5/
+fastmcp,3.4.11,Apache-2.0,f50a7aa4cc2a5954d02fcc9672ff1d69daff73a02387f959c2647523cd6d5606,https://pypi.org/project/fastmcp/3.4.11/
+fastmcp-slim,3.4.11,Apache-2.0,24535dd843b3dcb3272b86c88fdf6ada5026c39ec5b56e2426557223c4d2c8bf,https://pypi.org/project/fastmcp-slim/3.4.11/
+Flask,3.1.3,BSD-3-Clause,f4bcbefc124291925f1a26446da31a5178f9483862233b23c0c96a20701f670c,https://pypi.org/project/Flask/3.1.3/
+fonttools,4.68.0,MIT,f265c85432c398d86f26add143423924a4747879b2dce001a3ffe0a5fed30638,https://pypi.org/project/fonttools/4.68.0/
+griffelib,2.4.1,ISC,76bc562f936ad1ce198d2cf6d0731bd5c92a7d934b69ef828ef22ee0ffdb62ce,https://pypi.org/project/griffelib/2.4.1/
+h11,0.16.0,MIT,63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86,https://pypi.org/project/h11/0.16.0/
+httpcore,1.0.9,BSD-3-Clause,2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55,https://pypi.org/project/httpcore/1.0.9/
+httpx,0.28.1,BSD-3-Clause,d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad,https://pypi.org/project/httpx/0.28.1/
+httpx-sse,0.4.3,MIT,0ac1c9fe3c0afad2e0ebb25a934a59f4c7823b60792691f779fad2c5568830fc,https://pypi.org/project/httpx-sse/0.4.3/
+idna,3.20,BSD-3-Clause,ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c,https://pypi.org/project/idna/3.20/
+itsdangerous,2.2.0,BSD License,c6242fc49e35958c8b15141343aa660db5fc54d4f13a1db01a3f5891b98700ef,https://pypi.org/project/itsdangerous/2.2.0/
+jaraco.classes,3.4.0,MIT License,f662826b6bed8cace05e7ff873ce0f9283b5c924470fe664fff1c2f00f581790,https://pypi.org/project/jaraco.classes/3.4.0/
+jaraco.context,6.1.2,MIT,bf8150b79a2d5d91ae48629d8b427a8f7ba0e1097dd6202a9059f29a36379535,https://pypi.org/project/jaraco.context/6.1.2/
+jaraco.functools,4.6.0,MIT,99e3dc0060c5cbe8fcd1cdb36258e2a65ca40f1566b2033b12abb1bb44dd3c30,https://pypi.org/project/jaraco.functools/4.6.0/
+Jinja2,3.1.6,BSD License,85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67,https://pypi.org/project/Jinja2/3.1.6/
+joserfc,1.8.0,BSD-3-Clause,176b836ac7ed9a46a88629e24076314b475f33a75d0bad7f26146e572eed7c79,https://pypi.org/project/joserfc/1.8.0/
+jsonref,1.1.0,MIT,590dc7773df6c21cbf948b5dac07a72a251db28b0238ceecce0a2abfa8ec30a9,https://pypi.org/project/jsonref/1.1.0/
+jsonschema,4.26.0,MIT,d489f15263b8d200f8387e64b4c3a75f06629559fb73deb8fdfb525f2dab50ce,https://pypi.org/project/jsonschema/4.26.0/
+jsonschema-path,0.5.0,Apache-2.0,2790a070bc7abb08ea3dbe4d340ece4efadf639223001f020c7503229ba068e2,https://pypi.org/project/jsonschema-path/0.5.0/
+jsonschema-specifications,2025.9.1,MIT,98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe,https://pypi.org/project/jsonschema-specifications/2025.9.1/
+keyring,25.7.0,MIT,be4a0b195f149690c166e850609a477c532ddbfbaed96a404d4e43f8d5e2689f,https://pypi.org/project/keyring/25.7.0/
+manifold3d,3.5.5,Apache Software License,493d6af3552f25e4cefa2aec775c6b371278871ab526b0805543769977155314,https://pypi.org/project/manifold3d/3.5.5/
+markdown-it-py,4.3.0,MIT License,7aa1511a46c39138de78d9eba92ce47e63124d8003fc98b3a351909e04239efa,https://pypi.org/project/markdown-it-py/4.3.0/
+MarkupSafe,3.0.4,BSD-3-Clause,0930db9bdc62d22944e10b066448bb65dc9abe9112880c7cab8da54db4284d5f,https://pypi.org/project/MarkupSafe/3.0.4/
+mcp,1.30.0,MIT,666edb5009503e1047c9d60346a756f94b261f05cc2625f23d41c728ffc484d0,https://pypi.org/project/mcp/1.30.0/
+mdurl,0.1.2,MIT License,84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8,https://pypi.org/project/mdurl/0.1.2/
+more-itertools,11.2.1,MIT,35a7377edd1dd6608dcb2cdf534ded55ea32d49448875ad042cd3f879fb1ded0,https://pypi.org/project/more-itertools/11.2.1/
+numpy,2.5.5,BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0,a3856a97e48ed8371c680fb04120b99fbcc29f2076ebe6dc3deb34f77947c5ca,https://pypi.org/project/numpy/2.5.5/
+openapi-pydantic,0.6.0,MIT,8bd6d548a250da37db96f461bcd52b3468e8834ad7d6db14b00a6b2ebbd163a3,https://pypi.org/project/openapi-pydantic/0.6.0/
+opentelemetry-api,1.45.2,Apache-2.0,2cbd737377e710ee740d261c94e93fa0f08e6d037c18f17513cc0a2d94479a34,https://pypi.org/project/opentelemetry-api/1.45.2/
+packaging,26.3,Apache-2.0 OR BSD-2-Clause,d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c,https://pypi.org/project/packaging/26.3/
+pathable,0.6.0,Apache-2.0,82c4ca6c98c502ad12e0d4e9779b6210afee93c38990988c8c5d1b49bdcdf566,https://pypi.org/project/pathable/0.6.0/
+pillow,12.3.0,MIT-CMU,ffd0c5368496f41b0944be820fcb7a838aa6e623d250b01acf2643939c3f99d7,https://pypi.org/project/pillow/12.3.0/
+platformdirs,4.14.7,MIT,391513b74707c42335fff3ea17eaac657a7ee9ffcadd809634d34ea594d0122c,https://pypi.org/project/platformdirs/4.14.7/
+py-key-value-aio,0.4.6,Apache-2.0,820b30c7959fc738ea3d00160cdb10cd258f51e38737b2add530defeea1ded77,https://pypi.org/project/py-key-value-aio/0.4.6/
+pycparser,3.12,BSD-3-Clause,a076f3f489b39b43ed13563a1dafe42447445bec2e294154ec5c57fcdda4c85e,https://pypi.org/project/pycparser/3.12/
+pydantic,2.14.3,MIT,3f7b347782ab7e4cf4c798496ae3a82787d9f21ec12676a9c564355eeef8daa8,https://pypi.org/project/pydantic/2.14.3/
+pydantic-settings,2.16.3,MIT,d1db16a2d34006323a1b42c0640898da58adfbad7ec30baaa9e2b18aafc08999,https://pypi.org/project/pydantic-settings/2.16.3/
+pydantic_core,2.50.4,MIT,1e20cbde2b6deb33a51d08cd168454dd9044ec7d4474056f4d98d63f51578783,https://pypi.org/project/pydantic_core/2.50.4/
+Pygments,2.21.0,BSD-2-Clause,2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9,https://pypi.org/project/Pygments/2.21.0/
+PyJWT,2.15.1,MIT,42d59d631f7768a1028a64c7ff581a9bf7519804daf91fc5b6c56e30eec5e193,https://pypi.org/project/PyJWT/2.15.1/
+pyparsing,3.3.3,MIT,ece8c00a69cf01b45d0b1dedabb469c90d8caf996d4fda40f147627a122849a4,https://pypi.org/project/pyparsing/3.3.3/
+pyperclip,1.11.0,BSD,299403e9ff44581cb9ba2ffeed69c7aa96a008622ad0c46cb575ca75b5b84273,https://pypi.org/project/pyperclip/1.11.0/
+pyserial,3.5,BSD,c4451db6ba391ca6ca299fb3ec7bae67a5c55dde170964c7a14ceefec02f2cf0,https://pypi.org/project/pyserial/3.5/
+python-dotenv,1.2.4,BSD-3-Clause,42269a8a5b3fd54ffa6f3d84b18abed50064717576b4ecf03dc4a55d8aa04fdc,https://pypi.org/project/python-dotenv/1.2.4/
+python-multipart,0.0.34,Apache-2.0,ebacd224bd686eee2f9aa1066a657affe07435a185834e05e5235e2e59173e91,https://pypi.org/project/python-multipart/0.0.34/
+PyYAML,6.0.3,MIT,fc09d0aa354569bc501d4e787133afc08552722d3ab34836a80547331bb5d4a0,https://pypi.org/project/PyYAML/6.0.3/
+referencing,0.37.0,MIT,381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231,https://pypi.org/project/referencing/0.37.0/
+rich,15.0.0,MIT,33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb,https://pypi.org/project/rich/15.0.0/
+rich-rst,2.2.0,MIT,1ea1c43813dc4a8d86475fce27ffb74e0ada3d4656c9f8130ba2a59868055fe9,https://pypi.org/project/rich-rst/2.2.0/
+rpds-py,2026.9.1,MIT,e21c1429e205828ea886a2293a4a2c8e01f4c25d9893ca330e97a6cf73f52e7b,https://pypi.org/project/rpds-py/2026.9.1/
+shapely,2.2.0,BSD-3-Clause,c36ccbff5c3374c349c370bfdac22c7676b268b4a707c98e9031f498965aa02d,https://pypi.org/project/shapely/2.2.0/
+sse-starlette,3.7.0,BSD-3-Clause,f1d3136caa12d129284fca3d2ded79bc9af943320b6472712955fea52a6d3eea,https://pypi.org/project/sse-starlette/3.7.0/
+starlette,1.10.0,BSD-3-Clause,478c0ab3b4ced6e82719849c118fa406f0278a3499c1a898cd15cd31bdc38ce4,https://pypi.org/project/starlette/1.10.0/
+typing-inspection,0.4.5,MIT,bc210535442b39e1bf2805e0c7a17dfd6a4ace760c84c7f7d16245d23a6b1c39,https://pypi.org/project/typing-inspection/0.4.5/
+typing_extensions,4.16.0,PSF-2.0,481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8,https://pypi.org/project/typing_extensions/4.16.0/
+uncalled-for,0.6.1,MIT,1e8f86f972684db50f2888f07caa87d81a431584fa77856660e0c5e89f1cc778,https://pypi.org/project/uncalled-for/0.6.1/
+uvicorn,0.54.0,BSD-3-Clause,505bdb0f318731d45f1f712071fc781a8981f6847a31c902c9f5e652d4f67faf,https://pypi.org/project/uvicorn/0.54.0/
+watchfiles,1.3.0,MIT,bbc1198edfdc90fda0600f825aa94150f428dfcbf8138746f55998e0e660d64c,https://pypi.org/project/watchfiles/1.3.0/
+websockets,17.4,BSD-3-Clause,bcad49104711f88b2b7c3ba166de172857d837248205e541b044a552558fecc3,https://pypi.org/project/websockets/17.4/
+Werkzeug,3.1.9,BSD-3-Clause,6392e50c78460ba618e5b21f08a71f59c99ce99cdc6cf6e3dd7e6ccca8754fab,https://pypi.org/project/Werkzeug/3.1.9/

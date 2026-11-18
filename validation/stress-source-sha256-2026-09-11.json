@@ -1,0 +1,10 @@
+{
+  "studio/relief.py": "1f34958054a648e39b3988418a694c3d7f39ef7228d6a3d5e878466177fd63f9",
+  "studio/cam.py": "cd1d02174138527ba7ff8a13c0d77ec5b6fe04735d21e63f3d741feeb0d60efb",
+  "studio/operations.py": "d968d38a3c1afde293744ff63c8d27afcb4b8185cc908cda1d0937850197fbdd",
+  "studio/laser.py": "b7616dea459383734aedd4ec07720c1b6f32f31fe1475659d43f03f623bc8215",
+  "studio/protocols.py": "ff90696743bfdfe4d48818d7ac94a5c863d309e08a20609e129f4e8d6a6c8f86",
+  "studio/simulation.py": "2ba63c0dfe681021582afdd338249c40b0095d21845ddb711eca8fe405927fd8",
+  "validation/stress_cam.py": "51585f9a9a81722ba796bde65f0a4b30237468417b7db11d4c4bcba4e5ff3bcd",
+  "validation/relief_benchmark.cpp": "98808e53cb43f7cf01cb0fbc5c27332cfca5e0db4ab7b43891d9f03767ffb585"
+}

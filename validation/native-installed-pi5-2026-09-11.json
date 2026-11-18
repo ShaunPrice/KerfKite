@@ -1,0 +1,97 @@
+{
+  "platform": "Linux-6.12.47+rpt-rpi-2712-aarch64-with-glibc2.41",
+  "python": [
+    {
+      "stages": {
+        "relief": 1.132206988055259,
+        "gcode": 0.5247621019370854,
+        "stock_preview": 1.2052875799126923
+      },
+      "vertices": 67335,
+      "lines": 135886,
+      "segments": 134268,
+      "gcode_bytes": 4749814,
+      "sha256": "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc",
+      "peak_rss_mib": 95.078125
+    },
+    {
+      "stages": {
+        "relief": 1.1416615470079705,
+        "gcode": 0.5220946599729359,
+        "stock_preview": 1.2217419990338385
+      },
+      "vertices": 67335,
+      "lines": 135886,
+      "segments": 134268,
+      "gcode_bytes": 4749814,
+      "sha256": "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc",
+      "peak_rss_mib": 96.265625
+    },
+    {
+      "stages": {
+        "relief": 1.1432455579051748,
+        "gcode": 0.5182934679323807,
+        "stock_preview": 1.2024035059148446
+      },
+      "vertices": 67335,
+      "lines": 135886,
+      "segments": 134268,
+      "gcode_bytes": 4749814,
+      "sha256": "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc",
+      "peak_rss_mib": 97.03125
+    }
+  ],
+  "extension": "studio/_relief_native.cpython-313-aarch64-linux-gnu.so",
+  "native": [
+    {
+      "stages": {
+        "relief": 0.0879412239883095,
+        "gcode": 0.5199241639347747,
+        "stock_preview": 1.2119222880573943
+      },
+      "vertices": 67335,
+      "lines": 135886,
+      "segments": 134268,
+      "gcode_bytes": 4749814,
+      "sha256": "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc",
+      "peak_rss_mib": 97.1875
+    },
+    {
+      "stages": {
+        "relief": 0.08602249005343765,
+        "gcode": 0.5180779489455745,
+        "stock_preview": 1.2081639500102028
+      },
+      "vertices": 67335,
+      "lines": 135886,
+      "segments": 134268,
+      "gcode_bytes": 4749814,
+      "sha256": "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc",
+      "peak_rss_mib": 97.1875
+    },
+    {
+      "stages": {
+        "relief": 0.08605034206993878,
+        "gcode": 0.5208724669646472,
+        "stock_preview": 1.2111208020942286
+      },
+      "vertices": 67335,
+      "lines": 135886,
+      "segments": 134268,
+      "gcode_bytes": 4749814,
+      "sha256": "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc",
+      "peak_rss_mib": 97.1875
+    }
+  ],
+  "hashes_match": true,
+  "medians": {
+    "python": {
+      "pipeline": 2.8639425317524,
+      "relief": 1.1416615470079705
+    },
+    "native": {
+      "pipeline": 1.8180436111288145,
+      "relief": 0.08605034206993878
+    }
+  }
+}

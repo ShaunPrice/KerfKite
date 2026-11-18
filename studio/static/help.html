@@ -1,0 +1,1805 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#geometry">Geometry</a> <a href="#program-import">Program Import</a> <a href="#product">Product</a> <a href="#licensing">Licensing</a> <a href="#request-coverage">Request Coverage</a> <a href="#ai-vision">Ai Vision</a> <a href="#mcp">Mcp</a> <a href="#android">Android</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#assemblies">Assemblies</a> <a href="#sketch">Sketch</a> <a href="#fixtures">Fixtures</a> <a href="#status">Status</a> <a href="#install">Install</a> <a href="#developer">Developer</a> <a href="#laser-order">Laser Order</a> <a href="#user-guide">User Guide</a> <a href="#platforms">Platforms</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#branding">Branding</a> <a href="#simulation">Simulation</a> <a href="#web">Web</a> <a href="#release-review">Release Review</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#native">Native</a> <a href="#camera-register">Camera Register</a> <a href="#protocols">Protocols</a> <a href="#solid-cad">Solid Cad</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#lightburn-import">Lightburn Import</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
+<p>KerfKite Studio is an open-source CAD/CAM workbench for interchangeable CNC router, laser and drag-knife heads. Design in a browser, simulate a job, and prepare output for a supported controller. The Python application runs locally or as an authenticated HTTPS editor. The repository also includes a simplified Android companion.</p>
+<p><img src="header-wood.png" alt="KerfKite Studio engraved timber header" /></p>
+<h2>Run it locally</h2>
+<ol>
+<li>Install a supported 64-bit Python and follow the <a href="#install">installation guide</a>.</li>
+<li>On macOS or Linux, run <code>sh scripts/install.sh</code> and <code>sh start.sh</code>. On Windows, use <code>scripts/install.ps1</code> and <code>start.bat</code>.</li>
+<li>Open the loopback address printed by the server. The default startup uses the simulator. Under <strong>Projects</strong>, choose <strong>Try a sample</strong> to import a laser badge. Under <strong>3D CAD</strong>, open the guided plate or bearing tutorial.</li>
+<li>For STEP exchange install the optional extra with <code>python -m pip install &quot;.[step]&quot;</code> inside the application's virtual environment.</li>
+</ol>
+<h2>Inside the workshop</h2>
+<ul>
+<li>Parametric parts, sketches, Boolean features, assembly mates, interference checks, Bézier/NURBS surface editing and STEP exchange.</li>
+<li>Layer-based laser editing, image processing, material test grids, camera registration and 1,000 original vector templates.</li>
+<li>Router relief, profile and pocket operations, drag-knife paths, rotary file export and simulated fixture clearance.</li>
+<li>Reviewed imports for LightBurn projects and settings, DXF drawings, G-code, HP-GL cutter programs and LinuxCNC workspace settings.</li>
+</ul>
+<p>See the <a href="docs/KerfKite-Release-Review.pdf">release report (PDF)</a>, <a href="#lightburn-import">file compatibility</a>, <a href="#protocols">controller matrix</a> and <a href="#platforms">platforms</a> for tested scope and open work. The machine limits in the public profiles are example dimensions. Enter your measured setup before preparing a physical job.</p>
+<h2>Development and licensing</h2>
+<p>Start with <a href="#agents">AGENTS.md</a> and the <a href="#developer">developer handoff</a> for the architecture, simulation and browser tests. The command names <code>cnc-studio</code> and <code>cnc-studio-web</code> and the project format <code>pi-cnc-studio/1</code> preserve interoperability with existing Studio installations.</p>
+<p><a href="vendor/Studio-MIT.txt">MIT</a> covers first-party software and documentation. Fonts, the bundled parser and native runtime components have their own licences. See the <a href="#licensing">licensing inventory</a>, <a href="#contributing">contributing guide</a> and <a href="#security">security policy</a>.</p>
+</section><section id="geometry"><h1>Geometry, text and controller capabilities</h1>
+<p>Current development behavior; see <a href="#status">STATUS.md</a> for acceptance limits and <a href="#user-guide">USER-GUIDE.md</a> for operation instructions.</p>
+<h2>Involute spur gears</h2>
+<p>New gears use metric zero-shift external involute teeth. Controls: tooth count, module, pressure angle (14.5–25 degrees), pitch-circle tooth thinning, centre-hole diameter and page rotation. Outside diameter is derived as module × (teeth + 2). A mating pair needs matching module/pressure angle; standard centre distance is module × (teeth A + teeth B) / 2. Thinning is per gear, so the pair's thinning adds to backlash.</p>
+<p>Conservatively reject tooth counts below ceil(2 / sin(pressure angle)^2), oversized bores and pointed/overlapping teeth. New gear objects cannot be stretched with resize handles; regenerate using module. Existing decorative gears in old projects are not silently converted. The root uses a radial transition and circular root arc, not a generated hob trochoid. No load rating, root stress, interference sweep or physical mesh test has been completed. Use the internal outside/inside profile operation for cutter-radius or laser-kerf compensation, or export to suitable external CAM. Compensation does not establish physical gear accuracy. SVG export preserves geometry and hole-first path order. Numerical tests verify pitch thickness, tooth count and dimensions.</p>
+<p>Reference: https://khkgears.net/gear-knowledge/gear-technical-reference/calculation-gear-dimensions/</p>
+<p>Polygons support 3–128 sides, rotation and circular centre holes checked against actual edge clearance.</p>
+<h2>Text</h2>
+<p>Bundled Lora, Montserrat and Cormorant Garamond fonts (SIL Open Font License) and imported TTF/OTF fonts convert to closed contours. The parser is opentype.js 2.0.0 (MIT); licenses are bundled in static/vendor. Local files work without fetch or a CDN. Text retains editable settings in the project, plus portable outlines. Custom font files must be reimported to regenerate text in another session.</p>
+<p>Layouts: straight, vertical text down, cubic Bezier baseline with adjustable rise, letter spacing, page rotation and Y-axis rotation. Choose symmetric rise or independent custom cubic control points. Custom control X positions are percentages of text width and Y positions are millimetres; numeric fields and draggable orange handles edit the same values. Endpoints remain fixed at the baseline start/end. Settings survive text load/replace and portable projects; cusp/stationary-tangent cases are rejected. Tight curves may still overlap letters. Latin kerning and composite glyphs are supported; complex-script shaping is rejected rather than misrepresented. No automatic ligatures are applied.</p>
+<p>Depth is separate from font style. Text creates per-vertex negative-Z contours, with shallowest depth and optional Y-axis tilt. Router CAM uses step-down limits and clearance retracts, with conservative plunge-feed speed for 3D contour segments. XYZ paths can also be exported. A rotatable 3D path view and sampled stock-removal preview are available. Separate operations provide pockets, sampled V-carving and raised/recessed text/artwork relief; solid STL extrusion preserves holes. The sampled preview is an approximation, not a collision/gouge certificate. Font style itself does not define cutter geometry or engraving depth.</p>
+<h2>Artwork</h2>
+<p>1000 original built-in vector templates across 52 categories, including botanical sets, ornamental borders, mandalas, seasonal designs, nautical motifs, music, space, workshop, food, travel, garden, celebrations, animals, coasters, bookmarks, jewellery and hanging ornaments. The library displays 36 previews per page, with category/search/favourites filters. The MCP snapshot contains the same artwork. Source reference sheets have not been traced or redistributed. Existing simple motifs remain available. Foreground leaf/berry masking trims underlying vector segments, so exports do not retain hidden stem lines. Natural aspect ratios are retained for built-in previews and insertion. These are engraving contours; automatic stencil bridges, automatic one-piece cutout construction and production minimum-feature validation are not provided; manual boolean editing and CAM warnings do not replace these checks. Artwork quality still needs user review at intended production size.</p>
+<h2>Protocols</h2>
+<p><code>studio/protocols.py</code> separates supported export dialects from controller transport. GRBL / GRBL-ESP32 retains its output. Marlin router export omits GRBL work-coordinate/modal setup and uses millisecond dwell; the controller must have CNC spindle support configured. Both GRBL and experimental Marlin live adapters have software tests. Physical ports are disabled by default and require <code>--enable-hardware</code>; no physical machine was commissioned. Marlin pause stops host scheduling and may not stop already buffered motion. Marlin dynamic-laser output remains unsupported.</p>
+<p>The separate rotary workflow exports continuous A-axis LinuxCNC G-code with diameter wrapping and seam checks; it is not a live LinuxCNC driver. The same rotary wrapping is implemented in JavaScript for supported offline contour jobs and covered by parity tests. The new file:// browser workflow was not accepted end-to-end because the automation browser blocked that URL; browser-policy blocking is not a CAM correctness result. General Mach, LinuxCNC, Duet and other live adapters remain outstanding. Do not interpret a postprocessor as a validated live controller driver.</p>
+<h2>Area CAM, relief and preview limits</h2>
+<p>Compensated profiles use valid closed contours and nested holes. Pockets use concentric erosion and a stepover no larger than half the cutter diameter. Sampled medial-axis V-carving is conservative and can leave material in broad regions; tool-size/inaccessible-feature warnings still need review. Heightmaps and top-access STL relief use flat/ball cutter-contact envelopes, allowances and step-downs. Undercuts, clamps, holders and out-of-stock geometry are not modeled as certified collision checks.</p>
+<p>The optional native C++ relief kernel accelerates contact calculations while Python retains validation and the reference implementation; see <a href="#native">NATIVE.md</a> for measured results. No physical cut or gear mesh is established by numerical tests.</p>
+<h2>Multi-object layout</h2>
+<p>The Design panel provides an explicit multi-object checklist, edge/centre alignment and equal-gap horizontal/vertical distribution. Use selected-object bounds or the complete work area as the reference. Distribution requires at least three objects and rejects insufficient space instead of overlapping them. A single object can align to the work area. Translations preserve depth/power arrays, text settings, tool settings and gear proportions; saved gear/surface origins translate with their paths. Changes are atomic, participate in undo and invalidate previews. Full snapping/grouping semantics remain outstanding.</p>
+<h2>Router holding tabs</h2>
+<p>Closed router line/inside/outside contours can retain stock-bottom-relative tabs with a flat cutter. The requested cut reaches the stock bottom; tab height is less than stock thickness. For example, 10 mm stock with 2 mm tabs retains plateaus at Z −8 mm even if the main contour overcuts below −10 mm. Tab positions follow the compensated path's arc length; width includes one cutter diameter of plateau padding beyond the nominal width. Count-based placement or explicit percentages are supported, including closed-seam handling.</p>
+<p>Placement is a geometric aid, not a retention/clamping guarantee: corners and neighboring cuts need review. Open paths, relief/per-vertex depths, unsupported tools/operations, overlapping tabs and oversized plateaus are rejected. Holding tabs currently require the Python server; the offline engine rejects them explicitly. Direct dragging of tab locations on the design is not implemented.</p>
+</section><section id="program-import"><h1>Bringing drawings, toolpaths and cutter plots into Studio</h1>
+<p>Use the project importer in the Studio editor to open a drawing from another program. Imported outlines retain their source coordinates in millimetres and start with output disabled. Check a known dimension in the editor, choose the installed head and material, and generate a new CAM preview before enabling any imported artwork for output.</p>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>How to export</th>
+<th>What to check in Studio</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FreeCAD, AutoCAD, LibreCAD and other drawing tools</td>
+<td>Save an ASCII model-space DXF. Outline text before exporting. Set drawing units or select them when importing.</td>
+<td>Layer, colour, overall size, spline/arc contours and unsupported-entity counts</td>
+</tr>
+<tr>
+<td>A router CAM postprocessor</td>
+<td>Export an absolute or incremental three-axis text program as .nc, .ngc, .cnc, .tap or .gcode</td>
+<td>Feed contours, separate rapid approaches, work origin, depth units and the named source feed presets</td>
+</tr>
+<tr>
+<td>A plotter or vinyl design program</td>
+<td>Export plain HP-GL as .plt, .hpgl or .hpg with standard unscaled coordinates</td>
+<td>Pen layers, pen-up gaps, available velocity presets, knife offset and source force values</td>
+</tr>
+</tbody>
+</table>
+<h2>DXF contours</h2>
+<p>LINE, ARC, CIRCLE, ELLIPSE, SPLINE and ordinary 2D/XY polylines are converted to editable paths, including curved bulge segments and transformed nested block instances. The reader applies the drawing's declared insertion units. For a unitless drawing, <strong>Unitless DXF</strong> supplies the scale. Studio imports horizontal contours into the XY plane. Unsupported text, fills, dimensions, meshes and non-horizontal geometry appear in the skip report. Convert labels to outlines and hatches to boundaries in the source drawing if you need them. Layer colours and visibility carry into the import report. <a href="https://ezdxf.readthedocs.io/en/stable/path.html">ezdxf path documentation</a></p>
+<h2>Posted CNC contours</h2>
+<p>The importer tracks G20/G21 units, G90/G91 positioning and modal G0/G1/G2/G3 commands in the XY plane. It reads I/J centres, signed R arcs, full circles with I/J, helical Z and G90.1/G91.1 arc-centre modes. Tool changes separate source tool layers. G0 travel separates contours. An initial feed move with unknown starting XY produces a warning. Establish the starting position explicitly for incremental motion. Within Studio's supported depth range of −50 to 0 mm, varying cutting Z stays attached to each vertex. Other known Z values are retained as reference metadata. Rapids, stationary drilling moves and dwell timing do not form artwork. Controller macros, rotary axes, cycles, probing, coordinate resets, unsupported modal instructions and other ambiguous geometry stop the import with a line number. <a href="https://www.linuxcnc.org/docs/html/gcode/g-code.html">LinuxCNC G-code reference</a></p>
+<h2>HP-GL pen and knife settings</h2>
+<p>The reader supports IN, DF, SP, PA, PR, PU, PD, CI, AA and AR, with semicolons between instructions. Separate pen selections become layers. Drawn arcs use the same chord tolerance as other imported circular motions. VS velocity in cm/s produces a named mm/min feed preset when it fits Studio's feed range. FS values appear in the report in their source units. Review pressure on the target machine. Device-specific scaling, page coordinates, transformations, text and raster commands require conversion in the plotter software. Ordinary unscaled HP-GL uses 40 units per millimetre. <a href="https://developers.hp.com/system/files/attachments/PCL%20Implementors%20Guide-0-glossary.pdf">HP PCL Implementor's Guide, glossary</a></p>
+<h2>Try a two-pen motif</h2>
+<p>Save the following text as <code>motif.plt</code> and open it using the project importer.</p>
+<pre><code class="language-text">IN;SP1;VS2;FS5;PU400,400;PD800,400,800,800,400,800,400,400;PU;SP2;PU600,600;CI80;PU;
+</code></pre>
+<p>The first pen makes a 10 × 10 mm square starting at X 10, Y 10. The second makes a 4 mm circle centred at X 15, Y 15. The review includes a 1200 mm/min source feed and a force value of 5 in source units. Select the knife head, inspect the outlines and adjust CAM parameters for the intended cutter.</p>
+<h2>Size and performance</h2>
+<p>Imported artwork fits Studio's portable project limits of 3000 paths, 100000 vertices and coordinates within ±2000 mm. Circular toolpaths target 0.025 mm chord error. DXF uses ezdxf's path approximation and flattening with a 0.025 mm target. Convert very large drawings to the relevant work region and relocate distant survey or building coordinates before import.</p>
+<h2>LinuxCNC workspace reference</h2>
+<p>Choose a self-contained LinuxCNC <strong>.ini</strong> file and select <strong>Review import</strong>. The reader uses explicit <code>[TRAJ]LINEAR_UNITS</code> and <code>[AXIS_X]</code> / <code>[AXIS_Y]</code> minimum and maximum soft limits. A workspace width equals maximum X minus minimum X, including machines with negative travel coordinates. Z range, axis velocity and acceleration appear as measured-unit reference values when present. Applying the imported workspace changes the Studio drawing dimensions. INI files using external include statements require a resolved copy with the axis limits in the same file. <a href="https://linuxcnc.org/docs/stable/html/config/ini-config.html">LinuxCNC INI reference</a></p>
+<h2>LightBurn user bundles</h2>
+<p>Choose a <strong>.lbzip</strong> in <strong>Projects → Import artwork and settings</strong>, then select a supported member for review. Studio reads device profiles, preferences, material libraries, settings and project files present in the archive. Other bundle components are counted as skipped. An ordinary LightBurn bundle export omits standalone project files. Archives support up to 4 MB compressed, 256 members and 16 MB expanded in total, with up to 4 MB per supported member. The reader keeps archive data in memory. <a href="https://docs.lightburnsoftware.com/latest/Reference/UserBundles/">LightBurn User Bundles</a></p>
+</section><section id="product"><h1>Feature and acceptance matrix</h1>
+<p>The <a href="#release-review">current release review</a> and <a href="#lightburn-import">file compatibility guide</a> supersede the historical implementation column below. Track remaining items against the acceptance criteria.</p>
+<p>Every row requires implementation, regression fixtures and user workflow acceptance. Hardware-dependent rows also require commissioning on the machine. “Planned” is not implemented.</p>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Required capabilities</th>
+<th>Current status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Geometry</td>
+<td>Shapes, pen/Bezier curves, node editing, snapping, dimensions, rotate, mirror, group, align, distribute, arrays, offsets, booleans, weld, undo/redo</td>
+<td>Shapes including polygons/involute gears, move/resize, rotation/mirror, arrays, basic Bezier/node editing, offsets/booleans, multi-object alignment/equal-gap distribution and undo/redo implemented. Full snapping/group/document semantics remain incomplete.</td>
+</tr>
+<tr>
+<td>Typography</td>
+<td>System font discovery, editable text, kerning, text on path, weld/outline conversion, single-line fonts</td>
+<td>Three bundled outline fonts and TTF/OTF import, retained text settings, kerning, straight/down/Bezier layouts, rotations and depth paths implemented. Independent numeric/draggable cubic baseline controls implemented. System discovery, single-line fonts and complex-script shaping remain incomplete.</td>
+</tr>
+<tr>
+<td>Import/export</td>
+<td>SVG, DXF, bitmap images, PDF vectors; retain units and discontinuities; documented project format</td>
+<td>Restricted SVG, DXF, LightBurn vector projects and settings, HP-GL, supported CNC instruction files, STEP, PNG/JPEG, heightmaps, STL relief and Studio project imports. SVG/G-code/XYZ/STL/STEP exports. PDF vectors, native commercial cutter formats and full SVG coverage remain open.</td>
+</tr>
+<tr>
+<td>Layers</td>
+<td>Object-to-layer assignment, ordering, per-layer speed/power/pass/fill settings, output enable, material library</td>
+<td>Ordered per-object operation settings, output enable/reorder and local tool/material presets implemented. Full document/layer model and continuous tool changes remain incomplete.</td>
+</tr>
+<tr>
+<td>Laser vector</td>
+<td>Line, fill, offset fill, cross-hatch, interval/angle, overscan, perforation, kerf, tabs/bridges</td>
+<td>M4 lines, tangent leads and sampled ramps, kerf-compensated profiles, hatch/crosshatch and ordered settings implemented. Geometry-aware curved leads, perforation and automated bridges remain incomplete.</td>
+</tr>
+<tr>
+<td>Laser image</td>
+<td>Grayscale, threshold, dithering, brightness/contrast/gamma, invert, crop/masks, bidirectional raster, overscan, variable power</td>
+<td>Grayscale, threshold, Floyd–Steinberg dithering, inversion, interval, bidirectional raster and zero-power overscan implemented. Tone adjustment, crop, alpha, ellipse and selected artwork masks are covered in the laser workshop.</td>
+</tr>
+<tr>
+<td>Job optimisation</td>
+<td>Travel minimisation, inside-before-outside, directional rules, duplicate removal, cut order preview, accurate machine-calibrated time</td>
+<td>User operation order, hole-first area paths and opt-in layer-aware line ordering with exact duplicate removal. Machine-calibrated time and optimization across all operation types remain open.</td>
+</tr>
+<tr>
+<td>Camera</td>
+<td>Capture, lens/bed calibration, overlay, trace placement, saved calibration per machine, fiducial registration</td>
+<td>Camera/image outline and centreline tracing implemented with user-specified dimensions. Four-landmark projective bed registration, an image overlay and registered trace placement are implemented. Lens distortion and measured physical accuracy remain open.</td>
+</tr>
+<tr>
+<td>Machine UI</td>
+<td>Jog, home, origin modes, framing, console, alarms, overrides, safe hold/abort, progress, stored device configuration</td>
+<td>Software-tested GRBL/Marlin transport, simulator, manual/keyboard/standard-gamepad jogging, hold/reset and progress. Physical ports require explicit opt-in; hardware commissioning remains outstanding.</td>
+</tr>
+<tr>
+<td>Rotary</td>
+<td>Diameter/circumference, axis mapping, preview, per-machine calibration</td>
+<td>Continuous A-axis LinuxCNC export, diameter wrapping, exact-turn seam checks, periodic borders and offline contour wrapping implemented. JavaScript/Python parity tested; new direct file-browser acceptance blocked by automation URL policy. No live rotary sender or arbitrary four-axis surface machining; wiring/calibration remain unverified.</td>
+</tr>
+<tr>
+<td>Libraries</td>
+<td>Materials, reusable artwork, templates, variables, serial numbers, barcodes/QR, material tests</td>
+<td>1,000 original templates, a feed/power test grid, custom creator/manager, local material/tool presets and portable project/library files implemented. Variables, serial numbers, barcodes/QR and full material-test workflows remain incomplete.</td>
+</tr>
+<tr>
+<td>CNC CAM</td>
+<td>Centreline engraving, tool library, depth/step-down, profiles with compensation, pockets, adaptive/clearing strategy, tabs, ramp/helix, drilling, V-carving, surfacing, 3D relief</td>
+<td>Compensated profiles/pockets, stepped and varying-depth contours, sampled V-carving, image/STL relief with flat/ball contact and sampled preview implemented. Holding tabs support closed flat-cutter router contours with count/explicit positions. Adaptive clearing, direct-on-contour tab dragging, ramp/helix and drilling cycles remain outstanding.</td>
+</tr>
+<tr>
+<td>CNC setup</td>
+<td>XYZ probe, tool-length measurement, tool change workflow, stock/clamp model, work coordinate systems, feeds/speeds, spindle control</td>
+<td>Stock/depth limits, origin commands and independent manual tool-change stage plans implemented. No automatic probing/tool changer, fixture collision certification or automatic staged-job continuation.</td>
+</tr>
+<tr>
+<td>Shared machine</td>
+<td>Head identity, configuration readback, laser/router mode transitions, air assist/dust extraction, head offsets, shared XY registration, per-head focus/tool-zero, explicit remount procedure</td>
+<td>Explicit head mode workflow switches outputs off, requests GRBL mode and requires readback/setup. Physical head switching, air assist, offsets and registration are not commissioned.</td>
+</tr>
+<tr>
+<td>Extensibility</td>
+<td>Multiple machines, GRBL capability discovery, original xPRO adapter, FluidNC/grblHAL adapters, plugin boundaries, touch UI, portable packaging, import migration</td>
+<td>GRBL/GRBL-ESP32 and experimental Marlin live adapters; separate rotary LinuxCNC export. Mach, FluidNC/grblHAL-specific and other live integrations remain outstanding.</td>
+</tr>
+<tr>
+<td>Release quality</td>
+<td>Offline operation after install, recovery from connection failures, reproducible builds, ARM64 performance, documentation, accessibility, licence checks, regression corpus</td>
+<td>Local regression/browser checks, Mac/Pi native relief validation, bounded Pi stress tests, installation/user/help documentation. Full platform acceptance, accessibility, reproducible/signable distributions and hardware acceptance remain outstanding.</td>
+</tr>
+</tbody>
+</table>
+<p>“Full LightBurn parity” includes software workflows applicable to the target machines. Support for other hardware families (Ruida/Trocen/galvo etc.) needs separate protocol adapters and hardware tests; it is not supplied by an xPRO GRBL adapter. Proprietary LightBurn project-file round-tripping is not yet implemented or promised as lossless.</p>
+</section><section id="licensing"><h1>Licences and redistribution</h1>
+<p><strong>Shaun Price's Studio code and project documentation use MIT.</strong> Keep the copyright and permission notice with copies. The font licences, upstream software licences, and permission to publish a specific recording follow the material they cover. <a href="vendor/Studio-MIT.txt">Studio MIT licence</a></p>
+<h2>What the checked packages contain</h2>
+<table>
+<thead>
+<tr>
+<th>Artefact</th>
+<th>Evidence checked on 18 November 2026</th>
+<th>Distribution terms</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Source repository</td>
+<td>First-party Python, C++, Java and JavaScript, geometric template generators, docs, bundled font/parser files, Gradle wrapper, screenshots and generated branding</td>
+<td>Preserve MIT and third-party notices. The public source edition omits recorded marketing audio and video.</td>
+</tr>
+<tr>
+<td>Studio wheel for macOS ARM64</td>
+<td>ZIP member inspection of the 0.2.0 CPython 3.12 wheel found the Studio native relief extension, static fonts/parser, templates and MIT file. Python geometry/runtime wheels and marketing audio/video are separate.</td>
+<td>Include MIT and the bundled font/parser notices when copying, mirroring or extracting static assets. The updated vendor directory also carries OCCT and OCP notices.</td>
+</tr>
+<tr>
+<td>Android source and APK</td>
+<td>Studio Pocket declares no external app dependency. Gradle 8.9 wrapper JAR embeds its Apache licence. The debug APK contains Studio DEX/resources and an MIT licence asset. SDK, Gradle, desktop fonts, STEP libraries and the marketing track are outside the APK.</td>
+<td>Keep Android source headers and the embedded <code>assets/LICENSE.txt</code> in the application. The wrapper and build tools have their own terms. <a href="https://docs.gradle.org/current/userguide/licenses.html">Gradle licence information</a></td>
+</tr>
+<tr>
+<td>Local source install and HTTPS service</td>
+<td>pip resolves dependencies on the installation host. The reference CPython 3.12/macOS ARM64 resolution included 83 external distributions for base + web + step + mcp.</td>
+<td>Package metadata is an index. Keep libraries' own notices and review the native payload of any wheel you redistribute. The resolved list records version, declared licence, reference wheel SHA-256 and release URL. <a href="vendor/python-licenses-macos-arm64.csv">Resolved dependency inventory</a></td>
+</tr>
+<tr>
+<td>Self-contained installer, wheelhouse or Pi image</td>
+<td>Platform wheels can contain other projects' code and libraries. An installed venv on one Mac does not establish the contents of other OS/architecture builds.</td>
+<td>Before distributing that binary set, inventory its exact versions and payloads, preserve notices, provide applicable corresponding source/build information and honour library replacement rights. A pip install performed by the user and a vendor shipping copies have different artefacts to review.</td>
+</tr>
+</tbody>
+</table>
+<h2>Assets included in the frontend</h2>
+<p>The bundled minified opentype.js matched the upstream 2.0.0 npm distribution byte for byte. That distribution embeds tiny-inflate 1.0.3. The accompanying vendor directory now includes the MIT notices for opentype.js and tiny-inflate and the zlib notice for the tinf decoder from which tiny-inflate was ported. <a href="https://www.npmjs.com/package/opentype.js/v/2.0.0">opentype.js release</a> · <a href="https://www.npmjs.com/package/tiny-inflate/v/1.0.3">tiny-inflate release</a> · <a href="https://github.com/jibsen/tinf/blob/master/LICENSE">tinf licence</a></p>
+<p>All three TTF payloads decoded from <code>studio/static/vendor/fonts.js</code> matched their respective upstream variable fonts byte for byte. Each retains its copyright notice and SIL Open Font License 1.1. The Lora notice reserves the name Lora. Keep these texts when moving the offline editor. Observe the OFL rules for modified fonts and reserved names. Ordinary designs made using the glyphs may use the designer's chosen licence. <a href="https://github.com/google/fonts/tree/main/ofl/lora">Lora</a> · <a href="https://github.com/google/fonts/tree/main/ofl/montserrat">Montserrat</a> · <a href="https://github.com/google/fonts/tree/main/ofl/cormorantgaramond">Cormorant Garamond</a> · <a href="https://openfontlicense.org/ofl-faq/">OFL FAQ</a></p>
+<p>The template generators and geometry snapshot are project artwork. The authoring record identifies the supplied reference sheets as inspiration. They are absent from the tracked release. User-imported art, fonts and STEP models retain their existing rights. Independently drawn recognisable landmarks may still have trademark, depiction or merchandising restrictions in a particular use. A licence to the drawing code cannot grant another party's brand rights. <a href="#geometry">Template provenance</a> · <a href="https://www.toureiffel.paris/en/business/use-image-of-eiffel-tower">Eiffel Tower image-use guidance</a></p>
+<h2>Geometry and other native dependencies</h2>
+<ul>
+<li><strong>STEP.</strong> The exchange module uses Open CASCADE Technology through <code>cadquery-ocp-novtk</code>. The tested 7.9.3.1.1 wheel's metadata says Apache-2.0 for the bindings. Its Mach-O libraries include the <strong>OCCT 7.9.3</strong> kernel under LGPL 2.1 with the Open CASCADE exception. The exception concerns incorporation of material from headers and requires acknowledgement. Redistributing OCCT binaries still carries LGPL obligations. Supply the library licences, applicable corresponding source or compliant distribution arrangement, preserve notices and permit replacement/relinking and debugging of library modifications as the LGPL requires. Retain actual build and patch information corresponding to the binaries. <a href="https://github.com/CadQuery/OCP/blob/master/LICENSE">OCP licence</a> · <a href="https://github.com/Open-Cascade-SAS/OCCT/blob/V7_9_3/LICENSE_LGPL_21.txt">OCCT 7.9.3 licence</a> · <a href="https://github.com/Open-Cascade-SAS/OCCT/blob/V7_9_3/OCCT_LGPL_EXCEPTION.txt">OCCT exception</a></li>
+<li><strong>Additional STEP-wheel libraries.</strong> The inspected no-VTK macOS wheel contained FreeImage 3.18, LibRaw, FreeType, OpenEXR, Imath, Lerc, libjpeg, JPEG XR, Little CMS, OpenJPEG/OpenJPH, libpng, libtiff, libwebp, compression libraries and a C++ runtime. Its RECORD included no licence texts. The Studio source supplies the OCP and OCCT texts. A distributor bundling this wheel must also obtain the corresponding component notices and meet whichever upstream terms apply. FreeImage offers FIPL or GPL choices, and LibRaw offers LGPL 2.1 or CDDL 1.0. These additional notices, matching sources and any codec-specific conditions require review for the actual binary set before a bundled public distribution. <a href="https://freeimage.sourceforge.io/license.html">FreeImage terms</a> · <a href="https://www.libraw.org/about#license">LibRaw terms</a></li>
+<li><strong>2D and solid geometry.</strong> Shapely 2.2.0 is BSD-3-Clause. Its macOS wheel includes GEOS 3.14.1 and <code>LICENSE_GEOS</code> identifying LGPL 2.1. Preserve those notices, source access and library-replacement rights when distributing the libraries. Manifold 3.5.5 carries Apache 2.0 and an AUTHORS file. ezdxf 1.4.5 uses MIT. Retain the FontTools external licence file when distributing its font tools. <a href="https://github.com/shapely/shapely">Shapely</a> · <a href="https://github.com/libgeos/geos">GEOS source</a> · <a href="https://github.com/elalish/manifold/blob/master/LICENSE">Manifold licence</a> · <a href="https://github.com/mozman/ezdxf/blob/master/LICENSE">ezdxf licence</a></li>
+<li><strong>Numerics, image, serial and web services.</strong> NumPy's distribution carries component-specific notices alongside its BSD and other permissive licences. Pillow uses MIT-CMU and its binary wheel contains separately licensed image codecs and font/text libraries. Preserve the actual wheel's complete licence bundle, including any attribution required by the included FreeType and JPEG components. pySerial uses BSD terms. Flask and its supporting libraries retain their upstream notices. Cheroot and cryptography carry separate terms, and a cryptography wheel can include OpenSSL. <a href="https://github.com/numpy/numpy/blob/main/LICENSE.txt">NumPy licences</a> · <a href="https://pillow.readthedocs.io/en/stable/about.html#license">Pillow licence</a> · <a href="https://pyserial.readthedocs.io/en/latest/appendix.html#license">pySerial licence</a> · <a href="https://cryptography.io/en/latest/installation/">cryptography installation</a></li>
+<li><strong>MCP.</strong> The resolved FastMCP and FastMCP Slim advertise Apache 2.0. The MCP SDK advertises MIT. The dependency set includes certifi's Mozilla trust bundle under MPL 2.0. Preserve the MPL notice and comply with its source-availability provisions if distributing the covered material. Other transitive licences are listed in the inventory. The optional service is installed independently of the Studio wheel. <a href="https://pypi.org/project/fastmcp/3.4.11/">FastMCP release</a> · <a href="https://github.com/certifi/python-certifi">certifi</a> · <a href="https://www.mozilla.org/en-US/MPL/2.0/">MPL 2.0</a></li>
+</ul>
+<p>To refresh the inventory in a build environment, run <code>python -m pip install --dry-run --ignore-installed --report resolved.json &quot;.[web,step,mcp]&quot;</code>. Use the target OS, architecture and Python for each build, inspect the actual archives, and retain licence files even when a package's metadata reports a single permissive identifier. The recorded resolver output describes a specific platform and date.</p>
+<h2>Branding, audio and video</h2>
+<ul>
+<li>The application icon and engraved-wood header have documented generation prompts. OpenAI's published terms assign applicable rights in output to the user as between the parties, subject to the applicable agreement and law. Generated artwork may resemble other outputs. Keep the recorded provenance with the images. <a href="#branding">Branding record</a> · <a href="https://openai.com/policies/terms-of-use/">OpenAI terms</a>
+The public repository distributes the application source, original template generators, generated branding and documented third-party assets. No voice recording or narrated marketing video is included.</li>
+<li>LightBurn, controller, device, and software names identify compatibility or comparisons. The Studio MIT licence conveys the project's own software rights. Third-party trademarks and official logos remain with their owners.</li>
+</ul>
+</section><section id="request-coverage"><h1>Compatibility and acceptance</h1>
+<p>The <a href="#product">feature matrix</a> records capabilities and open work. See the <a href="#release-review">release verification</a>, <a href="#lightburn-import">format compatibility</a>, <a href="#protocols">controller support</a> and <a href="#platforms">platform measurements</a>. Device commissioning requires an independently measured work envelope, tools, clearances, work origin and controller settings.</p>
+</section><section id="ai-vision"><h1>Optional AI camera module — proposal, not implemented</h1>
+<p>Assuming the official Raspberry Pi AI HAT+ 13 TOPS: this is a Hailo-8L INT8 inference accelerator. Raspberry Pi provides supported camera inference examples. It is not a general-purpose GPU or extra system RAM, and ordinary geometry/CAM code does not automatically run on it.</p>
+<p>Recommended initial use: a fixed overhead camera feeding an optional local vision worker, reporting observations to the workstation and phone.</p>
+<ol>
+<li>Work-area observations: stock/clamp presence and possible stock movement. Fiducial tracking and precise alignment should also evaluate conventional calibrated vision, which may not need an NPU.</li>
+<li>Head identification: distinguish the laser, router and drag-knife holder. A dedicated dataset and trained/validated model are required; generic object detectors will not reliably recognise these tools without adaptation.</li>
+<li>Process anomaly alerts: visible part movement or unexpected appearance changes. Smoke, flame and small broken-bit detection are research candidates, not dependable safeguards. Camera resolution, occlusion, dust and lighting determine usefulness.</li>
+<li>After-job visual inspection: compare visible results with references, subject to calibration and measurement limits.</li>
+</ol>
+<p>AI observations must remain distinct from motion control and physical interlocks. Do not use visual inference as the sole fire protection, E-stop, tool-clearance or tool-identity gate. An alert should show its timestamp, confidence and camera availability. Automatic motion actions would need a separately validated policy.</p>
+<p>The 13 TOPS HAT runs supported compiled models; custom model training and compilation are separate workflows. No inference FPS, accuracy or actual HAT connectivity has been measured for this project. Do not install or change the adjacent AI Trainer project as part of this proposal.</p>
+<p>For other hosts, keep inference behind a provider interface (CPU, optional Metal-capable backend, optional other accelerators). No Metal backend is implemented today. The CNC application must function without AI hardware.</p>
+<h2>Implemented conventional tracing</h2>
+<p>The editor now captures camera images or imports image files for outline and centreline tracing. This is conventional image processing, not Hailo inference. Physical dimensions are entered by the user; lens/bed calibration, registered overlays, fiducials and reliable stock/tool identification remain outstanding. Camera tracing does not authorize motion or replace setup checks.</p>
+<h2>Pi 5 8 GB assessment</h2>
+<p>A bounded CAM stress test on the real Pi 5 with 8 GB completed a complex 256×256 relief fixture generating 135,886 G-code lines. Across 62 complete matching jobs, peak sampled temperature was 72.7°C, available system memory stayed above 6.2 GiB, swap use was zero and no throttling flags were reported. That test measured the calculation workload, not the full browser/UI, live control and camera pipeline together. See <a href="#pi-cam-stress-2026-09-11">the stress report</a>.</p>
+<p>A subsequent installed optional C++ extension reduced the same fixture's complete calculation median from 2.864 s to 1.818 s, with matching G-code. The earlier standalone prototype results are historical; <a href="#native">NATIVE.md</a> records the integrated implementation and evidence. No Rust or HAT CAM acceleration comparison has been performed.</p>
+<p>These results support the Pi 5 / 8 GB for the tested workload, not unlimited models or full-parity capacity. Large meshes, finer stock previews and simultaneous vision can increase CPU/memory demand. The application imposes work caps; future background/chunked CAM and full combined-workload performance still need engineering and measurement. Use active cooling for sustained processing and validate intended workloads on the deployment host. The HAT cannot substitute for CPU CAM capacity or physical commissioning.</p>
+<p>Primary references checked 11 September 2026:</p>
+<ul>
+<li>https://www.raspberrypi.com/documentation/accessories/ai-hat-plus.html</li>
+<li>https://www.raspberrypi.com/documentation/computers/ai.html</li>
+<li>https://www.raspberrypi.com/news/heating-and-cooling-raspberry-pi-5/</li>
+</ul>
+</section><section id="mcp"><h1>Artwork MCP interface</h1>
+<p>Local stdio server built with FastMCP 3. Optional dependency; the normal UI does not require it. This server creates artwork and files, not machine motion. It has not been registered in Claude Desktop, Codex or a hosted ChatGPT connector.</p>
+<h2>Install and launch</h2>
+<p>From the project directory:</p>
+<pre><code class="language-sh">.venv/bin/python -m pip install '.[mcp]'
+.venv/bin/python -m studio.mcp_server --output-dir ./artifacts
+</code></pre>
+<p>On Windows use <code>.venv\Scripts\python.exe</code> instead. Use Python 3.12 for the currently tested dependency set. A local MCP client launches the process and communicates over stdin/stdout; the command is not a web server. Logs go to stderr. No remote HTTP endpoint, OAuth service or MCPB bundle is provided yet.</p>
+<p>Example client configuration, after installation (replace all paths for your machine):</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;cnc-studio-artwork&quot;: {
+      &quot;command&quot;: &quot;/absolute/path/cnc-studio/.venv/bin/python&quot;,
+      &quot;args&quot;: [&quot;-m&quot;, &quot;studio.mcp_server&quot;, &quot;--output-dir&quot;, &quot;/absolute/path/cnc-studio/artifacts&quot;]
+    }
+  }
+}
+</code></pre>
+<p>Windows uses an absolute path ending in <code>.venv\\Scripts\\python.exe</code>. Client configuration syntax varies; the essential contract is that executable, arguments and stdio transport. No account configuration was changed by this implementation.</p>
+<h2>Tools</h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Purpose</th>
+<th>Writes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>list_templates</code></td>
+<td>Search the 79 original built-ins by query/category</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>get_template</code></td>
+<td>Obtain scaled, positioned XY geometry for a template ID</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>create_artwork</code></td>
+<td>Create SVG and <code>.cncstudio.json</code> project files from ordered polylines</td>
+<td>Unique local files</td>
+</tr>
+<tr>
+<td><code>save_template</code></td>
+<td>Create <code>.templates.json</code> for import into the browser library</td>
+<td>Unique local file</td>
+</tr>
+<tr>
+<td><code>preview_job</code></td>
+<td>Validate using the same CAM generator as the UI, returning bounds/warnings/sample G-code</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>export_gcode</code></td>
+<td>Generate an <code>.nc</code> file using current CAM</td>
+<td>Unique local file</td>
+</tr>
+</tbody>
+</table>
+<p>Resource: <code>cnc-studio://artwork-guide</code>.</p>
+<h2>Example requests to an assistant</h2>
+<ul>
+<li>“Find six-petal flower templates and arrange three flowers in a 180 × 60 mm engraving.”</li>
+<li>“Create a vine border, save it as a reusable template and give me the SVG.”</li>
+<li>“Create an eight-sided polygon from closed XY points, then save a project for review.”</li>
+<li>“Check this laser project’s bounds and lead-ins before exporting G-code.”</li>
+</ul>
+<p>The assistant supplies geometry or composes retrieved templates. This is not an integrated generative-image model and does not automatically vectorise bitmap images. The browser's polygon/gear generators are currently UI tools; MCP can accept their exported polylines but does not expose dedicated parametric gear generation yet.</p>
+<h2>Coordinate and review rules</h2>
+<p>Coordinates are millimetres, positive XY from the bottom-left of the work area. Each path is a distinct polyline; repeat the first point at the end to close it. Put centre holes before outer outlines. Generated project files preserve object geometry; importing the SVG separately uses the UI's current SVG scaling rules instead.</p>
+<p>Open <code>.cncstudio.json</code> using <strong>Open project</strong>, or import <code>.templates.json</code> using <strong>Template library → Import library</strong>. Browser library storage and MCP artifact files are separate. Template files contain geometry, not material cutting settings.</p>
+<p>Default speed/power values are placeholders. The shared CAM supports compensated router profiles, pockets, sampled V-carving, knife offset paths, laser hatch and supplied per-vertex router depths/powers. Send the operation and tool parameters as part of the project; ordered operations must retain a compatible head, protocol and cutter. There is no dedicated MCP tool for importing heightmaps/STL, calculating relief contact, generating parametric gears, camera tracing or rotary export. Use the relevant browser/server workflow first and supply supported prepared paths when appropriate. <code>create_artwork</code> itself accepts XY polylines and supplies placeholder laser settings, not a complete material-specific CAM plan. MCP does not bypass physical commissioning. It never opens serial ports or sends machine commands.</p>
+<p>All outputs have generated unique filenames beneath the output directory chosen at server startup. Tool callers cannot specify arbitrary file paths or overwrite existing documents. Large geometry is bounded to the same limits as the UI.</p>
+<h2>Validation</h2>
+<p><code>PYTHONPATH=. .venv/bin/python validation/mcp_smoke.py</code> starts a separate real stdio MCP process and uses the MCP SDK to initialize, list tools and exercise all six tools. It creates files in a temporary directory. The successful local result is in <code>validation/mcp-smoke.json</code>. This verifies local protocol operation on Mac; it is not proof of installation in a specific assistant client or on Windows/Linux/Pi.</p>
+</section><section id="android"><h1>Studio Pocket for Android</h1>
+<p>Studio Pocket is a native, offline vector sketch editor for Android 8 and later. It uses a touch canvas and numerical dimensions. Files saved from the app open in the desktop and Raspberry Pi workstation. The current template, solid modelling and machining workflows run on that workstation.</p>
+<h2>Install and draw</h2>
+<p>Build the debug APK using Android Studio with JDK 17 or newer, Android SDK Platform 35 and Build Tools 35 installed. Open the repository’s android directory as the project. Alternatively, from the android directory run:</p>
+<pre><code class="language-sh">./gradlew assembleDebug
+</code></pre>
+<p>On Windows run <code>gradlew.bat assembleDebug</code>. The first build fetches the pinned build tools. Subsequent builds can use <code>--offline</code> once the dependencies are cached. The installable debug APK appears at <code>app/build/outputs/apk/debug/app-debug.apk</code>. Transfer the APK to the phone and open it from Files, or choose Run in Android Studio with your development device selected.</p>
+<ol>
+<li>Tap <strong>Add shape</strong> and choose Rectangle, Ellipse or Polygon. Enter <strong>Width</strong> and <strong>Height</strong> in millimetres. <strong>X</strong> and <strong>Y</strong> locate the lower-left corner on the 680 × 240 mm example work area. A polygon accepts 3–64 sides. Tap <strong>Apply</strong>.</li>
+<li>Tap the drawing or its object row to select a shape. <strong>Edit</strong> reopens its dimensions. The preview fits all shapes automatically. For overlapping artwork, use the object list to select the lower shape. Each applied change saves the private draft on this device.</li>
+<li>Choose <strong>CNC router</strong>, <strong>Laser</strong> or <strong>Drag knife</strong>. Tap <strong>Studio project</strong>, choose a destination in the system file picker and save. <strong>SVG</strong> writes a vector drawing with physical dimensions and preserves the placement on the work area.</li>
+<li>Open the project in KerfKite Studio. The workstation reads the head selection and editable outline geometry. Set the intended tool, feed, depth or laser power, then generate the machining preview. The native app exports design files and does not send machine commands.</li>
+</ol>
+<p><strong>Quick guide</strong> inside the app walks through these same controls. Clearing app data deletes its private draft. Use the system file picker to keep a portable copy.</p>
+<h2>Scope</h2>
+<p>A draft supports up to 128 objects. The phone retains primitive dimensions in its local draft. Portable project files contain sampled paths for compatibility with the workstation. The phone currently has one local draft and exports through Android's document picker; it does not reopen project files from other devices. Its only Android activity is the editor. The manifest requests no network or external storage permissions.</p>
+</section><section id="troubleshooting"><h1>Troubleshooting and fault finding</h1>
+<p>Use this guide with the <a href="#user-guide">user guide</a>, <a href="#status">current acceptance status</a> and <a href="#web">HTTPS setup</a>. Simulator results, browser tests and successful file transfers do not establish physical machine behavior.</p>
+<h2>Preserve evidence first</h2>
+<p>Download the current <code>.cncstudio.json</code> project before restarting, refreshing or changing browser storage. Save the exact error text and a screenshot of the relevant settings. If motion or powered output is unsafe, use the machine's physical emergency-stop procedure; a browser refresh or network disconnect is not a stop command.</p>
+<p>When asking for help, include:</p>
+<ul>
+<li>Application version/revision, OS and browser version.</li>
+<li>Local server, HTTPS editor, phone monitor or direct <code>file://</code> mode.</li>
+<li>Selected protocol/head, simulator versus physical machine, and the steps that reproduce the issue.</li>
+<li>A minimal project, generated file if relevant, and a short controller/server log excerpt.</li>
+<li>Whether the fault happened before generating, while transmitting, during actual movement or only in the preview.</li>
+</ul>
+<p>Do not include passwords, pairing/upload tokens, certificate private keys or complete unrelated private documents.</p>
+<h2>App startup and tools</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Check and next action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Connection refused at the app URL</td>
+<td>Confirm the intended server is running and read its actual host/port from the terminal. A saved browser URL may point to an old development port.</td>
+</tr>
+<tr>
+<td><code>ModuleNotFoundError</code> or missing package</td>
+<td>Use the project's intended Python environment and reinstall the documented dependencies. <code>python -m pip</code> and the app must use the same interpreter.</td>
+</tr>
+<tr>
+<td>Port already in use</td>
+<td>Identify the existing Studio process or choose another explicit port. Do not terminate an unknown service simply to free the port.</td>
+</tr>
+<tr>
+<td>Tools appear missing</td>
+<td>Check the left and right tabs. Design/Text/Images/Templates/Projects/Objects are separate from CAM/3D relief/Rotary/Control/Quote.</td>
+</tr>
+<tr>
+<td>Tabs are absent or scripts fail</td>
+<td>Keep all static files together in filesystem mode. In server mode, save first, restart the updated service and reload. Inspect the first browser-console error for a missing script or stale/mixed build.</td>
+</tr>
+<tr>
+<td>“Restart CNC Studio and reload”</td>
+<td>The browser has newer controls than the running server supports. Save the project, restart the correct process, then reload its URL.</td>
+</tr>
+<tr>
+<td>“Advanced operation requires the app server”</td>
+<td>The direct-file build supports basic contour CAM but not all server operations. Open the saved project in the local/HTTPS server for area CAM, relief, extrusion, simulation or rotary export.</td>
+</tr>
+<tr>
+<td>Browser warning about <code>--disable-blink-features=AutomationControlled</code></td>
+<td>This comes from how Chromium was launched, not from CNC Studio. Open the app URL in your normally launched browser. Studio does not require this flag.</td>
+</tr>
+</tbody>
+</table>
+<h2>Drawing, projects and templates</h2>
+<h3>Selection outline and artwork disagree</h3>
+<p>Cancel an active drag with Escape, select the object again and inspect the object list for another overlapping/open path. Save the project before refreshing. If a reload resolves the drawing but the issue recurs, capture the object geometry and exact move/resize sequence. Do not treat disappearance after refresh as proof that the underlying bug is fixed.</p>
+<h3>My browser library disappeared</h3>
+<p>Check the browser profile, hostname, protocol and port. They affect storage identity. Hosted libraries are also separated by username. Private browsing, browser cleanup and site-data deletion can remove IndexedDB/localStorage records. Do not clear site data as a first repair step.</p>
+<p>Use <strong>Projects → Recover latest draft</strong> if available, inspect saved revisions, or reopen a downloaded project. Drafts are delayed and there is only one latest draft per namespace; they are not a complete backup history. A template-library JSON export is separate from a project file.</p>
+<h3>Saving or recovery fails</h3>
+<p>Download a portable project immediately. Check the browser's storage permissions/quota and whether private browsing restricts IndexedDB. Close other Studio tabs if a database upgrade is blocked. The portable project limit is 4 MB; split very large artwork rather than assuming a larger server upload limit guarantees it can be reopened as a project.</p>
+<p>For edits made in several tabs, keep separate downloads before choosing which version to retain. The browser library does not merge concurrent project edits.</p>
+<h3>An SVG or font will not import</h3>
+<p>Studio supports a restricted SVG geometry subset. Convert text, transforms/effects or unsupported compound structures to compatible plain paths in your source editor, then retry a small example. Full DXF/PDF/SVG document support is not implemented. Missing font glyphs and unsupported complex-script shaping are reported; import correctly shaped outlines rather than substituting arbitrary characters.</p>
+<p>Custom font outlines travel with a project, but the font file must be imported again to regenerate the text. Check that you selected a supported TTF/OTF and that it is within the size limit.</p>
+<h3>A gear refuses resize or tooth settings</h3>
+<p>Change module and regenerate instead of stretching a gear. Check the conservative minimum tooth count for the pressure angle, bore clearance and tooth thinning. Old decorative gear objects are not equivalent to new involute gears. A successful geometry preview is not a meshing/load test; cutter diameter, kerf, backlash and actual centre distance matter.</p>
+<h3>Vine stems, leaf gaps or cutout islands look wrong</h3>
+<p>Distinguish old/simple templates from the newer occlusion-aware botanical group. Inspect the actual exported paths at production size. Templates are engraving geometry, not automatically bridged stencils or unioned one-piece silhouettes. For a reproducible crossing, include the template name and a minimal exported project. Do not hide a line visually and assume it has been removed from G-code.</p>
+<h2>Images and camera</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Check and next action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Camera button reports unavailable/denied</td>
+<td>Use a supported browser on HTTPS or localhost, allow camera permission and check whether another application owns the camera. Image upload remains available.</td>
+</tr>
+<tr>
+<td>Camera is open but Capture is unavailable</td>
+<td>Wait for a usable video frame. Stop and reopen if the device has disconnected. Closing the trace section or leaving the page releases its tracks.</td>
+</tr>
+<tr>
+<td>A black stroke becomes two outlines</td>
+<td>Choose <strong>Stroke centrelines</strong>, not <strong>Closed shape outlines</strong>. Outlining both edges of a thick stroke is expected in outline mode.</td>
+</tr>
+<tr>
+<td>Centreline has spurs or missing short branches</td>
+<td>Improve contrast/source quality and adjust the minimum stroke length. Thinning is pixel-based; it is not automatic reconstruction of an ideal pen stroke. Preview before adding.</td>
+</tr>
+<tr>
+<td>Small holes disappear</td>
+<td>Outline filtering uses minimum area and applies to holes too. Lower the minimum feature value and preview again.</td>
+</tr>
+<tr>
+<td>“Too noisy” or complexity-limit error</td>
+<td>Clean the image, adjust threshold/inversion, crop unrelated content externally or reduce small features. The trace is capped rather than producing an unbounded job.</td>
+</tr>
+<tr>
+<td>Trace is stretched or wrong physical size</td>
+<td>Width/height map the whole image rectangle. Match its aspect ratio and an independently measured size. The camera has not calibrated that measurement.</td>
+</tr>
+<tr>
+<td>Picture is skewed relative to the stock</td>
+<td>Correct perspective/lens effects externally or retake the picture square-on. Bed registration and lens calibration are not implemented.</td>
+</tr>
+<tr>
+<td>Raster is outside the work area</td>
+<td>Include the zero-power overscan on both sides in your placement. Reduce width/overscan or move the image inward.</td>
+</tr>
+<tr>
+<td>Raster exceeds the pixel limit</td>
+<td>Increase interval or reduce physical dimensions. Preview and generation have additional segment limits.</td>
+</tr>
+</tbody>
+</table>
+<h2>CAM and 3D geometry</h2>
+<h3>“Closed contours,” “self-crossing,” “tool does not fit” or empty output</h3>
+<p>Area operations need valid closed regions. An imported open centreline belongs in a line operation. Repair self-crossings, duplicate/canceling contours and zero-area shapes before using profiles, pockets, hatch fill or V-carving. Even-odd nesting creates holes; overlapping shapes can cancel in the filled region.</p>
+<p>For a fit error, compare tool diameter with the actual feature width. Reducing the numeric diameter without changing the physical cutter creates an incorrect toolpath. Use a suitable tool or change the design. Internal corners narrower than the cutter cannot be machined sharp by that cutter.</p>
+<h3>Pocket has residual material</h3>
+<p>Use a stepover no larger than half cutter diameter. Inspect inaccessible corners and narrow regions even when the stepover passes validation. Concentric pocketing is not adaptive clearing, and the tool must support the generated plunge entry. V-carving can also leave wide flat areas; it is not automatically a complete flat-clearing strategy.</p>
+<h3>Text has depth outlines but no filled letter surface</h3>
+<p>Text outline depth and filled relief are separate workflows. Select V-carving, raised/recessed relief or the relevant area operation for the desired result. Y tilt varies the depth across text; it does not automatically generate a solid or a pocket. Review whether the chosen operation uses a flat cutter or a V-bit, and keep tool changes in separate jobs.</p>
+<h3>Relief is slow or leaves extra material</h3>
+<p>Reduce grid resolution or increase stepover while preserving the required feature detail. The contact calculation uses conservative cell envelopes, so coarse maps can leave extra material deliberately. Use appropriate resolution and allowance for roughing/finishing review. Smaller tools and more rows can increase contact checks sharply; complexity limits reject work beyond the bounded workload.</p>
+<p>The UI identifies <strong>C++ accelerated relief</strong> versus <strong>Python relief</strong>. To check the optional extension in the same environment as the server:</p>
+<pre><code class="language-sh">python -c &quot;from studio import _relief_native; print(_relief_native.__file__)&quot;
+</code></pre>
+<p>If that import fails, the native extension is not installed in that interpreter. The Python backend remains available. Rebuild using the documented compiler/install process for that platform, then restart the server. A native build is specific to its Python/OS/architecture; copying a macOS binary to a Pi or Windows installation will not work. Native acceleration covers the relief kernel, not every CAM operation or all browser interactions.</p>
+<h3>Stock preview differs from a real cut</h3>
+<p>The preview samples the stock and can miss fine details. It does not check holders, clamps, the chuck, tool deflection or every swept-volume collision. The STL workflow is top-access height-field machining, not undercut/multi-axis machining. Record the resolution, tool shape, allowance and source model when reporting a mismatch.</p>
+<h3>Ordered operations are rejected</h3>
+<p>Check that every enabled object uses the same head, protocol, work area and compatible cutter geometry. A continuous file cannot silently swap a flat cutter for a V-bit or a different diameter. Split those into separately reviewed jobs. Remember that an object's assigned settings can differ from the currently visible global controls; clear/reassign its operation if needed.</p>
+<h2>Rotary faults</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Check and next action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Rotary export asks for router/GRBL source</td>
+<td>Select router mode and GRBL source geometry. The export converts that source into LinuxCNC G93/A-axis instructions; it is not sending GRBL rotary commands.</td>
+</tr>
+<tr>
+<td>File cannot be run by Studio's normal sender</td>
+<td>Expected: rotary is export-only for configured LinuxCNC hardware. Current GRBL/Marlin senders do not support this file.</td>
+</tr>
+<tr>
+<td>Seam endpoint check fails</td>
+<td>Check the <code>π × diameter</code> design span and align opposite-edge endpoints in axial position and depth. The comparison tolerance is 0.01 mm.</td>
+</tr>
+<tr>
+<td>Seam check passes but physical seam is wrong</td>
+<td>Measure the real diameter and verify seam zero, axis direction and physical alignment. The endpoint check does not establish tangency or compensate an inaccurate stock diameter.</td>
+</tr>
+<tr>
+<td>Rotary uses X instead of the other design axis</td>
+<td>Expected: the unwrapped design coordinate becomes axial X; A rotates around X and Z is radial. Check the target machine configuration before execution.</td>
+</tr>
+<tr>
+<td>Angles exceed 360°</td>
+<td>Expected for a continuous unwrapped A axis. Do not apply modulo-360 rewriting: it can change the intended movement direction/path.</td>
+</tr>
+<tr>
+<td>Cut crosses the cylinder centre</td>
+<td>Reduce depth or use an appropriate cylinder; the exporter rejects Z at or beyond the centre radius.</td>
+</tr>
+</tbody>
+</table>
+<p>The rotary preview remains planar. G93 preserves nominal unwrapped movement timing; actual surface speed changes with radius, and the target controller's acceleration/axis limits still matter.</p>
+<h2>Controller and manual input</h2>
+<h3>Physical port is disabled or missing</h3>
+<p>The server defaults to simulator-only. Physical use requires explicit <code>--enable-hardware</code>; adding that flag is not calibration or commissioning. Check the selected protocol, OS serial permissions, cable and whether another sender has the port open. A power-only USB cable does not provide a serial connection. Disconnect before switching protocols.</p>
+<h3>GRBL mode, power or travel mismatch</h3>
+<p>Wait for settings readback. Check <code>$32</code> against the actual head and <code>$30</code> against the intended S/RPM command range. A 25 W optical laser rating is not an S-value of 25. Check work-area dimensions against current controller travel and the physical setup. Do not blindly apply an old settings export from another machine.</p>
+<p>After changing a head, verify its mounting and re-establish focus/Z and work zero. The confirmed head-mode command turns powered outputs off while applying the supported mode change; it does not determine the new tool length or stock surface automatically.</p>
+<h3>GRBL says ready but Marlin behaves differently</h3>
+<p>Marlin uses different initialization, acknowledgements, homing and zero commands. It needs firmware configured for the intended CNC spindle functions. Studio waits for an acknowledged M400 before claiming job completion; ordinary <code>ok</code> responses are not proof that all buffered motion has finished. Live physical compatibility remains a commissioning task.</p>
+<h3>A timeout/reset occurs</h3>
+<p>Treat motion and output state as uncertain until checked locally. Record the last accepted command and controller log. Resolve the underlying connection/firmware issue, reconnect when required and re-establish the necessary origin/setup before generating or starting another job. Do not automatically replay an ambiguous job from the beginning: part of it may already have executed.</p>
+<p>For Marlin, a long blocking command can exceed the configured acknowledgement timeout. Its fault handler requests M112, but immediate processing depends on firmware emergency-parser behavior. Do not repeatedly increase timeouts to hide a failing connection.</p>
+<h3>Keyboard/gamepad will not jog</h3>
+<p>Use a local server session, enable manual input and confirm the controller is connected, idle and not running a job. The page must have focus, and text inputs must not have focus. Key-repeat is ignored. OS/browser shortcuts may reserve some keys.</p>
+<p>Use a gamepad with browser-standard mapping. Press a button, refresh the device list and select it. After enabling or changing mapping, release the hold-to-jog button, centre the stick, then hold it and deflect for one increment. Centre again before the next increment. Gamepad steps are capped at 1 mm, one axis at a time. Focus loss/disconnection disables input. Dedicated XHC pendants are not supported by this browser-gamepad adapter.</p>
+<p>If the feed is rejected, use a feed accepted by the selected controller's jog guard. The manual panel's upper bound does not override a stricter driver limit. Test direction/mapping with the simulator and then a commissioned, supervised setup.</p>
+<h2>HTTPS login, receiver uploads and phone controls</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Check and next action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No login/password works on a new install</td>
+<td>There are no default credentials. Create a user with the setup CLI, choosing a password or using its secure generator.</td>
+</tr>
+<tr>
+<td>Forgotten password</td>
+<td>Use the operator <code>reset-password</code> command from <a href="#web">WEB.md</a>. It revokes that account's sessions/upload tokens; issue replacement upload tokens where needed.</td>
+</tr>
+<tr>
+<td>Certificate warning or rejected HTTPS connection</td>
+<td>Check certificate expiry, hostname/IP SAN, matching key and client trust. Trust the intended self-signed certificate explicitly or install a trusted certificate. Do not disable verification as the fix.</td>
+</tr>
+<tr>
+<td>HTTPS request rejected for host/origin</td>
+<td>Open the configured public HTTPS URL exactly. The service expects that origin and direct TLS/TCP passthrough; forwarded proxy headers are not implicitly trusted.</td>
+</tr>
+<tr>
+<td>Session expired or CSRF/reload error</td>
+<td>Download unsaved artwork first, then log in/reload. A session has idle and absolute expiry.</td>
+</tr>
+<tr>
+<td>Login throttled</td>
+<td>Stop repeated attempts, confirm the account details and allow the throttle window to expire. Use operator password recovery if needed.</td>
+</tr>
+<tr>
+<td>No receiver destination appears</td>
+<td>Configure it on the hosted server with the receiver-issued upload token, then restart to load the destination configuration.</td>
+</tr>
+<tr>
+<td>File upload receipt missing/timeout</td>
+<td>Inspect the Pi receiver inbox before retrying. A failed response can occur after the file was stored. Successful receipt confirms file checksum/size, not execution.</td>
+</tr>
+<tr>
+<td><code>file://</code> upload blocked</td>
+<td>The receiver needs <code>--allow-file-upload</code>, the browser must trust its HTTPS certificate and the upload token must be valid. Browser private-network/CORS policies may still restrict the flow.</td>
+</tr>
+<tr>
+<td>Receiver storage full</td>
+<td>Download needed files, then delete unwanted server copies. Quotas apply per account; never assume deletion creates a separate backup.</td>
+</tr>
+<tr>
+<td>Phone Start is unavailable</td>
+<td>Generate and confirm a job at the local workstation, then arm it. The one-use arm must still be valid and the controller ready. An upload does not arm a job.</td>
+</tr>
+<tr>
+<td>Phone displays stale/disconnected data</td>
+<td>Check connectivity and the running monitor; do not infer a successful pause/stop from missing updates. Check the machine locally.</td>
+</tr>
+<tr>
+<td>Phone pairing fails after restart</td>
+<td>Restarting generates a new pairing token. Use the new pairing link.</td>
+</tr>
+</tbody>
+</table>
+<p>The account-based HTTPS editor and bearer-token phone monitor have different purposes. The monitor can use HTTPS with both certificate/key options; without them it uses plain HTTP on a trusted LAN. Do not expose the plain HTTP monitor through public port forwarding. The hosted receiver's upload tokens only store files, while the paired monitor can act on an explicitly armed job.</p>
+<h2>Quotes and printed templates</h2>
+<p>Check quantity, per-unit versus per-order fields, time multiplier, travel/startup allowance, currency and tax. Margin is not markup: a 20% gross margin means cost divided by 0.8, not cost multiplied by 1.2. Preview cutting time excludes several real production costs.</p>
+<p>If a quote/design does not print, allow the print popup and use the browser's PDF/printer dialog. For 1:1 designs choose tiled A4 landscape, set the final print to 100%/actual size and measure the 50 mm reference. Disable driver/PDF fit-to-page scaling. A correctly sized SVG/PDF does not guarantee the printer used the same scale.</p>
+<h2>Known acceptance limits</h2>
+<p>Full LightBurn workflow parity, robust general DXF/PDF import, complete SVG semantics, camera calibration, arbitrary complex-script text shaping, dedicated XHC pendant integration and additional live controller ecosystems are not complete. Advanced CAM does not have full filesystem-mode parity. Tool changes/probing, production-grade clamp/holder collision checking and optimized industrial toolpath strategies remain separate gaps.</p>
+<p>Cross-platform builds, independent internet-service security acceptance and physical machine/gear/laser/knife/phone-stop testing must be tracked as their own evidence. Consult <a href="#status">STATUS.md</a> for the current record rather than treating the existence of a button or a passed unit test as deployment acceptance.</p>
+</section><section id="assemblies"><h1>Assemblies, mates and interference</h1>
+<p>Open <strong>3D CAD → Assembly mates &amp; interference</strong> in the running Studio app or hosted editor. You can fit a shaft to a bore, place a fixture plate or check the fit of several modelled components. Dimensions use millimetres and rotations use degrees.</p>
+<h2>Try a bearing fit</h2>
+<ol>
+<li>Choose <strong>Try bearing tutorial</strong>. The demo opens a 40 × 30 × 8 mm plate and an 8 mm diameter shaft in a 10 mm bore. The shaft extends through the plate. The report should read <strong>No interference detected</strong>.</li>
+<li>With <strong>Shaft</strong> selected, change <strong>Parent origin XYZ</strong> from <code>20, 15, 0</code> to <code>24, 15, 0</code> and choose <strong>Solve &amp; check</strong>. Both parts turn red. The report identifies the interfering pair and gives their common volume in mm³.</li>
+<li>Restore the parent origin to <code>20, 15, 0</code>. Set <strong>Shift in datum XYZ</strong> to <code>0, 0, 3</code> and solve. The shaft slides along the bore. Drag the view or focus it and use the arrow keys to orbit.</li>
+<li>Choose <strong>Save assembly to project</strong>, then save or download the project from <strong>Projects</strong>. Choose <strong>Close</strong> to discard the working copy instead.</li>
+</ol>
+<h2>Assemble your own parts</h2>
+<p>Build a part in <strong>3D CAD</strong>. Open the assembly and choose <strong>Insert current solid</strong> to capture its parametric feature history in the project. Give it a name and click <strong>Rename part</strong>. Repeat for additional parts. To feed a revised solid into an existing instance, select it and click <strong>Replace selected geometry</strong>. The part keeps its local datum and mates.</p>
+<p>Independent parts have a world origin and XYZ rotation. To constrain a part, select it, choose its parent under <strong>Mate to</strong>, and enter datum origins and orientations in each part’s own coordinates. Each datum's Z axis defines its normal or joint axis. Rotations apply about X, then Y, then Z. Opposing face normals can be matched by rotating one reference frame by 180° about its local X or Y axis.</p>
+<table>
+<thead>
+<tr>
+<th>Mate</th>
+<th>Allowed motion</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Fixed frames</td>
+<td>Coincident origins and matching orientations.</td>
+</tr>
+<tr>
+<td>Coincident planes</td>
+<td>Translation along parent datum X and Y and rotation about Z.</td>
+</tr>
+<tr>
+<td>Concentric axes</td>
+<td>Translation along the common Z axis and rotation about Z.</td>
+</tr>
+<tr>
+<td>Coincident points</td>
+<td>Rotation about all three axes at the shared point.</td>
+</tr>
+</tbody>
+</table>
+<p>Moving a parent moves its descendants when you solve. The solver supports directed trees with one driving mate per child. It rejects cycles, duplicate assignments and input on locked axes. Independent roots give you multiple subassemblies in the same document. To release a mate, choose <strong>Independent placement</strong> and enter the desired world pose. Release child mates before removing their parent.</p>
+<h2>Interpret an interference report</h2>
+<p>Studio uses bounding boxes to shortlist pairs, intersects the transformed manifold solids and measures any positive overlap over 0.000000001 mm³. Contact within 0.000001 mm is reported separately. Contact and overlap are computed on the solid kernel's tessellated geometry. Curves are approximated by facets. Fit tolerances should account for that approximation and the manufacturing process.</p>
+<p>This check describes the assembled pose. Moving through intermediate positions, evaluating machine travel and toolholder clearance requires a separate motion analysis. The solver accepts up to 24 part instances and 150,000 triangles across the assembly. Project files store parametric inputs and mates; reopening the assembly rebuilds the preview.</p>
+</section><section id="sketch"><h1>Sketching a driven profile</h1>
+<p>Use the <strong>3D CAD</strong> tab in the running Studio application. An extrusion uses XY coordinates in millimetres. A revolution uses radius and Z, and revolves around the local Z axis. The feature’s <strong>Position and rotation</strong> settings place it in the part.</p>
+<h2>Draw a plate with a driven corner</h2>
+<ol>
+<li>In <strong>Parameters</strong>, enter <code>peak</code> under <strong>New parameter</strong> and click <strong>Add parameter</strong>. Enter <code>20</code> as its value.</li>
+<li>Choose <strong>Sketch extrusion</strong> as the feature type and click <strong>Add feature</strong>. The editor creates a three-point profile. Set its height to the plate thickness.</li>
+<li>Click <strong>Edit sketch on plane</strong>. Choose a grid step in millimetres. With <strong>Snap to grid</strong> selected, new or dragged coordinates round to multiples of that step from the local origin. At small scales the displayed grid uses larger intervals for readability.</li>
+<li>Select a vertex in the drawing or in <strong>Vertex</strong>. Click empty space to insert a point immediately after it. The loop closes automatically from the last point to the first. Drag a point to reshape it.</li>
+<li>Select the corner you want to drive. Choose <strong>Y</strong> under <strong>Coordinate</strong>, choose <strong>peak</strong> under <strong>Driving parameter</strong>, then click <strong>Link axis</strong>. The selected point moves to Y = 20 mm. Drag it sideways. Its X changes while Y remains linked.</li>
+<li>Click <strong>Apply sketch</strong>. Studio validates the profile and rebuilds the feature. Change the <code>peak</code> parameter to <code>28</code> and check the new corner position. Give two vertices the same Y parameter to maintain a horizontal edge, or the same X parameter to maintain a vertical edge.</li>
+<li>To use a formula, enter an expression such as <code>peak / 2</code> in a sketch point’s numeric field in the feature inspector. The sketch plane preserves that expression while you drag the other axis. Choose <strong>Release axis</strong> to replace the expression with its current numeric result.</li>
+</ol>
+<p><strong>Fit sketch</strong> recentres the drawing. <strong>Remove vertex</strong> removes the selected point from the draft. <strong>Cancel sketch</strong> discards edits made in the open dialog. After applying, use <strong>Undo CAD edit</strong> to revert the change. Save the project to retain the points, expressions and named parameters.</p>
+<h2>Profile requirements</h2>
+<p>Each feature accepts one closed polygon of 3–256 distinct vertices. Edges must enclose a positive area and must not cross each other. Revolution profiles require nonnegative radii. Use a second subtractive feature for a hole. The editor supports straight edges, grid snapping and parameter-driven coordinates. Tangency, dimensional solving for free curves, and sketch fillets are outside this editor’s current scope.</p>
+</section><section id="fixtures"><h1>Checking tool and holder clearance</h1>
+<p>The <strong>Fixture clearance</strong> panel in <strong>CAM</strong> checks the tool and holder against measured clamp boxes along every move in the generated XYZ program. Use the app server or hosted editor. Each result identifies the G-code line, rapid or feed motion, fixture, component and first tool-tip contact position in millimetres.</p>
+<h2>Try a rapid that crosses a clamp</h2>
+<ol>
+<li>Open <strong>CAM → Fixture clearance → Try the clamp clearance lesson</strong>. Click <strong>Run lesson simulation</strong> with the clamp at Y 21 mm.</li>
+<li>The two cuts lie on either side of X 30 mm. During the rapid between them, the 12 mm holder on the 2 mm cutter contacts the clamp. The reported line is a G0 move. At contact the tool tip is still around X 24.08 mm.</li>
+<li>Enter <strong>40</strong> for the clamp's minimum Y and run the lesson again. The report now shows clearance on the same posted program. This lesson uses its own CAM project and fixture dimensions.</li>
+</ol>
+<h2>Check a design</h2>
+<ol>
+<li>Generate a fresh toolpath preview. Measure the tool envelope diameter, exposed length from tip to holder base, holder diameter and modelled holder length. Enter these dimensions in <strong>Mounted head</strong>. Use a diameter enclosing all flutes and shank features within the modelled tool length. For a knife or laser head, choose conservative envelope dimensions enclosing the mounted assembly.</li>
+<li>Enter the tool tip's actual <strong>starting XYZ</strong> in the work coordinate frame used by the program. Studio's posted moves use absolute millimetres. Stock top is normally Z 0. For a fixed-height laser, the entered Z remains the height for the entire job.</li>
+<li>Click <strong>Add clamp</strong>. Give it a recognizable name. Enter its minimum and maximum X, Y and Z, measured from the same work origin. For irregular or angled clamps, enclose them in one or more axis-aligned boxes. Include clamp bolts and other workholding projections.</li>
+<li>Choose <strong>Check generated preview</strong>. Review the first reported line in <strong>Generated G-code</strong>. Reposition the fixture or change the programmed path or travel clearance, regenerate as needed, then repeat the check. Studio saves the setup with the project. Recheck starting position and mounting dimensions after reopening, remounting the head or changing work offsets.</li>
+</ol>
+<h2>What the result covers</h2>
+<p>The calculation sweeps upright, flat-ended circular tool and holder envelopes continuously along each straight move, including the first move from the entered position, rapids, plunges and retracts. Contact at a face, edge or corner counts. The result reports the total number of motion–fixture–component contacts and lists the first 100 in program order.</p>
+<p>The checker reads the posted G0/G1 lines and explicit setup words emitted by Studio's three-axis profiles. Unsupported motion or coordinate-state instructions stop the check with a line number. Rotary motion, arcs, machine-specific rapid doglegs, machine-frame offsets, runout, flexible tooling, stock removal and machine-frame geometry are outside this model. A clear result covers only the fixture boxes, tool envelopes, initial position and straight travel supplied. It provides an offline planning check. It does not command the controller or interlock the Run control.</p>
+</section><section id="status"><h1>Implementation status</h1>
+<p>The <a href="#release-review">release review</a> and <a href="../validation/advanced-cad-simulation.json">simulation results</a> describe this source edition. Start with the <a href="#product">feature and acceptance matrix</a> when extending the product.</p>
+<ul>
+<li><a href="#solid-cad">Solid modelling</a>, <a href="#sketch">sketches</a>, <a href="#assemblies">assemblies</a>, <a href="#surfaces-step">surfaces and STEP</a>.</li>
+<li><a href="#laser-workshop">Laser image processing</a>, <a href="#laser-order">cut order</a>, <a href="#camera-register">camera registration</a>, <a href="#fixtures">fixture clearance</a>.</li>
+<li><a href="#lightburn-import">LightBurn interchange</a>, <a href="#program-import">other CAD and cutter programs</a>, <a href="#protocols">controller capabilities</a>.</li>
+<li><a href="#developer">Development setup</a>, <a href="#simulation">simulation</a>, <a href="#platforms">platforms</a>, <a href="#licensing">licences</a>.</li>
+</ul>
+</section><section id="install"><h1>Install KerfKite Studio</h1>
+<p>KerfKite Studio 0.2 is a source installation with a browser interface. Python 3.10 or newer is required; use 64-bit Python 3.12 where possible. Install into the project's <code>.venv</code>, not the operating system Python environment. A network connection is required to fetch Python dependencies during installation. The desktop editor runs on the same computer as the Python service.</p>
+<p>See <a href="#platforms">Platforms</a> for installation targets and measured CAD/CAM acceptance on macOS, Windows, Linux and Raspberry Pi.</p>
+<h2>1. Obtain the source</h2>
+<p>Clone the public repository with <code>git clone https://github.com/ShaunPrice/KerfKite.git</code> or download its source archive. Open a terminal in the directory containing <code>pyproject.toml</code>, <code>start.sh</code> and <code>studio/</code>. Keep the complete tree together. Do not copy a macOS <code>.venv</code> or compiled extension to a Pi or Windows computer; each host needs its own installation.</p>
+<h2>2. Install on Raspberry Pi OS or Debian/Ubuntu Linux</h2>
+<p>Use a 64-bit operating system. On the Pi, install the Python virtual environment package and optional C++ build tools:</p>
+<pre><code class="language-sh">sudo apt update
+sudo apt install python3 python3-venv python3-dev build-essential
+python3 --version
+sh scripts/install.sh --web --mcp
+sh start.sh --port 8765
+</code></pre>
+<p>If the OS Python is older than 3.10, use a supported newer OS/Python installation. <code>CNC_PYTHON</code> can choose an already installed interpreter:</p>
+<pre><code class="language-sh">CNC_PYTHON=python3.12 sh scripts/install.sh --web --mcp
+</code></pre>
+<p>The <code>--web</code> installer option adds HTTPS services; <code>--mcp</code> adds the artwork MCP server. Omit either option if you do not need it. Open <strong>http://127.0.0.1:8765</strong> on the Pi's desktop browser. This local editor listener deliberately binds to loopback.</p>
+<h2>3. Install on macOS</h2>
+<p>Install 64-bit Python 3.12 first. The old system Python is unsuitable. For the optional C++ relief engine, install Apple's command line tools and complete any displayed installation dialog:</p>
+<pre><code class="language-sh">xcode-select --install
+</code></pre>
+<p>Then, from the project directory:</p>
+<pre><code class="language-sh">python3 --version
+sh scripts/install.sh --web --mcp
+sh start.sh --port 8765
+</code></pre>
+<p>Open <strong>http://127.0.0.1:8765</strong>. If <code>python3</code> points to an older interpreter, set <code>CNC_PYTHON</code> to your Python 3.12 executable when installing. Metal is not required; no custom Metal compute backend is implemented.</p>
+<h2>4. Install on Windows 11 x86-64</h2>
+<p>Install 64-bit Python 3.12. The optional C++ extension needs Microsoft Visual C++ Build Tools with the C++ workload and Windows SDK. Without those tools, installation can use the Python relief fallback.</p>
+<p>The following manual commands work without changing PowerShell script execution policy. Run from the project directory:</p>
+<pre><code class="language-powershell">py -3.12 -m venv .venv
+.venv\Scripts\python.exe -m pip install &quot;.[web,mcp]&quot;
+.\start.bat --port 8765
+</code></pre>
+<p>Alternatively, after reviewing the supplied script and where local execution policy permits:</p>
+<pre><code class="language-powershell">.\scripts\install.ps1 -Web -Mcp -Python &quot;C:\Path\To\Python312\python.exe&quot;
+.\start.bat --port 8765
+</code></pre>
+<p>Open <strong>http://127.0.0.1:8765</strong>. The PowerShell installer has not been executed on Windows in this project; use the manual commands if your execution policy blocks scripts. Do not change a managed organization's execution policy merely to run this installer.</p>
+<h2>5. First simulator session</h2>
+<ol>
+<li>Leave the CNC disconnected. Launch the local service using one of the commands above.</li>
+<li>Open the browser address and select the simulator connection.</li>
+<li>Add a rectangle or open an example, choose the operation and generate a preview.</li>
+<li>Review the geometry and G-code. Test manual controls in the simulator before configuring hardware.</li>
+<li>Save a named browser project and download a portable <code>.cncstudio.json</code> backup. Browser-local storage does not synchronize automatically to other computers.</li>
+</ol>
+<p>The default server permits simulator connections only. Physical serial ports require an explicit restart with <code>--enable-hardware</code>, machine commissioning and verified machine/tool settings. Installing the software does not commission a machine. The supplied machine profile belongs to the project's reference machine; users of other machines must configure their own travel, heads and tools.</p>
+<h2>Optional native C++ relief engine</h2>
+<p>The installer tries to compile the extension if a suitable compiler and Python development headers exist. The extension is optional; the Python implementation remains available. Check which engine was installed:</p>
+<pre><code class="language-sh">.venv/bin/python -c &quot;from studio.relief import _relief_native; print('C++' if _relief_native is not None else 'Python fallback')&quot;
+</code></pre>
+<p>On Windows substitute <code>.venv\Scripts\python.exe</code> for <code>.venv/bin/python</code>. After adding compiler tools, rerun the installer to rebuild for this host. The engine accelerates relief contact calculations; it does not change physical controller speed. See the validation reports for measured Pi workloads and their limits.</p>
+<h2>Offline file editor</h2>
+<p>Open <code>studio/static/index.html</code> directly from the filesystem. Keep its vendor, font, icon and sibling script files together. There is no login in this mode. Drawing, templates, portable projects and supported contour CAM work locally; advanced server-dependent geometry and relief calculations require the Python service. The UI should report unsupported operations instead of treating them as completed calculations.</p>
+<p>Use portable project files to move between the file editor and the server editor. Browser storage permissions differ for <code>file://</code>; if the project library is unavailable, use Download project. Uploading from this editor still requires an authenticated HTTPS receiver and an explicitly configured file-upload receiver option.</p>
+<h2>HTTPS editor and Pi upload inbox</h2>
+<p>Install the <code>web</code> extra. These commands use the POSIX virtual environment path; on Windows use <code>.venv\Scripts\python.exe</code>. Replace <code>YOUR_USERNAME</code>, hostnames and addresses with real values.</p>
+<p>Create a user. The password is prompted for twice; no default password exists:</p>
+<pre><code class="language-sh">.venv/bin/python -m studio.web_server --data-dir web-data create-user YOUR_USERNAME
+</code></pre>
+<p>To generate a cryptographically random password instead, append <code>--generate-password</code> and save the one-time displayed value in a password manager. Do not place passwords in shell arguments.</p>
+<p>Generate a self-signed certificate, or provide an installed certificate and its matching private key:</p>
+<pre><code class="language-sh">.venv/bin/python -m studio.web_server certificate --cert server.pem --key server-key.pem --hosts your-pi.local 192.0.2.50
+.venv/bin/python -m studio.web_server --data-dir web-data serve --public-url https://your-pi.local:8443 --cert server.pem --key server-key.pem --port 8443
+</code></pre>
+<p>Use the actual hostname/IP in the certificate. Trust the self-signed certificate explicitly on each client, or use a trusted CA certificate. Generated certificates expire after 90 days. Certificate renewal requires a service restart. Private keys and <code>web-data</code> contain private operational data; keep them outside shared/public source archives and protect them with OS access controls, including Windows ACLs where applicable.</p>
+<p>The HTTPS service is both a design editor and an upload inbox. <strong>Uploads are stored for review; the HTTPS inbox does not start the CNC.</strong> For a separate hosted design server and Pi receiver, configure each separately with its own data directory and accounts. On the Pi, issue an upload-only token:</p>
+<pre><code class="language-sh">.venv/bin/python -m studio.web_server --data-dir web-data issue-token YOUR_USERNAME
+</code></pre>
+<p>On the design server, register the Pi receiver; paste its token into the hidden prompt:</p>
+<pre><code class="language-sh">.venv/bin/python -m studio.web_server --data-dir web-data destination workshop --url https://your-pi.local:8443 --ca-file server.pem
+</code></pre>
+<p>Here <code>server.pem</code> is the receiver certificate trusted by the sender. Omit <code>--ca-file</code> when the receiver's certificate is already trusted by the host. Restart the design service after destination changes. To permit uploads from <code>file://</code> editors, add <code>--allow-file-upload</code> to the receiver's <code>serve</code> command. File uploads still require the token. Do not disable certificate checks to resolve trust errors.</p>
+<p>For internet hosting use a real DNS name, publicly trusted certificate and deliberate firewall access to the HTTPS listener. The current service expects direct TLS or TCP passthrough; it does not trust HTTP reverse-proxy forwarded headers. Automatic certificate renewal, system services and public deployment are not configured by the installer. See <a href="#web">WEB.md</a> for session limits, quotas and upload details.</p>
+<h2>Phone monitor and controls</h2>
+<p>The local controller service can expose a separate paired monitor. Install <code>web</code> first for TLS and supply a certificate valid for the phone's Pi hostname:</p>
+<pre><code class="language-sh">sh start.sh --monitor --monitor-port 8766 --monitor-cert server.pem --monitor-key server-key.pem
+</code></pre>
+<p>The console displays a fresh pairing URL containing a random token. Replace its <code>&lt;PI-LAN-IP&gt;</code> placeholder with the certificate's matching host/IP, then open it on the phone. Treat this URL as a credential; do not include it in screenshots or repository files. Restarting revokes it. This example remains simulator-only. Omitting both certificate options selects the explicit HTTP LAN monitor; HTTPS is preferable for credential protection.</p>
+<p>Monitor control is distinct from the upload inbox. Releasing a software pendant or sending feed hold is not a physical emergency stop, and accepted/buffered motion can continue depending on firmware.</p>
+<h2>MCP artwork integration</h2>
+<p>Install with <code>--mcp</code>, then configure your MCP client to launch the absolute path to <code>.venv/bin/python</code> (Windows: <code>.venv\Scripts\python.exe</code>) with arguments <code>-m</code>, <code>studio.mcp_server</code> and the project directory as its working directory. This is a stdio artwork/template service. See <a href="#mcp">MCP.md</a> for the actual tools and a client configuration example. No MCP setup automatically connects or moves a machine.</p>
+<h2>Updating, stopping and removing</h2>
+<p>Stop the foreground service with Ctrl+C. Before updating, download unsaved projects and back up <code>web-data</code>, exported template libraries and configuration. Install new source into the same project, rerun the installer, restart the service and refresh the browser after saving its work. Native extensions must be rebuilt for a different OS, CPU architecture or incompatible Python version.</p>
+<p>Removing <code>.venv</code> removes that installation's Python dependencies. Removing source does not delete browser IndexedDB projects; browser site-data controls manage those separately. Keep or remove <code>web-data</code> deliberately according to whether its accounts/files are still needed. Do not delete the only copy of project files when uninstalling.</p>
+</section><section id="developer"><h1>Developer handoff</h1>
+<p>KerfKite Studio combines a browser-based design workspace, a Python CAD/CAM service and a separate machine sender. The Raspberry Pi runs the same geometry and CAM code as the desktop service. The native Android companion is a smaller editor and client with its own build.</p>
+<h2>Set up a simulator checkout</h2>
+<p>Use 64-bit Python 3.12 and a C++ compiler for the optional accelerated relief extension. Install Node.js 22 for the JavaScript checks. Create a virtual environment, activate it, then run these commands from the repository root. STEP exchange needs a platform with a compatible Open CASCADE wheel.</p>
+<pre><code class="language-sh">python -m pip install -e &quot;.[web,step,mcp]&quot;
+python -m pip install markdown-it-py playwright
+python -m playwright install chromium
+python -m studio.server --port 8765
+</code></pre>
+<p>Open the printed loopback address. Keep the server's default simulator setting. For the filesystem-only editor open <code>studio/static/index.html</code> directly. Its supported CAM subset runs in JavaScript. STEP, assembly solving, fixture checks, bundle inspection and DXF parsing use the Python service.</p>
+<h2>How a design becomes a cut</h2>
+<table>
+<thead>
+<tr>
+<th>Responsibility</th>
+<th>Entry points</th>
+<th>Change contract</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Project versioning, named documents, recovery</td>
+<td><code>studio/static/app.js</code>, <code>projects.js</code>, <code>design-layers.js</code></td>
+<td>A portable <code>pi-cnc-studio/1</code> file contains editable objects, settings, metadata and extras. Design layer visibility and output are independent. CAM uses millimetres, feed in mm/min, Z zero at the stock surface and negative cutting depths.</td>
+</tr>
+<tr>
+<td>Solid features, sketches, surfaces and assemblies</td>
+<td><code>studio/solid_cad.py</code>, <code>cad_exchange.py</code>, <code>assembly.py</code>; their browser modules</td>
+<td>Keep input parameters and source geometry in project extras. Meshes and solved poses are derived. STEP files use Open CASCADE; the editable feature history stays in the Studio project.</td>
+</tr>
+<tr>
+<td>Import and migration</td>
+<td><code>studio/static/interchange.js</code>, <code>lightburn-import.js</code>, <code>studio/program_import.py</code>, <code>import_bundle.py</code></td>
+<td>Stage a report with objects, layers, devices, presets, warnings and head mode. Put each object's source layer key in <code>sourceLayer</code>. Preview first, apply in one edit and keep new layer output disabled for operator review.</td>
+</tr>
+<tr>
+<td>CAM and simulation</td>
+<td><code>studio/cam.py</code>, <code>operations.py</code>, <code>relief.py</code>, <code>fixture_collision.py</code>, <code>simulation.py</code>, <code>studio/static/offline-cam.js</code></td>
+<td>Derive preview and postprocessed output from the same document. Test the posted instructions as well as the displayed paths. Validate footprint, units, motion dialect and work frame explicitly.</td>
+</tr>
+<tr>
+<td>HTTP services and machine transport</td>
+<td><code>studio/design_api.py</code>, <code>server.py</code>, <code>web_server.py</code>, <code>device.py</code>, <code>protocols.py</code></td>
+<td>Register a design route once for both authenticated hosted and local services. A design route has no machine access. Keep preview, phone arming, transport and direct machine commands in their existing boundaries.</td>
+</tr>
+<tr>
+<td>Other clients</td>
+<td><code>studio/mcp_server.py</code>, <code>android/</code>, <code>studio/static/monitor.js</code></td>
+<td>Test the client that actually consumes a change. Desktop solid modelling is distinct from the Android companion's supported operations.</td>
+</tr>
+</tbody>
+</table>
+<p>Browser scripts are loaded as classic scripts from <code>studio/static/index.html</code>. Several editor modules extend common functions in load order. Features that reference the tab panels mount after <code>tool-tabs.js</code>. When a project opens or resets, listen for <code>cnc-project-loaded</code> to refresh controls. Notify project persistence through <code>cnc-project-changed</code> for edits stored in extras.</p>
+<h2>Run the checks</h2>
+<pre><code class="language-sh">python scripts/simulate_studio.py --all --require-step --json simulation.json
+python validation/simulate_solid_workspace.py
+python scripts/build_help.py
+bash scripts/ci-local.sh --list
+</code></pre>
+<p>Use <code>--browser PATH</code> to select an installed Chromium executable. The browser harness starts its own simulator-only service and temporary browser profiles. The JSON report includes each scenario's measurements and skipped checks. <code>--require-step</code> makes a missing STEP runtime a failure. The repository also has OS-specific local checks in <code>scripts/ci-local.sh</code> and Android build instructions in <a href="#android">Android</a>. Write diagnostic reports outside the source tree when they contain local paths.</p>
+<h2>Example change</h2>
+<p>To extend DXF import, add a small, independently authored fixture to <code>tests/test_program_import.py</code>. Decide how unsupported entities, XY projection and unit conversion should appear in the review. Implement the reader in <code>studio/program_import.py</code>. Verify its numerical result, handle a malformed variant, and test review → enable layer → CAM → project reopen in <code>validation/import_fixture_workflow.py</code>. Add the supported entity and limits to <a href="#program-import">Program import</a>. Importing artwork never grants permission to send a program to a device.</p>
+<p>For future work, use the acceptance matrix and the specific workflow guides. Physical cutting, lens distortion calibration, general constrained sketch and assembly solving, additional native vendor formats, and platform-specific binary redistribution each require their own validation.</p>
+<p>The Android and MCP clients retain their legacy 680 × 240 mm example canvas for project compatibility. These dimensions describe an editing canvas. Configure each machine using its own measured travel and origin.</p>
+</section><section id="laser-order"><h1>Plan the laser cut order</h1>
+<p>In <strong>Layers → Laser cut order</strong>, enable <strong>Plan compatible line cuts within each layer</strong>. The preview, generated G-code and downloaded job use the planned sequence. Object geometry stays editable in its original design order. Save the project to retain the planning switches.</p>
+<ul>
+<li><strong>Minimise travel</strong> chooses the nearest eligible contour start at each step. It preserves each contour’s start vertex and direction. The report compares nominal XY travel between design contours, starting at work zero. Physical time also depends on acceleration, speeds, positioning, lead moves and the controller.</li>
+<li><strong>Inside before outside</strong> orders strictly enclosed cuts before their enclosing outline, including open engravings within a closed contour. Paths that cross or touch are independent. This setting can increase travel when the original sequence crossed a holding contour too soon.</li>
+<li><strong>Remove exact duplicate paths</strong> removes matching open paths in either direction and matching closed loops with a different starting vertex or winding. Keep this option off for intentional repeated cuts. Offset or resampled copies count as different geometry.</li>
+</ul>
+<h3>Try nested frames</h3>
+<ol>
+<li>Start an empty laser project with <strong>Line</strong> operation, one pass and zero lead/ramp distances. Draw a large rectangle, then a smaller one entirely inside it. Duplicate the smaller one at exactly the same coordinates.</li>
+<li>Open <strong>Layers</strong>, enable planning and turn on <strong>Inside before outside</strong> and <strong>Remove exact duplicate paths</strong>.</li>
+<li>Generate a preview. The inner rectangle runs once before the larger one. The report identifies one duplicate. Disable planning to compare the original operation order.</li>
+</ol>
+<p>Planning processes contiguous single-pass line operations whose complete settings agree within a single output layer. An override with a different feed, power or other setting starts a new group. Raster and per-vertex power, fill, leads, ramps, holding tabs, multipass jobs and incompatible operations retain their order. Studio joins compatible contours into a single planned operation. Layer order continues to determine when each layer runs.</p>
+<p>A group supports 200 contours, 15,000 vertices and 500,000 edge comparisons. A group exceeding a bound keeps its source sequence and appears in the report. Check the preview when nesting spans operation boundaries or a group reaches one of these limits.</p>
+</section><section id="user-guide"><h1>KerfKite Studio user guide</h1>
+<p>This guide describes the development application. It includes design, CAM, file transfer and machine controls, but it does not establish full LightBurn parity or certify a machine setup. Read the current <a href="#status">acceptance status</a>, <a href="#readme">installation entry point</a> and <a href="#troubleshooting">troubleshooting guide</a>.</p>
+<h2>Choose how to open Studio</h2>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Open it with</th>
+<th>What it provides</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Local workstation</td>
+<td>Start the Python application; open its localhost URL</td>
+<td>Design tools, Python CAM, optional native relief acceleration, simulator and operator-enabled serial control</td>
+</tr>
+<tr>
+<td>Hosted HTTPS editor</td>
+<td>Open the configured HTTPS address and log in</td>
+<td>Design, server CAM, private server files and receiver uploads; no machine-start endpoint</td>
+</tr>
+<tr>
+<td>Local filesystem</td>
+<td>Open <code>studio/static/index.html</code>, keeping the complete static folder together</td>
+<td>Design and supported contour CAM without login; portable project/SVG/G-code export; authenticated HTTPS receiver upload</td>
+</tr>
+</tbody>
+</table>
+<p>The filesystem mode supports router, laser and knife contour generation, including supported depth/power paths and ordered contour operations. LinuxCNC rotary wrapping of supported existing contour jobs is also implemented locally. Advanced area operations, holding tabs, relief, solid extrusion and stock simulation require the Python server. The new offline rotary calculations passed parity tests, but direct file:// browser acceptance was blocked by the automation browser URL policy and remains unverified. An unavailable operation produces an error rather than silently substituting a different toolpath. See <a href="#web">HTTPS and local-file setup</a>.</p>
+<h2>Find the tools</h2>
+<p>The centre holds the work area, toolpath controls, messages and expandable G-code/3D previews. The side panels use tabs, so a tool may be present in another tab rather than farther down the page.</p>
+<table>
+<thead>
+<tr>
+<th>Left tab</th>
+<th>Main tools</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Design</td>
+<td>Rectangle, ellipse, line, polygon, gear, dimensions and work area</td>
+</tr>
+<tr>
+<td>Text</td>
+<td>Fonts, straight/down/curved layouts, rotation, depth outlines, relief and extrusion controls</td>
+</tr>
+<tr>
+<td>Images</td>
+<td>SVG import, laser raster images and image/camera tracing</td>
+</tr>
+<tr>
+<td>Templates</td>
+<td>Template library and template creation</td>
+</tr>
+<tr>
+<td>Projects</td>
+<td>Browser project library, recovery, portable files and hosted transfers</td>
+</tr>
+<tr>
+<td>Objects</td>
+<td>Selection, position, resize and available geometry-editing tools</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Right tab</th>
+<th>Main tools</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CAM</td>
+<td>Head, protocol, operation, feeds/depths, compensation, laser settings and ordered object operations</td>
+</tr>
+<tr>
+<td>3D relief</td>
+<td>Heightmap/STL preparation and cutter-contact settings</td>
+</tr>
+<tr>
+<td>Rotary</td>
+<td>Diameter, wrap direction, seam checks and LinuxCNC rotary export</td>
+</tr>
+<tr>
+<td>Control</td>
+<td>Machine profile, connection-related setup, jogging, head mode, job/phone controls and manual pendant input</td>
+</tr>
+<tr>
+<td>Quote</td>
+<td>Cost estimates, quote output and design printing</td>
+</tr>
+</tbody>
+</table>
+<p>Click a tab to select it. When a tab button has keyboard focus, Left/Right changes tabs and Home/End selects the first/last tab. In a server session, machine connection controls also appear in the application header. Hosted/file modes hide unavailable live-control functions.</p>
+<h2>First project: design, preview and save</h2>
+<ol>
+<li>In <strong>Design</strong>, check the work-area dimensions and enter X/Y plus shape width/height in millimetres. Add a rectangle or another shape. Shape buttons can also be dragged onto the work area.</li>
+<li>Select the shape. Drag to move it; use the handles to resize it. Escape cancels the current drag. Position and resize commands also use the numeric fields.</li>
+<li>In <strong>CAM</strong>, choose the head and operation. For a simple demonstration choose the simulator workflow and a line operation. Enter the feed and relevant depth or laser power settings.</li>
+<li>Select <strong>Generate preview</strong>. Inspect its warnings, path placement and generated G-code. The cut slider steps through cutting segments; the time estimate excludes travel, acceleration, plunge and startup.</li>
+<li>Name the project in <strong>Projects</strong>, then save it to the browser and download a portable project copy. Export G-code only after generating a current preview.</li>
+</ol>
+<p>Editing artwork or machining settings invalidates the previous preview and setup confirmation. Generate another preview before exporting or starting that job. A rendered design alone is not evidence that cutter compensation, material clearance or machine coordinates are correct.</p>
+<h2>Projects, recovery and portability</h2>
+<p><strong>Save to this browser</strong> stores the complete project in IndexedDB. <strong>Save as a copy</strong> creates a separate project. Search, open, delete and saved-revision controls appear in the same panel. Up to five earlier saves are retained per saved project.</p>
+<p>Changes schedule a recovery draft after a short delay. <strong>Recover latest draft</strong> explicitly opens the available draft; startup does not automatically replace your canvas. There is one latest draft per local account namespace, not a permanent history of every unsaved document. Closing the browser immediately after a change can precede recovery storage.</p>
+<p><strong>Download project</strong> creates a <code>.cncstudio.json</code> file containing artwork, settings and supported project extras, including quote/rotary settings. Use this file to move work between computers. <code>Ctrl+S</code>/<code>Cmd+S</code> saves to the browser library; use Download project when you need a portable backup. Project files have a 4 MB import/save limit.</p>
+<p>Browser storage belongs to the browser profile and origin. Clearing site data, changing the hostname/port, using a private window or switching browser profiles can make a library unavailable. Hosted accounts use separate library namespaces. This is not a substitute for downloaded backups or private server file storage. Concurrent editing in several tabs is not a collaborative document service.</p>
+<p>SVG exports contain vector geometry, not the full editable project settings. G-code exports contain machine instructions, not an editable design. Custom font outlines remain in saved artwork, but reimport the custom font when regenerating that text in a new session. Browser template libraries and material presets should be backed up separately where export controls are provided.</p>
+<h2>Shapes, gears and objects</h2>
+<p>Polygons accept a side count, rotation and centre-hole diameter. Width/height can stretch a polygon. The bore must fit within its actual edge clearance.</p>
+<p>Gears use metric external involute geometry. Set teeth, module, pressure angle, centre hole and pitch-circle tooth thinning. Outside diameter is derived from module and tooth count. For a standard pair, use matching module and pressure angle; nominal centre distance is <code>module × (teeth A + teeth B) / 2</code>. Tooth thinning is specified per gear, so both gears contribute to pair backlash.</p>
+<p>New gears cannot be stretched with ordinary resize controls; regenerate them with a different module. Low tooth counts and invalid bores are rejected. Existing decorative gears in old projects are not automatically upgraded. Use the correct cutter diameter or measured laser kerf for compensated cutting, and verify a test pair: no load rating or physical mesh certification is implied. See <a href="#geometry">gear geometry notes</a>.</p>
+<p>Available object tools include undo/redo, rotation, mirroring, rectangular arrays, a basic Bézier curve, node editing, weld/difference and offset. Node editing is limited to 500 vertices on the selected object. Advanced boolean/offset operations need the server. Avoid treating these tools as a complete illustration or parametric CAD system.</p>
+<h3>Align and distribute several objects</h3>
+<p>Open <strong>Design → Align &amp; distribute</strong>. Tick the objects in its list, use <strong>Select all</strong>, or select an object on the canvas and choose <strong>Add canvas selection</strong>. This selection is separate from the canvas's single highlighted object.</p>
+<p>Choose <strong>Selected objects’ bounds</strong> or <strong>Entire work area</strong>. Left/right/top/bottom and centre controls translate the chosen objects without scaling them. Top means the maximum Y edge in the bottom-left coordinate system. Equal horizontal/vertical gaps require three or more objects; increase their spread or use the work area if the current span cannot fit them without overlap. One object can align to the entire work area.</p>
+<p>Depths, power values, text settings and gear proportions are preserved. Use <strong>Undo</strong> to restore the previous arrangement and generate a fresh preview after edits. Alignment can intentionally put objects on top of one another; inspect the result before CAM.</p>
+<h2>Text and depth</h2>
+<ol>
+<li>Open <strong>Text</strong>, enter the text and choose a bundled font or import a TTF/OTF file.</li>
+<li>Set size and spacing, then choose straight, text-down or Bézier-baseline layout. Adjust page rotation or Y-axis rotation as required.</li>
+<li>Set the shallowest depth and select <strong>Add text as paths</strong>. The font style controls letter outlines; the depth controls their Z values.</li>
+<li>To revise the wording/settings, select that text object, load its text settings, make changes and use <strong>Replace selected text</strong>.</li>
+</ol>
+<p>Y-axis rotation creates varying negative-Z depths. Large tilts across wide text can exceed the supported depth range. Router line CAM follows the outline at those depths; it does not clear the entire letter interior. Choose the separate V-carve, raised/recessed relief or extrusion workflow for those results. XYZ path export preserves depth coordinates; solid STL extrusion is an export, not an automatically machined solid.</p>
+<p>For Bézier text, choose <strong>Symmetric · use curve rise</strong> or <strong>Custom · independent control points</strong>. In custom mode, enter Control 1/2 X as a percentage of the original text width and Y in millimetres, or drag either orange handle in the baseline preview. The endpoints stay fixed. <strong>Copy symmetric rise into custom controls</strong> initializes the custom shape from the simple rise setting. Apply changes with <strong>Add text as paths</strong> or <strong>Replace selected text</strong>; editing controls alone does not change existing outlines. Independent values are restored with the selected text settings. Tight curves can overlap letters, and stationary/cusp tangents are rejected. Complex-script shaping and automatic ligatures are incomplete; import correctly shaped outlines when required. Check missing-glyph errors rather than accepting replacement characters.</p>
+<h2>Images: raster versus tracing</h2>
+<p><strong>Laser raster</strong> samples an image into alternating scan rows. Choose grayscale, threshold or Floyd–Steinberg dithering, physical dimensions, pixel interval, inversion and overscan. Smaller intervals increase the job size. Raster output is capped at 60,000 pixels before later CAM limits. Overscan adds zero-power travel beyond both sides of the artwork, so allow physical space for it.</p>
+<p><strong>Image/camera tracing</strong> creates actual editable vector paths:</p>
+<ol>
+<li>Upload an image, or explicitly open the camera and capture a frame. Camera access depends on browser permission and a supported secure context such as HTTPS or localhost.</li>
+<li>Choose <strong>Closed shape outlines</strong> for silhouette boundaries and holes, or <strong>Stroke centrelines</strong> for line drawings. Centrelines are skeletonized, split at junctions and remain open unless the source contains a genuine loop.</li>
+<li>Set threshold, optional inversion and minimum feature size. In outline mode the filter uses pixel area, including small holes. In centreline mode it uses stroke length and can remove short branches.</li>
+<li>Set the physical width and height of the <strong>entire image rectangle</strong>, then preview. Changing their ratio stretches the trace. Dimensions are not inferred from the camera.</li>
+<li>Inspect the paths and select <strong>Add preview to project</strong>. They are inserted at the design X/Y placement. Use a line engraving operation for open centrelines.</li>
+</ol>
+<p>Tracing reduces input to at most 384 pixels per side and caps contour/stroke complexity. It removes collinear vertices without smoothing away gaps. Expect pixel-scale corners, approximate endpoints and possible skeleton spurs. This is not camera-bed calibration, lens correction, perspective correction, automatic registration or a live machine overlay. Capture, Stop, closing the trace section and leaving the page release camera tracks. No trace action moves the machine.</p>
+<p>SVG import supports a restricted geometry subset. Convert unsupported text/effects to plain paths before importing; do not assume arbitrary SVG, DXF or PDF document support.</p>
+<h2>Templates</h2>
+<p>Open <strong>Templates → Template library</strong> to browse, search, filter categories and mark favourites. Select a template to insert it at the design placement and requested size. Built-in artwork retains its natural aspect ratio. The library includes simple motifs and original botanical/ornamental examples; preview them at the intended production size.</p>
+<p>To create a reusable template, select artwork or choose the whole design, then provide its name/category. Custom templates are stored in this browser. Export/import library JSON for a portable backup; the custom library is limited to 200 templates.</p>
+<p>Leaf/berry occlusion in the newer botanical artwork is applied to actual vector paths. These are still engraving contours: one-piece silhouette union, cutout bridges and tool-size/minimum-feature checks are not automatically constructed. Inspect whether a cutout would release unwanted islands. See <a href="#mcp">MCP setup</a> for external artwork/template creation through the local stdio interface.</p>
+<h2>CAM and ordered operations</h2>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Use and important limits</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Line / depth contour</td>
+<td>Follows the path centreline; no radius compensation. Supports router depths, laser vectors/raster powers and knife preparation.</td>
+</tr>
+<tr>
+<td>Outside / inside</td>
+<td>Compensates closed valid contours using cutter radius or laser kerf. Nested contours use even-odd holes. A tool may not reach narrow features.</td>
+</tr>
+<tr>
+<td>Pocket</td>
+<td>Concentric router clearing around preserved islands. Stepover is limited to half cutter diameter. Plunge entry needs a suitable centre-cutting tool; inaccessible corners can remain.</td>
+</tr>
+<tr>
+<td>Laser hatch fill</td>
+<td>Scans an even-odd region at the specified interval/angle, with optional crosshatch.</td>
+</tr>
+<tr>
+<td>V-carve</td>
+<td>Sampled medial-axis paths with V-angle, depth and cutter-diameter limits. Fine detail and wide-area clearing need inspection.</td>
+</tr>
+<tr>
+<td>Vinyl drag knife</td>
+<td>Offset pivot paths, alignment leads and corner swivels, with powered outputs off. The alignment lead marks material before each contour.</td>
+</tr>
+</tbody>
+</table>
+<p>Assign current operation settings to a selected object when objects need different operations or feeds. Object order becomes operation order; output can be disabled per object. Continuous jobs reject changes of head, protocol or cutter geometry. Make separate reviewed jobs for tool changes. Saving a material/tool preset records your entered settings; it does not calibrate feeds, cutter dimensions or machine limits.</p>
+<p>Laser lead-ins/outs are straight tangent <strong>cutting</strong> moves. Start/end power ramps extend over the chosen distances and can mark beyond the original outline. Preview shows commanded power; GRBL dynamic laser mode additionally changes effective output with motion speed. The laser's optical watts are not the controller S-value: validate the controller's configured range and your material tests.</p>
+<h2>3D relief and native acceleration</h2>
+<p>In <strong>3D relief</strong>, choose a grayscale image or ASCII/binary STL and set placement, physical dimensions, depth, resolution, tool diameter/shape, stepover and stock allowance. Generate the relief, then review its normal router step-downs and clearance moves.</p>
+<p>Image heights map white to the stock top and black to the selected depth. STL processing makes a top-access height field; undercuts and inaccessible sides are not represented. Flat/ball cutter-contact preparation is conservative and can leave material on a coarse grid. It does not model the holder, chuck, clamps or material outside the input rectangle.</p>
+<p>The optional C++ extension accelerates the relief contact calculation. The UI reports <strong>C++ accelerated relief</strong> when that backend is used, otherwise <strong>Python relief</strong>. An install without a compiler can still use the Python backend. This is CPU acceleration, not a claim of Metal/GPU/Hailo acceleration for CAM. See <a href="#platforms">platform notes</a> and the installation instructions for the selected host.</p>
+<p>The central 3D view rotates by mouse drag. <strong>Simulate sampled stock removal</strong> adds an approximate stock surface. Resolution limits can hide thin remaining material or small defects; this is not a clamp/holder collision check or a guarantee against gouging.</p>
+<h2>Holding tabs for router contours</h2>
+<ol>
+<li>Select a closed contour object and choose router <strong>line</strong>, <strong>inside</strong> or <strong>outside</strong> with a flat end mill. Set cut depth to reach the stock bottom.</li>
+<li>In <strong>CAM → Holding tabs · router contours</strong>, enter stock thickness, nominal tab width and tab height above the stock bottom. Height must be positive and below stock thickness.</li>
+<li>Choose an evenly spaced count or explicit positions as comma-separated percentages from 0 up to, but not including, 100. Positions are measured around each compensated contour.</li>
+<li>Click <strong>Assign tabs and current CAM settings to selected object</strong>. Draft fields alone do not modify the job. Assignment also updates the project stock-thickness default.</li>
+<li>Generate a fresh preview and inspect the depth plateaus. With 10 mm stock and 2 mm tabs, plateaus should stop at Z −8 mm while the main cut reaches the bottom. Use <strong>Remove tabs from selected object</strong> and regenerate to remove them.</li>
+</ol>
+<p>The plateau adds one cutter diameter to the nominal width along the path. Inspect corners, inner contours and nearby cuts: geometric tabs do not guarantee stock retention and do not replace clamping. Overlapping/oversized placements fail CAM validation. Relief/depth paths, non-flat cutters, open contours and unsupported operations are rejected. Direct-on-contour dragging of tab positions is not available. Holding-tab CAM currently requires the server; local-file generation explicitly rejects it.</p>
+<h2>Rotary design and export</h2>
+<p>Rotary is an <strong>export-only LinuxCNC router workflow</strong>. The current GRBL and Marlin senders do not run the exported A-axis file.</p>
+<p>Enter the measured cylinder diameter, design wrap axis, starting angle and direction. <strong>Set design span to one revolution</strong> sets that design dimension to <code>π × diameter</code>. The other design coordinate is axial; the export emits axial motion as X, rotation as continuous A degrees and radial motion as Z. Physically configure A rotation around X and establish the radial stock-surface zero.</p>
+<p>Use <strong>Add seamless periodic border</strong> for a full-turn example. <strong>Check matching seam endpoints</strong> compares endpoint axial positions and depths within 0.01 mm. Passing that check does not prove tangent continuity, true stock circumference or physical alignment.</p>
+<p>Export requires router mode and GRBL source geometry; the server or supported offline contour engine converts it to LinuxCNC G93 inverse-time feed. The JavaScript/Python parity checks cover the wrap calculations. The new direct file:// browser workflow remains unverified because the automation browser blocked the file URL; test it in your actual browser before depending on it. Angles remain continuous beyond 360° rather than wrapping to zero. Source positions within 0.00051 mm of an integer circumference are snapped to whole turns to account for source CAM decimal rounding. Preview remains planar. Review the file in the target LinuxCNC configuration before any physical execution; fixtures and holder collisions are not simulated.</p>
+<h2>Local machine, keyboard and gamepad control</h2>
+<p>The local server starts with physical ports disabled. Test with <strong>Simulator</strong>. Enabling real ports requires the explicit <code>--enable-hardware</code> startup option and a machine that has been commissioned independently. Select the correct protocol before connecting; disconnect before changing it.</p>
+<p>The Control profile is a setup aid, not a command to overwrite the controller. Check current travel, head, work origin and clearance against the actual machine. <strong>Apply mounted head mode · outputs off</strong> requests a confirmed mode transition; it does not mechanically swap or measure the head. Re-establish router/knife Z zero or laser focus after changing heads. GRBL readback checks include mode/power and available travel; firmware and physical setup still determine what happens.</p>
+<p>For keyboard/gamepad jogging, explicitly enable manual control in <strong>Control</strong>. The machine must be connected and idle.</p>
+<ul>
+<li>Arrow keys request one X/Y step; Page Up/Down request one Z step. Held-key repeats are ignored. Typing in inputs does not jog the machine.</li>
+<li>For a browser-standard gamepad, press a button if necessary, then <strong>Find gamepads</strong> and select it. Check the mapping in the simulator.</li>
+<li>Release the selected hold-to-jog button, centre the stick, then hold the button and deflect for one increment. Return to centre before another increment. Only the strongest axis moves; gamepad increments are capped at 1 mm.</li>
+<li>Losing window focus, hiding the page, changing the mapping or disconnecting the gamepad disables manual input. Releasing the button prevents new requests; already accepted movement can continue.</li>
+</ul>
+<p>Dedicated XHC/USB pendant protocols and continuous handwheel jogging are not implemented. GRBL feed hold and Marlin host pause have different behavior. Marlin pause stops transmission while buffered moves may continue; its abort uses M112 and requires reconnect. Software hold/reset is not a physical emergency stop.</p>
+<h2>Phone control and uploads</h2>
+<p>Phone control and file upload are separate services. The hosted HTTPS editor/receiver stores files for review; an upload never starts a job. Use <strong>Projects</strong> to download/upload project, SVG or current G-code files. A transfer receipt confirms checksum and byte count, not execution. If a transfer result is ambiguous, inspect the receiver before retrying. See <a href="#web">WEB.md</a> for accounts, certificates and upload-only tokens.</p>
+<p>For phone controls, start the local machine server with <code>--monitor</code>. Pair using its generated URL/token. TLS is available using <code>--monitor-cert</code> and <code>--monitor-key</code>; without those options the monitor is plain HTTP and intended only for a trusted local network. Do not treat the phone monitor as the internet-facing account-based editor. Restarting revokes its pairing token.</p>
+<p>At the local workstation, generate a current preview, confirm setup and <strong>Arm preview for phone start</strong>. The phone can attempt that armed job once, pause/resume or stop/abort. It cannot submit arbitrary G-code, jog or configure the machine. Stale phone data means position/control status is unknown; do not infer a successful stop from a lost connection.</p>
+<h2>Costs, quotes and printing</h2>
+<p>In <strong>Quote</strong>, enter your own material, waste, machine-time, hourly-rate, setup, finishing, consumables and other costs. Use the current preview time as a starting point, then add travel/startup and realistic production allowances. There are no built-in authoritative material prices or calibrated production rates.</p>
+<p>Gross margin is profit as a percentage of selling price, not a markup on cost. Choose the quantity, currency and tax rate appropriate to the quote. Calculate, then download quote JSON or print/save PDF. Unit prices are rounded; order totals use the unrounded estimate before final currency rounding. These are estimates, not accounting or tax determinations.</p>
+<p>For design printing, choose <strong>Fit on A4 landscape</strong> or <strong>1:1 tiled A4 landscape</strong>. Allow the print popup. For 1:1 output, use A4 landscape and 100%/actual-size scaling in the browser/printer dialog; turn off any additional fit-to-page scaling. Measure the printed <strong>50 mm reference</strong> with a physical ruler before using the print as a machining template. Printer margins, drivers and PDF viewers can change scale even when the on-screen dimensions are correct.</p>
+<h2>Reporting a problem</h2>
+<p>Keep a portable copy before restarting or clearing any browser data. Record the application revision, operating system/browser, server mode, selected head/protocol, operation settings and exact error. Include a minimal project that reproduces the issue and distinguish simulator behavior from physical hardware behavior. Redact passwords, upload/pairing tokens and private keys. Use the symptom-specific <a href="#troubleshooting">fault-finding guide</a>.</p>
+<h2>Manual tool changes</h2>
+<p>In CAM, open Manual tool changes. Set the cutter diameter, operation, depth and feeds; select an object, assign a tool number/name/shape and its current settings. Repeat for every active object. Generate separate stage files, then download each G-code file and the plan JSON. Consecutive operations using the same tool geometry/number share a stage. Returning to a previous tool creates another stage.</p>
+<p>Each stage ends retracted with the spindle off. Wait for motion and spindle to cease, install the next tool, re-establish Z zero or verified tool length, check XY origin/clearance and review the next stage before starting it manually. Do not concatenate stage files. Automatic tool changers, probing and automatic continuation are not implemented. Ordinary Run rejects differing tool numbers even if their diameters match. Tool-change generation requires the app server.</p>
+<p>Holding tabs are retained when reassigning CAM settings or a manual tool. Use <strong>Remove tabs from selected object</strong> before clearing operation settings; the editor prevents implicit removal. Incompatible tool/mode combinations retain the tab request and fail CAM validation.</p>
+</section><section id="platforms"><h1>Platforms and verification</h1>
+<p>Use the desktop browser editor with a local Python service on 64-bit macOS, Windows or Linux. The service provides solid modelling, CAM and simulation. The Android edition is a native 2D design companion with portable project and SVG exchange.</p>
+<table>
+<thead>
+<tr>
+<th>Platform</th>
+<th>Installation and evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>macOS, Apple Silicon</td>
+<td>Install 64-bit Python 3.12 and run the macOS installer below. The CAD and machining harness and Chrome editing workflows passed on macOS ARM64.</td>
+</tr>
+<tr>
+<td>macOS, Intel</td>
+<td>Use the same installer with x86-64 Python. The geometry kernel publishes Intel wheels. Hardware acceptance is pending.</td>
+</tr>
+<tr>
+<td>Windows 11, x86-64</td>
+<td>Install 64-bit Python 3.12 and use the PowerShell installer. Package installation and all four core CAD and machining scenarios passed on an x64 Windows build 26300 machine.</td>
+</tr>
+<tr>
+<td>Windows 10, x86-64</td>
+<td>Use 64-bit Python 3.12 and the same PowerShell installer. A Windows 10 runtime and UI test is pending.</td>
+</tr>
+<tr>
+<td>Linux, x86-64</td>
+<td>Use 64-bit Python 3.11 or 3.12 on a recent glibc distribution. Installation and all four core scenarios passed on Ubuntu 24.04 x86-64 under WSL.</td>
+</tr>
+<tr>
+<td>Linux, ARM64</td>
+<td>Use a 64-bit OS and Python environment. The four core scenarios passed on Debian ARM64 on a physical Raspberry Pi 5.</td>
+</tr>
+<tr>
+<td>Raspberry Pi 4B or 5, 4 GB or 8 GB</td>
+<td>Use 64-bit Raspberry Pi OS with a supported Python. On a Pi 5 with 8 GB, the server fixture passed under a 1.5 GiB memory ceiling and a two-core CPU quota in 5.49 s. Peak Python process RSS was 54,048 KiB. The Chromium browser and server also passed all nine CAD workflow groups together under a 2 GiB ceiling and two-core quota on that Pi 5, including sketch drag, project reopening, STL and router relief transfer. Pi 4 and whole-browser use on a physical 4 GB board still need measurement.</td>
+</tr>
+<tr>
+<td>Samsung Galaxy S23</td>
+<td>Install the Android APK or build it from source. Drawing, editing, draft persistence and project/SVG export were exercised in an ARM64 emulator at S23 display dimensions. The exported polygon generated six laser segments on the workstation. Physical S23 testing is pending. See <a href="#android">Android</a>.</td>
+</tr>
+</tbody>
+</table>
+<h2>Desktop commands</h2>
+<p>From the source directory on macOS or Linux:</p>
+<pre><code class="language-sh">sh scripts/install.sh
+sh start.sh --port 8765
+</code></pre>
+<p>On Windows 10/11 in PowerShell:</p>
+<pre><code class="language-powershell">.\scripts\install.ps1 -Python C:\Python312\python.exe
+.\start.bat --port 8765
+</code></pre>
+<p>Set the executable path to the installed 64-bit Python. Open the printed localhost address. Add HTTPS/web or MCP extras as described in <a href="#install">Install</a>. The geometry kernel and browser renderer use CPU resources. Custom Metal rendering and 32-bit x86/ARM builds have no acceptance evidence.</p>
+<h2>Raspberry Pi sizing</h2>
+<p>Start on a 4 GB board with a single editor tab. Use a small solid, transfer a silhouette and preview a contour first. For relief work, start with a coarse stepover and measure a small region before increasing the sampling density. Large meshes, raster jobs and many open browser tabs can dominate memory. Run the same fixture on the target board with the following command:</p>
+<pre><code class="language-sh">.venv/bin/python scripts/simulate_studio.py --json pi-result.json
+</code></pre>
+<p>The report identifies the completed cases. Actual machine travel, cutter and laser calibration, clamping and material response need commissioning on the target machine.</p>
+</section><section id="laser-workshop"><h1>Laser image workshop and material tests</h1>
+<p>Open <strong>Images → Laser image engraving</strong>. The preview maps black to the highest commanded power and white to zero. Pixels with zero opacity remain at zero power through every adjustment.</p>
+<h2>Try a masked tonal wedge</h2>
+<ol>
+<li>Choose <strong>Try tonal wedge</strong>. A black-to-white gradient appears with a transparent square at its centre.</li>
+<li>Under <strong>Crop &amp; mask</strong>, crop 10% from the left, and choose <strong>Ellipse</strong>. Adjust <strong>Gamma</strong> to 2 and compare the midtones. Cropping resizes the remaining image to the destination width and height.</li>
+<li>Choose <strong>Floyd–Steinberg dither</strong> and turn on <strong>Invert</strong>. Look at the corners and the centre square. Both stay white. Change <strong>Threshold</strong> to alter the balance of marked and unmarked samples.</li>
+<li>Set the placement rectangles and pixel interval in millimetres. The work origin is at bottom left. Source crop percentages are measured from the indicated image edges. Allow room to either side for overscan.</li>
+<li>Choose <strong>Create raster paths</strong>, then <strong>Preview</strong>. Scanlines alternate direction and travel across overscan with S0. Save the project under <strong>Projects</strong>. Reopening restores the generated paths, per-segment power, feed, maximum S, pass count and processing settings.</li>
+<li>To use your own drawing as a mask, select a closed outline in the bed view, choose <strong>Selected artwork</strong> and create the raster. Nested contours produce holes by even–odd fill. The original artwork remains in the document. Disable its output if it should serve only as a mask.</li>
+</ol>
+<p><strong>Recall selected raster settings</strong> restores the processing controls for another pass. Select the original image file again when resampling a saved raster. The portable project contains the processed paths and recipe. Studio does not embed the input bitmap.</p>
+<h2>Compare laser settings on one coupon</h2>
+<p>Expand <strong>Laser material test</strong> in the same Images tab. The grid places selectable samples in the work area with increasing power from left to right and increasing feed from bottom to top.</p>
+<ol>
+<li>Enter the controller's full-scale S value. The software converts each percentage to the corresponding integer S command. Match this scale to your controller before physical use.</li>
+<li>Pick the minimum and maximum feed, minimum and maximum power, and step counts. Start with a small grid. A 3 × 3 grid creates nine operations.</li>
+<li>Choose square outlines to compare line marking or hatched patches to compare area engraving. Set the cell size and spacing, the grid origin and, for hatch, the line interval.</li>
+<li>Click <strong>Insert test grid</strong>. Each object name records the feed, power percentage and S value. Generate a preview and inspect the commands. Download the project or save it to the library to retain a record of all samples.</li>
+<li>To evaluate a real coupon, record its material and thickness, focus, actual controller scale and the acceptable cell. Those measurements determine the working preset for that material. The software preview shows commanded settings.</li>
+</ol>
+<p>Raster processing supports 60,000 pixels and 2,500 scanlines per image. A material grid supports up to 10 steps per axis within the 100-operation job limit. Cropping, masks, generated rasters and outline/hatch test grids run locally in the browser.</p>
+</section><section id="branding"><h1>Branding assets</h1>
+<p>Created with the built-in image-generation tool, 11 September 2026. Project copies: studio/static/app-icon.png and studio/static/header-wood.png. These are generated brand illustrations, not photographs of completed physical machining. The artwork predates the KerfKite name. The descriptions below summarise its design briefs.</p>
+<h2>Header design brief</h2>
+<p>Create a professional wide website header background image for an open-source CNC router and laser design program originally named Pi CNC Studio. Landscape panoramic 3:1 composition, warm premium walnut and maple wood grain, realistic macro craftsmanship. At the right third a beautiful flowing botanical flourish and a small precise spur-gear motif are machined into the wood: some smooth deep V-carved router grooves revealing pale fresh timber with convincing depth and bevel shadows, alongside dark crisp fine laser-engraved linework. Flat overhead view, subtle raking warm light. Left half is quiet dark walnut negative space so HTML white app title can overlay legibly. Sophisticated maker workshop aesthetic, restrained, high quality, no machine hardware, no sparks, no text, no letters, no watermark, no border. Deliver a finished banner texture suitable for cropping to a shallow application header.</p>
+<h2>Icon design brief</h2>
+<p>Design one finished square application icon for KerfKite Studio, an open-source CNC router, laser engraving and vinyl cutting application. Bold memorable precision-machining emblem: a single substantial copper-orange C-shaped routed channel forms a clean circular toolpath around a small cyan-blue diamond laser point, with one short diagonal cutter stroke implying creation and motion. Deep midnight teal rounded-square tile, subtle dimensional beveled edges and finely machined metal/wood inlay texture, refined orange and cyan accents, strong simple silhouette readable at 32 pixels, centered with generous safe padding. Contemporary professional maker CAD/CAM identity. No text, no letters as typography, no tiny decorative details, no multiple icons, no mockup/device, no watermark. Full square image with solid background.</p>
+</section><section id="simulation"><h1>Simulation and acceptance</h1>
+<p>From a source checkout, install the workstation dependencies using the <a href="#install">installation guide</a>. Run the harness from the project root using the same Python environment as the workstation. The extended run also requires Node.js with its built-in test runner and the dependencies used by the web tests.</p>
+<pre><code class="language-sh">python scripts/simulate_studio.py --all --json simulation-result.json
+</code></pre>
+<p>For a quick CAD and machining check, omit <code>--all</code>. The harness creates an isolated workstation with Flask's test client and connects the controller to its in-process GRBL simulator. It does not require a running server, local port or machine. A nonzero exit status identifies a failed check. The JSON report preserves each case, results, errors, skipped dependencies and areas awaiting other forms of acceptance.</p>
+<h2>What the fixture checks</h2>
+<ol>
+<li>Build a 3 mm plate with a named width, a height constrained to half the width, and a rectangular through-slot. Rebuild at 32 mm and 40 mm width. Compare both solid volumes and projected areas to the analytic plate-minus-slot values. Confirm that the top projection has an inner and outer contour and that the binary STL contains the displayed triangle count.</li>
+<li>Generate an outside router profile with a 2 mm flat cutter, two depth levels and 4 mm rapid clearance. Replay the posted linear moves and compare every XY cutting segment and ending depth with the preview at the precision of the posted coordinates. Check travel bounds, retracts and the final power state. Sample stock removal and confirm that the job reaches the 3 mm programmed depth and retains stock elsewhere.</li>
+<li>Use the same projected contours to generate a laser line pass. Check that every rapid has the beam off, cuts stay in the programmed range and the program ends with output off. Generate a drag-knife contour with blade offset and lead. Check work-area bounds, clearance, blade depth and absence of spindle or laser activation.</li>
+<li>Submit each job through the workstation Run endpoint. Hold, observe stable progress, resume and wait for reported completion at 100% in the Idle state. The simulated driver models job scheduling. Position and process checks come from the separate replay of the emitted instructions.</li>
+</ol>
+<h2>Reading extended results</h2>
+<p><code>--all</code> additionally discovers Python tests in <code>tests/</code>, JavaScript tests in <code>tests/</code> and the business and camera tests in <code>validation/</code>. These exercise the existing controller families and postprocessors, relief and stock models, tool changes, rotary, holding tabs, phone controls, hosted web app, project editing and artwork library. The report includes counts of skipped tests, with reasons for Python skips such as the optional native kernel. A missing dependency fails the affected suite. Other independent suites still run. The exit code reflects failures. Consult nested skip counts when deciding whether the tested configuration matches an intended installation.</p>
+<p>The motion interpreter covers the absolute millimetre linear GRBL subset emitted by this fixture. The report records GUI interaction, physical commissioning and execution by external controller software as outside this simulation. Material cutting quality, machine stopping distance, fixture clearance and real tool changes require their own acceptance records.</p>
+<h2>Advanced CAD and file workflows</h2>
+<p>Run <code>python scripts/simulate_studio.py --all --require-step</code> to include a real open surface and cylinder STEP round trip, a mated shaft offset into its bore wall, a holder strike during a posted rapid, relocation of the clamp and a plotter-to-knife conversion. The separate browser harness in <code>validation/simulate_solid_workspace.py</code> exercises editing, saving, reopening, image registration and file import through the actual controls. Install the STEP extra and Playwright first. The simulated fixture positions and tools are numerical test inputs.</p>
+</section><section id="web"><h1>Web editor, local-file editor and Pi receiver</h1>
+<p>The hosted editor and machine inbox run using the same HTTPS service. Uploaded files are stored for review in the recipient account; this service has no controller or job-start routes. Use separate data directories/accounts on the design server and Pi. This is an implementation tested locally, not a deployed or independently audited internet service.</p>
+<h2>HTTPS setup (LAN or internet host)</h2>
+<p>From the cnc-studio directory, using Python 3.10+:</p>
+<pre><code class="language-sh">python -m pip install '.[web]'
+python -m studio.web_server --data-dir web-data create-user YOUR_USERNAME
+</code></pre>
+<p>The command prompts twice for a user-created password of 15–256 characters. Add <code>--generate-password</code> to generate a 256-bit random password and display it once. No account or password ships with the app. Do not put passwords into shell command arguments. <code>reset-password YOUR_USERNAME</code> uses the same prompt/generator and revokes that account's sessions and upload tokens.</p>
+<p>Use an installed certificate and matching key, or generate a 90-day self-signed certificate:</p>
+<pre><code class="language-sh">python -m studio.web_server certificate --cert server.pem --key server-key.pem --hosts your-pi.local 192.0.2.50
+python -m studio.web_server --data-dir web-data serve --public-url https://your-pi.local:8443 --cert server.pem --key server-key.pem --port 8443
+</code></pre>
+<p>Replace hostnames/IPs with the actual host. Certificate names and the public URL must match. Trust a self-signed certificate explicitly on each client, or use a certificate from an installed trusted CA. Certificate verification is never disabled by the application. For internet hosting, use a publicly trusted certificate for your domain and configure DNS/firewall access to the HTTPS listener. Serve direct TLS (or TCP passthrough); this build deliberately does not trust forwarded proxy headers. Certificate issuance/renewal, OS services and internet deployment are operator tasks, not automated here. Restart the service after certificate renewal.</p>
+<p>The listener is Cheroot with TLS 1.2 minimum. Sessions use Secure/HttpOnly/SameSite=Strict cookies, CSRF validation, eight-hour absolute expiry and 30-minute idle expiry. Password hashes use scrypt. Login attempts are limited by address/account. Uploaded content is always downloaded as an attachment. Account files are isolated and limited to 200 files / 64 MiB total, 8 MiB per file. Secure the data directory with OS access controls on every platform (POSIX permissions alone do not configure Windows ACLs).</p>
+<h2>Configure uploads to the Pi</h2>
+<p>On the Pi, create an account and issue its upload-only token:</p>
+<pre><code class="language-sh">python -m studio.web_server --data-dir web-data issue-token YOUR_USERNAME
+</code></pre>
+<p>On the hosted design server, register the receiver. The token is requested through a hidden prompt:</p>
+<pre><code class="language-sh">python -m studio.web_server --data-dir web-data destination workshop --url https://your-pi.local:8443 --ca-file server.pem
+</code></pre>
+<p>Omit <code>--ca-file</code> for a certificate already trusted by the OS. Restart the design server to load destination changes. The browser sees destination names, never stored receiver tokens. Uploads verify the returned SHA-256 and byte count. Redirects are not followed. A failed upload may have arrived: inspect the receiver before retrying. Use <code>revoke-tokens YOUR_USERNAME</code> on the Pi to invalidate all its upload tokens.</p>
+<p>The sender can target an explicitly configured HTTP origin with <code>--allow-http</code> for a compatible receiver/proxy, but credentials and contents would be unencrypted. CNC Studio's own receiver is HTTPS-only. The local-file upload UI also requires HTTPS.</p>
+<h2>Local filesystem editor</h2>
+<p>Open <code>studio/static/index.html</code> directly in a browser. Keep the entire static directory together, including vendor, icon and font files. No login, web server or network access is required for drawing, text outlines, templates, SVG/project/XYZ downloads. Local contour CAM and G-code export support router/laser/knife paths, per-vertex depth/power, laser ramps and ordered contour operations. LinuxCNC rotary wrapping of supported existing contour jobs is also implemented in JavaScript. Advanced polygon/area operations, holding tabs, relief/extrusion and stock simulation require the Python app server; unsupported offline operations fail explicitly. Rotary source/job parity tests passed, but the new direct file:// browser workflow could not be exercised because the automation browser URL policy blocked it. Do not interpret that blocked check as end-to-end browser acceptance.</p>
+<p>To upload from a local file, launch the Pi receiver with <code>--allow-file-upload</code>. Enter the receiver HTTPS origin and upload token into the editor's Files &amp; receiver uploads section. The token stays in page memory, not browser persistent storage. The receiver permits opaque <code>Origin: null</code> only on its token-protected receive endpoint when this flag is enabled. Browsers cannot distinguish file origins from other opaque origins; the upload token remains mandatory. Certificate trust and browser private-network policies still apply. This flow has not been verified on every target browser/OS.</p>
+<p>Hosted mode has private server file downloads and destination uploads. Its template library and IndexedDB project library are namespaced by username in browser storage. Named projects retain up to five prior save revisions and a recovery draft. Browser data is local to that browser profile; private server files and portable downloads are separate storage choices. Project downloads preserve metadata and extra business/rotary settings; exported library backups remain portable. Save unsaved artwork locally before logout or reloading an editor update.</p>
+<h2>Current operating guidance</h2>
+<p>See <a href="#install">INSTALL.md</a> for complete platform and HTTPS setup, <a href="#user-guide">USER-GUIDE.md</a> for save/upload workflows and <a href="#status">STATUS.md</a> for current software/hardware boundaries. Cost estimates, quotes and print layouts are available in the editor; they do not change the receiver's upload-only behavior. Paired phone monitoring/control belongs to the separate local controller service, not this HTTPS inbox.</p>
+</section><section id="release-review"><h1>KerfKite Studio | CAD and workshop release review</h1>
+<p>18 November 2026</p>
+<p>Public source repository: <a href="https://github.com/ShaunPrice/KerfKite">github.com/ShaunPrice/KerfKite</a>.</p>
+<p>KerfKite Studio can fit parts in an assembly, edit freeform surfaces, exchange geometry with other CAD software and check a posted toolpath against modelled clamps. An operator can bring an existing laser or cutter design into the editor, inspect the conversion and choose which layers to machine.</p>
+<h2>Workflows delivered</h2>
+<table>
+<thead>
+<tr>
+<th>Workflow</th>
+<th>Operator capability</th>
+<th>Verification</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Assembly</td>
+<td>Constrain named parts with fixed, planar, concentric and point mates. Inspect contact and interference volume.</td>
+<td>A shaft cleared its modelled bore. Moving its mating datum 4 mm introduced 175.02 mm³ of overlap. Returning it to centre restored clearance.</td>
+</tr>
+<tr>
+<td>Surfaces and STEP</td>
+<td>Edit Bézier and clamped B-spline/NURBS control nets, degrees and weights. Export solid and open-surface STEP, insert a closed imported body into a part, or transfer an open patch to top relief.</td>
+<td>An open patch returned as one face. An analytic cylinder returned as three faces with volume 197.9203 mm³. Browser tests exercised editing, exchange, reopening and CAM transfer.</td>
+</tr>
+<tr>
+<td>Machining clearance</td>
+<td>Sweep the cutter and holder along supported posted three-axis moves against rectangular fixtures positioned in work coordinates.</td>
+<td>A holder struck a clamp during a rapid between cuts. Relocating the clamp cleared the same 11 moves. Unsupported instructions produce a diagnostic.</td>
+</tr>
+<tr>
+<td>Laser preparation</td>
+<td>Crop and mask raster images, adjust tone, generate a feed/power test grid, and plan eligible line cuts within layer boundaries.</td>
+<td>Editor tests preserved masked zero-power pixels, saved per-cell machining settings, placed an inner cut first and removed an eligible duplicate from the generated job.</td>
+</tr>
+<tr>
+<td>Camera placement</td>
+<td>Register a flat image to the bed from four landmarks, inspect an independent check point, overlay the image and place traced paths.</td>
+<td>A synthetic target exercised projective registration, profile recall and trace placement. Accuracy with a physical lens and fixture remains unmeasured.</td>
+</tr>
+<tr>
+<td>File interchange</td>
+<td>Review LightBurn vector projects, supported preferences, materials, device setups and selected bundle members. Import DXF entities, G-code geometry, HP-GL pen paths and numeric LinuxCNC setup data.</td>
+<td>A saved LightBurn project regenerated its laser power and feed. Replayed HP-GL produced 21 knife segments. Additional compatibility checks read public LightBurn vector, material and preference samples.</td>
+</tr>
+</tbody>
+</table>
+<h2>Test evidence</h2>
+<p>The macOS ARM64 release harness passed all eleven scenarios, including <strong>151 Python tests and 114 JavaScript tests</strong>, with the optional STEP runtime installed. <strong>21 Chromium workflow groups passed</strong> against a hardware-disabled service. Separate repository checks passed on macOS ARM64 and Ubuntu ARM64 in a local container. The Windows, physical Raspberry Pi and phone results documented for previous versions do not validate these additions on those targets.</p>
+<p>The <a href="../validation/advanced-cad-simulation.json">machine-readable simulation record</a>, <a href="#developer">developer handoff</a>, <a href="machining-lessons.html">interactive workshop entry points</a> and <a href="#lightburn-import">import compatibility guide</a> describe how to repeat the checks.</p>
+<h2>Publication and licensing</h2>
+<p>First-party software and documentation use MIT. The source distribution includes third-party font and decoder notices. The licence audit covers the bundled assets, a macOS wheel, an Android debug APK and a reference environment with 83 external Python distributions. Redistributing a complete binary runtime requires the notices and source arrangements applicable to its exact components, including Open CASCADE and GEOS. The public source edition excludes the narration and narrated video. <a href="#licensing">Licence inventory</a></p>
+<p>This public edition starts with a fresh source history. Its publication review covered source, validation records, media metadata, screenshot text and commit identity. The edition uses generic machine profiles and excludes private device configurations, recordings and provider receipts. Public copyright attribution remains. Credential-pattern scanning and manual review have limited coverage.</p>
+<h2>Remaining scope</h2>
+<p>The assembly solver accepts directed mate hierarchies. Closed-loop mechanical constraint solving and general surface trimming or stitching remain open. STEP exchange covers geometry; CAD feature-tree, PMI and assembly-mate round trips remain open. Tool and holder clearance depends on the supplied work frame, envelopes and fixture measurements. Rotary collision simulation and machine-frame component collisions require additional models.</p>
+<p>LightBurn compatibility covers documented subsets of the source formats. Lossless LightBurn round trips, some image effects, complete text shaping, proprietary controller protocols, camera lens-distortion correction and native commercial cutter-project formats remain open. Supervised physical commissioning is still required to measure cutting quality, clearance and stopping behaviour.</p>
+</section><section id="surfaces-step"><h1>Surface modelling and STEP exchange</h1>
+<p>In <strong>3D CAD</strong>, open <strong>Surfaces and STEP</strong> below the solid viewport. The Studio server supplies the modelling kernel. A filesystem project retains its geometry when moved to a server. All Studio coordinates are millimetres.</p>
+<h2>Shape a practice surface</h2>
+<ol>
+<li>Choose <strong>Editable surface patch</strong>, then <strong>Practice shaping a patch</strong>. Practice opens a flat 60 × 36 mm control net while preserving your project.</li>
+<li>Select row 2, column 2. Set <strong>Z</strong> to <strong>12</strong> and choose <strong>Apply point</strong>. The pole moves 12 mm. The smooth surface approaches the pole while the corner points stay fixed.</li>
+<li>Drag in the preview or use its arrow keys to orbit. Click a point or use the selector to inspect and edit its X, Y and Z. The X/Y footprint and the height can both change.</li>
+<li>Choose <strong>Export STEP</strong>. Once the download finishes, choose <strong>Keep practice surface</strong> to save it with the project, or <strong>Exit practice</strong> to restore the previous net. Outside practice, applied edits are part of the project.</li>
+<li>To machine the top envelope, choose <strong>Prepare router relief</strong>. Review model dimensions, stock zero, maximum depth, cutter and stepover before generating the relief preview. The imported model carries geometry only. Vertical, folded and overhanging areas need a suitable setup beyond top-access relief.</li>
+</ol>
+<p>The editor starts with a bicubic tensor-product Bézier patch. To create a multispan surface, choose <strong>Clamped B-spline / NURBS</strong>. Set the polynomial degree of each direction, then choose <strong>Apply point</strong>. Each degree must be smaller than the number of poles in that direction. A lower degree gives each pole more local influence. Increase <strong>Point weight</strong> above 1 to pull the surface toward that pole, then apply. Weights apply in either basis. <strong>Extend U</strong> and <strong>Extend V</strong> extrapolate a new row or column in the working net. Edit its positions to continue the surface. Each direction supports 2–8 poles. Studio uses uniformly spaced interior knots and clamped ends. Its sampled preview has 24 intervals per direction. The STEP writer uses the full mathematical surface. This release covers single patches; trimmed multipatch construction, sewing and continuity constraints between surfaces remain open.</p>
+<h2>Install STEP exchange</h2>
+<p>From the Studio checkout, activate its existing virtual environment and run:</p>
+<pre><code class="language-sh">python -m pip install &quot;.[step]&quot;
+</code></pre>
+<p>Restart the Studio server. The optional extra installs CadQuery's no-VTK bindings for Open CASCADE 7.9. Editing an original patch and preparing its router relief use the base install. STEP operations require the extra and a compatible wheel or build for the installed Python and OS. The browser, including a phone browser, uses the server's kernel.</p>
+<h2>Exchange a part</h2>
+<ol>
+<li>Rebuild a solid in <strong>3D CAD</strong>. Open <strong>Surfaces and STEP</strong> and choose <strong>Current solid part</strong>.</li>
+<li>Choose <strong>Export STEP</strong>. The export builds analytical boxes, cylinders, cones, spheres, extrusions and revolutions in feature order, including transforms, patterns and booleans. The regular solid viewport and CAM use a tessellation. Small numerical differences are expected on curved geometry.</li>
+<li>Use <strong>Import STEP</strong> and choose a local <code>.step</code> or <code>.stp</code> file. Inspect the millimetre dimensions and counts of faces and solids. The translator interprets the file's declared length units. An imported reference retains its source inside the project and can be re-exported. This is geometry exchange. Feature history, PMI, materials, colours and product hierarchy are outside its scope.</li>
+<li>For a file containing closed solids, choose <strong>Add STEP to part</strong>. The new step feature supports join/cut/intersect, position, rotation, patterns and suppression. Standard part sections and silhouettes then feed router, laser or knife CAM. The feature keeps the original STEP for later exact STEP export. Files containing open faces stay in the exchange workspace and can supply top relief.</li>
+<li>Save the Studio project to retain its native history and exchange geometry. Import accepts up to 1.5 MB, 256 roots and 2,000 faces, with a 60,000-triangle preview limit. The portable project limit applies to the full project including encoded STEP files.</li>
+</ol>
+<p>Run <code>python -m unittest discover -s tests -p test_cad_exchange.py</code> in the environment with the step extra to exercise source-unit conversion, transforms, patterns, curved-surface round trips, solid-feature booleans and malformed inputs.</p>
+</section><section id="native"><h1>Optional C++ relief backend</h1>
+<p><code>studio/_relief_native.cpp</code> is an in-process CPython extension. It accelerates conservative flat/ball cutter contact; Python retains input validation, work caps, path construction, metadata and the reference implementation. There are no runtime compiler or subprocess calls. The kernel releases the GIL during its bounded numerical loop.</p>
+<p>Install with a compiler and Python headers, then <code>python -m pip install .</code>. Developers can use <code>python setup.py build_ext --inplace</code>. Windows uses MSVC <code>/O2</code>; other builds use <code>-O3 -std=c++11</code>, without fast-math. The extension is optional, so inspect the backend rather than assuming compilation succeeded.</p>
+<pre><code class="language-python">from studio.relief import prepare_relief
+result = prepare_relief(data)  # auto: native if importable, otherwise Python
+print(result['surface']['backend'])  # cpp or python
+reference = prepare_relief(data, backend='python')
+accelerated = prepare_relief(data, backend='native')  # explicit error if absent
+</code></pre>
+<p>The UI identifies accelerated relief results. Restart an already-running server after installing the extension. Browser-only file mode does not load a CPython extension.</p>
+<p>Native and Python parity tests cover planes, ramps, domes, peaks, random fields, both cutter shapes, allowances, malformed input and the fallback path. The installed Pi wheel passed ten relief/native tests; six complete benchmark jobs produced the same G-code hash. The original standalone C++ executable remains only as a historical benchmark fixture.</p>
+<p>Installed Pi medians: 1.142 s Python relief versus 0.086 s C++; 2.864 s total versus 1.818 s. About 37% less total calculation time for that fixture. C++ was chosen because its implementation was directly measured; no Rust performance comparison was performed. Stock preview is the largest remaining stage.</p>
+<p>Evidence: <code>validation/native-installed-pi5-2026-09-11.json</code> and <code>validation/native-installed-mac-2026-09-11.json</code>. The Mac evidence exercises the local compiled module; the Pi evidence imports from the temporary environment's installed site-packages. No persistent Pi service was deployed.</p>
+</section><section id="camera-register"><h1>Register a camera image to the machine bed</h1>
+<p>Under <strong>Images</strong>, the <strong>Camera bed registration</strong> panel places a frozen camera image and its traced paths in millimetres on the design bed. The mapping uses a four-point planar homography. Camera access is optional and begins only when you press <strong>Open camera</strong>. You may supply an image file instead.</p>
+<h2>Try the registration card</h2>
+<ol>
+<li>Click <strong>Try registration card</strong>. The synthetic image contains four turquoise targets and a dark rectangle. The panel solves a perspective transformation mapping the targets to the bed corners.</li>
+<li>Adjust <strong>Bed overlay opacity</strong> to compare the rectified image and the design grid.</li>
+<li>In <strong>Image &amp; camera line tracing</strong>, choose <strong>Closed shape outlines</strong>, set threshold to 128 with inversion off, and click <strong>Preview trace</strong>.</li>
+<li>Return to <strong>Camera bed registration</strong> and select <strong>Place previewed trace on bed</strong>. The new rectangle outline follows the dark rectangle on the rectified bed overlay. Change the camera marker placement and solve again to see how registration affects the placement of a subsequent trace.</li>
+<li>Use <strong>Projects</strong> to save the registered artwork. The geometric paths survive a project round trip. The camera photograph and calibration overlay are session-only.</li>
+</ol>
+<h2>Register your setup</h2>
+<p>Place four targets on the same plane as the artwork, spread around the region to be traced. Measure each target's X and Y in the work coordinate system. Select the correct machine profile and bed size. In <strong>Image &amp; camera line tracing</strong>, load a still image or open the camera and capture a frame.</p>
+<p>Select marker <strong>1</strong>, click the corresponding target in the frozen registration image, and enter its measured <strong>Work X</strong> and <strong>Work Y</strong>. Repeat for markers <strong>2–4</strong>. Image pixel coordinates can also be typed. Use <strong>Solve registration</strong>. To check accuracy, select <strong>Independent check point</strong>, click a fifth landmark, enter its measured work coordinates and choose <strong>Measure check error</strong>. The reported error in millimetres is specific to that checkpoint.</p>
+<p><strong>Save for this profile</strong> stores landmark coordinates and bed dimensions in this browser for the active account and selected machine profile. For subsequent frames from the same fixed camera, use <strong>Recall profile calibration</strong>. Recall checks the work area and image aspect ratio. Recalibrate when the camera position, zoom, crop, work origin or stock surface height changes. Images of the same aspect ratio can still have different optics or framing.</p>
+<p>The overlay covers the quadrilateral enclosed by the measured targets. Registered tracing rejects contours extending outside it. <strong>Add preview to project</strong> in the basic tracing panel uses numeric width, height and shape placement. <strong>Place previewed trace on bed</strong> uses the measured camera mapping.</p>
+<p>The trace input is downsampled to at most 384 pixels per side. The transformation corrects perspective on a flat surface. Lens distortion, parallax over raised parts, camera movement and physical registration accuracy require separate measurements. General lens undistortion and 3D camera calibration remain open.</p>
+</section><section id="protocols"><h1>Controller compatibility</h1>
+<p>The CAM selector now has eight implemented profiles. A G-code postprocessor is not a live machine driver. None of these profiles has been physically commissioned in this project.</p>
+<table>
+<thead>
+<tr>
+<th>Profile</th>
+<th>Studio connection</th>
+<th>File operations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GRBL / GRBL-ESP32</td>
+<td>USB serial, 115200</td>
+<td>Router, dynamic laser, passive drag knife</td>
+</tr>
+<tr>
+<td>FluidNC</td>
+<td>Experimental GRBL-compatible USB serial, 115200</td>
+<td>Router, dynamic laser, passive drag knife</td>
+</tr>
+<tr>
+<td>grblHAL</td>
+<td>Experimental GRBL-compatible USB serial, 115200</td>
+<td>Router, dynamic laser, passive drag knife</td>
+</tr>
+<tr>
+<td>Marlin CNC</td>
+<td>Experimental USB serial, checksum/resend and M400</td>
+<td>Router, passive drag knife; CNC spindle configuration required</td>
+</tr>
+<tr>
+<td>LinuxCNC</td>
+<td>Export only</td>
+<td>XYZ router/relief and passive drag knife; separate continuous-A rotary exporter</td>
+</tr>
+<tr>
+<td>Mach3 Mill</td>
+<td>Export only</td>
+<td>XYZ router/relief and passive drag knife</td>
+</tr>
+<tr>
+<td>Mach4 Mill / Router</td>
+<td>Export only</td>
+<td>XYZ router/relief and passive drag knife</td>
+</tr>
+<tr>
+<td>UCCNC</td>
+<td>Export only</td>
+<td>XYZ router/relief and passive drag knife</td>
+</tr>
+</tbody>
+</table>
+<h2>Mach3, Mach4, LinuxCNC and UCCNC</h2>
+<p>Select the controller in CAM, select router or knife, generate a preview, and export the .nc file. Load it in the controller's own software. Connect, jog, head changes, phone arming and Run are unavailable for export-only selections. Server dispatch rejects these profiles too. Uploading to the Pi inbox only stores a file for review; it does not add a machine driver.</p>
+<p>Mach3 and UCCNC require a <strong>configured dwell units</strong> choice matching the actual machine application. The choice is saved in the project and operation settings. Seconds emits G4 P2; milliseconds emits G4 P2000. Mixed dwell settings within a job or tool-change plan are rejected. Mach4 and LinuxCNC use seconds.</p>
+<p>Desktop exports establish G21/G90/G17/G94/G54, cancel cutter and tool-length compensation and canned cycles (G40/G49/G80), and use G61 exact-stop motion. Establish G54 Z zero for the current tool tip <strong>with tool-length compensation off</strong>. Clear existing scaling, coordinate rotation and local offsets before loading. G61 protects corners but may leave witness marks or slow dense relief paths; cutting-time estimates do not model this overhead. Every manual tool stage needs fresh tool-tip Z setup; do not rely on an offset that G49 cancels.</p>
+<p>All operation cuts precede one final M30. Each separately exported tool stage has its own end. Knife jobs do not enable spindle output. Laser exports to these desktop profiles are rejected because their ordinary M4 command does not mean GRBL dynamic laser power.</p>
+<h2>FluidNC and grblHAL</h2>
+<p>These profiles reuse the conservative XYZ GRBL serial transport; they are not TCP, WebSocket or HTTP drivers. They retain head-mode, maximum power, travel and job completion checks. Firmware identification is recorded when supplied by $I. FluidNC explicitly queries $30, $32 and $I in acknowledgement order, so older firmware that omits $32 from $$ can report it separately. Missing required readback keeps the driver unready. Nonfinite settings and unexpected reboot banners invalidate readiness.</p>
+<p>FluidNC YAML must be configured separately for the mounted spindle or laser. Studio refuses automatic FluidNC head-setting writes. Neither profile enables extra axes, firmware plugins, automatic tool changes or unverified status extensions. grblHAL compatibility settings must provide the GRBL 1.1 response format used by this driver. Test connection, homing, work zero, motion, hold, abort and completion on the actual configured machine before cutting.</p>
+<h2>Remaining integrations</h2>
+<p>Duet/RepRapFirmware, Smoothieware, TinyG/g2core, Klipper/Moonraker, ShopBot, Ruida, Trocen, TopWisdom and galvo controller families still need specific adapters/postprocessors and validation. Live Mach plugins and LinuxCNC bridges are also unimplemented. They are not presented as working choices. The project does <strong>not</strong> yet support every protocol or full LightBurn parity.</p>
+<h2>Contributor extension points</h2>
+<p>The catalog is <code>studio/static/protocols.json</code>; the offline mirror in <code>protocols.js</code> is checked for parity. Add explicit backend/offline postprocessing, supported modes, a driver only when implemented, dispatch guards and regression tests. Never route an unknown ID through a default firmware conversion. <code>/api/protocols</code> exposes implemented capabilities to editor clients.</p>
+<h2>Primary references</h2>
+<ul>
+<li><a href="https://www.linuxcnc.org/docs/stable/html/gcode/g-code.html">LinuxCNC G-code reference</a></li>
+<li><a href="https://www.machsupport.com/wp-content/uploads/2014/05/Mach4%20Mill%20GCode%20Manual.pdf">Mach4 Mill programming manual</a></li>
+<li><a href="https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf">Mach3 Mill usage manual</a></li>
+<li><a href="https://www.cncdrive.com/UCCNC/UCCNC_usersmanual.pdf">UCCNC user manual</a></li>
+<li><a href="https://github.com/bdring/FluidNC">FluidNC project</a> and <a href="https://github.com/bdring/FluidNC/issues/1319">older $32 readback issue</a></li>
+<li><a href="https://github.com/grblHAL/core/wiki/Compatibility-level">grblHAL compatibility levels</a></li>
+</ul>
+<p>Validation: 108 Python tests, 76 JavaScript tests; local browser exercise of selector, required Mach3 dwell and generated output. These are software checks, not controller or physical cutting acceptance.</p>
+</section><section id="solid-cad"><h1>From a dimensioned part to a machining preview</h1>
+<p>Open <strong>3D CAD</strong> in the Studio workstation or HTTPS editor. Dimensions are in millimetres. The server builds a triangulated solid from the feature list, in order. The canvas shows the last successful rebuild and the status line identifies a failing feature. Save the project from <strong>Projects</strong> to preserve its parameters and feature history. Export STL when you need the finished mesh in another application.</p>
+<h2>Tutorial 1. Make a mounting plate</h2>
+<ol>
+<li>Choose <strong>Guided plate tutorial</strong>. It opens a practice model with a 60 × 32 × 6 mm plate and a bore of radius 4 mm. Change the named parameter <code>width</code> to 80. The bore centre follows <code>width / 2</code> and moves to X = 40 mm.</li>
+<li>Select <strong>bore</strong> and choose <strong>Suppress</strong>. The plate becomes solid and the displayed volume increases by approximately 302 mm³. Choose <strong>Enable</strong> to restore the through hole. Circles are tessellated, so measured volumes approach the analytic value.</li>
+<li>Choose <strong>Keep lesson model</strong>. Drag the viewport to orbit, scroll to zoom, or choose <strong>Top view</strong>. A focused viewport also accepts arrow keys and the plus and minus keys.</li>
+<li>Open <strong>Projects</strong> and save or download the project. Reopen it and change the width again to verify the bore remains centred. Exit the tutorial before keeping the model if you want to return to your original part.</li>
+</ol>
+<h2>Tutorial 2. Model a raised boss or a pocket</h2>
+<p>Start with the saved plate. Add a cylinder of radius 5 and height 3 with its origin at X = 15, Y = 15, Z = 6. Select <strong>Join</strong> to form a raised boss. To make a pocket instead, place the cylinder at Z = 3, set its height to 4 and select <strong>Cut</strong>. Inspect the resulting volume and top face. Feature order matters because each operation uses the material accumulated by the preceding features.</p>
+<p>Use a rectangular pattern to repeat a feature by a fixed XYZ displacement or use a polar pattern around a centre and axis Z. Counts include the initial instance. Try a pair of bores with a 20 mm X step. Confirm that both stay inside the stock as the plate dimensions change.</p>
+<h2>Feature and parameter reference</h2>
+<table>
+<thead>
+<tr>
+<th>Control</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Box</td>
+<td>XYZ lengths from its minimum corner</td>
+</tr>
+<tr>
+<td>Cylinder or cone</td>
+<td>Radius and axial height, with optional second radius for taper</td>
+</tr>
+<tr>
+<td>Sphere</td>
+<td>Radius about its local centre</td>
+</tr>
+<tr>
+<td>Sketch extrusion</td>
+<td>Simple closed XY polygon extruded along local Z</td>
+</tr>
+<tr>
+<td>Sketch revolution</td>
+<td>Profile in the radial/Z plane swept about local Z</td>
+</tr>
+<tr>
+<td>Join, Cut, Intersect</td>
+<td>Add material, subtract a tool solid, or keep the overlap</td>
+</tr>
+<tr>
+<td>Suppress</td>
+<td>Skip a feature during rebuild while retaining its definition</td>
+</tr>
+<tr>
+<td>Origin and rotation</td>
+<td>Apply local rotation in degrees before translation</td>
+</tr>
+<tr>
+<td>Named parameter</td>
+<td>Drive multiple dimensions with numbers, parentheses, other names and arithmetic</td>
+</tr>
+<tr>
+<td>Undo and redo</td>
+<td>Traverse the current CAD editing history</td>
+</tr>
+</tbody>
+</table>
+<p>Begin with an enabled additive feature. If a rebuild fails, inspect its name in the error, check parameter spelling and remove circular references. For sketches, check for crossed edges and coincident adjacent points. An empty intersection returns a rebuild error.</p>
+<p>See the <a href="#sketch">graphical sketch tutorial</a> to insert, constrain and drag vertices.</p>
+<h2>Tutorial 3. Choose a machining representation</h2>
+<table>
+<thead>
+<tr>
+<th>Intended result</th>
+<th>Action in 3D CAD</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Laser or knife outline</td>
+<td>Transfer the whole part silhouette. It includes holes open through the complete thickness.</td>
+</tr>
+<tr>
+<td>Inspect a blind pocket</td>
+<td>Select a horizontal section between its floor and the top. The section includes both the outer material boundary and internal boundaries at that height.</td>
+</tr>
+<tr>
+<td>Router contour</td>
+<td>Transfer the outline, check its placement in the bed, select the required profile and generate a preview in CAM.</td>
+</tr>
+<tr>
+<td>Router top relief</td>
+<td>Transfer the part into 3D relief, review physical width, height, depth, cutter and stepover, then generate the relief toolpaths.</td>
+</tr>
+</tbody>
+</table>
+<p>Placement X and Y give the lower-left of the part in the work area. A transfer creates independent machining geometry. After editing the CAD model, remove the earlier machining snapshot or disable its output before transferring the rebuilt geometry again. A section describes the material at one height. Assigning a pocket operation to all its contours can clear the surrounding plate. Review the removal preview before choosing the stock region to machine. Top relief covers surfaces accessible from above.</p>
+<h2>Tutorial 4. Read the toolpath</h2>
+<p>Open <strong>Help → Machining lessons</strong>. The lessons use the same offline contour generator as the portable editor. Each offers a dimension to change, toolpath playback and the resulting G-code.</p>
+<ul>
+<li>For the router, set a 1 mm step-down and observe the three Z levels in a 3 mm groove.</li>
+<li>For the laser, set a 5 mm entry ramp. Compare the S values and the colour along the start of the path.</li>
+<li>For the drag knife, set a 0.5 mm blade offset. Compare the generated corner arcs with the dashed nominal shape.</li>
+</ul>
+<p>These exercises run independently of the workstation project. The command-line acceptance fixture exercises the server generator, including tool compensation, the stock model, and the simulated controller. See <a href="#simulation">Simulation</a>.</p>
+<h2>Scope</h2>
+<p>Studio models one ordered solid history, which may contain disconnected bodies. General assembly mates, arbitrary NURBS surfaces, STEP exchange, five-axis machining and continuous machine collision detection remain outside this release. The solid modeller requires a Studio server. The downloadable project carries the editable model between workstations.</p>
+</section><section id="template-catalogue"><h1>Template catalogue</h1>
+<p>1000 original built-in vector templates across 52 categories. The browser and MCP share the same artwork.</p>
+<p>Open <strong>Templates → Template library</strong>, choose a category or search, then click an image to insert it. Previous/Next pages show 36 previews at a time. Favourites and custom templates remain available.</p>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th style="text-align:right">Templates</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Animal portraits</td>
+<td style="text-align:right">24</td>
+</tr>
+<tr>
+<td>Animals &amp; pets</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Bookmarks</td>
+<td style="text-align:right">16</td>
+</tr>
+<tr>
+<td>Botanical corners</td>
+<td style="text-align:right">15</td>
+</tr>
+<tr>
+<td>Botanical dividers</td>
+<td style="text-align:right">25</td>
+</tr>
+<tr>
+<td>Botanical frames</td>
+<td style="text-align:right">15</td>
+</tr>
+<tr>
+<td>Botanical vines</td>
+<td style="text-align:right">17</td>
+</tr>
+<tr>
+<td>Butterflies</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Cars &amp; road vehicles</td>
+<td style="text-align:right">25</td>
+</tr>
+<tr>
+<td>Celebrations</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Children’s toy artwork</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Coasters</td>
+<td style="text-align:right">16</td>
+</tr>
+<tr>
+<td>Decorative borders</td>
+<td style="text-align:right">24</td>
+</tr>
+<tr>
+<td>Floral corners</td>
+<td style="text-align:right">30</td>
+</tr>
+<tr>
+<td>Floral sprays</td>
+<td style="text-align:right">30</td>
+</tr>
+<tr>
+<td>Flowers</td>
+<td style="text-align:right">56</td>
+</tr>
+<tr>
+<td>Food &amp; kitchen</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Frames</td>
+<td style="text-align:right">19</td>
+</tr>
+<tr>
+<td>Fruit &amp; orchard</td>
+<td style="text-align:right">20</td>
+</tr>
+<tr>
+<td>Garden &amp; growing</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Garden flowers</td>
+<td style="text-align:right">30</td>
+</tr>
+<tr>
+<td>Geometric patterns</td>
+<td style="text-align:right">16</td>
+</tr>
+<tr>
+<td>Hanging ornaments</td>
+<td style="text-align:right">16</td>
+</tr>
+<tr>
+<td>Herbs &amp; spices</td>
+<td style="text-align:right">20</td>
+</tr>
+<tr>
+<td>Historic buildings</td>
+<td style="text-align:right">20</td>
+</tr>
+<tr>
+<td>Insects</td>
+<td style="text-align:right">18</td>
+</tr>
+<tr>
+<td>Jewellery</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Learning &amp; play</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Leaves</td>
+<td style="text-align:right">20</td>
+</tr>
+<tr>
+<td>Mandalas</td>
+<td style="text-align:right">16</td>
+</tr>
+<tr>
+<td>Motorbikes &amp; cycles</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Mountain scenes</td>
+<td style="text-align:right">16</td>
+</tr>
+<tr>
+<td>Mushrooms &amp; fungi</td>
+<td style="text-align:right">20</td>
+</tr>
+<tr>
+<td>Music</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Music notation</td>
+<td style="text-align:right">30</td>
+</tr>
+<tr>
+<td>Musical instruments</td>
+<td style="text-align:right">33</td>
+</tr>
+<tr>
+<td>Nature &amp; landscapes</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Nautical</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Ornamental swirls</td>
+<td style="text-align:right">19</td>
+</tr>
+<tr>
+<td>River scenes</td>
+<td style="text-align:right">16</td>
+</tr>
+<tr>
+<td>Seasonal</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Space &amp; astronomy</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Succulents &amp; cacti</td>
+<td style="text-align:right">20</td>
+</tr>
+<tr>
+<td>Symbols</td>
+<td style="text-align:right">28</td>
+</tr>
+<tr>
+<td>Tags &amp; badges</td>
+<td style="text-align:right">24</td>
+</tr>
+<tr>
+<td>Travel &amp; outdoors</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Trees</td>
+<td style="text-align:right">50</td>
+</tr>
+<tr>
+<td>Vines</td>
+<td style="text-align:right">24</td>
+</tr>
+<tr>
+<td>Wheat &amp; grain</td>
+<td style="text-align:right">50</td>
+</tr>
+<tr>
+<td>Workshop &amp; makers</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>World landmarks</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Wreaths</td>
+<td style="text-align:right">14</td>
+</tr>
+</tbody>
+</table>
+<p>Artwork is original procedural vector line art, included under the project MIT licence. Botanical and animal studies are stylised rather than scientific illustrations. Landmark drawings are artistic interpretations, not measured architectural plans. Existing IDs are preserved.</p>
+<p>Templates contain geometry, not preconfigured cutting jobs. Toy designs and learning boards are scalable craft patterns, not validated mechanical assembly plans or certified children's products. Set dimensions, material thickness, hole sizes and fit allowances before fabrication. Some designs combine closed outlines and open engraving detail; assign appropriate operations. Stencil bridges, one-piece silhouette unions and automatic assembly tolerances are not included. Physical cut quality and suitability require review.</p>
+<p>Regenerate this catalogue and the MCP snapshot with <code>node scripts/build_templates.cjs</code>.</p>
+</section><section id="lightburn-import"><h1>Import LightBurn artwork and settings</h1>
+<p>In <strong>Projects → Import artwork and settings</strong>, choose a file, review the drawing and open <strong>Conversion details</strong>. Choose <strong>Add to project</strong> to append the conversion. Existing artwork stays in place. In <strong>Layers</strong>, review the geometry and CAM settings before enabling Output. The imported setups are also available after saving and reopening the Studio project.</p>
+<h2>Interactive badge tutorial</h2>
+<ol>
+<li>Start an empty project and choose <strong>Try a sample</strong>. The review shows a 30 × 18 mm rounded badge. The project still contains zero imported objects.</li>
+<li>Leave <strong>Laser S at 100%</strong> at 1000 and choose <strong>Add to project</strong>. The Outline layer contains a 480 mm/min feed and power S350, converted from 8 mm/s and 35%. Choose the correct maximum S for your own controller before reviewing an actual file.</li>
+<li>Open <strong>Layers</strong> and turn on Output for Outline. In the laser CAM workspace, preview the badge. Inspect the posted feed and S value. Save the project and reopen it under <strong>Projects</strong> to edit the layer again.</li>
+<li>For a material library or device file, choose a preset in <strong>Imported setup library</strong>, read the converted values, then choose <strong>Apply to workspace</strong>. A device setup changes the drawing area. Firmware configuration and machine motion have separate controls.</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Imported</th>
+<th>Fidelity and review</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LBRN / LBRN2 XML</td>
+<td>Rectangles, rounded corners, ellipses, expanded and packed line/cubic paths, shared geometry, nested group transforms, saved text outlines and named cut layers</td>
+<td>Vectors become editable Studio polylines. Groups flatten. Text requires a saved backup path. Source mirror flags are reported for orientation checks. Bitmap shapes, unsupported shape types and sublayers require manual conversion.</td>
+</tr>
+<tr>
+<td>CLB material XML</td>
+<td>Labelled material/thickness/description presets with supported line and hatch settings</td>
+<td>Review speed, maximum power, pass count, scan interval, angle and crosshatching. Unmapped process settings appear in conversion details.</td>
+</tr>
+<tr>
+<td>LBDEV and LBPREFS JSON</td>
+<td>Supported bed sizes, device cut lists and preferences cut lists</td>
+<td>Only selected numeric workspace and CAM fields enter the project. Network credentials, scripts and private host paths are excluded.</td>
+</tr>
+<tr>
+<td>LBSET / SETTINGS</td>
+<td>GRBL text backups containing numeric XY travel</td>
+<td>Work envelope only. Controller-specific binary settings need the originating software.</td>
+</tr>
+<tr>
+<td>LBZIP user bundle</td>
+<td>Choose individual supported project/settings members for review</td>
+<td>The service inspects bounded ZIP members in memory. Select another member or reopen the bundle for further imports.</td>
+</tr>
+<tr>
+<td>DXF, G-code, HP-GL and LinuxCNC INI</td>
+<td>Drawing geometry, supported program paths and numeric setup references</td>
+<td>See <a href="#program-import">program and cutter import</a> for entity, command and unit limits.</td>
+</tr>
+<tr>
+<td>STEP / STP, STL, SVG, raster and Studio projects</td>
+<td>Dedicated editors or importers for each source</td>
+<td>Open STEP in <strong>3D CAD</strong>, STL in <strong>3D relief</strong>, SVG in <strong>Images</strong> and native Studio documents in <strong>Projects</strong>.</td>
+</tr>
+</tbody>
+</table>
+<p>LightBurn files vary across controller families and releases. Preserve the source file. Source-disabled objects keep an additional per-object Output restriction. Studio stores converted settings in its own project format. Recreating every LightBurn effect and writing a lossless LightBurn project remain open work. Commercial cutter-native formats such as Silhouette STUDIO3 and Cricut Design Space projects require a supported export from the originating program.</p>
+<p>LightBurn documents its supported project, device, preference and bundle types. <a href="https://docs.lightburnsoftware.com/2.1/Reference/UI/FileMenu/">LightBurn File menu</a> · <a href="https://docs.lightburnsoftware.com/latest/Guides/Migration/">LightBurn migration guide</a> · <a href="https://docs.lightburnsoftware.com/latest/Reference/UserBundles/">LightBurn bundles</a></p>
+</section></html>

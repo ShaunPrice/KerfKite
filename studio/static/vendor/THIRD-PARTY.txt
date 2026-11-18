@@ -1,0 +1,21 @@
+Pi CNC Studio third-party notices
+
+The Studio source and documentation written for this project use the MIT License,
+copyright 2026 Shaun Price. Retain the root LICENSE or Studio-MIT.txt with redistributed copies.
+The accompanying fonts, libraries and other upstream materials have separate terms.
+
+opentype.js 2.0.0 — MIT, copyright 2020 Frederik De Bleser.
+The upstream minified distribution includes tiny-inflate 1.0.3 by Devon Govett.
+This JavaScript decoder is a port of Joergen Ibsen's tinf. Preserve the
+opentype, tiny-inflate and tinf license texts in this directory.
+
+Lora, Montserrat and Cormorant Garamond — SIL Open Font License 1.1.
+fonts.js embeds the original font files. Keep each family's copyright notice
+and OFL file. Lora is a reserved font name under its accompanying notice.
+
+The optional STEP feature uses Open CASCADE Technology, accessed through
+CadQuery OCP. Open CASCADE Technology 7.9.3 uses LGPL 2.1 with the Open
+CASCADE exception 1.0. OCP wrapper code uses Apache 2.0. Copies of those
+texts are included. Shapely's geometry operations use GEOS under LGPL 2.1.
+The Studio wheel declares these dependencies separately. Bundling third-party
+binaries creates additional distribution obligations described in LICENSING.md.

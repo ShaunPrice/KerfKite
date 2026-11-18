@@ -1,0 +1,26 @@
+# Simulation and acceptance
+
+From a source checkout, install the workstation dependencies using the [installation guide](INSTALL.md). Run the harness from the project root using the same Python environment as the workstation. The extended run also requires Node.js with its built-in test runner and the dependencies used by the web tests.
+
+```sh
+python scripts/simulate_studio.py --all --json simulation-result.json
+```
+
+For a quick CAD and machining check, omit `--all`. The harness creates an isolated workstation with Flask's test client and connects the controller to its in-process GRBL simulator. It does not require a running server, local port or machine. A nonzero exit status identifies a failed check. The JSON report preserves each case, results, errors, skipped dependencies and areas awaiting other forms of acceptance.
+
+## What the fixture checks
+
+1. Build a 3 mm plate with a named width, a height constrained to half the width, and a rectangular through-slot. Rebuild at 32 mm and 40 mm width. Compare both solid volumes and projected areas to the analytic plate-minus-slot values. Confirm that the top projection has an inner and outer contour and that the binary STL contains the displayed triangle count.
+2. Generate an outside router profile with a 2 mm flat cutter, two depth levels and 4 mm rapid clearance. Replay the posted linear moves and compare every XY cutting segment and ending depth with the preview at the precision of the posted coordinates. Check travel bounds, retracts and the final power state. Sample stock removal and confirm that the job reaches the 3 mm programmed depth and retains stock elsewhere.
+3. Use the same projected contours to generate a laser line pass. Check that every rapid has the beam off, cuts stay in the programmed range and the program ends with output off. Generate a drag-knife contour with blade offset and lead. Check work-area bounds, clearance, blade depth and absence of spindle or laser activation.
+4. Submit each job through the workstation Run endpoint. Hold, observe stable progress, resume and wait for reported completion at 100% in the Idle state. The simulated driver models job scheduling. Position and process checks come from the separate replay of the emitted instructions.
+
+## Reading extended results
+
+`--all` additionally discovers Python tests in `tests/`, JavaScript tests in `tests/` and the business and camera tests in `validation/`. These exercise the existing controller families and postprocessors, relief and stock models, tool changes, rotary, holding tabs, phone controls, hosted web app, project editing and artwork library. The report includes counts of skipped tests, with reasons for Python skips such as the optional native kernel. A missing dependency fails the affected suite. Other independent suites still run. The exit code reflects failures. Consult nested skip counts when deciding whether the tested configuration matches an intended installation.
+
+The motion interpreter covers the absolute millimetre linear GRBL subset emitted by this fixture. The report records GUI interaction, physical commissioning and execution by external controller software as outside this simulation. Material cutting quality, machine stopping distance, fixture clearance and real tool changes require their own acceptance records.
+
+## Advanced CAD and file workflows
+
+Run `python scripts/simulate_studio.py --all --require-step` to include a real open surface and cylinder STEP round trip, a mated shaft offset into its bore wall, a holder strike during a posted rapid, relocation of the clamp and a plotter-to-knife conversion. The separate browser harness in `validation/simulate_solid_workspace.py` exercises editing, saving, reopening, image registration and file import through the actual controls. Install the STEP extra and Playwright first. The simulated fixture positions and tools are numerical test inputs.

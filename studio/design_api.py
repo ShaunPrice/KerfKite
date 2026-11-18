@@ -1,0 +1,145 @@
+"""Reusable authenticated/local design endpoints; no machine access."""
+from flask import Response, request, jsonify
+from shapely.ops import unary_union
+from .operations import region,outlines,value
+from .relief import prepare_relief
+
+
+def register_design_routes(app):
+    from . import assembly, cad_exchange, fixture_collision, program_import, import_bundle
+    for module in (assembly, cad_exchange, fixture_collision, program_import, import_bundle):
+        module.register(app)
+
+    def build_submitted_model():
+        from .solid_cad import rebuild
+
+        payload = request.get_json()
+        if not isinstance(payload, dict) or not isinstance(payload.get('model'), dict):
+            raise ValueError('Supply a CAD model in the model field')
+        return rebuild(payload['model'])
+
+    @app.post('/api/solid-cad')
+    def rebuild_solid():
+        return jsonify(build_submitted_model())
+
+    @app.post('/api/solid-cad/sketch-points')
+    def resolve_sketch_points():
+        from .solid_cad import Dimensions
+        from shapely.geometry import Polygon
+
+        payload = request.get_json()
+        if not isinstance(payload, dict) or not isinstance(payload.get('points'), list):
+            raise ValueError('Supply sketch points and parameters')
+        if len(payload['points']) > 256:
+            raise ValueError('A sketch supports up to 256 vertices')
+        dimensions = Dimensions(payload.get('parameters', {}))
+        points = [dimensions.vector(point, 2) for point in payload['points']]
+        if payload.get('validate'):
+            if len(points) < 3 or len(set(map(tuple, points))) != len(points):
+                raise ValueError('A closed sketch needs at least three distinct vertices')
+            polygon = Polygon(points)
+            if not polygon.is_valid or polygon.area <= 1e-8:
+                raise ValueError('Sketch must enclose an area without crossing itself')
+            if payload.get('kind') == 'revolve' and any(r < 0 for r, z in points):
+                raise ValueError('Revolve profile radii must be zero or greater')
+        return jsonify(points=points, parameters=dimensions.values)
+
+    @app.post('/api/solid-cad/section')
+    def section_solid():
+        from .solid_cad import horizontal_section
+
+        payload = request.get_json()
+        if not isinstance(payload, dict) or not isinstance(payload.get('model'), dict):
+            raise ValueError('Supply a CAD model and section height')
+        return jsonify(horizontal_section(payload['model'], payload.get('z')))
+
+    @app.post('/api/solid-cad/stl')
+    def export_solid():
+        from .solid_cad import binary_stl
+
+        data = binary_stl(build_submitted_model())
+        return Response(data, mimetype='model/stl', headers={
+            'Content-Disposition': 'attachment; filename="part.stl"'
+        })
+
+    @app.get('/api/protocols')
+    def protocols():
+        from dataclasses import asdict
+        from .protocols import PROTOCOLS
+        return jsonify([asdict(p) for p in PROTOCOLS.values()])
+
+    @app.post('/api/tool-changes')
+    def tool_change_plan():
+        from .tool_changes import plan_tool_changes
+        data=request.get_json()
+        if not isinstance(data,dict):raise ValueError('Provide a project')
+        return jsonify(plan_tool_changes(data.get('project')))
+
+    @app.post('/api/rotary')
+    def rotary_export():
+        from .cam import generate
+        from .rotary import wrap_job
+        data=request.get_json()
+        if not isinstance(data,dict) or not isinstance(data.get('project'),dict):
+            raise ValueError('Provide a project and rotary setup')
+        return jsonify(wrap_job(generate(data['project']),data.get('options',{})))
+
+    @app.post('/api/geometry')
+    def geometry():
+        data=request.get_json();objects=data.get('objects',[])
+        if not isinstance(objects,list) or not 1<=len(objects)<=200:raise ValueError('Select 1–200 objects')
+        if sum(len(path) for obj in objects for path in obj.get('paths',[]))>100000:raise ValueError('Geometry too complex')
+        shapes=[region(o['paths']) for o in objects];op=data.get('action')
+        if op=='union':result=unary_union(shapes)
+        elif op=='difference':result=shapes[0].difference(unary_union(shapes[1:]))
+        elif op=='intersection':
+            result=shapes[0]
+            for s in shapes[1:]:result=result.intersection(s)
+        elif op=='offset':result=unary_union(shapes).buffer(value(data,'distance',0,-100,100),quad_segs=32)
+        else:raise ValueError('Choose union, difference, intersection or offset')
+        if result.is_empty:raise ValueError('Operation produced empty geometry')
+        paths=outlines(result)
+        if sum(map(len,paths))>100000:raise ValueError('Result too complex')
+        return jsonify(paths=paths)
+
+    @app.post('/api/simulate')
+    def stock_preview():
+        from .simulation import simulate
+        return jsonify(simulate(request.get_json()))
+
+    @app.post('/api/extrude')
+    def extrude_artwork():
+        from .solid_text import extrude
+        return jsonify(extrude(request.get_json()))
+
+    @app.post('/api/artwork-relief')
+    def artwork_relief():
+        from shapely.geometry import box
+        data=request.get_json();g=region(data.get('paths',[]))
+        width=value(data,'width',100,.1,2000);height=value(data,'height',100,.1,2000)
+        x=value(data,'x',0,0,2000);y=value(data,'y',0,0,2000)
+        n=int(value(data,'resolution',64,16,128));kind=data.get('kind','raised')
+        if kind not in ('raised','recessed'):raise ValueError('Choose raised or recessed relief')
+        # Protect raised material wherever its contour intersects a cell neighborhood.
+        matrix=[]
+        for row in range(n):
+            values=[]
+            for col in range(n):
+                px=x+col*width/(n-1);py=y+row*height/(n-1)
+                cell=box(px-width/(n-1),py-height/(n-1),px+width/(n-1),py+height/(n-1))
+                values.append(1 if (g.intersects(cell) if kind=='raised' else not g.covers(cell)) else 0)
+            matrix.append(values)
+        result=prepare_relief({**data,'heightmap':matrix})
+        result['warnings'].append('Artwork relief is conservatively rasterized; increase map resolution for small glyph details.')
+        return jsonify(result)
+
+    @app.post('/api/relief')
+    def relief():
+        data=request.get_json()
+        if not isinstance(data,dict):raise ValueError('Expected relief settings')
+        warnings=[]
+        if data.get('content_base64'):
+            from .mesh_import import stl_heightmap
+            mesh=stl_heightmap(data);data={**data,'heightmap':mesh['heightmap']};warnings=mesh['warnings']
+        result=prepare_relief(data);result['warnings']+=warnings
+        return jsonify(result)

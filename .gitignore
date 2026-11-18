@@ -1,0 +1,31 @@
+.venv/
+__pycache__/
+*.egg-info/
+build/
+dist/
+artifacts/
+validation/.work/
+
+web-data/
+*.pem
+
+*.so
+*.pyd
+
+.DS_Store
+*.aiff
+marketing/render/
+
+# scripts/ci-local.sh: local check environments, caches and state
+.ci-local/
+
+# Private local configuration, imported machine files and signing material
+.env
+.env.*
+!.env.example
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+local.properties

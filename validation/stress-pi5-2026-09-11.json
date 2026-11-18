@@ -1,0 +1,1161 @@
+{
+  "platform": "Linux-6.12.47+rpt-rpi-2712-aarch64-with-glibc2.41",
+  "python": "3.13.5 (main, Jun 25 2025, 18:55:22) [GCC 14.2.0]",
+  "cpus": 4,
+  "fixture": "256x256 rosette/ripples, 300x180mm, 6mm depth, 3.175mm ball, .9mm stepover, 3mm stepdown",
+  "model": "Raspberry Pi 5 Model B Rev 1.0",
+  "baseline": [
+    {
+      "stages": {
+        "relief": 1.1436214849818498,
+        "gcode": 0.5220249990234151,
+        "stock_preview": 1.2062730509787798
+      },
+      "vertices": 67335,
+      "lines": 135886,
+      "segments": 134268,
+      "gcode_bytes": 4749814,
+      "sha256": "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc",
+      "peak_rss_mib": 96.1875
+    },
+    {
+      "stages": {
+        "relief": 1.1542909969575703,
+        "gcode": 0.5236234719632193,
+        "stock_preview": 1.2204584929859266
+      },
+      "vertices": 67335,
+      "lines": 135886,
+      "segments": 134268,
+      "gcode_bytes": 4749814,
+      "sha256": "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc",
+      "peak_rss_mib": 97.421875
+    },
+    {
+      "stages": {
+        "relief": 1.1564049549633637,
+        "gcode": 0.5231829879339784,
+        "stock_preview": 1.2088503639679402
+      },
+      "vertices": 67335,
+      "lines": 135886,
+      "segments": 134268,
+      "gcode_bytes": 4749814,
+      "sha256": "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc",
+      "peak_rss_mib": 97.421875
+    }
+  ],
+  "native": [
+    {
+      "grid": 32,
+      "python_median_seconds": 0.2176826490322128,
+      "cpp_process_including_text_io_seconds": 0.0349300749367103,
+      "python_output_parse_seconds": 0.02823492093011737,
+      "max_depth_error_mm": 7.283063041541027e-14
+    },
+    {
+      "grid": 128,
+      "python_median_seconds": 0.5302087350282818,
+      "cpp_process_including_text_io_seconds": 0.055010759038850665,
+      "python_output_parse_seconds": 0.02925344603136182,
+      "max_depth_error_mm": 7.283063041541027e-14
+    },
+    {
+      "grid": 256,
+      "python_median_seconds": 1.1782150559592992,
+      "cpp_process_including_text_io_seconds": 0.11159956397023052,
+      "python_output_parse_seconds": 0.030587565968744457,
+      "max_depth_error_mm": 7.283063041541027e-14
+    }
+  ],
+  "sustained_single": {
+    "runs": 20,
+    "elapsed": 60.86818808095995,
+    "hashes": [
+      "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc"
+    ],
+    "median_pipeline_seconds": 2.9076113534974866,
+    "peak_rss_mib": 100.5
+  },
+  "sustained_four": [
+    {
+      "runs": 9,
+      "elapsed": 31.33140788099263,
+      "hashes": [
+        "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc"
+      ],
+      "median_pipeline_seconds": 3.3125165558885783,
+      "peak_rss_mib": 89.53125
+    },
+    {
+      "runs": 9,
+      "elapsed": 31.1984207930509,
+      "hashes": [
+        "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc"
+      ],
+      "median_pipeline_seconds": 3.3222239528549835,
+      "peak_rss_mib": 89.53125
+    },
+    {
+      "runs": 9,
+      "elapsed": 31.33347083895933,
+      "hashes": [
+        "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc"
+      ],
+      "median_pipeline_seconds": 3.305429587024264,
+      "peak_rss_mib": 90.4375
+    },
+    {
+      "runs": 9,
+      "elapsed": 30.609766874928027,
+      "hashes": [
+        "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc"
+      ],
+      "median_pipeline_seconds": 3.2458606910659,
+      "peak_rss_mib": 89.546875
+    }
+  ],
+  "all_gcode_hashes_match": true,
+  "telemetry": [
+    {
+      "time": 1789100336.193608,
+      "temperature_c": 60.6,
+      "load": [
+        0.6357421875,
+        0.7587890625,
+        0.685546875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5540352 kB\nMemAvailable:    6943408 kB\nBuffers:          193488 kB\nCached:          1541792 kB\nSwapCached:            0 kB\nActive:          1483376 kB\nInactive:         835216 kB\nActive(anon):     951968 kB\nInactive(anon):        0 kB\nActive(file):     531408 kB\nInactive(file):   835216 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               352 kB\nWriteback:             0 kB\nAnonPages:        588320 kB\nMapped:           337616 kB\nShmem:            369280 kB\nKReclaimable:     126416 kB\nSlab:             182080 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55664 kB\nKernelStack:        6496 kB\nPageTables:        12400 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3156144 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57136 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100337.1997607,
+      "temperature_c": 60.6,
+      "load": [
+        0.6357421875,
+        0.7587890625,
+        0.685546875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5491200 kB\nMemAvailable:    6894416 kB\nBuffers:          193488 kB\nCached:          1546176 kB\nSwapCached:            0 kB\nActive:          1500656 kB\nInactive:         835328 kB\nActive(anon):     969200 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835328 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               352 kB\nWriteback:             0 kB\nAnonPages:        606368 kB\nMapped:           342928 kB\nShmem:            373504 kB\nKReclaimable:     126416 kB\nSlab:             182096 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55680 kB\nKernelStack:        6496 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3175536 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57136 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100338.261523,
+      "temperature_c": 61.15,
+      "load": [
+        0.6357421875,
+        0.7587890625,
+        0.685546875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5410336 kB\nMemAvailable:    6813568 kB\nBuffers:          193488 kB\nCached:          1547760 kB\nSwapCached:            0 kB\nActive:          1537520 kB\nInactive:         835344 kB\nActive(anon):    1006064 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835344 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               368 kB\nWriteback:             0 kB\nAnonPages:        641840 kB\nMapped:           344912 kB\nShmem:            375072 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6496 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3207072 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57136 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100339.3381858,
+      "temperature_c": 61.15,
+      "load": [
+        0.6357421875,
+        0.7587890625,
+        0.685546875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5419264 kB\nMemAvailable:    6822496 kB\nBuffers:          193488 kB\nCached:          1546816 kB\nSwapCached:            0 kB\nActive:          1503696 kB\nInactive:         835344 kB\nActive(anon):     972240 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835344 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               368 kB\nWriteback:             0 kB\nAnonPages:        607776 kB\nMapped:           345360 kB\nShmem:            374128 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6480 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3172576 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57120 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100340.3946135,
+      "temperature_c": 61.7,
+      "load": [
+        0.8251953125,
+        0.79638671875,
+        0.6982421875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5427632 kB\nMemAvailable:    6830880 kB\nBuffers:          193488 kB\nCached:          1546208 kB\nSwapCached:            0 kB\nActive:          1508096 kB\nInactive:         835360 kB\nActive(anon):     976640 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835360 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               288 kB\nWriteback:             0 kB\nAnonPages:        613920 kB\nMapped:           344416 kB\nShmem:            373504 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6480 kB\nPageTables:        12512 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3178736 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57120 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100341.468043,
+      "temperature_c": 61.7,
+      "load": [
+        0.8251953125,
+        0.79638671875,
+        0.6982421875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5430688 kB\nMemAvailable:    6833936 kB\nBuffers:          193488 kB\nCached:          1545776 kB\nSwapCached:            0 kB\nActive:          1537952 kB\nInactive:         835360 kB\nActive(anon):    1006496 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835360 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               288 kB\nWriteback:             0 kB\nAnonPages:        644272 kB\nMapped:           344528 kB\nShmem:            373072 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6480 kB\nPageTables:        12512 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3213296 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57120 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100342.544859,
+      "temperature_c": 61.7,
+      "load": [
+        0.8251953125,
+        0.79638671875,
+        0.6982421875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5439088 kB\nMemAvailable:    6842336 kB\nBuffers:          193488 kB\nCached:          1546208 kB\nSwapCached:            0 kB\nActive:          1505312 kB\nInactive:         835360 kB\nActive(anon):     973856 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835360 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               288 kB\nWriteback:             0 kB\nAnonPages:        611632 kB\nMapped:           340240 kB\nShmem:            373504 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6480 kB\nPageTables:        12512 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3176320 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100343.6164708,
+      "temperature_c": 61.7,
+      "load": [
+        0.8251953125,
+        0.79638671875,
+        0.6982421875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5443408 kB\nMemAvailable:    6846672 kB\nBuffers:          193488 kB\nCached:          1546864 kB\nSwapCached:            0 kB\nActive:          1516208 kB\nInactive:         835376 kB\nActive(anon):     984752 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835376 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               304 kB\nWriteback:             0 kB\nAnonPages:        622512 kB\nMapped:           341344 kB\nShmem:            374144 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6480 kB\nPageTables:        12544 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3192448 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100344.6898737,
+      "temperature_c": 60.6,
+      "load": [
+        0.8251953125,
+        0.79638671875,
+        0.6982421875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5448016 kB\nMemAvailable:    6851280 kB\nBuffers:          193488 kB\nCached:          1545904 kB\nSwapCached:            0 kB\nActive:          1536464 kB\nInactive:         835376 kB\nActive(anon):    1005008 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835376 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               304 kB\nWriteback:             0 kB\nAnonPages:        643040 kB\nMapped:           340880 kB\nShmem:            373184 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6480 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3211904 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100345.761502,
+      "temperature_c": 61.15,
+      "load": [
+        0.83935546875,
+        0.7998046875,
+        0.7001953125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5454672 kB\nMemAvailable:    6857952 kB\nBuffers:          193488 kB\nCached:          1545920 kB\nSwapCached:            0 kB\nActive:          1513408 kB\nInactive:         835392 kB\nActive(anon):     981952 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835392 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               320 kB\nWriteback:             0 kB\nAnonPages:        619968 kB\nMapped:           341488 kB\nShmem:            373184 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6480 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3190992 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57136 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100346.7618423,
+      "temperature_c": 62.8,
+      "load": [
+        0.83935546875,
+        0.7998046875,
+        0.7001953125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5463616 kB\nMemAvailable:    6866896 kB\nBuffers:          193488 kB\nCached:          1546000 kB\nSwapCached:            0 kB\nActive:          1519088 kB\nInactive:         835392 kB\nActive(anon):     987632 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835392 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               320 kB\nWriteback:             0 kB\nAnonPages:        625648 kB\nMapped:           342016 kB\nShmem:            373264 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6496 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3195632 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57152 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100347.7672696,
+      "temperature_c": 62.25,
+      "load": [
+        0.83935546875,
+        0.7998046875,
+        0.7001953125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5437456 kB\nMemAvailable:    6840752 kB\nBuffers:          193488 kB\nCached:          1545712 kB\nSwapCached:            0 kB\nActive:          1519008 kB\nInactive:         835408 kB\nActive(anon):     987552 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835408 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               336 kB\nWriteback:             0 kB\nAnonPages:        625568 kB\nMapped:           342128 kB\nShmem:            372960 kB\nKReclaimable:     126416 kB\nSlab:             182128 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55712 kB\nKernelStack:        6480 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3191392 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57136 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100348.834032,
+      "temperature_c": 62.25,
+      "load": [
+        0.83935546875,
+        0.7998046875,
+        0.7001953125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5430928 kB\nMemAvailable:    6834224 kB\nBuffers:          193488 kB\nCached:          1545712 kB\nSwapCached:            0 kB\nActive:          1519888 kB\nInactive:         835408 kB\nActive(anon):     988432 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835408 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               336 kB\nWriteback:             0 kB\nAnonPages:        626592 kB\nMapped:           342544 kB\nShmem:            372960 kB\nKReclaimable:     126416 kB\nSlab:             182128 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55712 kB\nKernelStack:        6480 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3195216 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57136 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100349.9012597,
+      "temperature_c": 61.15,
+      "load": [
+        0.83935546875,
+        0.7998046875,
+        0.7001953125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5427488 kB\nMemAvailable:    6830800 kB\nBuffers:          193488 kB\nCached:          1545776 kB\nSwapCached:            0 kB\nActive:          1526432 kB\nInactive:         835424 kB\nActive(anon):     994976 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835424 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               224 kB\nWriteback:             0 kB\nAnonPages:        633008 kB\nMapped:           343040 kB\nShmem:            373008 kB\nKReclaimable:     126416 kB\nSlab:             182128 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55712 kB\nKernelStack:        6480 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3198192 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57136 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100350.9681578,
+      "temperature_c": 62.25,
+      "load": [
+        0.8525390625,
+        0.80322265625,
+        0.7021484375
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5422048 kB\nMemAvailable:    6825360 kB\nBuffers:          193488 kB\nCached:          1546256 kB\nSwapCached:            0 kB\nActive:          1528464 kB\nInactive:         835424 kB\nActive(anon):     997008 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835424 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               240 kB\nWriteback:             0 kB\nAnonPages:        632400 kB\nMapped:           344128 kB\nShmem:            373488 kB\nKReclaimable:     126416 kB\nSlab:             182128 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55712 kB\nKernelStack:        6480 kB\nPageTables:        12512 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3197168 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57136 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100352.0256386,
+      "temperature_c": 62.25,
+      "load": [
+        0.8525390625,
+        0.80322265625,
+        0.7021484375
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5440672 kB\nMemAvailable:    6843984 kB\nBuffers:          193488 kB\nCached:          1545504 kB\nSwapCached:            0 kB\nActive:          1526208 kB\nInactive:         835424 kB\nActive(anon):     994752 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835424 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               240 kB\nWriteback:             0 kB\nAnonPages:        633216 kB\nMapped:           343904 kB\nShmem:            372736 kB\nKReclaimable:     126416 kB\nSlab:             182128 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55712 kB\nKernelStack:        6480 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3198176 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57136 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100353.066189,
+      "temperature_c": 61.7,
+      "load": [
+        0.8525390625,
+        0.80322265625,
+        0.7021484375
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5449776 kB\nMemAvailable:    6853104 kB\nBuffers:          193488 kB\nCached:          1545984 kB\nSwapCached:            0 kB\nActive:          1522768 kB\nInactive:         835440 kB\nActive(anon):     991312 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835440 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               256 kB\nWriteback:             0 kB\nAnonPages:        629328 kB\nMapped:           344832 kB\nShmem:            373200 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6480 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3197936 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57136 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100354.132808,
+      "temperature_c": 61.15,
+      "load": [
+        0.8525390625,
+        0.80322265625,
+        0.7021484375
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5437696 kB\nMemAvailable:    6841040 kB\nBuffers:          193488 kB\nCached:          1552576 kB\nSwapCached:            0 kB\nActive:          1551376 kB\nInactive:         835456 kB\nActive(anon):    1019920 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835456 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               272 kB\nWriteback:             0 kB\nAnonPages:        650352 kB\nMapped:           340432 kB\nShmem:            379776 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6480 kB\nPageTables:        12512 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3221840 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57120 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100355.1993752,
+      "temperature_c": 62.25,
+      "load": [
+        0.86474609375,
+        0.806640625,
+        0.7041015625
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5431136 kB\nMemAvailable:    6834480 kB\nBuffers:          193488 kB\nCached:          1553904 kB\nSwapCached:            0 kB\nActive:          1554880 kB\nInactive:         835456 kB\nActive(anon):    1023424 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835456 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                 0 kB\nWriteback:             0 kB\nAnonPages:        653712 kB\nMapped:           342272 kB\nShmem:            381104 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3225392 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100356.2359397,
+      "temperature_c": 62.25,
+      "load": [
+        0.86474609375,
+        0.806640625,
+        0.7041015625
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5450048 kB\nMemAvailable:    6853392 kB\nBuffers:          193488 kB\nCached:          1553904 kB\nSwapCached:            0 kB\nActive:          1526624 kB\nInactive:         835456 kB\nActive(anon):     995168 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835456 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                32 kB\nWriteback:             0 kB\nAnonPages:        625776 kB\nMapped:           342864 kB\nShmem:            381104 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6464 kB\nPageTables:        12512 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3196656 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100357.3041086,
+      "temperature_c": 61.7,
+      "load": [
+        0.86474609375,
+        0.806640625,
+        0.7041015625
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5452784 kB\nMemAvailable:    6856128 kB\nBuffers:          193488 kB\nCached:          1552000 kB\nSwapCached:            0 kB\nActive:          1544480 kB\nInactive:         835456 kB\nActive(anon):    1013024 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835456 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                32 kB\nWriteback:             0 kB\nAnonPages:        644800 kB\nMapped:           341472 kB\nShmem:            379200 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3219952 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100358.3901746,
+      "temperature_c": 62.8,
+      "load": [
+        0.86474609375,
+        0.806640625,
+        0.7041015625
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5457568 kB\nMemAvailable:    6860928 kB\nBuffers:          193488 kB\nCached:          1552528 kB\nSwapCached:            0 kB\nActive:          1525584 kB\nInactive:         835472 kB\nActive(anon):     994128 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835472 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               112 kB\nWriteback:             0 kB\nAnonPages:        625456 kB\nMapped:           342448 kB\nShmem:            379712 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3200496 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100359.4573343,
+      "temperature_c": 62.25,
+      "load": [
+        0.86474609375,
+        0.806640625,
+        0.7041015625
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5461088 kB\nMemAvailable:    6864464 kB\nBuffers:          193488 kB\nCached:          1552032 kB\nSwapCached:            0 kB\nActive:          1525136 kB\nInactive:         835488 kB\nActive(anon):     993680 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835488 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               128 kB\nWriteback:             0 kB\nAnonPages:        625776 kB\nMapped:           342352 kB\nShmem:            379200 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3200496 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100360.5086582,
+      "temperature_c": 63.35,
+      "load": [
+        0.8759765625,
+        0.81005859375,
+        0.7060546875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5467664 kB\nMemAvailable:    6871040 kB\nBuffers:          193488 kB\nCached:          1552576 kB\nSwapCached:            0 kB\nActive:          1547216 kB\nInactive:         835488 kB\nActive(anon):    1015760 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835488 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                 0 kB\nWriteback:             0 kB\nAnonPages:        644864 kB\nMapped:           343344 kB\nShmem:            379744 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6464 kB\nPageTables:        12512 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3216112 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100361.581183,
+      "temperature_c": 63.35,
+      "load": [
+        0.8759765625,
+        0.81005859375,
+        0.7060546875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5469408 kB\nMemAvailable:    6872800 kB\nBuffers:          193488 kB\nCached:          1552048 kB\nSwapCached:            0 kB\nActive:          1525136 kB\nInactive:         835504 kB\nActive(anon):     993680 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835504 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                48 kB\nWriteback:             0 kB\nAnonPages:        625456 kB\nMapped:           343392 kB\nShmem:            379200 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3196656 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100362.6713333,
+      "temperature_c": 61.15,
+      "load": [
+        0.8759765625,
+        0.81005859375,
+        0.7060546875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5473104 kB\nMemAvailable:    6876496 kB\nBuffers:          193488 kB\nCached:          1552288 kB\nSwapCached:            0 kB\nActive:          1525136 kB\nInactive:         835504 kB\nActive(anon):     993680 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835504 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                48 kB\nWriteback:             0 kB\nAnonPages:        625776 kB\nMapped:           344112 kB\nShmem:            379440 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3200496 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100363.7227507,
+      "temperature_c": 62.8,
+      "load": [
+        0.8759765625,
+        0.81005859375,
+        0.7060546875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5471840 kB\nMemAvailable:    6875248 kB\nBuffers:          193488 kB\nCached:          1552576 kB\nSwapCached:            0 kB\nActive:          1544928 kB\nInactive:         835520 kB\nActive(anon):    1013472 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835520 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               128 kB\nWriteback:             0 kB\nAnonPages:        644928 kB\nMapped:           344928 kB\nShmem:            379712 kB\nKReclaimable:     126416 kB\nSlab:             182112 kB\nSReclaimable:     126416 kB\nSUnreclaim:        55696 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3219952 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100364.794335,
+      "temperature_c": 62.25,
+      "load": [
+        0.8759765625,
+        0.81005859375,
+        0.7060546875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5468896 kB\nMemAvailable:    6872320 kB\nBuffers:          193488 kB\nCached:          1546368 kB\nSwapCached:            0 kB\nActive:          1522672 kB\nInactive:         835520 kB\nActive(anon):     991216 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835520 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               128 kB\nWriteback:             0 kB\nAnonPages:        626496 kB\nMapped:           340208 kB\nShmem:            373504 kB\nKReclaimable:     126432 kB\nSlab:             182128 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55696 kB\nKernelStack:        6464 kB\nPageTables:        12512 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3191440 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57088 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100365.8724687,
+      "temperature_c": 63.35,
+      "load": [
+        0.96630859375,
+        0.830078125,
+        0.71337890625
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5481408 kB\nMemAvailable:    6884832 kB\nBuffers:          193488 kB\nCached:          1546672 kB\nSwapCached:            0 kB\nActive:          1521632 kB\nInactive:         835520 kB\nActive(anon):     990176 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835520 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                 0 kB\nWriteback:             0 kB\nAnonPages:        628016 kB\nMapped:           341056 kB\nShmem:            373808 kB\nKReclaimable:     126432 kB\nSlab:             182128 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55696 kB\nKernelStack:        6464 kB\nPageTables:        12512 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3199376 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57088 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100366.950178,
+      "temperature_c": 62.25,
+      "load": [
+        0.96630859375,
+        0.830078125,
+        0.71337890625
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5483296 kB\nMemAvailable:    6886736 kB\nBuffers:          193488 kB\nCached:          1544944 kB\nSwapCached:            0 kB\nActive:          1537024 kB\nInactive:         835536 kB\nActive(anon):    1005568 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835536 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                48 kB\nWriteback:             0 kB\nAnonPages:        644928 kB\nMapped:           339760 kB\nShmem:            372064 kB\nKReclaimable:     126432 kB\nSlab:             182128 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55696 kB\nKernelStack:        6464 kB\nPageTables:        12480 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3209872 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57088 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100368.0215788,
+      "temperature_c": 62.25,
+      "load": [
+        0.96630859375,
+        0.830078125,
+        0.71337890625
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5485472 kB\nMemAvailable:    6888928 kB\nBuffers:          193488 kB\nCached:          1545856 kB\nSwapCached:            0 kB\nActive:          1525056 kB\nInactive:         835552 kB\nActive(anon):     993600 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835552 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               112 kB\nWriteback:             0 kB\nAnonPages:        631616 kB\nMapped:           341296 kB\nShmem:            372960 kB\nKReclaimable:     126432 kB\nSlab:             182208 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55776 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3196560 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100369.0978968,
+      "temperature_c": 62.25,
+      "load": [
+        0.96630859375,
+        0.830078125,
+        0.71337890625
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5486784 kB\nMemAvailable:    6890240 kB\nBuffers:          193488 kB\nCached:          1546400 kB\nSwapCached:            0 kB\nActive:          1539696 kB\nInactive:         835552 kB\nActive(anon):    1008240 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835552 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               112 kB\nWriteback:             0 kB\nAnonPages:        643536 kB\nMapped:           342336 kB\nShmem:            373504 kB\nKReclaimable:     126432 kB\nSlab:             182208 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55776 kB\nKernelStack:        6464 kB\nPageTables:        12512 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3209888 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100370.1560533,
+      "temperature_c": 62.8,
+      "load": [
+        0.96923828125,
+        0.8330078125,
+        0.71533203125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5489680 kB\nMemAvailable:    6893136 kB\nBuffers:          193488 kB\nCached:          1545808 kB\nSwapCached:            0 kB\nActive:          1537840 kB\nInactive:         835552 kB\nActive(anon):    1006384 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835552 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               112 kB\nWriteback:             0 kB\nAnonPages:        644928 kB\nMapped:           342176 kB\nShmem:            372912 kB\nKReclaimable:     126432 kB\nSlab:             182208 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55776 kB\nKernelStack:        6464 kB\nPageTables:        12480 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3213712 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100371.227684,
+      "temperature_c": 61.15,
+      "load": [
+        0.96923828125,
+        0.8330078125,
+        0.71533203125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5487728 kB\nMemAvailable:    6891184 kB\nBuffers:          193488 kB\nCached:          1547776 kB\nSwapCached:            0 kB\nActive:          1528256 kB\nInactive:         835552 kB\nActive(anon):     996800 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835552 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               112 kB\nWriteback:             0 kB\nAnonPages:        633664 kB\nMapped:           344592 kB\nShmem:            374880 kB\nKReclaimable:     126432 kB\nSlab:             182208 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55776 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3198608 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100372.2900646,
+      "temperature_c": 63.35,
+      "load": [
+        0.96923828125,
+        0.8330078125,
+        0.71533203125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5495312 kB\nMemAvailable:    6898784 kB\nBuffers:          193488 kB\nCached:          1547792 kB\nSwapCached:            0 kB\nActive:          1539472 kB\nInactive:         835568 kB\nActive(anon):    1008016 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835568 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                 0 kB\nWriteback:             0 kB\nAnonPages:        644752 kB\nMapped:           345168 kB\nShmem:            374880 kB\nKReclaimable:     126432 kB\nSlab:             182208 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55776 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3209872 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100373.3619952,
+      "temperature_c": 61.7,
+      "load": [
+        0.96923828125,
+        0.8330078125,
+        0.71533203125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5494720 kB\nMemAvailable:    6898208 kB\nBuffers:          193488 kB\nCached:          1543952 kB\nSwapCached:            0 kB\nActive:          1536384 kB\nInactive:         835584 kB\nActive(anon):    1004928 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835584 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                96 kB\nWriteback:             0 kB\nAnonPages:        644944 kB\nMapped:           341760 kB\nShmem:            371024 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3209872 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100374.431725,
+      "temperature_c": 63.9,
+      "load": [
+        0.96923828125,
+        0.8330078125,
+        0.71533203125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5495248 kB\nMemAvailable:    6898736 kB\nBuffers:          193488 kB\nCached:          1545888 kB\nSwapCached:            0 kB\nActive:          1527120 kB\nInactive:         835584 kB\nActive(anon):     995664 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835584 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                96 kB\nWriteback:             0 kB\nAnonPages:        633680 kB\nMapped:           344256 kB\nShmem:            372960 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3202448 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100375.5038936,
+      "temperature_c": 63.35,
+      "load": [
+        1.21240234375,
+        0.8857421875,
+        0.7333984375
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5484304 kB\nMemAvailable:    6887792 kB\nBuffers:          193488 kB\nCached:          1548768 kB\nSwapCached:            0 kB\nActive:          1541232 kB\nInactive:         835584 kB\nActive(anon):    1009776 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835584 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                96 kB\nWriteback:             0 kB\nAnonPages:        644816 kB\nMapped:           341200 kB\nShmem:            375840 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3213712 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100376.5656114,
+      "temperature_c": 62.8,
+      "load": [
+        1.21240234375,
+        0.8857421875,
+        0.7333984375
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5494448 kB\nMemAvailable:    6897952 kB\nBuffers:          193488 kB\nCached:          1546448 kB\nSwapCached:            0 kB\nActive:          1528976 kB\nInactive:         835600 kB\nActive(anon):     997520 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835600 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               112 kB\nWriteback:             0 kB\nAnonPages:        634704 kB\nMapped:           340576 kB\nShmem:            373504 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12512 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3199632 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100377.6322978,
+      "temperature_c": 62.8,
+      "load": [
+        1.21240234375,
+        0.8857421875,
+        0.7333984375
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5497824 kB\nMemAvailable:    6901344 kB\nBuffers:          193488 kB\nCached:          1546784 kB\nSwapCached:            0 kB\nActive:          1528640 kB\nInactive:         835616 kB\nActive(anon):     997184 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835616 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               128 kB\nWriteback:             0 kB\nAnonPages:        634704 kB\nMapped:           341360 kB\nShmem:            373824 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12512 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3203472 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100378.7147043,
+      "temperature_c": 62.8,
+      "load": [
+        1.21240234375,
+        0.8857421875,
+        0.7333984375
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5498400 kB\nMemAvailable:    6901920 kB\nBuffers:          193488 kB\nCached:          1546432 kB\nSwapCached:            0 kB\nActive:          1538480 kB\nInactive:         835616 kB\nActive(anon):    1007024 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835616 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                96 kB\nWriteback:             0 kB\nAnonPages:        644896 kB\nMapped:           341616 kB\nShmem:            373472 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3213712 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100379.7868629,
+      "temperature_c": 63.35,
+      "load": [
+        1.21240234375,
+        0.8857421875,
+        0.7333984375
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5499136 kB\nMemAvailable:    6902656 kB\nBuffers:          193488 kB\nCached:          1548672 kB\nSwapCached:            0 kB\nActive:          1530496 kB\nInactive:         835616 kB\nActive(anon):     999040 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835616 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                96 kB\nWriteback:             0 kB\nAnonPages:        635744 kB\nMapped:           344368 kB\nShmem:            375712 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3200656 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100380.8714736,
+      "temperature_c": 63.35,
+      "load": [
+        1.1953125,
+        0.8876953125,
+        0.73486328125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5496928 kB\nMemAvailable:    6900448 kB\nBuffers:          193488 kB\nCached:          1546496 kB\nSwapCached:            0 kB\nActive:          1529584 kB\nInactive:         835616 kB\nActive(anon):     998128 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835616 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                96 kB\nWriteback:             0 kB\nAnonPages:        635744 kB\nMapped:           342624 kB\nShmem:            373536 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3204496 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100381.9443302,
+      "temperature_c": 63.35,
+      "load": [
+        1.1953125,
+        0.8876953125,
+        0.73486328125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5499312 kB\nMemAvailable:    6902864 kB\nBuffers:          193488 kB\nCached:          1545952 kB\nSwapCached:            0 kB\nActive:          1538112 kB\nInactive:         835648 kB\nActive(anon):    1006656 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835648 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               128 kB\nWriteback:             0 kB\nAnonPages:        644960 kB\nMapped:           342496 kB\nShmem:            372960 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3209872 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100383.0215733,
+      "temperature_c": 62.25,
+      "load": [
+        1.1953125,
+        0.8876953125,
+        0.73486328125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5497600 kB\nMemAvailable:    6901152 kB\nBuffers:          193488 kB\nCached:          1545952 kB\nSwapCached:            0 kB\nActive:          1530208 kB\nInactive:         835648 kB\nActive(anon):     998752 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835648 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               128 kB\nWriteback:             0 kB\nAnonPages:        636768 kB\nMapped:           342912 kB\nShmem:            372960 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3201680 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100384.088473,
+      "temperature_c": 62.25,
+      "load": [
+        1.1953125,
+        0.8876953125,
+        0.73486328125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5499920 kB\nMemAvailable:    6903472 kB\nBuffers:          193488 kB\nCached:          1545952 kB\nSwapCached:            0 kB\nActive:          1530208 kB\nInactive:         835648 kB\nActive(anon):     998752 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835648 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                16 kB\nWriteback:             0 kB\nAnonPages:        637072 kB\nMapped:           343504 kB\nShmem:            372960 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3202688 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100385.1543858,
+      "temperature_c": 63.9,
+      "load": [
+        1.17919921875,
+        0.8896484375,
+        0.736328125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5498720 kB\nMemAvailable:    6902272 kB\nBuffers:          193488 kB\nCached:          1546208 kB\nSwapCached:            0 kB\nActive:          1538144 kB\nInactive:         835648 kB\nActive(anon):    1006688 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835648 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                96 kB\nWriteback:             0 kB\nAnonPages:        644960 kB\nMapped:           344256 kB\nShmem:            373216 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3213712 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100386.2221634,
+      "temperature_c": 63.35,
+      "load": [
+        1.17919921875,
+        0.8896484375,
+        0.736328125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5488560 kB\nMemAvailable:    6892128 kB\nBuffers:          193488 kB\nCached:          1546512 kB\nSwapCached:            0 kB\nActive:          1532448 kB\nInactive:         835664 kB\nActive(anon):    1000992 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835664 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               112 kB\nWriteback:             0 kB\nAnonPages:        637792 kB\nMapped:           345104 kB\nShmem:            373504 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12512 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3202704 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100387.2889466,
+      "temperature_c": 62.8,
+      "load": [
+        1.17919921875,
+        0.8896484375,
+        0.736328125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5467712 kB\nMemAvailable:    6871056 kB\nBuffers:          193488 kB\nCached:          1546240 kB\nSwapCached:            0 kB\nActive:          1534368 kB\nInactive:         835680 kB\nActive(anon):    1002912 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835680 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               128 kB\nWriteback:             0 kB\nAnonPages:        641440 kB\nMapped:           340048 kB\nShmem:            373216 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3206784 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57088 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100388.3683019,
+      "temperature_c": 65.0,
+      "load": [
+        1.17919921875,
+        0.8896484375,
+        0.736328125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5469344 kB\nMemAvailable:    6872928 kB\nBuffers:          193488 kB\nCached:          1546240 kB\nSwapCached:            0 kB\nActive:          1538176 kB\nInactive:         835680 kB\nActive(anon):    1006720 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835680 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               128 kB\nWriteback:             0 kB\nAnonPages:        644960 kB\nMapped:           340560 kB\nShmem:            373216 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3213712 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57088 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100389.4500098,
+      "temperature_c": 63.35,
+      "load": [
+        1.17919921875,
+        0.8896484375,
+        0.736328125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5465744 kB\nMemAvailable:    6869328 kB\nBuffers:          193488 kB\nCached:          1546640 kB\nSwapCached:            0 kB\nActive:          1538576 kB\nInactive:         835680 kB\nActive(anon):    1007120 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835680 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                 0 kB\nWriteback:             0 kB\nAnonPages:        642912 kB\nMapped:           341568 kB\nShmem:            373616 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12512 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3207824 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57088 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100390.5216537,
+      "temperature_c": 63.9,
+      "load": [
+        1.16455078125,
+        0.8916015625,
+        0.73779296875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5471184 kB\nMemAvailable:    6874800 kB\nBuffers:          193488 kB\nCached:          1546576 kB\nSwapCached:            0 kB\nActive:          1540480 kB\nInactive:         835712 kB\nActive(anon):    1009024 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835712 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               128 kB\nWriteback:             0 kB\nAnonPages:        644768 kB\nMapped:           341968 kB\nShmem:            373520 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12512 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3209872 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57088 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100391.5729437,
+      "temperature_c": 64.45,
+      "load": [
+        1.16455078125,
+        0.8916015625,
+        0.73779296875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5477232 kB\nMemAvailable:    6880848 kB\nBuffers:          193488 kB\nCached:          1546016 kB\nSwapCached:            0 kB\nActive:          1538336 kB\nInactive:         835712 kB\nActive(anon):    1006880 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835712 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               128 kB\nWriteback:             0 kB\nAnonPages:        644960 kB\nMapped:           341856 kB\nShmem:            372960 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3210912 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57088 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100392.634312,
+      "temperature_c": 62.8,
+      "load": [
+        1.16455078125,
+        0.8916015625,
+        0.73779296875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5488576 kB\nMemAvailable:    6892192 kB\nBuffers:          193488 kB\nCached:          1546272 kB\nSwapCached:            0 kB\nActive:          1535328 kB\nInactive:         835712 kB\nActive(anon):    1003872 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835712 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               128 kB\nWriteback:             0 kB\nAnonPages:        641888 kB\nMapped:           342528 kB\nShmem:            373216 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3210640 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57088 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100393.706288,
+      "temperature_c": 62.8,
+      "load": [
+        1.16455078125,
+        0.8916015625,
+        0.73779296875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5491600 kB\nMemAvailable:    6895216 kB\nBuffers:          193488 kB\nCached:          1546272 kB\nSwapCached:            0 kB\nActive:          1537808 kB\nInactive:         835712 kB\nActive(anon):    1006352 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835712 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               128 kB\nWriteback:             0 kB\nAnonPages:        644832 kB\nMapped:           342976 kB\nShmem:            373216 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3213712 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57088 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100394.7779891,
+      "temperature_c": 64.45,
+      "load": [
+        1.16455078125,
+        0.8916015625,
+        0.73779296875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5480912 kB\nMemAvailable:    6884528 kB\nBuffers:          193488 kB\nCached:          1546576 kB\nSwapCached:            0 kB\nActive:          1539344 kB\nInactive:         835712 kB\nActive(anon):    1007888 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835712 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               128 kB\nWriteback:             0 kB\nAnonPages:        642928 kB\nMapped:           343856 kB\nShmem:            373520 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6464 kB\nPageTables:        12512 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3211664 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57088 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100395.8447158,
+      "temperature_c": 63.35,
+      "load": [
+        1.1513671875,
+        0.8935546875,
+        0.7392578125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5483328 kB\nMemAvailable:    6886976 kB\nBuffers:          193488 kB\nCached:          1546048 kB\nSwapCached:            0 kB\nActive:          1536368 kB\nInactive:         835744 kB\nActive(anon):    1004912 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835744 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                32 kB\nWriteback:             0 kB\nAnonPages:        642928 kB\nMapped:           343792 kB\nShmem:            372960 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6480 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3207824 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100396.9163246,
+      "temperature_c": 64.45,
+      "load": [
+        1.1513671875,
+        0.8935546875,
+        0.7392578125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5488640 kB\nMemAvailable:    6892288 kB\nBuffers:          193488 kB\nCached:          1546048 kB\nSwapCached:            0 kB\nActive:          1538352 kB\nInactive:         835744 kB\nActive(anon):    1006896 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835744 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                64 kB\nWriteback:             0 kB\nAnonPages:        644912 kB\nMapped:           344352 kB\nShmem:            372960 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6480 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3210912 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100397.973312,
+      "temperature_c": 63.9,
+      "load": [
+        1.1513671875,
+        0.8935546875,
+        0.7392578125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5490336 kB\nMemAvailable:    6893984 kB\nBuffers:          193488 kB\nCached:          1546288 kB\nSwapCached:            0 kB\nActive:          1537392 kB\nInactive:         835744 kB\nActive(anon):    1005936 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835744 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                64 kB\nWriteback:             0 kB\nAnonPages:        643952 kB\nMapped:           339808 kB\nShmem:            373200 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6480 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3212688 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100399.0479333,
+      "temperature_c": 63.35,
+      "load": [
+        1.1513671875,
+        0.8935546875,
+        0.7392578125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5499456 kB\nMemAvailable:    6903104 kB\nBuffers:          193488 kB\nCached:          1546608 kB\nSwapCached:            0 kB\nActive:          1540336 kB\nInactive:         835744 kB\nActive(anon):    1008880 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835744 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                64 kB\nWriteback:             0 kB\nAnonPages:        643952 kB\nMapped:           340688 kB\nShmem:            373520 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6480 kB\nPageTables:        12512 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3208848 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100400.137984,
+      "temperature_c": 63.9,
+      "load": [
+        1.13916015625,
+        0.8955078125,
+        0.74072265625
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5499552 kB\nMemAvailable:    6903200 kB\nBuffers:          193488 kB\nCached:          1546160 kB\nSwapCached:            0 kB\nActive:          1538880 kB\nInactive:         835744 kB\nActive(anon):    1007424 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835744 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                64 kB\nWriteback:             0 kB\nAnonPages:        645792 kB\nMapped:           340688 kB\nShmem:            373072 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6480 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3214704 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57104 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100401.2146804,
+      "temperature_c": 62.8,
+      "load": [
+        1.13916015625,
+        0.8955078125,
+        0.74072265625
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5492288 kB\nMemAvailable:    6895968 kB\nBuffers:          193488 kB\nCached:          1546096 kB\nSwapCached:            0 kB\nActive:          1538336 kB\nInactive:         835776 kB\nActive(anon):    1006880 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835776 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                16 kB\nWriteback:             0 kB\nAnonPages:        644896 kB\nMapped:           341216 kB\nShmem:            372976 kB\nKReclaimable:     126432 kB\nSlab:             182192 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55760 kB\nKernelStack:        6496 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3213680 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57120 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100402.2712617,
+      "temperature_c": 63.35,
+      "load": [
+        1.13916015625,
+        0.8955078125,
+        0.74072265625
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5491488 kB\nMemAvailable:    6895168 kB\nBuffers:          193488 kB\nCached:          1548240 kB\nSwapCached:            0 kB\nActive:          1539968 kB\nInactive:         835776 kB\nActive(anon):    1008512 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835776 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                48 kB\nWriteback:             0 kB\nAnonPages:        644896 kB\nMapped:           343856 kB\nShmem:            375120 kB\nKReclaimable:     126432 kB\nSlab:             182176 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55744 kB\nKernelStack:        6496 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3209840 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57120 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100403.3351378,
+      "temperature_c": 65.0,
+      "load": [
+        1.13916015625,
+        0.8955078125,
+        0.74072265625
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5488848 kB\nMemAvailable:    6892528 kB\nBuffers:          193488 kB\nCached:          1546080 kB\nSwapCached:            0 kB\nActive:          1539328 kB\nInactive:         835776 kB\nActive(anon):    1007872 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835776 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                48 kB\nWriteback:             0 kB\nAnonPages:        645984 kB\nMapped:           342128 kB\nShmem:            372960 kB\nKReclaimable:     126432 kB\nSlab:             182176 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55744 kB\nKernelStack:        6496 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3210864 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57120 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100404.4017327,
+      "temperature_c": 62.8,
+      "load": [
+        1.13916015625,
+        0.8955078125,
+        0.74072265625
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5472784 kB\nMemAvailable:    6876480 kB\nBuffers:          193488 kB\nCached:          1546096 kB\nSwapCached:            0 kB\nActive:          1539424 kB\nInactive:         835792 kB\nActive(anon):    1007968 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835792 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                64 kB\nWriteback:             0 kB\nAnonPages:        645984 kB\nMapped:           342544 kB\nShmem:            372960 kB\nKReclaimable:     126432 kB\nSlab:             182176 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55744 kB\nKernelStack:        6496 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3211904 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57120 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100405.4790585,
+      "temperature_c": 63.9,
+      "load": [
+        1.1279296875,
+        0.8974609375,
+        0.7421875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5487264 kB\nMemAvailable:    6890976 kB\nBuffers:          193488 kB\nCached:          1546224 kB\nSwapCached:            0 kB\nActive:          1539424 kB\nInactive:         835808 kB\nActive(anon):    1007968 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835808 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                80 kB\nWriteback:             0 kB\nAnonPages:        645984 kB\nMapped:           343088 kB\nShmem:            373072 kB\nKReclaimable:     126432 kB\nSlab:             182160 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55728 kB\nKernelStack:        6496 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3214704 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57120 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100406.5406103,
+      "temperature_c": 62.8,
+      "load": [
+        1.1279296875,
+        0.8974609375,
+        0.7421875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5488208 kB\nMemAvailable:    6891920 kB\nBuffers:          193488 kB\nCached:          1545776 kB\nSwapCached:            0 kB\nActive:          1539424 kB\nInactive:         835808 kB\nActive(anon):    1007968 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835808 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                64 kB\nWriteback:             0 kB\nAnonPages:        646016 kB\nMapped:           343264 kB\nShmem:            372624 kB\nKReclaimable:     126432 kB\nSlab:             182160 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55728 kB\nKernelStack:        6496 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3214704 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57120 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100407.597205,
+      "temperature_c": 63.9,
+      "load": [
+        1.1279296875,
+        0.8974609375,
+        0.7421875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5482960 kB\nMemAvailable:    6886672 kB\nBuffers:          193488 kB\nCached:          1546672 kB\nSwapCached:            0 kB\nActive:          1540368 kB\nInactive:         835808 kB\nActive(anon):    1008912 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835808 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                64 kB\nWriteback:             0 kB\nAnonPages:        645072 kB\nMapped:           344720 kB\nShmem:            373520 kB\nKReclaimable:     126432 kB\nSlab:             182160 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55728 kB\nKernelStack:        6496 kB\nPageTables:        12512 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3209872 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57120 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100408.6687415,
+      "temperature_c": 63.9,
+      "load": [
+        1.1279296875,
+        0.8974609375,
+        0.7421875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5487456 kB\nMemAvailable:    6891168 kB\nBuffers:          193488 kB\nCached:          1548592 kB\nSwapCached:            0 kB\nActive:          1540096 kB\nInactive:         835808 kB\nActive(anon):    1008640 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835808 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                64 kB\nWriteback:             0 kB\nAnonPages:        645296 kB\nMapped:           347104 kB\nShmem:            375440 kB\nKReclaimable:     126432 kB\nSlab:             182160 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55728 kB\nKernelStack:        6496 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3209872 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57120 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100409.743653,
+      "temperature_c": 62.8,
+      "load": [
+        1.1279296875,
+        0.8974609375,
+        0.7421875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5483808 kB\nMemAvailable:    6887552 kB\nBuffers:          193488 kB\nCached:          1546144 kB\nSwapCached:            0 kB\nActive:          1538528 kB\nInactive:         835840 kB\nActive(anon):    1007072 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835840 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                96 kB\nWriteback:             0 kB\nAnonPages:        645296 kB\nMapped:           339840 kB\nShmem:            372960 kB\nKReclaimable:     126432 kB\nSlab:             182176 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55744 kB\nKernelStack:        6496 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3209872 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57120 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100410.8050585,
+      "temperature_c": 63.9,
+      "load": [
+        1.11767578125,
+        0.8994140625,
+        0.74365234375
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5491744 kB\nMemAvailable:    6895488 kB\nBuffers:          193488 kB\nCached:          1546144 kB\nSwapCached:            0 kB\nActive:          1538736 kB\nInactive:         835840 kB\nActive(anon):    1007280 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835840 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                16 kB\nWriteback:             0 kB\nAnonPages:        645296 kB\nMapped:           340352 kB\nShmem:            372960 kB\nKReclaimable:     126432 kB\nSlab:             182176 kB\nSReclaimable:     126432 kB\nSUnreclaim:        55744 kB\nKernelStack:        6496 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3209872 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57120 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100411.8511646,
+      "temperature_c": 62.8,
+      "load": [
+        1.11767578125,
+        0.8994140625,
+        0.74365234375
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5479792 kB\nMemAvailable:    6883552 kB\nBuffers:          193488 kB\nCached:          1546592 kB\nSwapCached:            0 kB\nActive:          1539888 kB\nInactive:         835840 kB\nActive(anon):    1008432 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835840 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                48 kB\nWriteback:             0 kB\nAnonPages:        645296 kB\nMapped:           341392 kB\nShmem:            373408 kB\nKReclaimable:     126448 kB\nSlab:             182176 kB\nSReclaimable:     126448 kB\nSUnreclaim:        55728 kB\nKernelStack:        6496 kB\nPageTables:        12512 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3209872 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57152 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100412.9077826,
+      "temperature_c": 62.8,
+      "load": [
+        1.11767578125,
+        0.8994140625,
+        0.74365234375
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5458544 kB\nMemAvailable:    6862304 kB\nBuffers:          193488 kB\nCached:          1546320 kB\nSwapCached:            0 kB\nActive:          1538736 kB\nInactive:         835840 kB\nActive(anon):    1007280 kB\nInactive(anon):        0 kB\nActive(file):     531456 kB\nInactive(file):   835840 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                48 kB\nWriteback:             0 kB\nAnonPages:        645296 kB\nMapped:           341616 kB\nShmem:            373136 kB\nKReclaimable:     126448 kB\nSlab:             182176 kB\nSReclaimable:     126448 kB\nSUnreclaim:        55728 kB\nKernelStack:        6496 kB\nPageTables:        12496 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    3213712 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57152 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100413.9766464,
+      "temperature_c": 67.75,
+      "load": [
+        1.11767578125,
+        0.8994140625,
+        0.74365234375
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5393888 kB\nMemAvailable:    6798016 kB\nBuffers:          193488 kB\nCached:          1548592 kB\nSwapCached:            0 kB\nActive:          1613104 kB\nInactive:         836096 kB\nActive(anon):    1081568 kB\nInactive(anon):        0 kB\nActive(file):     531536 kB\nInactive(file):   836096 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                48 kB\nWriteback:             0 kB\nAnonPages:        715712 kB\nMapped:           343616 kB\nShmem:            375104 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6560 kB\nPageTables:        13344 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4175904 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57200 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100414.9773362,
+      "temperature_c": 68.3,
+      "load": [
+        1.11767578125,
+        0.8994140625,
+        0.74365234375
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5292288 kB\nMemAvailable:    6696448 kB\nBuffers:          193488 kB\nCached:          1545456 kB\nSwapCached:            0 kB\nActive:          1744624 kB\nInactive:         836096 kB\nActive(anon):    1213056 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836096 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                48 kB\nWriteback:             0 kB\nAnonPages:        849424 kB\nMapped:           342864 kB\nShmem:            371568 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6544 kB\nPageTables:        13360 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4175904 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57200 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100415.9784272,
+      "temperature_c": 68.85,
+      "load": [
+        1.3486328125,
+        0.951171875,
+        0.76123046875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5204848 kB\nMemAvailable:    6609040 kB\nBuffers:          193488 kB\nCached:          1545616 kB\nSwapCached:            0 kB\nActive:          1805488 kB\nInactive:         836128 kB\nActive(anon):    1273920 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836128 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                80 kB\nWriteback:             0 kB\nAnonPages:        908224 kB\nMapped:           341360 kB\nShmem:            372096 kB\nKReclaimable:     126480 kB\nSlab:             182336 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55856 kB\nKernelStack:        6544 kB\nPageTables:        13360 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4180256 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57200 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100416.9787767,
+      "temperature_c": 68.3,
+      "load": [
+        1.3486328125,
+        0.951171875,
+        0.76123046875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5163488 kB\nMemAvailable:    6567680 kB\nBuffers:          193488 kB\nCached:          1547376 kB\nSwapCached:            0 kB\nActive:          1804560 kB\nInactive:         836128 kB\nActive(anon):    1272992 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836128 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                96 kB\nWriteback:             0 kB\nAnonPages:        913792 kB\nMapped:           343520 kB\nShmem:            373856 kB\nKReclaimable:     126480 kB\nSlab:             182336 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55856 kB\nKernelStack:        6544 kB\nPageTables:        13360 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4180000 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57200 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100417.9791327,
+      "temperature_c": 69.4,
+      "load": [
+        1.3486328125,
+        0.951171875,
+        0.76123046875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5173056 kB\nMemAvailable:    6577248 kB\nBuffers:          193488 kB\nCached:          1546608 kB\nSwapCached:            0 kB\nActive:          1808048 kB\nInactive:         836128 kB\nActive(anon):    1276480 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836128 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                96 kB\nWriteback:             0 kB\nAnonPages:        911200 kB\nMapped:           343104 kB\nShmem:            373088 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6544 kB\nPageTables:        13520 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4177200 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57200 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100418.9795642,
+      "temperature_c": 68.3,
+      "load": [
+        1.3486328125,
+        0.951171875,
+        0.76123046875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5168448 kB\nMemAvailable:    6572640 kB\nBuffers:          193488 kB\nCached:          1548272 kB\nSwapCached:            0 kB\nActive:          1814768 kB\nInactive:         836128 kB\nActive(anon):    1283200 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836128 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                96 kB\nWriteback:             0 kB\nAnonPages:        911200 kB\nMapped:           345344 kB\nShmem:            374752 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6544 kB\nPageTables:        13360 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4184224 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57200 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100419.9799135,
+      "temperature_c": 71.05,
+      "load": [
+        1.3486328125,
+        0.951171875,
+        0.76123046875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5161776 kB\nMemAvailable:    6565968 kB\nBuffers:          193488 kB\nCached:          1547216 kB\nSwapCached:            0 kB\nActive:          1815344 kB\nInactive:         836128 kB\nActive(anon):    1283776 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836128 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                96 kB\nWriteback:             0 kB\nAnonPages:        925264 kB\nMapped:           346288 kB\nShmem:            373696 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6544 kB\nPageTables:        13344 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4184224 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57200 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100420.9810572,
+      "temperature_c": 68.3,
+      "load": [
+        1.56103515625,
+        1.001953125,
+        0.77880859375
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5149104 kB\nMemAvailable:    6553328 kB\nBuffers:          193488 kB\nCached:          1542688 kB\nSwapCached:            0 kB\nActive:          1814192 kB\nInactive:         836160 kB\nActive(anon):    1282624 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836160 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               128 kB\nWriteback:             0 kB\nAnonPages:        922448 kB\nMapped:           334976 kB\nShmem:            369136 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6528 kB\nPageTables:        13552 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4184208 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100421.9835541,
+      "temperature_c": 69.95,
+      "load": [
+        1.56103515625,
+        1.001953125,
+        0.77880859375
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5136944 kB\nMemAvailable:    6541168 kB\nBuffers:          193488 kB\nCached:          1547136 kB\nSwapCached:            0 kB\nActive:          1816768 kB\nInactive:         836160 kB\nActive(anon):    1285200 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836160 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               128 kB\nWriteback:             0 kB\nAnonPages:        919376 kB\nMapped:           340208 kB\nShmem:            373584 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6544 kB\nPageTables:        13536 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4184208 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100422.9841495,
+      "temperature_c": 69.4,
+      "load": [
+        1.56103515625,
+        1.001953125,
+        0.77880859375
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5140464 kB\nMemAvailable:    6544688 kB\nBuffers:          193488 kB\nCached:          1543360 kB\nSwapCached:            0 kB\nActive:          1808880 kB\nInactive:         836160 kB\nActive(anon):    1277312 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836160 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                32 kB\nWriteback:             0 kB\nAnonPages:        919376 kB\nMapped:           336928 kB\nShmem:            369808 kB\nKReclaimable:     126480 kB\nSlab:             182304 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55824 kB\nKernelStack:        6560 kB\nPageTables:        13360 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4185280 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100423.9850633,
+      "temperature_c": 70.5,
+      "load": [
+        1.56103515625,
+        1.001953125,
+        0.77880859375
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5157856 kB\nMemAvailable:    6562080 kB\nBuffers:          193488 kB\nCached:          1547968 kB\nSwapCached:            0 kB\nActive:          1810240 kB\nInactive:         836160 kB\nActive(anon):    1278672 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836160 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                32 kB\nWriteback:             0 kB\nAnonPages:        917520 kB\nMapped:           341888 kB\nShmem:            374416 kB\nKReclaimable:     126480 kB\nSlab:             182304 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55824 kB\nKernelStack:        6560 kB\nPageTables:        13344 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4184112 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100424.9854553,
+      "temperature_c": 70.5,
+      "load": [
+        1.56103515625,
+        1.001953125,
+        0.77880859375
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5182976 kB\nMemAvailable:    6587200 kB\nBuffers:          193488 kB\nCached:          1547392 kB\nSwapCached:            0 kB\nActive:          1807952 kB\nInactive:         836160 kB\nActive(anon):    1276384 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836160 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                32 kB\nWriteback:             0 kB\nAnonPages:        915632 kB\nMapped:           342640 kB\nShmem:            373840 kB\nKReclaimable:     126480 kB\nSlab:             182304 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55824 kB\nKernelStack:        6560 kB\nPageTables:        13360 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4180272 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100425.9890015,
+      "temperature_c": 71.05,
+      "load": [
+        1.83642578125,
+        1.068359375,
+        0.8017578125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5186640 kB\nMemAvailable:    6590880 kB\nBuffers:          193488 kB\nCached:          1543024 kB\nSwapCached:            0 kB\nActive:          1814272 kB\nInactive:         836176 kB\nActive(anon):    1282704 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836176 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                48 kB\nWriteback:             0 kB\nAnonPages:        916960 kB\nMapped:           339088 kB\nShmem:            369456 kB\nKReclaimable:     126480 kB\nSlab:             182304 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55824 kB\nKernelStack:        6560 kB\nPageTables:        13360 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4184224 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100426.9894352,
+      "temperature_c": 70.5,
+      "load": [
+        1.83642578125,
+        1.068359375,
+        0.8017578125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5171552 kB\nMemAvailable:    6575808 kB\nBuffers:          193488 kB\nCached:          1546288 kB\nSwapCached:            0 kB\nActive:          1814912 kB\nInactive:         836192 kB\nActive(anon):    1283344 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836192 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                64 kB\nWriteback:             0 kB\nAnonPages:        927344 kB\nMapped:           341536 kB\nShmem:            372704 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6560 kB\nPageTables:        13360 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4188080 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100427.9898283,
+      "temperature_c": 70.5,
+      "load": [
+        1.83642578125,
+        1.068359375,
+        0.8017578125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5188240 kB\nMemAvailable:    6592496 kB\nBuffers:          193488 kB\nCached:          1542112 kB\nSwapCached:            0 kB\nActive:          1810688 kB\nInactive:         836192 kB\nActive(anon):    1279120 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836192 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                32 kB\nWriteback:             0 kB\nAnonPages:        921456 kB\nMapped:           338928 kB\nShmem:            368528 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6560 kB\nPageTables:        13136 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4185280 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100428.9902792,
+      "temperature_c": 71.05,
+      "load": [
+        1.83642578125,
+        1.068359375,
+        0.8017578125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5185440 kB\nMemAvailable:    6589696 kB\nBuffers:          193488 kB\nCached:          1549552 kB\nSwapCached:            0 kB\nActive:          1814352 kB\nInactive:         836192 kB\nActive(anon):    1282784 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836192 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                32 kB\nWriteback:             0 kB\nAnonPages:        921456 kB\nMapped:           345552 kB\nShmem:            375968 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6560 kB\nPageTables:        13376 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4188080 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100429.991502,
+      "temperature_c": 71.6,
+      "load": [
+        1.83642578125,
+        1.068359375,
+        0.8017578125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5186960 kB\nMemAvailable:    6591216 kB\nBuffers:          193488 kB\nCached:          1547136 kB\nSwapCached:            0 kB\nActive:          1814656 kB\nInactive:         836192 kB\nActive(anon):    1283088 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836192 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                32 kB\nWriteback:             0 kB\nAnonPages:        921456 kB\nMapped:           343872 kB\nShmem:            373552 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6560 kB\nPageTables:        13344 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4184224 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100430.9919977,
+      "temperature_c": 71.05,
+      "load": [
+        2.08984375,
+        1.1337890625,
+        0.82470703125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5169440 kB\nMemAvailable:    6573712 kB\nBuffers:          193488 kB\nCached:          1544832 kB\nSwapCached:            0 kB\nActive:          1813536 kB\nInactive:         836208 kB\nActive(anon):    1281968 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836208 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                48 kB\nWriteback:             0 kB\nAnonPages:        921456 kB\nMapped:           343312 kB\nShmem:            371232 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6560 kB\nPageTables:        13344 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4181440 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100431.9927025,
+      "temperature_c": 70.5,
+      "load": [
+        2.08984375,
+        1.1337890625,
+        0.82470703125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5152128 kB\nMemAvailable:    6556416 kB\nBuffers:          193488 kB\nCached:          1547072 kB\nSwapCached:            0 kB\nActive:          1811152 kB\nInactive:         836224 kB\nActive(anon):    1279584 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836224 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                64 kB\nWriteback:             0 kB\nAnonPages:        917360 kB\nMapped:           344320 kB\nShmem:            373456 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6560 kB\nPageTables:        13344 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4180144 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100432.9969976,
+      "temperature_c": 71.6,
+      "load": [
+        2.08984375,
+        1.1337890625,
+        0.82470703125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5141296 kB\nMemAvailable:    6545584 kB\nBuffers:          193488 kB\nCached:          1545200 kB\nSwapCached:            0 kB\nActive:          1812544 kB\nInactive:         836224 kB\nActive(anon):    1280976 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836224 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               144 kB\nWriteback:             0 kB\nAnonPages:        918560 kB\nMapped:           342928 kB\nShmem:            371584 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6560 kB\nPageTables:        13312 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4184240 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100433.9973748,
+      "temperature_c": 71.6,
+      "load": [
+        2.08984375,
+        1.1337890625,
+        0.82470703125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5146448 kB\nMemAvailable:    6550736 kB\nBuffers:          193488 kB\nCached:          1546080 kB\nSwapCached:            0 kB\nActive:          1814768 kB\nInactive:         836224 kB\nActive(anon):    1283200 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836224 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                32 kB\nWriteback:             0 kB\nAnonPages:        919760 kB\nMapped:           339776 kB\nShmem:            372464 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6560 kB\nPageTables:        13344 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4188080 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57200 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100434.9977725,
+      "temperature_c": 71.6,
+      "load": [
+        2.08984375,
+        1.1337890625,
+        0.82470703125
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5150832 kB\nMemAvailable:    6555136 kB\nBuffers:          193488 kB\nCached:          1547376 kB\nSwapCached:            0 kB\nActive:          1810528 kB\nInactive:         836240 kB\nActive(anon):    1278960 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836240 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                48 kB\nWriteback:             0 kB\nAnonPages:        916784 kB\nMapped:           341136 kB\nShmem:            373744 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6560 kB\nPageTables:        13520 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4183984 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57200 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100435.9986072,
+      "temperature_c": 69.95,
+      "load": [
+        2.2431640625,
+        1.181640625,
+        0.841796875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5160752 kB\nMemAvailable:    6565072 kB\nBuffers:          193488 kB\nCached:          1544688 kB\nSwapCached:            0 kB\nActive:          1811920 kB\nInactive:         836256 kB\nActive(anon):    1280352 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836256 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                64 kB\nWriteback:             0 kB\nAnonPages:        915760 kB\nMapped:           340032 kB\nShmem:            371040 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6560 kB\nPageTables:        13280 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4182176 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57200 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100436.9997,
+      "temperature_c": 72.7,
+      "load": [
+        2.2431640625,
+        1.181640625,
+        0.841796875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5174800 kB\nMemAvailable:    6579120 kB\nBuffers:          193488 kB\nCached:          1543984 kB\nSwapCached:            0 kB\nActive:          1809584 kB\nInactive:         836256 kB\nActive(anon):    1278016 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836256 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                64 kB\nWriteback:             0 kB\nAnonPages:        918832 kB\nMapped:           338240 kB\nShmem:            370336 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6528 kB\nPageTables:        13344 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4184304 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100438.0001333,
+      "temperature_c": 71.05,
+      "load": [
+        2.2431640625,
+        1.181640625,
+        0.841796875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5175296 kB\nMemAvailable:    6579616 kB\nBuffers:          193488 kB\nCached:          1543520 kB\nSwapCached:            0 kB\nActive:          1808816 kB\nInactive:         836256 kB\nActive(anon):    1277248 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836256 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                64 kB\nWriteback:             0 kB\nAnonPages:        917984 kB\nMapped:           338224 kB\nShmem:            369872 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6528 kB\nPageTables:        13344 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4179248 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100439.000813,
+      "temperature_c": 72.15,
+      "load": [
+        2.2431640625,
+        1.181640625,
+        0.841796875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5189952 kB\nMemAvailable:    6594272 kB\nBuffers:          193488 kB\nCached:          1544560 kB\nSwapCached:            0 kB\nActive:          1806368 kB\nInactive:         836256 kB\nActive(anon):    1274800 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836256 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                 0 kB\nWriteback:            32 kB\nAnonPages:        912000 kB\nMapped:           340032 kB\nShmem:            370912 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6528 kB\nPageTables:        13504 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4178192 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100440.0012362,
+      "temperature_c": 72.7,
+      "load": [
+        2.2431640625,
+        1.181640625,
+        0.841796875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5198032 kB\nMemAvailable:    6602352 kB\nBuffers:          193488 kB\nCached:          1548000 kB\nSwapCached:            0 kB\nActive:          1814608 kB\nInactive:         836256 kB\nActive(anon):    1283040 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836256 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                 0 kB\nWriteback:             0 kB\nAnonPages:        917520 kB\nMapped:           343904 kB\nShmem:            374352 kB\nKReclaimable:     126480 kB\nSlab:             182304 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55824 kB\nKernelStack:        6528 kB\nPageTables:        13376 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4184240 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100441.0017245,
+      "temperature_c": 71.05,
+      "load": [
+        2.38427734375,
+        1.228515625,
+        0.85888671875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5184896 kB\nMemAvailable:    6589232 kB\nBuffers:          193488 kB\nCached:          1546368 kB\nSwapCached:            0 kB\nActive:          1817200 kB\nInactive:         836272 kB\nActive(anon):    1285632 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836272 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                48 kB\nWriteback:             0 kB\nAnonPages:        924000 kB\nMapped:           342192 kB\nShmem:            372704 kB\nKReclaimable:     126480 kB\nSlab:             182304 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55824 kB\nKernelStack:        6544 kB\nPageTables:        13600 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4187072 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100442.0050225,
+      "temperature_c": 71.05,
+      "load": [
+        2.38427734375,
+        1.228515625,
+        0.85888671875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5165168 kB\nMemAvailable:    6569520 kB\nBuffers:          193488 kB\nCached:          1548656 kB\nSwapCached:            0 kB\nActive:          1813584 kB\nInactive:         836288 kB\nActive(anon):    1282016 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836288 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                64 kB\nWriteback:             0 kB\nAnonPages:        915776 kB\nMapped:           345360 kB\nShmem:            374976 kB\nKReclaimable:     126480 kB\nSlab:             182304 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55824 kB\nKernelStack:        6544 kB\nPageTables:        13408 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4180160 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100443.0057077,
+      "temperature_c": 69.95,
+      "load": [
+        2.38427734375,
+        1.228515625,
+        0.85888671875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5163216 kB\nMemAvailable:    6567568 kB\nBuffers:          193488 kB\nCached:          1545472 kB\nSwapCached:            0 kB\nActive:          1811664 kB\nInactive:         836288 kB\nActive(anon):    1280096 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836288 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:                64 kB\nWriteback:             0 kB\nAnonPages:        916800 kB\nMapped:           342592 kB\nShmem:            371792 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6544 kB\nPageTables:        13392 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4182208 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    },
+    {
+      "time": 1789100444.0060587,
+      "temperature_c": 72.15,
+      "load": [
+        2.38427734375,
+        1.228515625,
+        0.85888671875
+      ],
+      "meminfo": "MemTotal:        8256528 kB\nMemFree:         5174368 kB\nMemAvailable:    6578720 kB\nBuffers:          193488 kB\nCached:          1545248 kB\nSwapCached:            0 kB\nActive:          1812448 kB\nInactive:         836288 kB\nActive(anon):    1280880 kB\nInactive(anon):        0 kB\nActive(file):     531568 kB\nInactive(file):   836288 kB\nUnevictable:       10352 kB\nMlocked:               0 kB\nSwapTotal:       2097136 kB\nSwapFree:        2097136 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               112 kB\nWriteback:             0 kB\nAnonPages:        917984 kB\nMapped:           342480 kB\nShmem:            371568 kB\nKReclaimable:     126480 kB\nSlab:             182320 kB\nSReclaimable:     126480 kB\nSUnreclaim:        55840 kB\nKernelStack:        6544 kB\nPageTables:        13376 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     6225392 kB\nCommitted_AS:    4183264 kB\nVmallocTotal:   68447887360 kB\nVmallocUsed:       57184 kB\nVmallocChunk:          0 kB\nPercpu:             1344 kB\nCmaTotal:          65536 kB\nCmaFree:           42224 kB\n"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Machining lessons · KerfKite Studio</title>
+<link rel="stylesheet" href="./machining-lessons.css">
+<main>
+<nav><a href="./index.html">Studio</a> / <a href="./help.html">Help centre</a></nav>
+<h1>Machining lessons</h1>
+<p>Change one setting, generate a toolpath and inspect how the machine would cut this sample plate.</p>
+<div class="layout">
+<section aria-label="Lesson controls">
+<label for="lesson">Machining head</label>
+<select id="lesson"><option value="router">Router · step-down</option><option value="laser">Laser · entry ramp</option><option value="knife">Drag knife · blade offset</option></select>
+<h2 id="title"></h2><p id="challenge"></p>
+<form><label for="setting" id="setting-label"></label><input type="number" id="setting" required>
+<button type="submit">Generate lesson preview</button></form>
+<output id="feedback" aria-live="polite"></output>
+</section>
+<section aria-label="Lesson preview">
+<svg viewBox="4 -50 70 50" aria-label="Top view of generated cutting paths" role="img"><g id="motion"></g></svg>
+<label for="step">Toolpath playback</label><input id="step" type="range" min="0" max="100" value="100" disabled>
+<p id="metrics"></p>
+<details><summary>Inspect generated G-code</summary><pre id="code"></pre></details>
+</section></div>
+<section><h2>Workshops in the editor</h2>
+<p>Open Studio to practise with editable examples. In <b>3D CAD</b>, try the bearing mate or surface tutorial. In <b>CAM</b>, move the clamp and rerun fixture clearance. In <b>Images</b>, use the sample raster or camera target. In <b>Projects</b>, choose <b>Try a sample</b> to convert a LightBurn badge.</p>
+<a href="./index.html">Open Studio</a> · <a href="./help.html#lightburn-import">Read the import tutorial</a></section></main>
+<script src="./protocols.js"></script><script src="./offline-cam.js"></script><script src="./machining-lessons.js"></script></html>

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kerfkite-studio"
+version = "0.2.0"
+description = "Cross-platform CNC, laser and knife design workspace"
+requires-python = ">=3.10"
+license = "MIT AND OFL-1.1 AND Zlib"
+license-files = ["LICENSE", "studio/static/vendor/*LICENSE.txt", "studio/static/vendor/*OFL.txt"]
+dependencies = ["Flask>=3.1,<4", "pyserial>=3.5,<4", "shapely>=2.1,<3", "Pillow>=11,<13", "numpy>=2,<3", "manifold3d>=3.5,<4", "ezdxf>=1.4,<2"]
+
+[project.optional-dependencies]
+step = ["cadquery-ocp-novtk>=7.9.3,<8"]
+web = ["cheroot>=10,<12", "cryptography>=46,<51"]
+mcp = ["fastmcp>=3,<4"]
+
+[project.scripts]
+cnc-studio = "studio.server:main"
+cnc-studio-web = "studio.web_server:main"
+cnc-studio-mcp = "studio.mcp_server:main"
+
+[tool.setuptools.package-data]
+studio = ["static/*", "static/icons/*", "static/vendor/*", "builtin_templates.json"]

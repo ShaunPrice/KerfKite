@@ -1,0 +1,1 @@
+{"stdio_initialize": true, "tools": ["list_templates", "get_template", "create_artwork", "save_template", "preview_job", "export_gcode"], "artwork_files_created": true, "template_bundle_created": true, "cam_lines": 208, "gcode_export": true, "invalid_id_rejected": true}

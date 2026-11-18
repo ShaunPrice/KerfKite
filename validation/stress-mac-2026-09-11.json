@@ -1,0 +1,183 @@
+{
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "python": "3.12.13 (main, Mar  3 2026, 12:39:30) [Clang 17.0.0 (clang-1700.6.3.2)]",
+  "cpus": 10,
+  "fixture": "256x256 rosette/ripples, 300x180mm, 6mm depth, 3.175mm ball, .9mm stepover, 3mm stepdown",
+  "model": null,
+  "baseline": [
+    {
+      "stages": {
+        "relief": 0.5491016659652814,
+        "gcode": 0.16727662493940443,
+        "stock_preview": 0.5201266659423709
+      },
+      "vertices": 67335,
+      "lines": 135886,
+      "segments": 134268,
+      "gcode_bytes": 4749814,
+      "sha256": "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc",
+      "peak_rss_mib": 96.90625
+    },
+    {
+      "stages": {
+        "relief": 0.5305696669965982,
+        "gcode": 0.17322670796420425,
+        "stock_preview": 0.5119548329384997
+      },
+      "vertices": 67335,
+      "lines": 135886,
+      "segments": 134268,
+      "gcode_bytes": 4749814,
+      "sha256": "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc",
+      "peak_rss_mib": 96.90625
+    },
+    {
+      "stages": {
+        "relief": 0.5242136660963297,
+        "gcode": 0.17579216603189707,
+        "stock_preview": 0.5156013750238344
+      },
+      "vertices": 67335,
+      "lines": 135886,
+      "segments": 134268,
+      "gcode_bytes": 4749814,
+      "sha256": "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc",
+      "peak_rss_mib": 96.90625
+    }
+  ],
+  "native": [
+    {
+      "grid": 32,
+      "python_median_seconds": 0.10324199998285621,
+      "cpp_process_including_text_io_seconds": 0.02648429200053215,
+      "python_output_parse_seconds": 0.008705290965735912,
+      "max_depth_error_mm": 7.283063041541027e-14
+    },
+    {
+      "grid": 128,
+      "python_median_seconds": 0.24678320798557252,
+      "cpp_process_including_text_io_seconds": 0.05368312494829297,
+      "python_output_parse_seconds": 0.009603500016964972,
+      "max_depth_error_mm": 7.283063041541027e-14
+    },
+    {
+      "grid": 256,
+      "python_median_seconds": 0.5385572080267593,
+      "cpp_process_including_text_io_seconds": 0.13974174996837974,
+      "python_output_parse_seconds": 0.009847208042629063,
+      "max_depth_error_mm": 7.283063041541027e-14
+    }
+  ],
+  "sustained_single": {
+    "runs": 1,
+    "elapsed": 1.2918774579884484,
+    "hashes": [
+      "08c0811b116f76b17866ad928bc4484293a43a86f6b02050ad0d85e46dd67bbc"
+    ],
+    "median_pipeline_seconds": 1.251528084045276,
+    "peak_rss_mib": 109.65625
+  },
+  "all_gcode_hashes_match": true,
+  "telemetry": [
+    {
+      "time": 1789100349.891864,
+      "temperature_c": null,
+      "load": [
+        3.849609375,
+        3.9326171875,
+        3.427734375
+      ],
+      "meminfo": null
+    },
+    {
+      "time": 1789100350.898819,
+      "temperature_c": null,
+      "load": [
+        3.849609375,
+        3.9326171875,
+        3.427734375
+      ],
+      "meminfo": null
+    },
+    {
+      "time": 1789100351.916399,
+      "temperature_c": null,
+      "load": [
+        3.849609375,
+        3.9326171875,
+        3.427734375
+      ],
+      "meminfo": null
+    },
+    {
+      "time": 1789100352.9327822,
+      "temperature_c": null,
+      "load": [
+        3.849609375,
+        3.9326171875,
+        3.427734375
+      ],
+      "meminfo": null
+    },
+    {
+      "time": 1789100353.94073,
+      "temperature_c": null,
+      "load": [
+        3.861328125,
+        3.93359375,
+        3.4306640625
+      ],
+      "meminfo": null
+    },
+    {
+      "time": 1789100354.952157,
+      "temperature_c": null,
+      "load": [
+        3.861328125,
+        3.93359375,
+        3.4306640625
+      ],
+      "meminfo": null
+    },
+    {
+      "time": 1789100355.9658391,
+      "temperature_c": null,
+      "load": [
+        3.861328125,
+        3.93359375,
+        3.4306640625
+      ],
+      "meminfo": null
+    },
+    {
+      "time": 1789100356.972418,
+      "temperature_c": null,
+      "load": [
+        3.861328125,
+        3.93359375,
+        3.4306640625
+      ],
+      "meminfo": null
+    },
+    {
+      "time": 1789100357.9837859,
+      "temperature_c": null,
+      "load": [
+        3.861328125,
+        3.93359375,
+        3.4306640625
+      ],
+      "meminfo": null
+    },
+    {
+      "time": 1789100359.000727,
+      "temperature_c": null,
+      "load": [
+        3.9521484375,
+        3.951171875,
+        3.439453125
+      ],
+      "meminfo": null
+    }
+  ]
+}
