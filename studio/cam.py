@@ -1,9 +1,11 @@
 """Conservative centreline engraving CAM, dimensions in millimetres."""
 import math
 from bisect import bisect_right
-from .laser import prepare
+from .laser import cut_options, prepare
+from .drilling import generate_drill
+from .router_entry import generate_entry
 from .protocols import postprocess, get_protocol
-from .operations import prepare as prepare_operation
+from .operations import prepare as prepare_operation, router_tool_shape
 
 
 def number(value, name, low, high):
@@ -117,23 +119,35 @@ def generate(project):
         if not isinstance(operations,list) or not 1<=len(operations)<=100:raise ValueError('Use 1–100 ordered operations')
         jobs=[]
         tool_signature=None
+        common = {k:v for k,v in project.items() if k not in ('operations','paths','path_depths','path_powers')}
         for operation in operations:
             if not isinstance(operation,dict) or 'operations' in operation:raise ValueError('Nested operations are unsupported')
             if any(operation.get(k,project.get(k))!=project.get(k) for k in ('mode','protocol','width','height','dwell_units')):raise ValueError('An ordered job must use one head, protocol and work area')
+            merged = {**common, **operation}
             if project.get('mode')=='router':
-                shape = 'v' if operation.get('operation', project.get('operation')) == 'vcarve' else operation.get('tool_shape', project.get('tool_shape', 'flat'))
-                signature = (operation.get('tool_id', project.get('tool_id')),
-                             operation.get('tool_diameter', project.get('tool_diameter', 3.175)), shape,
-                             operation.get('v_angle', project.get('v_angle', 60)) if shape == 'v' else None)
+                shape = router_tool_shape(merged)
+                angle = None
+                if shape == 'v':
+                    angle = merged.get('v_angle', 60)
+                elif shape == 'drill':
+                    angle = merged.get('drill_point_angle', 118)
+                signature = (merged.get('tool_id'),merged.get('tool_diameter',3.175),shape,angle)
                 if tool_signature is not None and signature != tool_signature:
                     raise ValueError('Tool identity or geometry differs between operations; export separate jobs and change tools explicitly')
                 tool_signature=signature
-            jobs.append(generate({**{k:v for k,v in project.items() if k not in ('operations','paths','path_depths','path_powers')},**operation}))
+            jobs.append(generate(merged))
             if sum(len(j['lines']) for j in jobs)>200000:raise ValueError('Combined job exceeds line limit')
+        drill_data = {}
+        holes = [hole for j in jobs for hole in j.get('drill_holes',[])]
+        if holes:
+            drill_data['drill_holes'] = holes
+            tool = jobs[0].get('simulation_tool')
+            if tool and all(j.get('simulation_tool') == tool for j in jobs):
+                drill_data['simulation_tool'] = tool
         return {'lines':[l for j in jobs for l in j['lines'] if l != 'M30'] + (['M30'] if jobs[-1]['lines'][-1]=='M30' else []), 'segments':[s for j in jobs for s in j['segments']],
                 'cut_length':round(sum(j['cut_length'] for j in jobs),2),'cut_minutes':round(sum(j['cut_minutes'] for j in jobs),2),
                 'mode':project['mode'],'bounds':[min(j['bounds'][0] for j in jobs),min(j['bounds'][1] for j in jobs),max(j['bounds'][2] for j in jobs),max(j['bounds'][3] for j in jobs)],
-                'warnings':list(dict.fromkeys(w for j in jobs for w in j['warnings'])),'operations':len(jobs)}
+                'warnings':list(dict.fromkeys(w for j in jobs for w in j['warnings'])),'operations':len(jobs), **drill_data}
     return _generate_single(project)
 
 
@@ -175,6 +189,14 @@ def _generate_single(project):
         if count > 100000:
             raise ValueError('Too many vertices; simplify the design')
         clean.append(points)
+    entry=project.get('router_entry','plunge')
+    if mode=='router' and entry != 'plunge' and project.get('operation')=='drill':
+        raise ValueError('Use the drill peck setting for drilling; select plunge as the router entry')
+    if project.get('operation')=='drill':
+        return generate_drill(project,clean,number)
+    if mode=='router' and project.get('tool_shape')=='drill':
+        raise ValueError('Choose a milling cutter for a contour or pocket; a drill bit is for drilling')
+    source = clean
     clean, prepared_depths, operation_warnings = prepare_operation(project, clean)
     for path in clean:
         for point in path:
@@ -195,6 +217,8 @@ def _generate_single(project):
         depths = [[float(v) for v in path] for path in depths]
         depth = max(-v for path in depths for v in path)
         if depth <= 0:raise ValueError('No contour cuts below the stock surface')
+    if mode=='router' and entry!='plunge':
+        return generate_entry(project,source,clean,depths,depth,step,safe,feed,plunge,power,operation_warnings)
     laser_paths = []
     options = None
     if mode == 'laser':
@@ -202,13 +226,14 @@ def _generate_single(project):
             ('lead_in', 0, 'Lead-in distance', 0, 100), ('lead_out', 0, 'Lead-out distance', 0, 100),
             ('ramp_in', 0, 'Start ramp distance', 0, 1000), ('ramp_out', 0, 'End ramp distance', 0, 1000),
             ('start_power', 100, 'Start power percent', 0, 100), ('end_power', 100, 'End power percent', 0, 100))]
+        cut = cut_options(project, number)
         pixel_powers = project.get('path_powers')
         if pixel_powers is not None:
             if project.get('operation','line')!='line' or any(options[:4]):raise ValueError('Raster powers require line operation with lead/ramp distances zero')
             if not isinstance(pixel_powers,list) or len(pixel_powers)!=len(clean):raise ValueError('Pixel powers must match raster paths')
         expanded = 0
         for path_index, path in enumerate(clean):
-            if pixel_powers is None:prepared = prepare(path, power, options, width, height)
+            if pixel_powers is None:prepared = prepare(path, power, options, width, height, cut)
             else:
                 powers=pixel_powers[path_index]
                 if not isinstance(powers,list) or len(powers)!=len(path):raise ValueError('Pixel powers must match vertices')
@@ -254,7 +279,7 @@ def _generate_single(project):
     if get_protocol(project.get('protocol','grbl')).family=='rs274':
         warnings.append('Before loading, clear controller scaling, rotation and local offsets. Set G54 Z zero for the current tool tip with tool-length compensation off. Exact-stop output may run slower on dense curves.')
     if mode == 'laser' and any(options[:4]):
-        warnings.append('Straight tangent leads are cutting moves and may mark outside the design. Power ramps use steps of at most 0.5 mm; M4 also scales power with speed.')
+        warnings.append('Tangent leads are cutting moves and may mark outside the design. Power ramps use steps of at most 0.5 mm; M4 also scales power with speed.')
     return {'lines': postprocess(lines, project.get('protocol', 'grbl'), mode, project.get('dwell_units','')), 'segments': segments, 'cut_length': round(length, 2),
             'cut_minutes': round(length / (min(feed, plunge) if depths is not None else feed), 2), 'mode': mode,
             'bounds': [min(p[0] for path in envelope for p in path), min(p[1] for path in envelope for p in path), max(p[0] for path in envelope for p in path), max(p[1] for path in envelope for p in path)],

@@ -503,6 +503,9 @@ def _part_shape(model):
             r, h = d.positive(f['radius']), d.positive(f['height'])
             top = d.evaluate(f.get('topRadius', r))
             shape = (BRepPrimAPI_MakeCylinder(r, h) if abs(top-r) < 1e-10 else BRepPrimAPI_MakeCone(r, top, h)).Shape()
+        elif kind == 'loft':
+            from .solid_loft import loft_shape
+            shape = loft_shape(f,d)
         elif kind in ('extrude', 'revolve'):
             from .sketch_profile import step_profile_face
             face = step_profile_face(f, d)

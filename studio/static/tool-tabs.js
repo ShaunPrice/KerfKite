@@ -20,7 +20,7 @@
  const projectButtons=document.createElement('div');projectButtons.className='buttons';l.projects.append(projectButtons);for(const id of ['loadProject','saveProject','saveSVG','demo'])move(id,projectButtons);
  const templateButtons=document.createElement('div');templateButtons.className='buttons';l.templates.append(templateButtons);for(const id of ['openLibrary','saveTemplate'])move(id,templateButtons);
  const templateHint=document.createElement('p');templateHint.className='hint';templateHint.textContent='Browse the template library, insert artwork, or save your selection as a reusable template.';l.templates.append(templateHint);
- move('svgImport',l.images);move('file',l.projects);
+ move('svgSizingLabel',l.images);move('svgImport',l.images);move('file',l.projects);
  move('objects',l.objects);move('move',l.objects,'.buttons');
  // Keep shape icons at the first visible position, independent of other tools.
  const icons=document.getElementById('rect').closest('.buttons');l.shapes.prepend(icons);icons.classList.add('quick-shapes');
@@ -48,6 +48,9 @@
     if (camOperation === 'fill') operation = 'engrave';
    } else if (mode === 'knife') {
     tool = 'knife';
+   } else if (camOperation === 'drill' || tool === 'drill') {
+    tool = 'drill';
+    operation = Number(document.getElementById('drill_peck').value)>0 ? 'peck' : 'drill';
    } else if (camOperation === 'vcarve') {
     tool = 'v';
     operation = 'engrave';

@@ -47,6 +47,18 @@ Select a vertex and enter a positive **Corner fillet radius** or a named radius 
 
 **Apply sketch** preserves constraints, radius expressions and the original construction vertices. Solid and CAM previews sample the arcs. STEP export with the optional Open CASCADE runtime writes exact circular arcs. Extrusion and revolution both use this profile.
 
+## Draw a dimension-driven Bézier edge
+
+1. Create an extruded rectangle with points (0,0), (20,0), (20,10) and (0,10). Add a model parameter named `rise` with value 4.
+2. Open **Edit sketch on plane**, select **Point 3** and expand **Cubic Bézier edge**. This edits the top edge from point 3 to point 4. For its start control enter X = `40/3`, Y = `10+rise`. For its end control enter X = `20/3`, Y = `10+rise`. Choose **Set cubic edge** and **Apply sketch**.
+3. The arch reaches Y = 13 mm halfway across the top. Change `rise` to 8. The arch now reaches Y = 16 mm. A horizontal section through the solid and its linked machining outline follow the rebuilt curve.
+4. To sculpt by hand, enter numeric coordinates for a control, press **Set cubic edge**, then drag its square handle. The grid snap applies when enabled. A coordinate containing a parameter expression stays driven when you drag. **Make edge straight** restores the chord between the construction vertices.
+5. For a smooth join, check **Tangent at start** or **Tangent at end** and choose **Set cubic edge**. The selected handle follows the direction of the adjoining straight or cubic edge. Its distance from the shared vertex comes from the entered control coordinates. At a cubic-to-cubic join, choose which of the two handles follows the other. A change to the driving tangent updates the follower.
+
+Multiple cubic edges form a piecewise Bézier profile. Tangency is directional (G1); handle lengths on the two sides may differ. Point constraints reference the construction vertices. Relations between edges measure their endpoint chords. The constraint count in the sketch refers to construction vertices. To change the number of vertices on a cubic, straighten that edge first. Sharp or curved joints can be mixed with circular fillets elsewhere on the outline.
+
+STL, stock previews and section paths use an adaptive polygonal approximation with a maximum cubic chord deviation of 0.01 mm. STEP writes the four Bézier poles as an exact curve before extruding or revolving the face.
+
 ## Profile requirements
 
-Each feature accepts one closed loop with 3–256 distinct construction vertices and up to 128 geometric relations. Revolutions require nonnegative radius coordinates. A second subtractive feature can produce a hole. The editor supports straight segments and tangent corner arcs. Dimension constraints act on construction vertices and straight edge directions. Free-form sketch splines and arbitrary curve-to-curve tangency constraints remain outside the sketch editor.
+Each feature accepts one closed loop with 3–256 distinct construction vertices and up to 128 geometric relations. Revolutions require nonnegative radius coordinates. A second subtractive feature can produce a hole. Supported sketch edges are straight segments, cubic Béziers and tangent circular corner fillets. A Bézier endpoint can follow a tangent at its shared vertex. Interior contact between unrelated curves, curvature-continuity constraints and general NURBS sketch edges remain open.

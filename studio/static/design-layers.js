@@ -1,7 +1,7 @@
 /* Named artwork layers; display visibility and machining output are independent. */
 (function(root){'use strict';
 const GLOBAL=['mode','protocol','width','height','stock_thickness','dwell_units'];
-const SETTINGS=['operation','tool_diameter','stepover','kerf','interval','hatch_angle','crosshatch','v_angle','v_resolution','knife_offset','knife_lead','feed','power','depth','step','safe','plunge','passes','lead_in','lead_out','start_power','end_power','ramp_in','ramp_out','tool_id','tool_name','tool_shape','tabs'];
+const SETTINGS=['operation','tool_diameter','stepover','kerf','interval','hatch_angle','crosshatch','v_angle','v_resolution','knife_offset','knife_lead','feed','power','depth','step','safe','plunge','passes','lead_in','lead_out','start_power','end_power','ramp_in','ramp_out','lead_shape','laser_pattern','laser_dash','laser_gap','laser_bridge_count','drill_peck','drill_point_angle','router_entry','entry_angle','entry_radius','tool_id','tool_name','tool_shape','tabs'];
 const defaults=()=>[{id:'default',name:'Default',color:'#176a9a',visible:true,output:true,settings:{}}];
 function catalog(value){if(value===undefined)return defaults();if(!Array.isArray(value)||!value.length||value.length>64)throw Error('Use 1–64 design layers.');const ids=new Set();const result=value.map(row=>{if(!row||typeof row!=='object'||typeof row.id!=='string'||!/^[a-zA-Z0-9_-]{1,80}$/.test(row.id)||ids.has(row.id))throw Error('Invalid or duplicate layer ID.');ids.add(row.id);if(typeof row.name!=='string'||!row.name.trim()||row.name.length>80)throw Error('Layer name must contain 1–80 characters.');if(!/^#[0-9a-fA-F]{6}$/.test(row.color))throw Error('Choose a valid layer colour.');if(typeof row.visible!=='boolean'||typeof row.output!=='boolean'||!row.settings||typeof row.settings!=='object'||Array.isArray(row.settings))throw Error('Invalid layer settings.');return {...row,name:row.name.trim(),settings:Object.fromEntries(SETTINGS.filter(k=>Object.hasOwn(row.settings,k)).map(k=>[k,structuredClone(row.settings[k])]))};});if(!ids.has('default'))throw Error('The Default layer is required.');return result;}
 function layerFor(o,rows){return rows.find(r=>r.id===o.designLayerId)||rows.find(r=>r.id==='default');}
@@ -21,6 +21,7 @@ root.projectExtras=root.projectExtras||{};
 api.layers=()=>catalog(root.projectExtras.designLayers);
 api.selectedLayerId=()=>layerFor(objects[selected]||{},api.layers()).id;
 let active='default';
+api.activeId=()=>api.layers().some(row=>row.id===active)?active:'default';
 function commit(rows,change){const valid=catalog(rows);invalidate();if(change)change();root.projectExtras.designLayers=valid;draw();refresh();window.recordHistory?.();window.dispatchEvent(new Event('cnc-layers-changed'));window.dispatchEvent(new Event('cnc-project-changed'));}
 api.create=function(name,color='#c77829'){const rows=api.layers(),id='layer_'+crypto.randomUUID().replaceAll('-','');rows.push({id,name,color,visible:true,output:true,settings:{}});commit(rows);active=id;refresh();return id;};
 api.update=function(id,changes){const rows=api.layers(),row=rows.find(r=>r.id===id);if(!row)throw Error('Layer not found');for(const k of ['name','color','visible','output','settings'])if(Object.hasOwn(changes,k))row[k]=changes[k];commit(rows);};

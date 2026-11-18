@@ -518,6 +518,11 @@ def import_program(payload):
 
 
 def register(app):
+    @app.post('/api/pdf-import')
+    def review_pdf():
+        from .pdf_import import import_pdf
+        return jsonify(import_pdf(request.get_json()))
+
     @app.post('/api/program-import')
     def program_import():
         return jsonify(import_program(request.get_json()))

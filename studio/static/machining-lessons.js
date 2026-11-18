@@ -22,6 +22,59 @@
   }
   byId('trim-horizontal').onchange = practiseTrim;
   byId('trim-vertical').onchange = practiseTrim;
+  // Each loft quadrant blends one straight side with its corresponding circular arc.
+  // The result is an elliptical arc; a zero radius at the base gives a straight line.
+  function loftOutline(fraction, outletRadius, centreX) {
+    const a = (1 - fraction) * 20;
+    const b = (1 - fraction) * 12;
+    const r = fraction * outletRadius;
+    const x = a + r * Math.SQRT1_2;
+    const y = b + r * Math.SQRT1_2;
+    const sideX = Math.SQRT2 * a + r;
+    const sideY = Math.SQRT2 * b + r;
+    return [
+      'M', centreX - x, -y,
+      'A', sideX, r, 0, 0, 1, centreX + x, -y,
+      'A', r, sideY, 0, 0, 1, centreX + x, y,
+      'A', sideX, r, 0, 0, 1, centreX - x, y,
+      'A', r, sideY, 0, 0, 1, centreX - x, -y,
+      'Z'
+    ].join(' ');
+  }
+
+  function sectionLoft() {
+    const diameter = byId('loft-diameter'), offset = byId('loft-offset');
+    const z = byId('loft-level').valueAsNumber;
+    byId('loft-level-value').textContent = z + ' mm';
+    const valid = diameter.validity.valid && offset.validity.valid;
+    byId('loft-drawing').style.display = valid ? '' : 'none';
+    if (!valid) {
+      byId('loft-size').textContent = '';
+      byId('loft-feedback').textContent = 'Use a diameter from 8 to 36 mm and an offset from −12 to 12 mm, in 0.5 mm steps.';
+      return;
+    }
+    const fraction = z / 20;
+    const size = diameter.valueAsNumber, shift = offset.valueAsNumber;
+    const centre = fraction * shift;
+    const width = (1 - fraction) * 40 + fraction * size;
+    const depth = (1 - fraction) * 24 + fraction * size;
+    const format = value => Number(value.toFixed(3));
+    byId('loft-outlet').setAttribute('r', size / 2);
+    byId('loft-outlet').setAttribute('cx', shift);
+    byId('loft-outline').setAttribute('d', loftOutline(fraction, size / 2, centre));
+    byId('loft-centre').setAttribute('cx', centre);
+    byId('loft-size').textContent = format(width) + ' × ' + format(depth) + ' mm · centre X ' + format(centre) + ' mm';
+    let feedback = 'Move to Z = 10 mm to inspect the halfway section.';
+    if (z === 10) {
+      if (width !== 31) feedback = 'At halfway, each 2 mm change in outlet diameter changes both section dimensions by 1 mm.';
+      else if (centre !== 2) feedback = 'The section size matches. Set the outlet offset to twice the target centre displacement.';
+      else feedback = 'Target reached. Move the plane toward the outlet to see the rectangle turn into a circle.';
+    }
+    byId('loft-feedback').textContent = feedback;
+  }
+  for (const id of ['loft-diameter', 'loft-offset', 'loft-level']) byId(id).oninput = sectionLoft;
+  sectionLoft();
+
   const lessons = {
     router: {title: 'Depth per pass', task: 'Cut a 3 mm groove in three depth passes. Set the maximum step-down to 1 mm and compare the Z moves.', label: 'Step-down (mm)', initial: 3, min: .25, max: 3, step: .25},
     laser: {title: 'Power at the start of a cut', task: 'Ramp from zero power to full job power over the first 5 mm. Inspect the S values at the start of the path.', label: 'Entry ramp length (mm)', initial: 0, min: 0, max: 15, step: 1},

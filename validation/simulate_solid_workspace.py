@@ -161,9 +161,17 @@ def main():
                 page.on("dialog",lambda dialog:dialog.accept())
                 page.goto(f"http://127.0.0.1:{server.server_port}/")
                 run(page)
+                from router_entry_workflow import run as router_entries
+                from svg_import_workflow import run as svg_import
+                from placement_workflow import run as placement
+                from production_label_workflow import run as production_labels
+                from drilling_workflow import run as drilling
+                from laser_pattern_workflow import run as laser_patterns
                 from corner_workflow import run as corner
                 from relief_link_workflow import run as linked_relief
                 from sketch_join_workflow import run as sketch_join
+                from machining_lessons_workflow import run as machining_lessons
+                from loft_workflow import run as loft
                 from cad_link_workflow import run as linked_cad
                 from materials_workflow import run as materials
                 from lightburn_workflow import run as lightburn
@@ -171,7 +179,7 @@ def main():
                 from assembly_laser_workflow import run as assembly_laser
                 from simulate_exchange_workspace import run as exchange
                 # Each lesson can modify the example or viewport.
-                for lesson in (lightburn, fixture_imports, assembly_laser, exchange, materials, corner, linked_cad, linked_relief, sketch_join):
+                for lesson in (lightburn, fixture_imports, assembly_laser, exchange, materials, corner, linked_cad, loft, linked_relief, sketch_join, production_labels, laser_patterns, drilling, placement, router_entries, svg_import, machining_lessons):
                     with browser.new_context(viewport={"width":1440,"height":980},accept_downloads=True) as context:
                         workshop = context.new_page()
                         workshop.on("dialog",lambda dialog:dialog.accept())

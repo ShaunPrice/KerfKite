@@ -3,6 +3,8 @@
   'use strict';
   const MAX = 200000;
   const protocols=root.CNCProtocols || (typeof require==='function'?require('./protocols.js'):null);
+  const routerEntry=root.CNCRouterEntry || (typeof require==='function'?require('./router-entry.js'):null);
+  const drilling=root.CNCDrilling || (typeof require==='function'?require('./drill-cam.js'):null);
   const fail = message => { throw new Error(message); };
   function number(value, name, lo, hi) {
     if (value === null || typeof value === 'boolean' || !['number', 'string'].includes(typeof value) || (typeof value === 'string' && !value.trim())) fail(name + ' must be a number');
@@ -37,25 +39,92 @@
       count+=q.length;return q;
     });
   }
-  function laser(path, power, options, width, height) {
-    const points=[];
-    for(const point of path) if(!points.length || distance(points[points.length-1],point)>1e-9) points.push(point.slice());
-    if(points.length<2) fail('Laser paths must contain nonzero travel');
+  function vectorLaserOptions(project) {
+    const pattern=project.laser_pattern === undefined ? 'continuous' : project.laser_pattern;
+    const shape=project.lead_shape === undefined ? 'straight' : project.lead_shape;
+    if (!['continuous','perforate','bridges'].includes(pattern)) fail('Choose continuous cutting, perforation or holding bridges');
+    if (!['straight','arc-left','arc-right'].includes(shape)) fail('Choose a straight, left or right tangent lead');
+    if (pattern !== 'continuous' && project.path_powers != null) fail('Laser perforation and bridges require vector line or profile operations');
+    const options={pattern,shape};
+    if (pattern !== 'continuous') options.gap=value(project,'laser_gap',1,.01,100);
+    if (pattern === 'perforate') options.dash=value(project,'laser_dash',3,.01,1000);
+    if (pattern === 'bridges') {
+      options.count=value(project,'laser_bridge_count',4,1,1000);
+      if (!Number.isInteger(options.count)) fail('Bridges per contour must be a whole number');
+    }
+    return options;
+  }
+  function leadPoints(a,b,length,shape,entering) {
+    if (length<1e-9) return [];
+    const edge=distance(a,b), tx=(b[0]-a[0])/edge, ty=(b[1]-a[1])/edge;
+    const [x,y]=entering?a:b, sign=entering?-1:1;
+    if (shape==='straight') return [[x+sign*length*tx,y+sign*length*ty]];
+    const radius=2*length/Math.PI, side=shape==='arc-left'?1:-1;
+    const step=Math.min(Math.PI/18,2*Math.acos(Math.max(-1,1-.01/radius)));
+    const count=Math.ceil(Math.PI/2/step), points=[];
+    for (let i=1;i<=count;i++) {
+      const angle=(Math.PI/2)*i/count, along=sign*radius*Math.sin(angle), across=side*radius*(1-Math.cos(angle));
+      points.push([x+along*tx-across*ty,y+along*ty+across*tx]);
+    }
+    return entering?points.reverse():points;
+  }
+  function gapBoundaries(perimeter,offset,points,cut) {
+    const boundaries=[];
+    if (cut.pattern==='continuous') return boundaries;
+    if (cut.pattern==='bridges') {
+      if (points.length<4 || distance(points[0],points.at(-1))>1e-7) fail('Laser holding bridges require closed contours');
+      const pitch=perimeter/cut.count;
+      if (cut.gap>=pitch-1e-9) fail('Holding bridges cover the contour; reduce their width or count');
+      for (let i=0;i<cut.count;i++) {
+        const start=(i+.5)*pitch-cut.gap/2;
+        boundaries.push(offset+start,offset+(start+cut.gap));
+      }
+    } else {
+      const pitch=cut.dash+cut.gap, count=Math.ceil(perimeter/pitch);
+      if (count>100000) fail('Perforation exceeds the segment limit; increase the cut or gap length');
+      for (let i=0;i<count;i++) {
+        const start=i*pitch+cut.dash;
+        if (start<perimeter) boundaries.push(offset+start,offset+Math.min(perimeter,start+cut.gap));
+      }
+    }
+    return boundaries;
+  }
+  function laser(path,power,options,width,height,cut) {
+    const contour=[];
+    for(const point of path) if(!contour.length || distance(contour.at(-1),point)>1e-9) contour.push(point.slice());
+    if(contour.length<2) fail('Laser paths must contain nonzero travel');
     const [leadIn,leadOut,rampIn,rampOut,start,end]=options;
-    if(leadIn) { const [a,b]=points, d=distance(a,b);points.unshift(a.map((v,i)=>v-(b[i]-v)/d*leadIn)); }
-    if(leadOut) { const a=points[points.length-2],b=points[points.length-1],d=distance(a,b);points.push(b.map((v,i)=>v+(v-a[i])/d*leadOut)); }
+    const before=leadPoints(contour[0],contour[1],leadIn,cut.shape,true);
+    const after=leadPoints(contour.at(-2),contour.at(-1),leadOut,cut.shape,false);
+    const points=before.concat(contour,after);
     if(points.some(([x,y])=>x<0 || x>width || y<0 || y>height)) fail('Laser lead-in/out extends outside the work area');
-    const lengths=points.slice(1).map((p,i)=>distance(points[i],p)),total=lengths.reduce((a,b)=>a+b,0);
+    const lengths=points.slice(1).map((p,i)=>distance(points[i],p));
+    const sum=arr=>arr.reduce((a,b)=>a+b,0), total=sum(lengths);
     if(rampIn+rampOut>total+1e-9) fail('Power ramp distances overlap');
-    const level=d=>rampIn && d<rampIn ? power*(start+(100-start)*d/rampIn)/100 : rampOut && d>total-rampOut ? power*(end+(100-end)*(total-d)/rampOut)/100 : power;
+    const offset=sum(lengths.slice(0,before.length)),perimeter=sum(lengths.slice(before.length,before.length+contour.length-1));
+    const gaps=gapBoundaries(perimeter,offset,contour,cut);
+    const stops=[...new Set([...gaps,rampIn,total-rampOut])].sort((a,b)=>a-b);
+    let gapIndex=0, stopIndex=0;
+    // Power samples and stops are consumed in increasing arclength order.
+    function level(d) {
+      while(gapIndex<gaps.length && gaps[gapIndex]<=d) gapIndex++;
+      if(gapIndex%2) return 0;
+      return rampIn && d<rampIn ? power*(start+(100-start)*d/rampIn)/100 : rampOut && d>total-rampOut ? power*(end+(100-end)*(total-d)/rampOut)/100 : power;
+    }
     const output=[[...points[0],level(0)]];let travelled=0;
     lengths.forEach((length,index)=>{
+      if(!length) return;
       const a=points[index],b=points[index+1],stop=travelled+length;
-      const cuts=[...new Set([travelled,stop,...[rampIn,total-rampOut].filter(v=>v>travelled && v<stop)])].sort((a,b)=>a-b);
+      const cuts=[travelled];
+      while(stopIndex<stops.length && stops[stopIndex]<stop) {
+        const boundary=stops[stopIndex++];
+        if(boundary>travelled) cuts.push(boundary);
+      }
+      cuts.push(stop);
       for(let c=1;c<cuts.length;c++) {
         const lo=cuts[c-1],hi=cuts[c],changing=(rampIn && lo<rampIn)||(rampOut && hi>total-rampOut);
         const count=changing ? Math.max(1,Math.ceil((hi-lo)/.5)) : 1;
-        if(output.length+count>MAX) fail('Laser ramp exceeds segment limit');
+        if(output.length+count>MAX) fail('Laser path exceeds segment limit');
         for(let i=0;i<count;i++) { const s0=lo+(hi-lo)*i/count,s1=lo+(hi-lo)*(i+1)/count,t=(s1-travelled)/length;output.push([a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,level((s0+s1)/2)]); }
       }
       travelled=stop;
@@ -68,7 +137,7 @@
     if(Object.prototype.hasOwnProperty.call(p,'operations')) {
       if(!Array.isArray(p.operations) || p.operations.length<1 || p.operations.length>100) fail('Use 1–100 ordered operations');
       if(p.mode==='router'){
-        const tools=p.operations.map(op=>{const v={...p,...op},shape=v.operation==='vcarve'?'v':v.tool_shape||'flat';return JSON.stringify([v.tool_id??null,v.tool_diameter??3.175,shape,shape==='v'?(v.v_angle??60):null]);});
+        const tools=p.operations.map(op=>{const v={...p,...op},shape=v.operation==='vcarve'?'v':v.tool_shape||(v.operation==='drill'?'drill':'flat');return JSON.stringify([v.tool_id??null,v.tool_diameter??3.175,shape,shape==='v'?(v.v_angle??60):shape==='drill'?(v.drill_point_angle??118):null]);});
         if(new Set(tools).size>1)fail('Tools differ between operations; generate separate manual tool-change stages using the app server');
       }
       const base={...p};for(const key of ['operations','paths','path_depths','path_powers']) delete base[key];
@@ -84,11 +153,15 @@
         cut_length:Math.round(jobs.reduce((n,job)=>n+job.cut_length,0)*100)/100,
         cut_minutes:Math.round(jobs.reduce((n,job)=>n+job.cut_minutes,0)*100)/100,mode:p.mode,
         bounds:[Math.min(...jobs.map(job=>job.bounds[0])),Math.min(...jobs.map(job=>job.bounds[1])),Math.max(...jobs.map(job=>job.bounds[2])),Math.max(...jobs.map(job=>job.bounds[3]))],
-        warnings:[...new Set(jobs.flatMap(job=>job.warnings))],operations:jobs.length};
+        warnings:[...new Set(jobs.flatMap(job=>job.warnings))],operations:jobs.length,
+        ...(jobs.some(j=>j.drill_holes)?{drill_holes:jobs.flatMap(j=>j.drill_holes||[])}:{}),
+        ...(jobs[0].simulation_tool&&jobs.every(j=>JSON.stringify(j.simulation_tool)===JSON.stringify(jobs[0].simulation_tool))?{simulation_tool:jobs[0].simulation_tool}:{})};
     }
     const mode=p.mode,protocol=p.protocol===undefined?'grbl':p.protocol,op=p.operation===undefined?'line':p.operation;
     if(!['router','laser','knife'].includes(mode)) fail('Choose router, laser or knife');
-    if(op!=='line') fail('Offline CAM supports line operations only. Use hosted CNC Studio for '+String(op)+' CAM.');
+    const entry=p.router_entry??'plunge';
+    if(mode==='router' && entry!=='plunge' && (entry!=='ramp'||op!=='line')) fail('Only a closed-line ramp is available offline. Use Studio server CAM for compensated ramp or pocket helix entries. Drilling uses its own peck controls.');
+    if(op!=='line'&&op!=='drill') fail('Offline CAM supports line operations only for contour work, plus router drilling. Use hosted CNC Studio for '+String(op)+' CAM.');
     const profile=protocols.get(protocol);
     if(!profile.modes.includes(mode))fail(profile.name+' dynamic laser export is not implemented');
 
@@ -103,6 +176,9 @@
       count+=path.length;if(count>100000) fail('Too many vertices; simplify the design');
       return path.map(point=>{if(!Array.isArray(point)||point.length!==2) fail('Invalid XY point');return [number(point[0],'X',0,width),number(point[1],'Y',0,height)];});
     });
+    if(mode==='router'&&entry!=='plunge') return routerEntry.generate(p,clean,value,integer,protocols);
+    if(op==='drill') return drilling.generate(p,clean,value,integer,protocols);
+    if(mode==='router' && p.tool_shape==='drill') fail('Choose a milling cutter for a contour or pocket; a drill bit is for drilling');
     const warnings=['Offline centreline CAM; inspect the exported toolpath before machining.','Review tool geometry, stock and clearance before running.','Time estimate excludes travel, plunge, acceleration and spindle startup.'];
     let depths=p.path_depths===undefined ? null : p.path_depths;
     if(mode==='knife') {
@@ -124,6 +200,7 @@
     let laserPaths=[],options=[];
     if(mode==='laser') {
       options=[['lead_in',0,100],['lead_out',0,100],['ramp_in',0,1000],['ramp_out',0,1000],['start_power',100,100],['end_power',100,100]].map(([key,d,max])=>value(p,key,d,0,max));
+      const cut=vectorLaserOptions(p);
       if(pixelPowers!==null) {
         if(options.slice(0,4).some(Boolean)) fail('Raster powers require lead/ramp distances zero');
         if(!Array.isArray(pixelPowers) || pixelPowers.length!==clean.length) fail('Pixel powers must match raster paths');
@@ -131,7 +208,7 @@
       let expanded=0;
       laserPaths=clean.map((path,index)=>{
         let out;
-        if(pixelPowers===null) out=laser(path,power,options,width,height);
+        if(pixelPowers===null) out=laser(path,power,options,width,height,cut);
         else {
           const powers=pixelPowers[index];
           if(!Array.isArray(powers)||powers.length!==path.length) fail('Pixel powers must match vertices');
@@ -139,7 +216,7 @@
         }
         expanded+=out.length;if(expanded*passes>MAX) fail('Laser job exceeds 200000 segments');return out;
       });
-      if(options.slice(0,4).some(Boolean)) warnings.push('Straight tangent leads are cutting moves and may mark outside the design. Power ramps use steps of at most 0.5 mm; M4 also scales power with speed.');
+      if(options.slice(0,4).some(Boolean)) warnings.push('Tangent leads are cutting moves and may mark outside the design. Power ramps use steps of at most 0.5 mm; M4 also scales power with speed.');
     }
     const levels=mode==='laser'?Array(passes).fill(null):Array.from({length:Math.ceil(depth/step)},(_,i)=>-Math.min(depth,step*(i+1)));
     if(count*levels.length>MAX) fail('Job exceeds 200000 cutting segments');
@@ -169,7 +246,7 @@
     for(const path of envelope) for(const [x,y] of path) {bounds[0]=Math.min(bounds[0],x);bounds[1]=Math.min(bounds[1],y);bounds[2]=Math.max(bounds[2],x);bounds[3]=Math.max(bounds[3],y);}
     return {lines,segments,cut_length:Math.round(length*100)/100,cut_minutes:Math.round(length/(depths!==null?Math.min(feed,plunge):feed)*100)/100,mode,bounds,warnings,prepared_paths:clean,prepared_depths:depths};
   }
-  const api={generate};
+  const api={generate,simulate:data=>drilling.simulate(data,value)};
   if(typeof module!=='undefined' && module.exports) module.exports=api;
   root.CNCOffline=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

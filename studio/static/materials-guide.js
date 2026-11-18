@@ -138,6 +138,16 @@
         cutter: 'M88 12H112V38H122L100 64L78 38H88Z', caption: 'The V-shaped tip opens a wider groove as it travels deeper into the stock.'
       }
     },
+    drill: {
+      drill: {
+        stock: 'M8 46H90V61L100 67L110 61V46H192V78H8Z', edge: 'M90 46V61L100 67L110 61V46',
+        cutter: 'M90 9H110V61L100 67L90 61Z', caption: 'The tip reaches the programmed depth. The full-diameter bore ends higher up the conical point.'
+      },
+      peck: {
+        stock: 'M8 46H90V61L100 67L110 61V46H192V78H8Z', edge: 'M90 46V61L100 67L110 61V46',
+        cutter: 'M90 8H110V27L100 33L90 27Z', caption: 'Between increments the drill returns to the clearance plane, then feeds to the next depth.'
+      }
+    },
     diode: {
       engrave: {
         stock: 'M8 48H192V78H8Z', edge: 'M78 48H111', cutter: laserHead, beam: 'M100 29V47',

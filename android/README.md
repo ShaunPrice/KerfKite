@@ -12,12 +12,24 @@ Build the debug APK using Android Studio with JDK 17 or newer, Android SDK Platf
 
 On Windows run `gradlew.bat assembleDebug`. The first build fetches the pinned build tools. Subsequent builds can use `--offline` once the dependencies are cached. The installable debug APK appears at `app/build/outputs/apk/debug/app-debug.apk`. Transfer the APK to the phone and open it from Files, or choose Run in Android Studio with your development device selected.
 
-1. Tap **Add shape** and choose Rectangle, Ellipse or Polygon. Enter **Width** and **Height** in millimetres. **X** and **Y** locate the lower-left corner on the 680 × 240 mm work area. A polygon accepts 3–64 sides. Tap **Apply**.
+1. Tap **Add shape** and choose Rectangle, Ellipse or Polygon. Enter **Width** and **Height** in millimetres. **X** and **Y** locate the lower-left corner on the project’s work area (680 × 240 mm for a new drawing). A polygon accepts 3–64 sides. Tap **Apply**.
 2. Tap the drawing or its object row to select a shape. **Edit** reopens its dimensions. The preview fits all shapes automatically. For overlapping artwork, use the object list to select the lower shape. Each applied change saves the private draft on this device.
 3. Choose **CNC router**, **Laser** or **Drag knife**. Tap **Studio project**, choose a destination in the system file picker and save. **SVG** writes a vector drawing with physical dimensions and preserves the placement on the work area.
 4. Open the project in KerfKite Studio. The workstation reads the head selection and editable outline geometry. Set the intended tool, feed, depth or laser power, then generate the machining preview. The sketch workspace exports design files. Open the separate **CNC pendant** screen to pair with the receiver.
 
-**Quick guide** inside the app walks through these same controls. Clearing app data deletes its private draft. Use the system file picker to keep a portable copy.
+**Quick guide** inside the app walks through these same controls. Clearing app data deletes its private project library. Use the system file picker to keep a portable copy.
+
+## Open and organise projects
+
+Choose **My projects → New project** and give the drawing a name. Edits save to the active project in private storage. **My projects** also lets you switch projects, rename one, duplicate it or delete the local copy. Upgrading from Pocket 0.3.0 keeps the previous single draft as **Pocket design**. Export important projects before uninstalling or clearing application data.
+
+Choose **Open file**, select a Studio JSON document with the Android file picker, check the object count and work area, then tap **Open copy**. Your active project stays in the library. Opening or editing a copy leaves the source file untouched.
+
+* **Pocket drawings** reopen with their machine head, dimensions and primitive controls. Compatible outlines from version 0.3.0 recover the original shape when its sampled points match. Other planar artwork supports moving and resizing, including open paths and objects with multiple contours.
+* **Desktop references** show their XY outlines in a read-only view. Use **Studio project** to export the complete source document, including the original CAD history, layers, object metadata and machining settings. Renaming a reference changes its name in the Pocket library only.
+* To edit the XY artwork separately, choose **My projects → Extract editable artwork** on a desktop reference. This makes a new drawing from all displayed outlines. SVG preserves open paths and separate contours. A Studio export from an artwork copy has output off for every object. Review and enable the intended objects in Studio before generating a toolpath.
+
+Try opening a two-path desktop project containing an open line and a closed outline. Extract the artwork, edit an object's position, export it and reopen the original reference from **My projects**. Both drawings stay available.
 
 ## Pair the CNC pendant
 
@@ -30,4 +42,14 @@ Open **CNC pendant** in Pocket. Connect the phone and Studio receiver using Wi-F
 
 ## Scope
 
-A draft supports up to 128 objects. The phone retains primitive dimensions in its local draft. Portable project files contain sampled paths for compatibility with the workstation. The phone currently has one local draft and exports through Android's document picker; it does not reopen project files from other devices. The pendant uses the Android Internet permission to reach the paired Studio server. Drafts stay private to the sketch editor. Portable files use the system document picker.
+Portable imports accept Studio version 1 vector documents up to 4 MB, 128 objects and 100,000 XY points within the declared work area. Projects with only solid features, unsupported formats, invalid coordinates or larger geometry stay on the desktop. Pocket displays sampled planar outlines. The workstation owns 3D modelling, CAM, simulation and the controller connection. Portable import and export use Android’s system document picker; project files require no storage permission.
+
+## Project acceptance on an emulator
+
+With Android platform-tools on PATH, boot a disposable Android emulator and run the following from the repository root. The optional `--previous` APK must be signed by the same key as the new APK. Use a fresh emulator for the migration test.
+
+```sh
+python validation/android_projects_workflow.py --serial emulator-5554 --apk path/to/Pocket.apk --previous path/to/previous-Pocket.apk
+```
+
+The harness creates a synthetic project in the emulator’s Download folder and drives Android’s document picker. It checks a desktop reference round trip, a separate editable artwork copy, SVG open paths, named projects, invalid-file handling, and persistence across restart. Install the desktop validation dependencies for the shared emulator helpers. For phone controls, see the [pendant acceptance procedure](../docs/PHONE-CONNECTIONS.md).

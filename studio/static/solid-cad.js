@@ -8,7 +8,7 @@
   stage.className = 'solid-stage';
   stage.hidden = true;
   workspace.append(stage);
-  const types = {box:'Box', cylinder:'Cylinder / cone', sphere:'Sphere', extrude:'Sketch extrusion', revolve:'Sketch revolution'};
+  const types = {box:'Box', cylinder:'Cylinder / cone', sphere:'Sphere', extrude:'Sketch extrusion', revolve:'Sketch revolution', loft:'Two-section loft'};
   const operations = {add:'Join', cut:'Cut', intersect:'Intersect'};
   const empty = () => ({version:1,parameters:{},features:[]});
   const clone = value => JSON.parse(JSON.stringify(value));
@@ -166,6 +166,8 @@
       case 'box': return {...common,size:[60,32,6]};
       case 'cylinder': return {...common,radius:4,height:8,origin:[12,12,-1]};
       case 'sphere': return {...common,radius:10};
+      case 'loft': return {...common,baseShape:'rectangle',baseWidth:36,baseDepth:24,topShape:'circle',topWidth:18,topDepth:18,
+        height:16,offset:[0,0],origin:[20,15,0]};
       case 'extrude': return {...common,height:8,points:[[0,0],[30,0],[15,20]]};
       case 'revolve': return {...common,angle:360,points:[[4,0],[14,0],[10,18],[4,18]]};
     }
@@ -207,6 +209,17 @@
       if ('topRadius' in f) {scalar('Top radius','topRadius',f.topRadius);host.append(button('Use equal radii',()=>edit(()=>delete f.topRadius)));}
       else host.append(button('Taper cylinder',()=>edit(()=>{f.topRadius=f.radius;})));
     }
+    if (f.kind==='loft') {
+      const shapes={rectangle:'Rectangle',circle:'Circle',ellipse:'Ellipse'};
+      for(const [level,title] of [['base','Base'],['top','Top']]) {
+        const shape=level+'Shape',width=level+'Width',depth=level+'Depth';
+        select(host,title+' section',shapes,f[shape],next=>edit(()=>{f[shape]=next;}));
+        scalar(title+(f[shape]==='circle'?' diameter':' width X'),width,f[width]);
+        if(f[shape]!=='circle')scalar(title+' depth Y',depth,f[depth]);
+      }
+      scalar('Loft height','height',f.height);
+      vector(host,'offset',['Top centre offset X','Top centre offset Y'],f.offset||[0,0]);
+    }
     if (f.kind==='revolve') scalar('Sweep angle (°)','angle',f.angle??360);
     if (Array.isArray(f.points)) {
       host.append(button('Edit sketch on plane',async()=>{
@@ -217,6 +230,8 @@
           if(revision!==original || model.features[index]!==f)throw Error('The feature changed while the sketch was open. Reopen the editor.');
           edit(()=>{
             f.points=sketch.points;
+            if(sketch.curves.some(Boolean)) f.curves=sketch.curves;
+            else delete f.curves;
             model.parameters=sketch.parameters;
             if(sketch.constraints.length) f.constraints=sketch.constraints;
             else delete f.constraints;
@@ -235,8 +250,10 @@
         });
         const drop=button('×',()=>{
           try {
-            const relations=window.remapSketchRelations(f.constraints||[],f.points.length,f.points.map((_,k)=>k).filter(k=>k!==i));
-            edit(()=>{f.points.splice(i,1);f.fillets?.splice(i,1);if(f.constraints)f.constraints=relations;});
+            const indices=f.points.map((_,k)=>k).filter(k=>k!==i);
+            const curves=f.curves && window.remapSketchCurves(f.curves,indices);
+            const relations=window.remapSketchRelations(f.constraints||[],f.points.length,indices);
+            edit(()=>{f.points.splice(i,1);f.fillets?.splice(i,1);if(f.constraints)f.constraints=relations;if(curves)f.curves=curves;});
           } catch(error){status(error.message,true);}
         });
         drop.disabled=f.points.length<=3;drop.setAttribute('aria-label','Remove point '+(i+1));row.append(drop);profile.append(row);
@@ -244,8 +261,9 @@
       profile.append(button('Add point',()=>{
         try {
           const indices=[...f.points.map((_,k)=>k),null];
+          const curves=f.curves && window.remapSketchCurves(f.curves,indices);
           const relations=window.remapSketchRelations(f.constraints||[],f.points.length,indices);
-          edit(()=>{f.points.push([0,10]);f.fillets?.push(0);if(f.constraints)f.constraints=relations;});
+          edit(()=>{f.points.push([0,10]);f.fillets?.push(0);if(f.constraints)f.constraints=relations;if(curves)f.curves=curves;});
         } catch(error){status(error.message,true);}
       }));host.append(profile);
     }

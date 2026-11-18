@@ -4,6 +4,10 @@
   'use strict';
 
   const sources = {
+    acrylicDrill: {
+      title: 'ACRYLITE · drilling sheet, bit geometry and exit support',
+      url: 'https://www.acrylite.co/resources/fabrication-manuals/drilling-acrylite-acrylic-sheet'
+    },
     compression: {
       title: 'LMT Onsrud · opposing flutes on veneered sheet',
       url: 'https://onsrud.com/Products/68101L.asp'
@@ -73,6 +77,9 @@
     ] },
     { id: 'ball', family: 'router', label: 'Ball-nose end mill', operations: [
       { id: 'relief', label: '3D relief finishing' }
+    ] },
+    { id: 'drill', family: 'router', label: 'Drill bit', operations: [
+      { id: 'drill', label: 'Single plunge' }, { id: 'peck', label: 'Full-retract peck drilling' }
     ] },
     { id: 'v', family: 'router', label: 'V-bit', operations: [
       { id: 'engrave', label: 'V-carve or engrave' }
@@ -179,7 +186,27 @@
     metals: 'Metals', other: 'Specialty stock'
   };
   function material(id, name, group, aliases, description, router, diode, knife = hardKnife) {
-    return { id, name, group: groups[group], aliases, description, tools: { ...router, diode, knife } };
+    let drill;
+    if (router.flat.status === avoid) {
+      drill = excludedTool('drill', router.flat.summary, router.flat.sources);
+    } else {
+      const acrylic = id.includes('acrylic');
+      const guidance = acrylic
+        ? 'Choose a drill ground for this grade of acrylic. Back the exit face with a sacrificial sheet and check a test bore for crazing or chipped edges.'
+        : group === 'wood' || group === 'boards'
+        ? 'Support the exit face for a through hole. Check both faces for torn fibres, especially across veneers.'
+        : group === 'metals'
+        ? 'Check the drill manufacturer’s data against the alloy, bit diameter and spindle speed range. Inspect the exit burr on a sample.'
+        : 'Check the supplier’s drilling guidance for the exact stock grade. Inspect the bore and exit face after the trial.';
+      const status = group === 'wood' || group === 'boards' ? router.flat.status : conditional;
+      drill = entry('A drill feeds straight down at the hole centre. Enter the included tip angle to preview the hole bottom.', {
+        drill: op(status, 'Set peck depth to zero. Full-diameter depth ends above the conical tip.'),
+        peck: op(status, 'Each increment returns to clearance. Check the tool maker’s guidance on chip evacuation for this depth and grade.')
+      }, [guidance, 'Measure stock thickness and cutter diameter; allow clearance over the fixture.'],
+      ['Measure the sample bore and inspect chip evacuation before repeating a pattern.'],
+      acrylic ? ['acrylicDrill'] : router.flat.sources);
+    }
+    return { id, name, group: groups[group], aliases, description, tools: { ...router, drill, diode, knife } };
   }
 
   const noFilmLaser = noDiode('The adhesive, liner and face all enter the beam path. Use a knife unless the complete product has a documented laser process.', ['excluded', 'laserSafety']);

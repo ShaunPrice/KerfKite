@@ -13,7 +13,7 @@ function requireNames(items) {
 
 test('the guide covers all installed head and cutter types', () => {
     requireNames(tools);
-    for (const id of ['flat', 'ball', 'v', 'diode', 'knife']) {
+    for (const id of ['flat', 'ball', 'drill', 'v', 'diode', 'knife']) {
         assert.ok(tools.some(tool => tool.id === id), id);
     }
     for (const tool of tools) {
@@ -70,4 +70,12 @@ test('the blue-diode guide distinguishes clear acrylic and marking anodised meta
     }
     assert.equal(verdict('anodised-aluminium', 'diode', 'engrave'), 'conditional');
     assert.equal(verdict('anodised-aluminium', 'diode', 'cut'), 'avoid');
+});
+
+test('drill guide distinguishes supported stock, test-required sheet and unknown material',()=>{
+    assert.equal(verdict('maple','drill','drill'),'candidate');
+    assert.equal(verdict('unknown','drill','peck'),'avoid');
+    const acrylic=materials.find(m=>m.id.includes('acrylic'));
+    assert.ok(acrylic.tools.drill.sources.includes('acrylicDrill'));
+    assert.equal(acrylic.tools.drill.operations.peck.status,'conditional');
 });

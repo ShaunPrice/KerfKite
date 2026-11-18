@@ -66,3 +66,71 @@ class SketchGeometryTests(unittest.TestCase):
         exact = write_step(model=lathe)
         self.assertIn(b'TOROIDAL_SURFACE', exact)
         self.assertAlmostEqual(rebuild(lathe)['volume'], inspect_step(exact)['volume'], delta=.5)
+
+    def test_driven_cubic_machining_profile(self):
+        from studio.solid_cad import horizontal_section
+        doc = model([[0,0],[20,0],[20,10],[0,10]], [0]*4, {'rise': 4})
+        doc['features'][0]['curves'] = [None, None, {'controls': [
+            ['40/3', '10+rise'], ['20/3', '10+rise']]}, None]
+        for rise in (4, 7):
+            doc = json.loads(json.dumps(doc))
+            doc['parameters']['rise'] = rise
+            result = rebuild(doc)
+            self.assertAlmostEqual(result['volume'], (200+10*rise)*5, delta=.6)
+            section = horizontal_section(doc, 2)
+            paths = section['profiles']
+            self.assertEqual(len(paths), 1)
+            self.assertGreater(len(paths[0]), 12)
+            self.assertAlmostEqual(max(y for _, y in paths[0]), 10+.75*rise, places=5)
+
+    def test_curves_tangent_to_lines_and_neighbouring_curves(self):
+        points = [[0,0],[20,0],[20,10],[0,10]]
+        doc = model(points, [0]*4)
+        f = doc['features'][0]
+        f['curves'] = [None,None,{'controls': [[17,14],[3,14]], 'tangentStart':True,'tangentEnd':True},None]
+        corners, _ = profile_geometry(f, Dimensions({}))
+        self.assertEqual(corners[2].outgoing_controls, [(20,15), (0,15)])
+        f['curves'][1] = {'controls':[[20,3],[22,8]]}
+        curves, _ = profile_geometry(f, Dimensions({}))
+        x, y = curves[2].outgoing_controls[0]
+        self.assertAlmostEqual(20-x, y-10)
+        self.assertAlmostEqual(math.dist((x,y), points[2]), 5)
+        f['curves'][1]['tangentEnd'] = True
+        with self.assertRaisesRegex(ValueError, 'only one handle'):
+            rebuild(doc)
+
+    def test_cubic_rejections_and_legacy_closure(self):
+        doc = model([[0,0],[20,0],[20,10],[0,10],[0,0]], [0]*5)
+        feature = doc['features'][0]
+        feature['curves'] = [None,None,{'controls':[[15,12],[5,13]]},None,None]
+        self.assertGreater(rebuild(doc)['volume'], 1000)
+        feature['fillets'][2] = 3
+        with self.assertRaisesRegex(ValueError, 'endpoint fillet'): rebuild(doc)
+        feature['fillets'][2] = 0
+        for bad in ({'controls':[[4,5]]}, {'controls': [[15,12],[5,13]], 'tangentStart':'yes'},
+                    {'controls': [[15,-30],[5,-30]]}):
+            feature['curves'][2] = bad
+            with self.assertRaises(ValueError): rebuild(doc)
+        feature['curves'] = [None, None]
+        with self.assertRaisesRegex(ValueError, 'one curve entry'): rebuild(doc)
+
+    @unittest.skipUnless(importlib.util.find_spec('OCP'), 'requires optional STEP runtime')
+    def test_cubic_native_step_extrusion_and_revolution(self):
+        doc = model([[0,0],[20,0],[20,10],[0,10]], [0]*4, {'rise': 4})
+        doc['features'][0]['curves'] = [None,None,{'controls': [
+            ['40/3', '10+rise'], ['20/3', '10+rise']]}, None]
+        step = write_step(model=doc)
+        self.assertIn(b'B_SPLINE_CURVE_WITH_KNOTS', step)
+        self.assertAlmostEqual(inspect_step(step)['volume'], 1200, places=6)
+        lathe = model([[2,0],[6,0],[6,9],[2,9]], [0]*4, kind='revolve')
+        f = lathe['features'][0]
+        f['angle'] = 360
+        f['curves'] = [None, {'controls': [[10,3],[10,6]]},None,None]
+        step = write_step(model=lathe)
+        self.assertIn(b'SURFACE_OF_REVOLUTION', step)
+        # R(t)=6+12t(1-t), z(t)=9t. Integral of pi*(R^2-2^2) dz.
+        expected = 9*math.pi*(36+24+144/30-4)
+        self.assertAlmostEqual(inspect_step(step)['volume'], expected, places=5)
+        self.assertAlmostEqual(rebuild(lathe)['volume'], expected, delta=3)
+        f['curves'][1] = {'controls': [[-10,3],[-10,6]]}
+        with self.assertRaisesRegex(ValueError, 'entire curve'): rebuild(lathe)

@@ -57,3 +57,15 @@ In **Design**, choose **Draw two-point line**. Click the start and end in the wo
 The first picked contour runs toward the corner and the second runs away from it. Open polylines retain all vertices on the chosen sides. The picked straight sections must meet within both segments. Endpoint and T junctions work, and sampled straight sections from an SVG are supported. Two open contours can belong to the same drawing object. A join keeps the first object's name, layer and CAM overrides, and other contours keep their order within each surviving object. Distinct objects need matching layer, output and CAM assignments. Sampled depth and power are interpolated at the crossing and must agree there. Closed outlines and objects carrying editable source geometry can be edited with their own tools. The design remains unchanged if a join is rejected.
 
 Practise choosing each side in the [interactive trim lesson](../studio/static/machining-lessons.html#trim-practice). The lesson uses the same intersection and joining functions as the editor.
+
+## Layout groups and placement snapping
+
+In **Design → Align & distribute**, check two or more objects and choose **Group checked objects**. Grouping retains each member’s layer and machining settings. Drag a member to move the entire group. To position it precisely, select any member, set **Group left X** and **Group bottom Y**, then choose **Move selected group**. Member-specific resizing, rotation and machining properties still operate on the selected member. **Ungroup selected layout** releases the group. Group membership survives undo, redo and project exchange.
+
+Open **Design → Placement snapping** to choose a grid pitch or nearby artwork vertices. Drag near a vertex to use it as the anchor. Resizing a handle and picking the endpoints of a new two-point line also use snapping. Visible vertices within eight screen pixels take priority over the grid. Hold Alt to place freely. Numeric entry stays exact. Each project remembers its snapping preferences.
+
+For centreline lettering, installed typefaces, numbered batches and machine-readable codes, see [Engraved lettering and production labels](LABELS.md).
+
+### Place router tabs on the cutter path
+
+In **CAM → Holding tabs**, select a closed router contour and choose a line, inside or outside operation. Set the cutter diameter, then choose **Place tabs on cutter contour**. Studio calculates the compensated tool centreline for inspection. Switch contours to inspect holes. Drag a tab marker along the contour, click the contour to add one, or edit the selected percentage numerically. **Use positions** copies the result to the tab settings. Set the stock thickness, tab width, tab height and cut depth, choose **Assign tabs**, then generate a fresh preview. The same normalized positions apply to every contour in the selected object. Use **Load assigned tab settings** to revise an existing operation.

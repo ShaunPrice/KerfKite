@@ -91,7 +91,7 @@
     if(objects.length>=100)throw Error('Studio supports up to 100 ordered operations per job.');
     const recipe={...opts};delete recipe.contours;
     laserSettings();
-    const values={mode:'laser',operation:'line',feed:read('feed'),power:read('power'),passes:read('passes'),lead_in:0,lead_out:0,ramp_in:0,ramp_out:0,start_power:100,end_power:100};
+    const values={mode:'laser',operation:'line',laser_pattern:'continuous',lead_shape:'straight',feed:read('feed'),power:read('power'),passes:read('passes'),lead_in:0,lead_out:0,ramp_in:0,ramp_out:0,start_power:100,end_power:100};
     objects.push({name:'Raster · '+name,...geometry,rasterRecipe:recipe,operationSettings:values});selected=objects.length-1;
     invalidate();draw();message('Raster added with saved laser settings. Preview the scanlines before export.');
   });

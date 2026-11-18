@@ -7,7 +7,8 @@
 <nav><a href="./index.html">Studio</a> / <a href="./help.html">Help centre</a></nav>
 <h1>Machining lessons</h1>
 <p>Change one setting, generate a toolpath and inspect how the machine would cut this sample plate.</p>
-<div class="layout">
+<nav class="lesson-links" aria-label="Choose an exercise"><a href="#head-practice">Toolpath playback</a><a href="#trim-practice">Trim two lines</a><a href="#loft-practice">Section a loft</a></nav>
+<div class="layout" id="head-practice">
 <section aria-label="Lesson controls">
 <label for="lesson">Machining head</label>
 <select id="lesson"><option value="router">Router · step-down</option><option value="laser">Laser · entry ramp</option><option value="knife">Drag knife · blade offset</option></select>
@@ -35,6 +36,22 @@
 <path id="trim-result" fill="none" stroke="#12646a" stroke-width="1.8"/>
 </svg></div>
 <p>In Studio, open <b>Design → Trim &amp; join</b>, click each side to keep, inspect the preview and choose <b>Apply join</b>.</p></section>
+<section id="loft-practice"><h2>Section a loft</h2>
+<p>A duct rises 20 mm from a 40 × 24 mm rectangular base to a circular outlet. Change the outlet and slide the cutting plane through the duct. Can you make a 31 × 23 mm section halfway up, with its centre 2 mm to the right of the base?</p>
+<div class="layout"><div>
+<label for="loft-diameter">Outlet diameter (mm)</label><input id="loft-diameter" type="number" min="8" max="36" step=".5" value="18" required>
+<label for="loft-offset">Outlet centre offset X (mm)</label><input id="loft-offset" type="number" min="-12" max="12" step=".5" value="4" required>
+<label for="loft-level">Section height Z · <span id="loft-level-value">10 mm</span></label><input id="loft-level" type="range" min="0" max="20" step=".5" value="10">
+<p class="lesson-result"><output id="loft-size" aria-live="polite"></output></p>
+<p id="loft-feedback" aria-live="polite"></p>
+</div><figure class="loft-figure">
+<svg viewBox="-35 -23 70 46" role="img" aria-label="Top view of the rectangular base, round outlet and selected horizontal section">
+<g transform="scale(1 -1)" fill="none"><rect x="-20" y="-12" width="40" height="24" class="loft-base"/>
+<g id="loft-drawing"><circle id="loft-outlet" class="loft-outlet"/><path id="loft-outline" class="loft-section"/><circle id="loft-centre" r=".55" fill="#075457"/></g></g>
+</svg><figcaption><span>Base</span><span>Outlet</span><span>Section</span></figcaption>
+</figure></div>
+<details><summary>How to predict the section</summary><p>At 10 mm the plane is halfway up the duct. Average the base width and outlet diameter to get the section width. Average the base depth and outlet diameter to get its depth. The section centre travels the same fraction of the outlet offset.</p></details>
+<p><b>Try it in Studio.</b> In <b>3D CAD</b>, add a <b>Two-section loft</b>. Set the base to Rectangle, 40 × 24 mm, and the top to Circle. Copy the outlet diameter and X offset above, leave the Y offset at zero and set the loft height to 20 mm. With the origin at Z = 0 and no rotation, choose <b>Horizontal section</b>, enter the same Z inside the solid and choose <b>Prepare in CAM</b>. Select the contour to check its width and height in <b>Properties</b>.</p></section>
 <section><h2>Workshops in the editor</h2>
 <p>Open Studio to practise with editable examples. In <b>3D CAD</b>, try the bearing mate or surface tutorial. In <b>CAM</b>, move the clamp and rerun fixture clearance. In <b>Images</b>, use the sample raster or camera target. In <b>Projects</b>, choose <b>Try a sample</b> to convert a LightBurn badge.</p>
 <a href="./materials-guide.html">Explore the materials guide</a> · <a href="./index.html">Open Studio</a> · <a href="./help.html#lightburn-import">Read the import tutorial</a></section></main>

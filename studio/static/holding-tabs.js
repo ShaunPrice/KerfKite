@@ -27,7 +27,7 @@
    const tabs=configuration();
    window.recordHistory?.();
    $('stock_thickness').value=$('tabStockThickness').value;
-   obj.operationSettings={...obj.operationSettings,...Object.fromEntries(fields.map(key=>[key,['mode','protocol','operation','dwell_units'].includes(key)?$(key).value:Number($(key).value)])),tabs};
+   obj.operationSettings={...obj.operationSettings,...Object.fromEntries(fields.map(key=>[key,['mode','protocol','operation','dwell_units','lead_shape','laser_pattern','router_entry'].includes(key)?$(key).value:Number($(key).value)])),tabs};
    invalidate();draw();message('Holding tabs assigned to the selected object. Generate a new preview; placement overlaps and cutter-path geometry are validated during CAM.');
  });
  $('removeHoldingTabs').onclick=task(()=>{const obj=selectedObject();window.recordHistory?.();if(obj.operationSettings)delete obj.operationSettings.tabs;invalidate();draw();message('Holding tabs removed from selected object. Generate a new preview before running.');});

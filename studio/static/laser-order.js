@@ -80,7 +80,7 @@
   function eligible(op){
     return op.mode==='laser' && (op.operation||'line')==='line' && (op.passes??1)===1 &&
       ['lead_in','lead_out','ramp_in','ramp_out'].every(k=>!op[k]) && !op.path_powers && !op.path_depths &&
-      !op.tabs && Array.isArray(op.paths) && op.paths.length && op.paths.every(valid);
+      (!op.laser_pattern || op.laser_pattern==='continuous') && !op.tabs && Array.isArray(op.paths) && op.paths.length && op.paths.every(valid);
   }
   const signature=op=>JSON.stringify(Object.keys(op).filter(k=>k!=='paths').sort().map(k=>[k,op[k]]));
   function plan(job,layers,opts) {

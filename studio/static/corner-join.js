@@ -194,7 +194,8 @@
   canvas.parentElement.addEventListener('pointerdown', event => {
     if (!mode || !canvas.contains(event.target) || event.button !== 0) return;
     event.stopImmediatePropagation(); event.preventDefault();
-    pick(canvasPoint(event));
+    const point=canvasPoint(event), placement=window.KerfPlacement;
+    pick(mode==='line'&&placement?placement.snap(point,$('placement-vertices').checked?placement.candidates([]):[],event.altKey):point);
   }, true);
   window.addEventListener('keydown', event => { if (event.key === 'Escape' && mode) stop(); });
   window.addEventListener('cnc-tab-changed', () => { if (mode && $('design-panel-shapes').hidden) stop(); });

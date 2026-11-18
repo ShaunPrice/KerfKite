@@ -8,10 +8,10 @@
 
 | What your board runs | Package |
 | --- | --- |
-| A 64-bit ARM Debian, Ubuntu or Armbian desktop | [Full Studio ARM64 DEB](https://github.com/ShaunPrice/KerfKite/releases/download/v0.3.0/KerfKite-Linux-arm64.deb) |
-| A 64-bit Intel/AMD Debian or Ubuntu desktop | [Full Studio AMD64 DEB](https://github.com/ShaunPrice/KerfKite/releases/download/v0.3.0/KerfKite-Linux-amd64.deb) |
-| A Debian-family desktop where you want browser editing only, including ARM32 or RISC-V with a modern browser | [Browser Editor DEB, all architectures](https://github.com/ShaunPrice/KerfKite/releases/download/v0.3.0/KerfKite-Browser-Editor-all.deb) |
-| Another desktop OS with a modern browser, or a computer where you cannot install packages | [Portable Browser Editor ZIP](https://github.com/ShaunPrice/KerfKite/releases/download/v0.3.0/KerfKite-Browser-Editor.zip) |
+| A 64-bit ARM Debian, Ubuntu or Armbian desktop | [Full Studio ARM64 DEB](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-Linux-arm64.deb) |
+| A 64-bit Intel/AMD Debian or Ubuntu desktop | [Full Studio AMD64 DEB](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-Linux-amd64.deb) |
+| A Debian-family desktop where you want browser editing only, including ARM32 or RISC-V with a modern browser | [Browser Editor DEB, all architectures](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-Browser-Editor-all.deb) |
+| Another desktop OS with a modern browser, or a computer where you cannot install packages | [Portable Browser Editor ZIP](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-Browser-Editor.zip) |
 
 Open the DEB in the desktop package manager and choose **Install**. Open **KerfKite Studio** or **KerfKite Browser Editor** from the applications menu. For the ZIP, extract the entire folder and open **index.html**. Save work through **Projects → Download project**. Browser storage is specific to the browser profile and can change when a portable folder moves. To remove the Browser Editor use the package manager, or delete the extracted ZIP folder. Saved project downloads stay where you chose to put them.
 

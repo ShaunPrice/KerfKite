@@ -24,3 +24,9 @@ The motion interpreter covers the absolute millimetre linear GRBL subset emitted
 ## Advanced CAD and file workflows
 
 Run `python scripts/simulate_studio.py --all --require-step` to include a real open surface and cylinder STEP round trip, a mated shaft offset into its bore wall, a holder strike during a posted rapid, relocation of the clamp and a plotter-to-knife conversion. The separate browser harness in `validation/simulate_solid_workspace.py` exercises editing, saving, reopening, image registration and file import through the actual controls. Install the STEP extra and Playwright first. The simulated fixture positions and tools are numerical test inputs.
+
+## Workshop and Pocket checks
+
+Run `python validation/simulate_solid_workspace.py` with Playwright and Chromium installed. Isolated browser contexts exercise sketch and loft rebuilds, registered camera tracing, PDF and compound SVG import, grouped artwork, serialised labels, tab placement, peck drilling, router entry, laser patterns and the project round trip. The disconnected editor uses the same test inputs for the operations it supports.
+
+The Android project and pendant checks run against an emulator with an installed APK. See [Android setup](ANDROID.md) for signing and installation. Saved work from an earlier APK and a desktop source project are separate compatibility cases. A visually successful import alone cannot establish a lossless reference-file round trip.

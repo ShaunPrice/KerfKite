@@ -87,7 +87,7 @@ def create_app(store,public_url,destinations=None,allow_file_upload=False):
     @app.get('/')
     def index():return send_from_directory(app.static_folder,'index.html')
     @app.get('/api/session')
-    def session():return jsonify(token=g.session['csrf'],username=g.user,web_mode=True,depth_paths=True,advanced_cam=True, holding_tabs=True)
+    def session():return jsonify(token=g.session['csrf'],username=g.user,web_mode=True,depth_paths=True,advanced_cam=True, holding_tabs=True, laser_patterns=True, router_entries=True)
     @app.get('/api/profiles')
     def profiles():return jsonify(PROFILES)
     @app.post('/api/generate')

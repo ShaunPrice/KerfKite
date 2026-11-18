@@ -18,6 +18,8 @@ Open **CAM → Materials guide** to start with the tool selected in Studio. **3D
 
 The guide does not load CAM settings. To retain settings that you measured for a particular machine, enter them in the editor and use its existing material/tool preset controls.
 
+For drilled holes, select **Drill bit** and compare **Single plunge** with **Full-retract peck drilling**. The cross sections show the relationship between tip depth and finished bore depth. Record your measured hole diameter, exit-face condition and observations in the sample notebook. See the [drilling exercise](DRILLING.md).
+
 ## Keep a sample notebook
 
 Choose the material, tool and operation you tested. Enter a supplier or batch, optionally add measured thickness in millimetres, and record the machine, actual settings, inspection result and observations. **Save sample** keeps the entry with that combination. Use **Edit sample** to correct it or **Delete sample** to remove it. Avoid-rated combinations show existing observations with recording disabled.

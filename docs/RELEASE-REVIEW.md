@@ -1,6 +1,20 @@
 # KerfKite Studio | CAD and workshop release review
 
-18 November 2026
+## 0.4.0 workshop update · 19 November 2026
+
+The new router operations generate explicit peck, ramp and helix moves. The laser can leave material bridges and generate a perforation pattern. A two-section parametric loft rebuilds from named dimensions and can feed linked machining geometry, STL and exact STEP exchange. The Android editor now keeps named drawings and can retain a desktop project for lossless re-export.
+
+| Workflow checked | Observed result |
+| --- | --- |
+| Parametric loft | Increasing the circular outlet diameter by 4 mm changed the linked halfway section from 29 × 21 mm to 31 × 23 mm. Its dimensions and dependency survived a save/reopen cycle. |
+| Production labels | An independent decoder read the rendered Code 39 and UTF-8 QR toolpaths. Material and engraving settings still determine contrast on the finished stock. |
+| Router and laser | Browser tests checked four-hole peck drilling, measured hole depths, power-off gaps across laser bridges, compensated tab centres, closed-profile ramps and pocket helix entry. |
+| Vector exchange | The editor preserved the bore and perimeter of a gear as separate SVG contours. A two-page vector PDF was reviewed at physical size before enabling output. |
+| Pocket | A signed APK upgraded a previous installation and retained its editable draft. A grouped 228,565-byte desktop project with labelled parts and machining settings survived byte-for-byte re-export. Pendant tests used the Studio simulator. |
+
+The [feature matrix](PRODUCT.md) records present scope. The [installer checks](INSTALLER-BUILDS.md) exercise separate desktop and SBC packages. The [interactive lessons](../studio/static/machining-lessons.html) and [simulation guide](SIMULATION.md) describe how to repeat workshop exercises without a machine. Physical cutting and handheld Galaxy S23 acceptance remain outstanding for this release.
+
+## Earlier CAD release review · 18 November 2026
 
 Public source repository: [github.com/ShaunPrice/KerfKite](https://github.com/ShaunPrice/KerfKite).
 
@@ -29,8 +43,8 @@ First-party software and documentation use MIT. The source distribution includes
 
 This public edition starts with a fresh source history. Its publication review covered source, validation records, media metadata, screenshot text and commit identity. The edition uses generic machine profiles and excludes private device configurations, recordings and provider receipts. Public copyright attribution remains. Credential-pattern scanning and manual review have limited coverage.
 
-## Remaining scope
+## Scope recorded in the earlier review
 
-The assembly solver accepts directed mate hierarchies. Closed-loop mechanical constraint solving and general surface trimming or stitching remain open. STEP exchange covers geometry; CAD feature-tree, PMI and assembly-mate round trips remain open. Tool and holder clearance depends on the supplied work frame, envelopes and fixture measurements. Rotary collision simulation and machine-frame component collisions require additional models.
+For current scope see the [feature matrix](PRODUCT.md). At the time of the earlier review, the assembly solver accepted directed mate hierarchies. Closed-loop mechanical constraint solving and general surface trimming or stitching remain open. STEP exchange covers geometry; CAD feature-tree, PMI and assembly-mate round trips remain open. Tool and holder clearance depends on the supplied work frame, envelopes and fixture measurements. Rotary collision simulation and machine-frame component collisions require additional models.
 
 LightBurn compatibility covers documented subsets of the source formats. Lossless LightBurn round trips, some image effects, complete text shaping, proprietary controller protocols, camera lens-distortion correction and native commercial cutter-project formats remain open. Supervised physical commissioning is still required to measure cutting quality, clearance and stopping behaviour.

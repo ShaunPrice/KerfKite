@@ -63,6 +63,12 @@ def run(page):
     expect(overlay).to_have_attribute('opacity','0.45')
     loc('#camera-reg-save').click()
     expect(loc('#camera-reg-info')).to_contain_text('Calibration saved')
+    # Exercise recall of the original four-target storage format after upgrading.
+    page.evaluate("""() => {
+      const key=Object.keys(localStorage).find(k=>k.includes('cnc-camera-registration-v1'));
+      const record=JSON.parse(localStorage.getItem(key));
+      localStorage.setItem(key,JSON.stringify({version:1,pairs:record.pairs.slice(0,4),bed:record.bed,aspect:record.aspect}));
+    }""")
     loc('#camera-reg-marker').select_option('0')
     loc('#camera-reg-wx').fill('12')
     expect(loc('#camera-reg-add')).to_be_disabled()
@@ -76,6 +82,30 @@ def run(page):
     assert registered['paths'][0][0]==registered['paths'][0][-1]
     assert registered['paths'][0][0][0]>100
     print('PASS camera teaching card, projective bed overlay, profile recall and registered trace placement')
+    loc('#camera-reg-lens-demo').click()
+    expect(loc('#camera-reg-info')).to_contain_text('RMS error 0.000 mm')
+    expect(loc('#camera-reg-info')).to_contain_text('k -0.32000')
+    loc('#camera-reg-marker').select_option('4')
+    loc('#camera-reg-check').click()
+    expect(loc('#camera-reg-info')).to_contain_text('Independent check error 0.000 mm')
+    loc('#camera-reg-save').click()
+    loc('#camera-reg-model').select_option('perspective')
+    expect(loc('#camera-reg-add')).to_be_disabled()
+    loc('#camera-reg-recall').click()
+    expect(loc('#camera-reg-model')).to_have_value('radial')
+    expect(loc('#camera-reg-info')).to_contain_text('nine measured targets')
+    loc('#tracePreview').click()
+    loc('#camera-reg-add').click()
+    expect(loc('#camera-reg-info')).to_contain_text('1 registered')
+    assert page.evaluate('CNCProjects.document().objects.at(-1).paths[0].length') > 5
+    loc('#camera-reg-marker').select_option('6')
+    loc('#camera-reg-wx').fill('12')
+    expect(loc('#camera-reg-add')).to_be_disabled()
+    loc('#camera-reg-fit').click()
+    expect(loc('#camera-reg-info')).not_to_contain_text('Lens fit using')
+    expect(loc('#camera-reg-add')).to_be_disabled()
+    print('PASS nine-landmark radial lens model, independent check, profile recall, registered trace and failed fit')
+
     tab('Projects')
     loc('#projectNew').click()
     tab('Design')

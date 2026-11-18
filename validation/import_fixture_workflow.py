@@ -89,3 +89,6 @@ def run(host_page):
         expect(panel.get_by_label('Holder diameter')).to_have_value('12')
         assert page.evaluate("project().operations.length") == 1
         print('PASS clamp lesson contact/clear, actual knife CAM contact, project save/reopen')
+
+        from validation.pdf_import_workflow import run as pdf_import
+        pdf_import(page)

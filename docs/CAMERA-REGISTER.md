@@ -1,6 +1,6 @@
 # Register a camera image to the machine bed
 
-Under **Images**, the **Camera bed registration** panel places a frozen camera image and its traced paths in millimetres on the design bed. The mapping uses a four-point planar homography. Camera access is optional and begins only when you press **Open camera**. You may supply an image file instead.
+Under **Images**, the **Camera bed registration** panel places a frozen camera image and its traced paths in millimetres on the design bed. Choose four-point perspective registration or nine-target registration with radial lens correction. Camera access is optional and begins only when you press **Open camera**. You may supply an image file instead.
 
 ## Try the registration card
 
@@ -20,4 +20,12 @@ Select marker **1**, click the corresponding target in the frozen registration i
 
 The overlay covers the quadrilateral enclosed by the measured targets. Registered tracing rejects contours extending outside it. **Add preview to project** in the basic tracing panel uses numeric width, height and shape placement. **Place previewed trace on bed** uses the measured camera mapping.
 
-The trace input is downsampled to at most 384 pixels per side. The transformation corrects perspective on a flat surface. Lens distortion, parallax over raised parts, camera movement and physical registration accuracy require separate measurements. General lens undistortion and 3D camera calibration remain open.
+## Measure radial lens distortion
+
+Choose **Perspective and radial lens · nine targets** when straight lines bend towards the corners of the image. Targets 1–4 define the outer work quadrilateral. Place five further measured targets inside this region at different distances from the image centre, including positions near each side. Keep a tenth measured point for an independent check. Select each target, click its centre in the frozen image and enter the matching work XY. Repeated points, poor target spread and implausible lens coefficients produce an error.
+
+Set **Maximum target error** to the largest fit residual you can accept for this job, in millimetres. **Solve registration** fits a centred, one-coefficient radial division model and a planar perspective transformation. Distances use square-pixel coordinates with the image aspect ratio. The report shows the root-mean-square residual and worst residual over the nine fitted targets, plus the fitted coefficient. Choose **Independent check point**, enter the separately measured point and choose **Measure check error**. A small fit residual alone cannot measure physical accuracy.
+
+**Try lens calibration card** loads a synthetic barrel-distorted image with known target coordinates. Solve or recall its fit, inspect the bed overlay, measure the check point and place its rectangle through **Preview trace → Place previewed trace on bed**. Long traced line segments are subdivided as needed when the lens transformation bends them in work coordinates. **Save for this profile** retains the measured correspondences, model, allowed error, bed size and aspect ratio. Earlier four-point calibrations still open.
+
+The trace input is downsampled to at most 384 pixels per side. Both models assume a flat work plane. Tangential or decentered lens distortion, fisheye optics, parallax above the measured surface and 3D camera pose require other models or measurements. Test a known target on the actual stock plane before relying on placement accuracy. [Radial division model](https://www.robots.ox.ac.uk/~vgg/publications/2001/Fitzgibbon01b/fitzgibbon01b.pdf)

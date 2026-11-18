@@ -115,6 +115,9 @@ def _primitive(feature, dimensions, kernel):
         solid = kernel.Manifold.cylinder(dimensions.positive(feature.get('height')), radius, top, _SEGMENTS)
     elif kind == 'sphere':
         solid = kernel.Manifold.sphere(dimensions.positive(feature.get('radius')), _SEGMENTS)
+    elif kind == 'loft':
+        from .solid_loft import loft_mesh
+        solid = loft_mesh(feature, dimensions, kernel, _MAX_FACES)
     elif kind == 'extrude':
         solid = _sketch(feature, dimensions, kernel).extrude(dimensions.positive(feature.get('height')))
     elif kind == 'revolve':

@@ -2,6 +2,8 @@
 
 This guide describes the development application. It includes design, CAM, file transfer and machine controls, but it does not establish full LightBurn parity or certify a machine setup. Read the current [acceptance status](STATUS.md), [installation entry point](../README.md) and [troubleshooting guide](TROUBLESHOOTING.md).
 
+Use **Find a tool** in the header or press **Ctrl+K** (**Command+K** on Mac). Search by control, section or tab, then choose a result with the arrow keys and Enter. Studio opens the tab, expands the section and focuses the existing control. You can inspect its settings before using it. Escape returns to your previous control.
+
 ## Choose how to open Studio
 
 | Mode | Open it with | What it provides |
@@ -42,7 +44,7 @@ Click a tab to select it. When a tab button has keyboard focus, Left/Right chang
 1. In **Design**, check the work-area dimensions and enter X/Y plus shape width/height in millimetres. Add a rectangle or another shape. Shape buttons can also be dragged onto the work area.
 2. Select the shape. Drag to move it; use the handles to resize it. Escape cancels the current drag. Position and resize commands also use the numeric fields.
 3. In **CAM**, choose the head and operation. For a simple demonstration choose the simulator workflow and a line operation. Enter the feed and relevant depth or laser power settings.
-4. Select **Generate preview**. Inspect its warnings, path placement and generated G-code. The cut slider steps through cutting segments; the time estimate excludes travel, acceleration, plunge and startup.
+4. Select **Generate preview**. Inspect its warnings, path placement and generated G-code. The cut slider steps through cutting segments; the cut-only estimate covers cutting moves. For a quote, open **Machine cycle time** and enter the rapid rates and starting position to include positioning, plunge and dwell.
 5. Name the project in **Projects**, then save it to the browser and download a portable project copy. Export G-code only after generating a current preview.
 
 Editing artwork or machining settings invalidates the previous preview and setup confirmation. Generate another preview before exporting or starting that job. A rendered design alone is not evidence that cutter compensation, material clearance or machine coordinates are correct.
@@ -102,7 +104,7 @@ For Bézier text, choose **Symmetric · use curve rise** or **Custom · independ
 
 Tracing reduces input to at most 384 pixels per side and caps contour/stroke complexity. It removes collinear vertices without smoothing away gaps. Expect pixel-scale corners, approximate endpoints and possible skeleton spurs. This is not camera-bed calibration, lens correction, perspective correction, automatic registration or a live machine overlay. Capture, Stop, closing the trace section and leaving the page release camera tracks. No trace action moves the machine.
 
-SVG import supports a restricted geometry subset. Convert unsupported text/effects to plain paths before importing; do not assume arbitrary SVG, DXF or PDF document support.
+For cutter artwork, import compound SVG contours at their original physical size or fit them to a chosen box. The [SVG guide](SVG.md) explains units, reused and hidden geometry, and unsupported effects. Import DXF and vector PDF files through the reviewed [program import](PROGRAM-IMPORT.md) workflow.
 
 ## Templates
 
@@ -199,3 +201,16 @@ In CAM, open Manual tool changes. Set the cutter diameter, operation, depth and 
 Each stage ends retracted with the spindle off. Wait for motion and spindle to cease, install the next tool, re-establish Z zero or verified tool length, check XY origin/clearance and review the next stage before starting it manually. Do not concatenate stage files. Automatic tool changers, probing and automatic continuation are not implemented. Ordinary Run rejects differing tool numbers even if their diameters match. Tool-change generation requires the app server.
 
 Holding tabs are retained when reassigning CAM settings or a manual tool. Use **Remove tabs from selected object** before clearing operation settings; the editor prevents implicit removal. Incompatible tool/mode combinations retain the tab request and fail CAM validation.
+
+
+### Calibrate quote time from a sample
+
+Open **Quote → Machine cycle time** after generating a preview. Enter the measured rapid rate for each axis, and the XYZ work-coordinate position where the program will start. The example rates are editable. Studio reads programmed feeds and dwell units from its posted XYZ moves and includes plunges, linked moves and retracts. Rapids assume coordinated axes, each within its entered maximum rate. Without a measured sample, the calculation uses constant speed.
+
+Run a representative sample under your normal workshop process and record elapsed time from program start to finish, excluding setup or pauses. Enter the duration in minutes, then choose **Calibrate from sample**. Studio scales the programmed motion portion and preserves the commanded dwell. The project retains this sample for its selected machine profile, head, protocol and rapid rates. Use a similar path type and material when transferring its factor to another preview. **Use cycle time in quote** sets the quoted machining minutes and resets the separate cut-time multiplier to one. Existing loading or handling allowances stay separate.
+
+### Use more than one machine
+
+Under **Control → My machine profiles**, enter a name, measured X/Y travel, optional Z travel and design dialect. Choose **Save as new profile**. The machine selector switches the current project to the work area and dialect. Selecting a smaller custom work area prompts you to move any artwork outside its limits first. A profile records planning dimensions. The controller's configuration and work origin are established separately at the machine.
+
+**Export profile** writes a portable JSON file. On a different computer, choose **Import profile**, inspect the fields and save it to that browser. Projects carry a snapshot of the active custom profile. Opening one from another machine displays the saved profile even if that machine has no local library entry. Hosted browser libraries are scoped to the signed-in account.

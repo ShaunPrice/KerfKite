@@ -12,3 +12,15 @@ label { display: block; font-weight: 600 }
 svg { width: 100%; background: #f1f6f6; border-radius: 6px; margin-bottom: 12px }
 pre { max-height: 15rem; overflow: auto; font-size: .85rem }
 @media(max-width: 700px){.layout { grid-template-columns: 1fr }}
+
+.lesson-links,.loft-figure figcaption { display:flex; gap:.6rem 1.4rem; flex-wrap:wrap }
+.lesson-links { margin:1rem 0 }
+.loft-figure { margin:0; align-self:center; min-width:0 }
+.loft-figure .loft-base { stroke:#77868a; stroke-width:.4 }
+.loft-figure .loft-outlet { stroke:#9a531d; stroke-width:.55; stroke-dasharray:1.2 .8 }
+.loft-figure .loft-section { fill:#13777a18; stroke:#075457; stroke-width:.6 }
+.loft-figure figcaption { justify-content:center }
+.loft-figure figcaption span::before { content:""; display:inline-block; width:1.2em; margin-right:.35em; vertical-align:middle; border-top:2px solid #77868a }
+.loft-figure figcaption span:nth-child(2)::before { border-top:2px dashed #9a531d }
+.loft-figure figcaption span:nth-child(3)::before { border-top:3px solid #075457 }
+.lesson-result { font-weight:650; margin-bottom:.25rem }

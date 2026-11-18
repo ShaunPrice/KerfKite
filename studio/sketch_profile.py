@@ -1,10 +1,11 @@
-"""Planar polygon profiles with optional circular, tangent corner fillets."""
+"""Planar profiles with straight edges, cubic Béziers and tangent corner fillets."""
 from dataclasses import dataclass
 import math
 
 from shapely.geometry import Polygon
 
 from .sketch_constraints import solve_profile
+from .sketch_curves import minimum_coordinate, resolve_curves, sample_cubic
 
 
 def crossing_axis(values, axis):
@@ -31,6 +32,7 @@ class Corner:
     start_angle: float = 0
     sweep: float = 0
     setback: float = 0
+    outgoing_controls: list | None = None
 
     def at(self, fraction):
         angle = self.start_angle + self.sweep * fraction
@@ -71,16 +73,23 @@ def profile_geometry(feature, dimensions, solved=None):
     radii = [dimensions.evaluate(r) for r in radii]
     if min(radii) < 0:
         raise ValueError('Fillet radii must be zero or positive')
+    raw_curves = feature.get('curves', [None] * len(points))
+    if not isinstance(raw_curves, list) or len(raw_curves) != len(points):
+        raise ValueError('Supply one curve entry per outgoing sketch edge')
     if points[0] == points[-1]:
+        if raw_curves[-1] is not None:
+            raise ValueError('A duplicate closing vertex cannot start another cubic edge')
+        raw_curves = raw_curves[:-1]
         if radii[-1]:
             raise ValueError('Set the fillet on the first vertex of a closed loop')
         points.pop()
         radii.pop()
     if len(points) < 3 or len(set(points)) != len(points):
         raise ValueError('Sketch vertices must be distinct')
-    polygon = Polygon(points)
-    if not polygon.is_valid or polygon.area <= 1e-8:
-        raise ValueError('Sketch must enclose an area without crossing itself')
+    controls = resolve_curves(raw_curves, points, dimensions)
+    for i, handles in enumerate(controls):
+        if handles is not None and (radii[i] or radii[(i+1) % len(points)]):
+            raise ValueError('Remove the endpoint fillet before making a curved edge. Use tangent handles to round a cubic join.')
     corners = [_corner(points[i-1], b, points[(i+1) % len(points)], radii[i]) for i, b in enumerate(points)]
     outline = []
     for i, corner in enumerate(corners):
@@ -92,10 +101,21 @@ def profile_geometry(feature, dimensions, solved=None):
             steps = max(2, math.ceil(abs(corner.sweep) / (math.pi / 48)))
             outline.extend(corner.at(j / steps) for j in range(1, steps))
             outline.append(corner.end)
+        if controls[i] is not None:
+            corner.outgoing_controls = controls[i]
+            end = corners[(i+1) % len(points)].start
+            if feature.get('kind') == 'revolve':
+                radial = [p[0] for p in (corner.end, *controls[i], end)]
+                if minimum_coordinate(*radial) < -1e-10:
+                    raise ValueError('Revolve profile radii must be zero or greater along the entire curve')
+            outline.extend(sample_cubic(corner.end, controls[i], end))
+        if len(outline) > 16384:
+            raise ValueError('Sketch exceeds 16384 sampled vertices')
     if len(outline) > 1 and math.dist(outline[0], outline[-1]) <= 1e-10:
         outline.pop()
-    if any(radii) and not Polygon(outline).is_valid:
-        raise ValueError('The rounded sketch crosses another edge. Reduce the fillet radius')
+    polygon = Polygon(outline)
+    if not polygon.is_valid or polygon.area <= 1e-8:
+        raise ValueError('Sketch must enclose an area without crossing itself')
     if feature.get('kind') == 'revolve' and any(x < 0 for x, _ in points + outline):
         raise ValueError('Revolve profile radii must be zero or greater')
     return corners, outline
@@ -104,6 +124,8 @@ def profile_geometry(feature, dimensions, solved=None):
 def step_profile_face(feature, dimensions):
     from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeEdge, BRepBuilderAPI_MakeFace, BRepBuilderAPI_MakeWire
     from OCP.GC import GC_MakeArcOfCircle
+    from OCP.Geom import Geom_BezierCurve
+    from OCP.TColgp import TColgp_Array1OfPnt
     from OCP.gp import gp_Pnt
 
     def gp(point):
@@ -113,7 +135,16 @@ def step_profile_face(feature, dimensions):
     corners, _ = profile_geometry(feature, dimensions)
     wire = BRepBuilderAPI_MakeWire()
     for i, corner in enumerate(corners):
-        if math.dist(corners[i-1].end, corner.start) > 1e-10:
+        previous = corners[i-1]
+        if previous.outgoing_controls:
+            poles = TColgp_Array1OfPnt(1, 4)
+            for index, point in enumerate((previous.end, *previous.outgoing_controls, corner.start), 1):
+                poles.SetValue(index, gp(point))
+            edge = BRepBuilderAPI_MakeEdge(Geom_BezierCurve(poles))
+            if not edge.IsDone():
+                raise ValueError('STEP could not construct the cubic sketch edge')
+            wire.Add(edge.Edge())
+        elif math.dist(previous.end, corner.start) > 1e-10:
             wire.Add(BRepBuilderAPI_MakeEdge(gp(corners[i-1].end), gp(corner.start)).Edge())
         if corner.radius:
             arc = GC_MakeArcOfCircle(gp(corner.start), gp(corner.at(.5)), gp(corner.end))

@@ -1,7 +1,7 @@
 // Preview conversions in a draft before adding anything to the open document.
 (() => {
   'use strict';
-  const extensions = 'lbrn lbrn2 lbdev lbprefs lbzip clb lbset settings dxf nc ngc cnc tap gcode plt hpgl hpg ini'.split(' ');
+  const extensions = 'lbrn lbrn2 lbdev lbprefs lbzip clb lbset settings dxf pdf nc ngc cnc tap gcode plt hpgl hpg ini'.split(' ');
   const program = /\.(dxf|nc|ngc|cnc|tap|gcode|plt|hpgl|hpg|ini)$/i;
   const ext = name => name.split('.').pop().toLowerCase();
   const panel=document.createElement('section');
@@ -11,6 +11,8 @@
     <label>Source file<input id="exchange-source-file" type="file"></label>
     <div class="pair"><label>Laser S at 100%<input type="number" min="1" max="100000" value="1000" id="import-max-s"></label>
     <label>Unitless DXF<select id="import-unit"><option value="mm">Millimetres</option><option value="in">Inches</option></select></label></div>
+    <div id="import-pdf-pages" hidden><label>PDF page<input id="import-pdf-page" type="number" min="1" step="1" value="1"></label>
+    <span id="import-pdf-size"></span></div>
     <div id="import-bundle" hidden><label>Bundle member<select id="import-member"></select></label><button id="import-read-member">Review selected member</button></div>
     <button id="import-inspect">Review import</button> <button id="import-example">Try a sample</button>
     <div id="import-review" hidden><p id="import-summary"></p><svg id="import-drawing" role="img" aria-label="Drawing to import" style="width:100%;height:130px;background:#f2f6f6"></svg>
@@ -49,7 +51,7 @@
     }
     modeUI();invalidate();draw();status('Workspace updated. Review CAM and generate a new preview.');
   });
-  let draft, bundle, revision=0;
+  let draft, bundle, pdfFile, revision=0;
   function clear(){revision++;draft=null;bundle=null;$('import-bundle').hidden=true;$('import-review').hidden=true;status('');}
   function preview(paths){
     const svg=$('import-drawing');svg.replaceChildren();svg.style.display=paths.length?'':'none';
@@ -63,22 +65,44 @@
     const margin=Math.max(1,(X-x+Y-y)*.03);
     svg.setAttribute('viewBox',[x-margin,-Y-margin,X-x+2*margin,Y-y+2*margin].join(' '));
   }
+  const asBase64=file=>new Promise((ok,fail)=>{
+    const reader=new FileReader();
+    reader.onload=()=>ok(reader.result.split(',')[1]);
+    reader.onerror=()=>fail(Error('Cannot read the selected file'));
+    reader.readAsDataURL(file);
+  });
   async function inspect(file, member=false){
     if(member){revision++;draft=null;$('import-review').hidden=true;}else clear();
     const id=revision;
     if(!file)throw Error('Choose a project, settings file or cutter program');
     if(file.size>4e6)throw Error('Import files up to 4 MB');
+    const name=file.name,pdf=ext(name)==='pdf';
+    $('import-pdf-pages').hidden=!pdf;
+    if(pdf && file!==pdfFile){
+      $('import-pdf-page').value='1';$('import-pdf-page').removeAttribute('max');$('import-pdf-size').textContent='';
+    }
+    pdfFile=pdf?file:null;
     if(ext(file.name)==='lbzip'){
-      const reader=new FileReader();
-      const content=await new Promise((ok,fail)=>{reader.onload=()=>ok(reader.result.split(',')[1]);reader.onerror=()=>fail(Error('Cannot read bundle'));reader.readAsDataURL(file);});
+      const content=await asBase64(file);
       const list=await api('import-bundle',{content});if(id!==revision)return;
       if(!list.files.length)throw Error('No supported files in this bundle');
       bundle=content;$('import-member').replaceChildren(...list.files.map(row=>new Option(row.name,String(row.index))));
       $('import-bundle').hidden=false;status(list.files.length+' supported members · '+list.skipped+' skipped');return;
     }
-    const text=await file.text(),name=file.name;
-    const r=program.test(name)?await api('program-import',{name:ext(name)==='dxf'?'drawing.dxf':'program.'+ext(name),text,unit:$('import-unit').value}):
-      CNCLightBurn.read(name,text,{maxPower:$('import-max-s').valueAsNumber});
+    let r;
+    if(pdf){
+      if(offline){status('Open the PDF in desktop Studio or the hosted editor. Save the converted project for editing offline.');return;}
+      const page=$('import-pdf-page').valueAsNumber;
+      if(!Number.isInteger(page)||page<1)throw Error('Select a positive PDF page number.');
+      r=await api('pdf-import',{content:await asBase64(file),page});
+      if(id!==revision)return;
+      $('import-pdf-page').max=r.pageCount;
+      $('import-pdf-size').textContent='Page '+r.page+' of '+r.pageCount+' · '+r.pageSize.map(v=>Number(v.toFixed(2))).join(' × ')+' mm';
+    }else{
+      const text=await file.text();
+      r=program.test(name)?await api('program-import',{name:ext(name)==='dxf'?'drawing.dxf':'program.'+ext(name),text,unit:$('import-unit').value}):
+        CNCLightBurn.read(name,text,{maxPower:$('import-max-s').valueAsNumber});
+    }
     if(id!==revision)return;
     const needed=new Set([...r.layers.map(l=>String(l.key)),...r.objects.map(o=>String(o.sourceLayer??''))]);
     if(CNCDesignLayers.layers().length+needed.size>64)throw Error('Adding these layers would exceed the 64-layer limit. Open a new project or import fewer layers.');
@@ -88,7 +112,9 @@
     const notes=[...r.warnings];
     if(r.objects.length)notes.unshift('New layers start with Output off. Review scale, orientation, head and settings in Layers before enabling output.');
     $('import-notes').replaceChildren(...notes.map(s=>{const li=document.createElement('li');li.textContent=s;return li;}));
-    draft=r;$('import-review').hidden=false;status('Review ready.');
+    draft=r;$('import-review').hidden=false;
+    $('import-commit').disabled=pdf&&!r.objects.length;
+    status(pdf && !r.objects.length?'No supported paths on this page. Select another page or inspect Conversion details.':'Review ready.');
   }
   $('import-read-member').onclick=task(async()=>{
     const content=bundle,id=++revision;draft=null;$('import-review').hidden=true;
@@ -97,10 +123,16 @@
     if(id===revision)await inspect(new File([result.text],result.name),true);
   });
   $('import-member').onchange=()=>{draft=null;revision++;$('import-review').hidden=true;};
-  $('import-inspect').onclick=task(()=>inspect(input.files[0]));
+  $('import-inspect').onclick=task(()=>inspect(pdfFile||input.files[0]));
   $('import-example').onclick=task(()=>inspect(new File(['<LightBurnProject><CutSetting type="Cut"><index Value="1"/><name Value="Outline"/><speed Value="8"/><maxPower Value="35"/></CutSetting><Shape Type="Rect" CutIndex="1" W="30" H="18" Cr="3"><XForm>1 0 0 1 30 24</XForm></Shape></LightBurnProject>'],'Practice badge.lbrn2')));
   for(const id of ['import-max-s','import-unit'])$(id).oninput=clear;
-  input.onchange=task(()=>inspect(input.files[0]));
+  $('import-pdf-page').oninput=()=>{clear();$('import-pdf-size').textContent='';};
+  $('import-pdf-page').onchange=task(()=>inspect(pdfFile));
+  input.onchange=task(()=>{
+    $('import-pdf-page').value='1';$('import-pdf-page').removeAttribute('max');$('import-pdf-size').textContent='';
+    $('import-pdf-pages').hidden=ext(input.files[0]?.name||'')!=='pdf';
+    return inspect(input.files[0]);
+  });
   $('import-commit').onclick=task(()=>{
     const r=draft;if(!r)throw Error('Review a source file first');
     const rows=CNCDesignLayers.layers(), map=new Map(), linked=new Set(r.objects.map(o=>String(o.sourceLayer??'')));
@@ -128,6 +160,6 @@
     clear();showShelf();status('Added '+additions.length+' objects and '+(r.devices.length+r.presets.length)+' setups.');
   });
   window.CNCInterchange={recognises:file=>extensions.includes(ext(file.name)),open:async file=>{$('design-tab-projects').click();await inspect(file);}};
-  window.addEventListener('cnc-project-loaded',()=>{clear();showShelf();});
+  window.addEventListener('cnc-project-loaded',()=>{clear();pdfFile=null;$('import-pdf-pages').hidden=true;showShelf();});
   showShelf();
 })();

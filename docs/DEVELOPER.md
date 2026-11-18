@@ -43,13 +43,25 @@ Use `--browser PATH` to select an installed Chromium executable. The browser har
 
 To extend DXF import, add a small, independently authored fixture to `tests/test_program_import.py`. Decide how unsupported entities, XY projection and unit conversion should appear in the review. Implement the reader in `studio/program_import.py`. Verify its numerical result, handle a malformed variant, and test review → enable layer → CAM → project reopen in `validation/import_fixture_workflow.py`. Add the supported entity and limits to [Program import](PROGRAM-IMPORT.md). Importing artwork never grants permission to send a program to a device.
 
-For future work, use the acceptance matrix and the specific workflow guides. Physical cutting, lens distortion calibration, general constrained sketch and assembly solving, additional native vendor formats, and platform-specific binary redistribution each require their own validation.
+For future work, use the acceptance matrix and the specific workflow guides. Physical cutting, measured camera lens accuracy on the stock plane, arbitrary curve constraints and general assembly solving, additional native vendor formats, and platform-specific binary redistribution each require their own validation.
 
 The Android and MCP clients retain their legacy 680 × 240 mm example canvas for project compatibility. These dimensions describe an editing canvas. Configure each machine using its own measured travel and origin.
 
 The paired phone listener is managed by `studio/phone_monitor_service.py`. Its authenticated API is in `studio/monitor.py`. The native client and activity are in the Android Pocket package. `tests/test_phone_pendant.py` exercises action bounds and revocation. `validation/android_pendant_workflow.py` drives an emulator against the simulator.
 
 For sketch constraints, start with `studio/sketch_constraints.py` and `studio/sketch_profile.py`. Supplementary assembly mates are solved in `studio/assembly_constraints.py`. The browser tracks linked CAD geometry in `studio/static/solid-links.js`. The browser harness exercises crossing lines, linked contours and reliefs, and parameter-driven sketches.
+
+## Workshop extensions
+
+| Workflow | Source | End-to-end check |
+| --- | --- | --- |
+| Curved parametric sketches and two-section lofts | `studio/sketch_curves.py`, `studio/solid_loft.py`, `studio/solid_cad.py`, `studio/cad_exchange.py` | `validation/sketch_join_workflow.py` and `validation/loft_workflow.py` |
+| Vector SVG and PDF input | `studio/static/svg-import.js`, `studio/pdf_import.py` | `validation/svg_import_workflow.py` and `validation/pdf_import_workflow.py` |
+| Router entry, drilling and tab placement | `studio/router_entry.py`, `studio/drilling.py`, `studio/static/tab-placement.js` | `validation/router_entry_workflow.py`, `validation/drilling_workflow.py`, `validation/placement_workflow.py` |
+| Labels, grouping, machine profiles and calibrated quotes | `studio/static/production-labels.js`, `placement.js`, `machine-library.js`, `cycle-time.js` | `validation/production_label_workflow.py` |
+| Native Android project storage and interchange | `DraftLibrary.java`, `ProjectFile.java` in `android/app/src/main/java/au/cncstudio/pocket/` | `validation/android_projects_workflow.py` |
+
+The desktop and hosted editors share the Python CAM service. When adding CAM algorithms, exercise the offline JavaScript implementation on the same inputs or report the server requirement before generating a file. Comparing emitted tool positions, power, depths and stock removal catches regressions that a successful HTTP response would miss.
 
 ## Installer releases
 

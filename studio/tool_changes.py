@@ -1,6 +1,7 @@
 """Independent router jobs for deliberate manual tool changes; no machine access."""
 import math
 from .cam import generate
+from .operations import router_tool_shape
 
 
 def _numeric(value, name, lo, hi):
@@ -19,10 +20,10 @@ def _tool(operation):
     if not isinstance(name,str) or not name.strip() or len(name)>80 or any(ord(c)<32 for c in name):
         raise ValueError('Tool name must contain 1..80 printable characters')
     diameter=_numeric(operation.get('tool_diameter',3.175),'Tool diameter',.01,100)
-    shape='v' if operation.get('operation','line')=='vcarve' else operation.get('tool_shape','flat')
-    if shape not in ('flat','ball','v'):raise ValueError('Tool shape must be flat, ball or v')
+    shape=router_tool_shape(operation)
+    if shape not in ('flat','ball','v','drill'):raise ValueError('Choose a flat, ball, V or drill bit')
     angle=_numeric(operation.get('v_angle',60),'V angle',10,170) if shape=='v' else None
-    return {'tool_id':int(tool_id),'tool_name':name.strip(),'diameter':diameter,'shape':shape,'v_angle':angle}
+    return {'tool_id':int(tool_id),'tool_name':name.strip(),'diameter':diameter,'shape':shape,'v_angle':angle, **({'drill_point_angle':_numeric(operation.get('drill_point_angle',118),'Drill point angle',60,170)} if shape=='drill' else {})}
 
 
 def plan_tool_changes(project):
@@ -49,7 +50,7 @@ def plan_tool_changes(project):
             if operation.get(key,project.get(key))!=project.get(key):
                 raise ValueError('A tool-change plan must use one head, protocol and work area')
         merged={**base,**operation};tool=_tool(merged)
-        signature=(tool['tool_id'],tool['diameter'],tool['shape'],tool['v_angle'])
+        signature=(tool['tool_id'],tool['diameter'],tool['shape'],tool['v_angle'],tool.get('drill_point_angle'))
         if not groups or groups[-1]['signature']!=signature:
             groups.append({'signature':signature,'tool':tool,'operations':[],'indices':[]})
         groups[-1]['operations'].append(merged);groups[-1]['indices'].append(index+1)

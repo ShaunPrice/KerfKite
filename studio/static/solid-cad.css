@@ -53,3 +53,7 @@
 .solid-sketch-dialog [data-status] {color:#924425;}
 .solid-sketch-dialog [hidden] { display:none; }
 .solid-sketch-dialog [data-dof] { display:block; color:#38586b; font-size:.9rem; }
+
+.sketch-handle-guide {stroke:#786429;stroke-dasharray:5 3;stroke-width:1.5;pointer-events:none}
+.sketch-handle {fill:#fff3c7;stroke:#805621;stroke-width:2;cursor:grab}
+[data-control-fields] input {width:10em}

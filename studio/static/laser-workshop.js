@@ -109,7 +109,7 @@
         paths.push(i%2?[[left+size,py],[left,py]]:[[left,py],[left+size,py]]);
       }
       cells.push({name:'Material test · '+feed+' mm/min · '+percent.toFixed(1)+'% (S'+power+')', paths,
-        operationSettings:{mode:'laser',operation:'line',feed,power,passes:1,lead_in:0,lead_out:0,ramp_in:0,ramp_out:0,start_power:100,end_power:100}});
+        operationSettings:{mode:'laser',operation:'line',laser_pattern:'continuous',lead_shape:'straight',feed,power,passes:1,lead_in:0,lead_out:0,ramp_in:0,ramp_out:0,start_power:100,end_power:100}});
     }
     return cells;
   }

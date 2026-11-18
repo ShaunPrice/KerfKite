@@ -95,14 +95,27 @@ def check(exe, data, offline, step):
         session=json.loads(read(STUDIO+"api/session"))
         assert session["hardware_enabled"] is False
         assert b"KerfKite Studio" in read(STUDIO)
-        project={"mode":"laser","protocol":"grbl","paths":[[[10,10],[30,10],[30,20]]],
-                 "width":80,"height":55,"operation":"line","feed":400,"power":500,"passes":1}
-        job=json.loads(read(STUDIO+"api/generate", data=json.dumps(project).encode(),
-                       headers={"Content-Type":"application/json","X-Studio-Token":session["token"]}))
-        assert len(job["segments"])>=2 and job["cut_length"]==30
+        headers = {"Content-Type": "application/json", "X-Studio-Token": session["token"]}
+        def post(path, payload):
+            return json.loads(read(STUDIO + path, data=json.dumps(payload).encode(), headers=headers))
+
+        project = {"mode": "laser", "protocol": "grbl", "paths": [[[10, 10], [30, 10], [30, 20]]],
+                   "width": 80, "height": 55, "operation": "line", "feed": 400, "power": 500, "passes": 1}
+        assert post("api/generate", project)["cut_length"] == 30
+        project.update(laser_pattern="perforate", laser_dash=3, laser_gap=2)
+        laser = post("api/generate", project)
+        assert {segment[5] for segment in laser["segments"]} == {0, 500}
+
+        feature = {"id": "inlet", "kind": "loft", "baseShape": "rectangle", "baseWidth": 40,
+                   "baseDepth": 24, "topShape": "circle", "topWidth": "outlet", "height": 20}
+        model = {"version": 1, "parameters": {"outlet": 18}, "features": [feature]}
+        loops = post("api/solid-cad/section", {"model": model, "z": 10})["profiles"]
+        assert len(loops) == 1
+        x, y = zip(*loops[0])
+        assert abs(max(x) - min(x) - 29) < .01 and abs(max(y) - min(y) - 21) < .01
         if step:
             python=next(data.glob("runtime-*/Scripts/python.exe" if os.name=="nt" else "runtime-*/bin/python"))
-            subprocess.run([python,"-I","-c","from OCP.STEPControl import STEPControl_Writer; STEPControl_Writer()"],check=True)
+            subprocess.run([python,"-I","-c","from pypdf import PdfReader; from OCP.STEPControl import STEPControl_Writer; STEPControl_Writer()"],check=True)
         submit(page,"quit")
         assert proc.wait(timeout=12)==0
         wait_for_studio_exit()

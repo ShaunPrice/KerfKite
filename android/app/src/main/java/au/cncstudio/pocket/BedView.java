@@ -7,7 +7,7 @@ import android.view.View;
 import java.util.function.IntConsumer;
 
 final class BedView extends View {
-    final Design model;
+    Design model;
     final IntConsumer select;
     final Paint pen = new Paint(Paint.ANTI_ALIAS_FLAG);
     float left, bottom, scale;
@@ -24,14 +24,14 @@ final class BedView extends View {
         canvas.drawColor(0xff112b2c);
         double minX=0, minY=0, maxX=100, maxY=60;
         if(!model.parts.isEmpty()) {
-            minX=680; minY=240; maxX=maxY=0;
+            minX=model.width; minY=model.height; maxX=maxY=0;
             for(Part p:model.parts) {
                 minX=Math.min(minX,p.x); minY=Math.min(minY,p.y);
                 maxX=Math.max(maxX,p.x+p.width); maxY=Math.max(maxY,p.y+p.height);
             }
         }
         float padding=Math.min(w,h)*.12f;
-        scale=(float)Math.min((w-2*padding)/(maxX-minX),(h-2*padding)/(maxY-minY));
+        scale=(float)Math.min((w-2*padding)/Math.max(.2,maxX-minX),(h-2*padding)/Math.max(.2,maxY-minY));
         left=(float)(w/2.0-scale*(minX+maxX)/2);
         bottom=(float)(h/2.0+scale*(minY+maxY)/2);
         pen.setStyle(Paint.Style.STROKE);
@@ -44,12 +44,12 @@ final class BedView extends View {
         }
         for(int i=0;i<model.parts.size();i++){
             Path path=new Path();
-            double[][] points=model.parts.get(i).outline();
+            for(double[][] points:model.parts.get(i).paths()){
             for(int j=0;j<points.length;j++){
                 float x=left+(float)points[j][0]*scale, y=bottom-(float)points[j][1]*scale;
                 if(j==0)path.moveTo(x,y);else path.lineTo(x,y);
             }
-            path.close();
+            }
             pen.setStrokeWidth(i==model.selected?4:2); pen.setColor(i==model.selected?0xff8aebce:0xff9ebabc);
             canvas.drawPath(path,pen);
         }

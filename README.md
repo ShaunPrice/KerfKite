@@ -12,13 +12,13 @@ Choose the installer for the computer where you want to design. First launch nee
 
 | Device | Download | How to open it |
 | --- | --- | --- |
-| Windows 10 or 11, 64-bit Intel/AMD | [Windows setup wizard](https://github.com/ShaunPrice/KerfKite/releases/download/v0.3.0/KerfKite-Windows-x64-Setup.exe) | Run Setup, then open **KerfKite Studio** from Start. |
-| Mac | [Apple silicon](https://github.com/ShaunPrice/KerfKite/releases/download/v0.3.0/KerfKite-macOS-Apple-Silicon.dmg) · [Intel](https://github.com/ShaunPrice/KerfKite/releases/download/v0.3.0/KerfKite-macOS-Intel.dmg) | Open the disk image, drag **KerfKite Studio** to **Applications**, then open it there. |
-| Raspberry Pi OS, 64-bit, or Debian/Ubuntu ARM64 | [ARM64 installer](https://github.com/ShaunPrice/KerfKite/releases/download/v0.3.0/KerfKite-Linux-arm64.deb) | Open the package in the desktop software installer, then launch **KerfKite Studio** from the applications menu. |
-| Debian/Ubuntu, 64-bit Intel/AMD | [AMD64 installer](https://github.com/ShaunPrice/KerfKite/releases/download/v0.3.0/KerfKite-Linux-amd64.deb) | Open the package in the desktop software installer. |
-| Android, including Samsung Galaxy S23 | [KerfKite Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/download/v0.3.0/KerfKite-Pocket-Android.apk) | Open the download on the phone and tap **Install**. Choose **CNC pendant** to pair with Studio. |
+| Windows 10 or 11, 64-bit Intel/AMD | [Windows setup wizard](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-Windows-x64-Setup.exe) | Run Setup, then open **KerfKite Studio** from Start. |
+| Mac | [Apple silicon](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-macOS-Apple-Silicon.dmg) · [Intel](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-macOS-Intel.dmg) | Open the disk image, drag **KerfKite Studio** to **Applications**, then open it there. |
+| Raspberry Pi OS, 64-bit, or Debian/Ubuntu ARM64 | [ARM64 installer](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-Linux-arm64.deb) | Open the package in the desktop software installer, then launch **KerfKite Studio** from the applications menu. |
+| Debian/Ubuntu, 64-bit Intel/AMD | [AMD64 installer](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-Linux-amd64.deb) | Open the package in the desktop software installer. |
+| Android, including Samsung Galaxy S23 | [KerfKite Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-Pocket-Android.apk) | Open the download on the phone and tap **Install**. Choose **CNC pendant** to pair with Studio. |
 
-The [installation guide](docs/INSTALL.md) covers first launch, security prompts, updates, removal and optional STEP exchange and controller access, and the source install for HTTPS and MCP services. The [release downloads](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.3.0) also include portable Linux archives and SHA-256 checksums.
+The [installation guide](docs/INSTALL.md) covers first launch, security prompts, updates, removal and optional STEP exchange and controller access, and the source install for HTTPS and MCP services. The [release downloads](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.4.0) also include portable Linux archives and SHA-256 checksums.
 
 For Orange Pi, Radxa, Jetson, BeagleBoard, ODROID, LattePanda and RISC-V systems, the [single-board computer guide](docs/SBC.md) maps each board to its installer. It also includes a browser-only edition for drawing and file export on smaller boards.
 
@@ -35,17 +35,25 @@ To trim two crossing lines, open the [geometry guide](docs/GEOMETRY.md). In a so
 
 For phone control, open **Control → Phone pendant** on the Studio workstation and choose **Enable phone pairing**. Use the private pairing link in Pocket. Wi-Fi, USB tethering and Bluetooth tethering all connect the phone to the same server. See the [connection guide](docs/PHONE-CONNECTIONS.md).
 
+## Workshop tools in 0.4
+
+* **Router.** Create a single hole or drilling pattern, choose a peck depth, place holding tabs directly on a compensated contour, and use ramp or helical entry on eligible toolpaths. [Drilling](docs/DRILLING.md) · [Router entry](docs/ROUTER-ENTRY.md)
+* **Laser and layout.** Place perforations or holding bridges, choose straight or curved leads, move layout groups and snap to a grid or visible vertices. [Laser patterns](docs/LASER-PATTERNS.md) · [Layout tools](docs/GEOMETRY.md)
+* **Lettering and labels.** Engrave centreline lettering with Workshop Mono, select installed fonts where supported, and create numbered text, Code 39 or QR labels with a live proof. [Production labels](docs/LABELS.md)
+* **CAD, import and camera.** Edit dimension-driven Bézier sketches, loft between two sections, inspect vector PDF pages, import compound SVG paths at physical scale and fit radial lens correction to measured targets. [Solid CAD](docs/SOLID-CAD.md) · [Sketches](docs/SKETCH.md) · [Import guide](docs/PROGRAM-IMPORT.md) · [Camera setup](docs/CAMERA-REGISTER.md)
+* **Workshop setup.** Store measured machine profiles and estimate cycle time from programmed feeds, rapids, dwell and a measured sample. Pocket can reopen portable projects and manage named drafts. [User guide](docs/USER-GUIDE.md) · [Pocket](docs/ANDROID.md)
+
 ## Stock artwork
 
 Browse **Templates → Template library** to insert one of **1,768 editable designs across 132 categories**. The collection includes Australian wildflowers, natural-history plates, woodcut landscapes, workshop tools, storybook illustrations, decorative panels and stencil lettering.
 
 [![Twelve examples from the stock library, including native flowers, a coastal print, a twin-lens camera and a ginkgo earring](studio/static/stock-artwork-preview.png)](docs/TEMPLATE-CATALOGUE.md)
 
-For an earlier Studio installation or another vector editor, [download the SVG library](https://github.com/ShaunPrice/KerfKite/releases/download/v0.3.0/KerfKite-Stock-Artwork.zip). Extract it and open **index.html** to search the gallery or browse the SVG files by category. The [template catalogue](docs/TEMPLATE-CATALOGUE.md) lists every category and its design count.
+For an earlier Studio installation or another vector editor, [download the SVG library](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-Stock-Artwork.zip). Extract it and open **index.html** to search the gallery or browse the SVG files by category. The [template catalogue](docs/TEMPLATE-CATALOGUE.md) lists every category and its design count.
 
 ## Materials guide
 
-Open **CAM → Materials guide** to choose stock for a flat end mill, ball end mill, V-bit, blue diode laser or drag knife. Compare two materials for the same operation and keep your measured sample results in a portable notebook. To use the guide on its own, [download the single-file materials guide](https://github.com/ShaunPrice/KerfKite/releases/download/v0.3.0/KerfKite-Materials-Guide.html) and open it in your browser. [Guide and workshop examples](docs/MATERIALS.md)
+Open **CAM → Materials guide** to choose stock for a drill bit, flat end mill, ball end mill, V-bit, blue diode laser or drag knife. Compare two materials for the same operation and keep your measured sample results in a portable notebook. To use the guide on its own, [download the single-file materials guide](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-Materials-Guide.html) and open it in your browser. [Guide and workshop examples](docs/MATERIALS.md)
 
 ## CNC simulations
 

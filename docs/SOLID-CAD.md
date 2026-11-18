@@ -22,8 +22,9 @@ Use a rectangular pattern to repeat a feature by a fixed XYZ displacement or use
 | Box | XYZ lengths from its minimum corner |
 | Cylinder or cone | Radius and axial height, with optional second radius for taper |
 | Sphere | Radius about its local centre |
-| Sketch extrusion | Simple closed XY polygon extruded along local Z |
+| Sketch extrusion | Closed XY sketch with straight lines, circular fillets or cubic Béziers extruded along local Z |
 | Sketch revolution | Profile in the radial/Z plane swept about local Z |
+| Two-section loft | Ruled transition between rectangular, elliptical or circular sections on two parallel planes |
 | Join, Cut, Intersect | Add material, subtract a tool solid, or keep the overlap |
 | Suppress | Skip a feature during rebuild while retaining its definition |
 | Origin and rotation | Apply local rotation in degrees before translation |
@@ -64,3 +65,14 @@ Studio models one ordered solid history, which may contain disconnected bodies. 
 For a relief that follows later part edits, select **Router top relief** and leave **Keep machining geometry linked to the CAD part** checked. Choose **Prepare in CAM**. Review the placement, output width, height, depth, cutter geometry, stepover, stock allowance and sampling resolution. **Generate** records that setup with this relief. For example, a 36 mm part prepared as an 18 mm relief becomes a 24 mm relief if you change the CAD dimension to 48 mm. Each axis retains its own scale. The layer, object machining settings and XY placement stay with the relief. Rebuilds recompute both the raster paths and the sampled Z values. Generate a fresh CAM preview after rebuilding.
 
 If the CAD part changes between preparing its STL and generating relief, return to **3D CAD** and prepare the current part again. Clear the link checkbox before preparing to make an independent snapshot. Choosing a separate STL or heightmap in the relief panel also creates an independent object. To keep an existing linked relief at its present dimensions, select it and choose **Detach CAD link** in Properties.
+
+## Loft a rectangular inlet into a round outlet
+
+Try the [interactive loft section exercise](../studio/static/machining-lessons.html#loft-practice) to change the outlet diameter, slide the section plane and measure the contour before building the part.
+
+1. In **3D CAD**, choose **Two-section loft → Add feature**. Set the base to **Rectangle**, 40 mm wide and 24 mm deep. Set the top to **Circle**, 18 mm diameter. Enter 20 mm for **Loft height**, 4 mm for **Top centre offset X** and 0 for **Top centre offset Y**. The feature origin locates the base centre. Offsets locate the top centre relative to the base before applying feature rotation.
+2. Inspect the loft from the side and from above. Each of the four base edges joins the corresponding quarter of the upper section. The transition follows straight lines between corresponding perimeter points. A circle uses one diameter; an ellipse uses independent width and depth. Every size, offset and height accepts a named dimension or expression.
+3. Set **Horizontal section** at Z = 10 mm with feature origin Z = 0 and no rotation. The section is 29 mm wide, 21 mm deep and centred 2 mm to the right of the base. Keep the machining link when transferring this contour into CAM. Changing the top diameter to 22 mm grows the section to 31 × 23 mm.
+4. Choose **Cut** or **Intersect** on a loft added after an existing solid to use it as a boolean tool. A solid STEP export uses four exact rational ruled side surfaces and two planar caps. STL, preview and CAM use closed triangles. Curved-section interpolation and side triangulation share a 0.025 mm approximation budget. Studio rejects a loft if meeting the tolerance would exceed the solid triangle budget.
+
+The loft supports two parallel sections, with lateral offset and no twist between them. Use feature rotation to orient the whole loft.

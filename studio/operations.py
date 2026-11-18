@@ -14,6 +14,13 @@ def value(data,key,default,lo,hi):
     return v
 
 
+def router_tool_shape(settings):
+    op = settings.get('operation', 'line')
+    if op == 'vcarve':
+        return 'v'
+    return settings.get('tool_shape', 'drill' if op == 'drill' else 'flat')
+
+
 def region(paths):
     result=GeometryCollection()
     for path in paths:
@@ -103,7 +110,9 @@ def prepare(project,paths):
             paths.extend(outlines(inset))
             if sum(map(len,paths))>100000:raise ValueError('Pocket exceeds vertex limit')
             inset=inset.buffer(-step,quad_segs=32)
-        warnings.append('Concentric pocket clearing; islands are preserved. Plunge entry requires a centre-cutting tool. Narrow residual features may remain.')
+        warnings.append('Concentric pocket clearing preserves islands. Narrow residual features may remain.')
+        if project.get('router_entry','plunge')=='plunge':
+            warnings.append('Plunge entry requires a centre-cutting tool.')
     elif op=='fill':
         if mode!='laser':raise ValueError('Hatch fill requires laser mode')
         interval=value(project,'interval',.2,.02,20);angle=value(project,'hatch_angle',0,-360,360)

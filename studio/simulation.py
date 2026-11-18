@@ -10,7 +10,7 @@ def simulate(data):
     width=value(data,'width',100,.1,2000);height=value(data,'height',100,.1,2000)
     n=int(value(data,'resolution',48,16,96));diameter=value(data,'tool_diameter',3.175,.01,100)
     radius=diameter/2;shape=data.get('tool_shape','flat');angle=value(data,'v_angle',60,10,170)
-    if shape not in ('flat','ball','v'):raise ValueError('Unknown simulated cutter')
+    if shape not in ('flat','ball','v','drill'):raise ValueError('Unknown simulated cutter')
     stock=value(data,'stock_thickness',10,.01,200);surface=[[0. for _ in range(n)] for _ in range(n)];checks=0
     dx=width/(n-1);dy=height/(n-1)
     for s in segments:
@@ -20,6 +20,8 @@ def simulate(data):
         if min(z,start_z)<-stock:raise ValueError('Cut exceeds simulated stock thickness')
         x0=max(0,math.floor((min(ax,bx)-radius)/dx));x1=min(n-1,math.ceil((max(ax,bx)+radius)/dx))
         y0=max(0,math.floor((min(ay,by)-radius)/dy));y1=min(n-1,math.ceil((max(ay,by)+radius)/dy))
+        if x1 < x0 or y1 < y0:
+            continue
         checks+=(x1-x0+1)*(y1-y0+1)
         if checks>8000000:raise ValueError('Simulation too large; lower preview resolution')
         vx=bx-ax;vy=by-ay;length_sq=vx*vx+vy*vy
@@ -30,6 +32,7 @@ def simulate(data):
                 if distance>radius:continue
                 sag=0 if shape=='flat' else radius-math.sqrt(max(0,radius*radius-distance*distance)) if shape=='ball' else distance/math.tan(math.radians(angle/2))
                 # Visual approximation uses depth at closest XY point on the move.
-                surface[j][i]=min(surface[j][i],start_z+t*(z-start_z)+sag)
+                contact = start_z+t*(z-start_z) if length_sq else min(start_z,z)
+                surface[j][i]=min(surface[j][i],contact+sag)
     return {'heights':surface,'x':origin_x,'y':origin_y,'width':width,'height':height,'stock_thickness':stock,'resolution':n,
             'warnings':['Sampled stock preview: features smaller than a grid cell may disappear. Variable-depth cutter contact is approximate.','No holder, fixture, machine acceleration, deflection or physical-clearance validation is performed.']}

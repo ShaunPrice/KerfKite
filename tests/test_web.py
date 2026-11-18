@@ -41,6 +41,14 @@ class WebTests(unittest.TestCase):
   app=create_app(self.store,self.base,allow_file_upload=True);c=app.test_client()
   r=c.options('/api/receive',base_url=self.base,headers={'Origin':'null'});self.assertEqual(r.headers['Access-Control-Allow-Origin'],'null')
   self.store.revoke_tokens('alice');self.assertEqual(c.post('/api/receive',base_url=self.base,headers=headers,json={}).status_code,401)
+ def test_pdf_review_requires_authenticated_session(self):
+  import base64
+  from validation.pdf_import_workflow import example_pdf
+  data={'content':base64.b64encode(example_pdf()).decode('ascii'),'page':2}
+  self.assertEqual(self.c.post('/api/pdf-import',base_url=self.base,json=data).status_code,401)
+  response=self.c.post('/api/pdf-import',base_url=self.base,headers=self.auth(),json=data)
+  self.assertEqual(response.status_code,200)
+  self.assertEqual(len(response.json['objects']),2)
  def test_limits_and_invalid_files(self):
   for i in range(10):self.assertEqual(self.login(password='wrong').status_code,401)
   self.assertEqual(self.login().status_code,429)

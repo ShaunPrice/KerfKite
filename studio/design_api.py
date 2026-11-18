@@ -45,14 +45,24 @@ def register_design_routes(app):
             constraint_error = str(exc)
         outline = None
         issue = None
-        if payload.get('validate') or 'fillets' in payload:
+        if payload.get('validate') or 'fillets' in payload or 'curves' in payload:
             try:
                 _, outline = profile_geometry(payload, dimensions, points)
             except ValueError as exc:
                 if payload.get('validate'):
                     raise
                 issue = str(exc)
-        return jsonify(points=points, parameters=dimensions.values, outline=outline, issue=issue, diagnostics=diagnostics, constraint_error=constraint_error)
+        handles = None
+        if 'curves' in payload:
+            from .sketch_curves import resolve_curves
+            try:
+                handles = resolve_curves(payload['curves'], points, dimensions)
+            except ValueError as exc:
+                if payload.get('validate'):
+                    raise
+                issue = str(exc)
+        return jsonify(points=points, parameters=dimensions.values, outline=outline, handles=handles,
+                       issue=issue, diagnostics=diagnostics, constraint_error=constraint_error)
 
     @app.post('/api/solid-cad/section')
     def section_solid():

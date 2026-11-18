@@ -37,12 +37,20 @@ const parsedFonts=new Map();
 function textFont(){const name=$('textFont').value;if(!parsedFonts.has(name)){const bytes=Uint8Array.from(atob(CNCFonts[name]),c=>c.charCodeAt(0));parsedFonts.set(name,opentype.parse(bytes.buffer));}return parsedFonts.get(name);}
 function flattenLetters(commands){const paths=[];let p=[],at=[0,0];function end(){if(p.length>1)paths.push(p);p=[];}for(const c of commands){if(c.type==='M'){end();at=[c.x,-c.y];p.push(at);}else if(c.type==='Z'){if(p.length)p.push([...p[0]]);end();}else if(c.type==='L'){at=[c.x,-c.y];p.push(at);}else if(c.type==='Q'||c.type==='C'){const start=at,a=[c.x1,-c.y1],b=c.type==='C'?[c.x2,-c.y2]:null,d=[c.x,-c.y];const length=Math.hypot(a[0]-start[0],a[1]-start[1])+Math.hypot(d[0]-a[0],d[1]-a[1])+(b?Math.hypot(b[0]-a[0],b[1]-a[1]):0),n=Math.max(4,Math.ceil(length/.15));for(let i=1;i<=n;i++){const t=i/n,u=1-t;p.push(c.type==='Q'?[0,1].map(k=>u*u*start[k]+2*u*t*a[k]+t*t*d[k]):[0,1].map(k=>u*u*u*start[k]+3*u*u*t*a[k]+3*u*t*t*b[k]+t*t*t*d[k]));}at=d;}}end();return paths;}
 function fontOutline(font,text,size,spacing=0){let x=0,last=null,commands=[];for(const c of text){const glyph=font.charToGlyph(c);if(last)x+=font.getKerningValue(last,glyph)*size/font.unitsPerEm;commands.push(...glyph.getPath(x,0,size).commands);x+=(glyph.advanceWidth||0)*size/font.unitsPerEm+spacing;last=glyph;}return commands;}
-function textGeometry(){const text=$('textValue').value;if(!text.trim()||[...text].length>120)throw Error('Enter 1–120 characters');const size=Number($('textSize').value),spacing=Number($('textSpacing').value),rotation=Number($('textRotation').value)*Math.PI/180,tilt=Number($('textTilt').value)*Math.PI/180,depth=Number($('textDepth').value),rise=Number($('textCurve').value),layout=$('textLayout').value;if(![size,spacing,rotation,tilt,depth,rise].every(Number.isFinite)||size<1||size>200||depth<.01||depth>50||Math.abs(tilt)>Math.PI*80/180||Math.abs(spacing)>50)throw Error('Check text size, spacing, depth and rotation');if(/[\u0590-\u08ff]/u.test(text))throw Error('Complex-script shaping is not supported yet; import correctly shaped SVG outlines');const font=textFont();for(const c of text)if(!/\s/.test(c)&&!font.charToGlyphIndex(c))throw Error('This font has no glyph for '+c);let paths=[];
- if(layout==='vertical'){let line=0;for(const c of text){paths.push(...flattenLetters(fontOutline(font,c,size)).map(p=>p.map(([x,y])=>[x,y-line*(size*1.2+spacing)])));line++;}}
- else paths=flattenLetters(fontOutline(font,text,size,spacing));
+function letteringPaths(text, size, spacing) {
+ if ($('textFont').value === KerfStrokeFont.name) return KerfStrokeFont.paths(text, size, spacing);
+ const selected = $('textFont').value;
+ if (!parsedFonts.has(selected) && !Object.hasOwn(CNCFonts,selected)) throw Error('Choose or reload the original font to edit this text.');
+ const font = textFont();
+ for (const c of text) if (!/\s/.test(c) && !font.charToGlyphIndex(c)) throw Error('This font has no glyph for '+c);
+ return flattenLetters(fontOutline(font,text,size,spacing));
+}
+function textGeometry(text=$('textValue').value, x0=Number($('shapeX').value), y0=Number($('shapeY').value)){if(!text.trim()||[...text].length>120)throw Error('Enter 1–120 characters');const size=Number($('textSize').value),spacing=Number($('textSpacing').value),rotation=Number($('textRotation').value)*Math.PI/180,tilt=Number($('textTilt').value)*Math.PI/180,depth=Number($('textDepth').value),rise=Number($('textCurve').value),layout=$('textLayout').value;if(![size,spacing,rotation,tilt,depth,rise].every(Number.isFinite)||size<1||size>200||depth<.01||depth>50||Math.abs(tilt)>Math.PI*80/180||Math.abs(spacing)>50)throw Error('Check text size, spacing, depth and rotation');if(/[\u0590-\u08ff]/u.test(text))throw Error('Complex-script shaping is not supported yet; import correctly shaped SVG outlines');let paths=[];
+ if(layout==='vertical'){let line=0;for(const c of text){paths.push(...letteringPaths(c,size,0).map(p=>p.map(([x,y])=>[x,y-line*(size*1.2+spacing)])));line++;}}
+ else paths=letteringPaths(text,size,spacing);
  if(!paths.length)throw Error('Text contains no outlines');let [minx,miny,maxx,maxy]=bounds(paths);const width=maxx-minx||1;
  if(layout==='bezier')paths=CNCTextLayout.warp(paths,bezierOptions());
- [minx,miny,maxx,maxy]=bounds(paths);const sx=Math.sin(tilt),cx=Math.cos(tilt),x0=Number($('shapeX').value),y0=Number($('shapeY').value);let all=paths.map(p=>p.map(([x,y])=>{const px=(x-minx)*cx,py=y-miny;return[px*Math.cos(rotation)-py*Math.sin(rotation),px*Math.sin(rotation)+py*Math.cos(rotation),-depth-(sx>=0?x-minx:maxx-x)*Math.abs(sx)];}));const bx=Math.min(...all.flat().map(p=>p[0])),by=Math.min(...all.flat().map(p=>p[1]));all=all.map(p=>p.map(([x,y,z])=>[x-bx+x0,y-by+y0,z]));if(all.flat().some(p=>p[2]<-50))throw Error('Y rotation exceeds 50 mm depth; reduce angle or text width');if(all.flat().length>100000)throw Error('Text has too many vertices');return {paths:all.map(p=>p.map(([x,y])=>[x,y])),depths:all.map(p=>p.map(q=>q[2]))};}
+ [minx,miny,maxx,maxy]=bounds(paths);const sx=Math.sin(tilt),cx=Math.cos(tilt);let all=paths.map(p=>p.map(([x,y])=>{const px=(x-minx)*cx,py=y-miny;return[px*Math.cos(rotation)-py*Math.sin(rotation),px*Math.sin(rotation)+py*Math.cos(rotation),-depth-(sx>=0?x-minx:maxx-x)*Math.abs(sx)];}));const [bx,by]=bounds(all);all=all.map(p=>p.map(([x,y,z])=>[x-bx+x0,y-by+y0,z]));if(all.flat().some(p=>p[2]<-50))throw Error('Y rotation exceeds 50 mm depth; reduce angle or text width');if(all.flat().length>100000)throw Error('Text has too many vertices');return {paths:all.map(p=>p.map(([x,y])=>[x,y])),depths:all.map(p=>p.map(q=>q[2]))};}
 const bezierKeys=['textBezierMode','textBezierC1X','textBezierC1Y','textBezierC2X','textBezierC2Y'];
 const textKeys=['textValue','textFont','textSize','textSpacing','textRotation','textTilt','textDepth','textCurve','textLayout',...bezierKeys];
 function bezierOptions(){return{mode:$('textBezierMode').value,rise:Number($('textCurve').value),c1x:Number($('textBezierC1X').value),c1y:Number($('textBezierC1Y').value),c2x:Number($('textBezierC2X').value),c2y:Number($('textBezierC2Y').value)};}
@@ -52,7 +60,7 @@ let baselineWidth=100,bezierDrag=null;
 function refreshBezier(){
  bezierPanel.hidden=$('textLayout').value!=='bezier';const custom=$('textBezierMode').value==='custom';$('textCurve').disabled=custom;for(const id of bezierKeys.slice(1))$(id).disabled=!custom;
  if(bezierPanel.hidden)return;
- try{const raw=flattenLetters(fontOutline(textFont(),$('textValue').value,Number($('textSize').value),Number($('textSpacing').value)));if(!raw.length)throw Error('Enter text for a baseline preview');const[b,,m]=bounds(raw);baselineWidth=m-b;const p=CNCTextLayout.baseline(baselineWidth,bezierOptions()),[x0,y0,x1,y1]=CNCTextLayout.curveBounds(p),minx=Math.min(x0,...p.map(v=>v[0])),maxx=Math.max(x1,...p.map(v=>v[0])),miny=Math.min(y0,...p.map(v=>v[1])),maxy=Math.max(y1,...p.map(v=>v[1])),pad=Math.max(2,baselineWidth*.08),svg=$('textBezierPreview');if(!bezierDrag)svg.setAttribute('viewBox',`${minx-pad} ${-maxy-pad} ${maxx-minx+2*pad} ${Math.max(4,maxy-miny)+2*pad}`);svg.replaceChildren();const node=(tag,attrs)=>{const n=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,v);svg.append(n);return n;};node('polyline',{points:p.map(([x,y])=>`${x},${-y}`).join(' '),fill:'none',stroke:'#718893','stroke-width':'.6','stroke-dasharray':'2 2'});node('path',{d:`M${p[0][0]} ${-p[0][1]} C${p[1][0]} ${-p[1][1]} ${p[2][0]} ${-p[2][1]} ${p[3][0]} ${-p[3][1]}`,fill:'none',stroke:'#176a9a','stroke-width':'1'});for(const i of [1,2])node('circle',{cx:p[i][0],cy:-p[i][1],r:Math.max(1,baselineWidth*.02),fill:'#c77829','data-bezier-control':i,tabindex:0,role:'img','aria-label':'Control point '+i});$('textBezierHint').textContent=`Baseline span ${baselineWidth.toFixed(2)} mm. Ends stay at the text start/finish; drag orange handles or enter values. Tight/reversing curves can overlap lettering. Add or Replace applies the changes.`;}
+ try{const raw=letteringPaths($('textValue').value,Number($('textSize').value),Number($('textSpacing').value));if(!raw.length)throw Error('Enter text for a baseline preview');const[b,,m]=bounds(raw);baselineWidth=m-b;const p=CNCTextLayout.baseline(baselineWidth,bezierOptions()),[x0,y0,x1,y1]=CNCTextLayout.curveBounds(p),minx=Math.min(x0,...p.map(v=>v[0])),maxx=Math.max(x1,...p.map(v=>v[0])),miny=Math.min(y0,...p.map(v=>v[1])),maxy=Math.max(y1,...p.map(v=>v[1])),pad=Math.max(2,baselineWidth*.08),svg=$('textBezierPreview');if(!bezierDrag)svg.setAttribute('viewBox',`${minx-pad} ${-maxy-pad} ${maxx-minx+2*pad} ${Math.max(4,maxy-miny)+2*pad}`);svg.replaceChildren();const node=(tag,attrs)=>{const n=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,v);svg.append(n);return n;};node('polyline',{points:p.map(([x,y])=>`${x},${-y}`).join(' '),fill:'none',stroke:'#718893','stroke-width':'.6','stroke-dasharray':'2 2'});node('path',{d:`M${p[0][0]} ${-p[0][1]} C${p[1][0]} ${-p[1][1]} ${p[2][0]} ${-p[2][1]} ${p[3][0]} ${-p[3][1]}`,fill:'none',stroke:'#176a9a','stroke-width':'1'});for(const i of [1,2])node('circle',{cx:p[i][0],cy:-p[i][1],r:Math.max(1,baselineWidth*.02),fill:'#c77829','data-bezier-control':i,tabindex:0,role:'img','aria-label':'Control point '+i});$('textBezierHint').textContent=`Baseline span ${baselineWidth.toFixed(2)} mm. Ends stay at the text start/finish; drag orange handles or enter values. Tight/reversing curves can overlap lettering. Add or Replace applies the changes.`;}
  catch(e){$('textBezierHint').textContent=e.message;}
 }
 function copySymmetric(){const rise=Number($('textCurve').value);$('textBezierC1X').value=100/3;$('textBezierC2X').value=200/3;$('textBezierC1Y').value=rise;$('textBezierC2Y').value=rise;}
@@ -61,12 +69,76 @@ for(const id of textKeys)$(id).addEventListener('input',refreshBezier);
 $('textBezierPreview').addEventListener('pointerdown',e=>{const control=e.target.dataset.bezierControl;if(!control)return;e.preventDefault();if($('textBezierMode').value!=='custom'){copySymmetric();$('textBezierMode').value='custom';}bezierDrag={id:e.pointerId,control};$('textBezierPreview').setPointerCapture(e.pointerId);});
 $('textBezierPreview').addEventListener('pointermove',e=>{if(!bezierDrag||e.pointerId!==bezierDrag.id)return;const svg=$('textBezierPreview'),matrix=svg.getScreenCTM();if(!matrix)return;const point=svg.createSVGPoint();point.x=e.clientX;point.y=e.clientY;const p=point.matrixTransform(matrix.inverse());$('textBezierC'+bezierDrag.control+'X').value=Math.max(-100,Math.min(200,p.x/baselineWidth*100)).toFixed(3);$('textBezierC'+bezierDrag.control+'Y').value=Math.max(-2000,Math.min(2000,-p.y)).toFixed(3);refreshBezier();});
 for(const event of ['pointerup','pointercancel','lostpointercapture'])$('textBezierPreview').addEventListener(event,()=>{bezierDrag=null;refreshBezier();});
-function addText(){const geometry=textGeometry();addGenerated('Text · '+$('textValue').value,geometry.paths);objects[selected].depths=geometry.depths;objects[selected].textOptions=Object.fromEntries(textKeys.map(k=>[k,$(k).value]));message('Text converted to outlines with per-vertex depth. Router preview follows these contours; use the separate raised/recessed relief controls or V-carve operation for filled depth work.');}
-$('addText').onclick=task(addText);
-$('editText').onclick=task(()=>{const o=objects[selected];if(!o?.textOptions)throw Error('Select a text object');$('textBezierMode').value='symmetric';for(const k of textKeys)if(o.textOptions[k]!==undefined)$(k).value=o.textOptions[k];if(!o.textOptions.textBezierMode)copySymmetric();refreshBezier();message('Text settings loaded. Use Replace selected text to apply edits.');});
-$('replaceText').onclick=task(()=>{if(!objects[selected]?.textOptions)throw Error('Select a text object');const old=selected;addText();objects.splice(old,1);selected=objects.length-1;invalidate();draw();});
-$('loadFont').onchange=task(async()=>{const file=$('loadFont').files[0];if(!file)return;if(file.size>8e6)throw Error('Font exceeds 8 MB');const font=opentype.parse(await file.arrayBuffer()),name='Custom: '+file.name;parsedFonts.set(name,font);const option=new Option(name,name);$('textFont').append(option);$('textFont').value=name;refreshBezier();});
-for(const name of Object.keys(CNCFonts))$('textFont').append(new Option(name,name));
+function textObject(value, x, y) {
+ const geometry = textGeometry(value, x, y);
+ const extent = bounds(geometry.paths);
+ if (extent[0]<0 || extent[1]<0 || extent[2]>Number($('width').value) || extent[3]>Number($('height').value)) throw Error('Text extends outside the work area.');
+ return {name:'Text · '+value, ...geometry, textOptions:{...Object.fromEntries(textKeys.map(k=>[k,$(k).value])),textValue:value}};
+}
+function readTextObject() {
+ return textObject($('textValue').value,Number($('shapeX').value),Number($('shapeY').value));
+}
+$('addText').onclick=task(()=>{
+ const o=readTextObject();
+ add(o.name,o.paths,{depths:o.depths,textOptions:o.textOptions});
+});
+$('editText').onclick=task(()=>{
+ const o=objects[selected];
+ if(!o?.textOptions)throw Error('Select a text object');
+ $('textBezierMode').value='symmetric';
+ for(const k of textKeys)if(o.textOptions[k]!==undefined)$(k).value=o.textOptions[k];
+ const [x,y]=bounds(o.paths);
+ $('shapeX').value=x; $('shapeY').value=y;
+ if(!o.textOptions.textBezierMode)copySymmetric();
+ refreshBezier();message('Text settings loaded. Use Replace selected text to apply edits.');
+});
+$('replaceText').onclick=task(()=>{
+ const original=objects[selected];
+ if(!original?.textOptions)throw Error('Select a text object');
+ const updated=readTextObject();
+ objects[selected]={...original,...updated,name:original.name.startsWith('Text · ')?updated.name:original.name};
+ invalidate(); draw(); message('Selected text updated.');
+});
+function registerFont(name, buffer) {
+ if(buffer.byteLength>8e6)throw Error('Font exceeds 8 MB');
+ const font=opentype.parse(buffer);
+ parsedFonts.set(name,font);
+ if(!Array.from($('textFont').options).some(option=>option.value===name)) $('textFont').append(new Option(name,name));
+ $('textFont').value=name;
+ refreshBezier();
+}
+$('loadFont').onchange=task(async()=>{
+ const file=$('loadFont').files[0];
+ if(!file)return;
+ if(file.size>8e6)throw Error('Font exceeds 8 MB');
+ registerFont('Custom: '+file.name,await file.arrayBuffer());
+});
+for(const name of [...Object.keys(CNCFonts),KerfStrokeFont.name])$('textFont').append(new Option(name,name));
+const localFonts=new Map();
+$('chooseLocalFont').hidden=typeof window.queryLocalFonts!=='function';
+$('chooseLocalFont').onclick=task(async()=>{
+ const fonts=await window.queryLocalFonts();
+ if(!fonts.length)throw Error('No installed fonts are available. You can import a TTF or OTF file.');
+ localFonts.clear();
+ const picker=$('localFontList');
+ picker.replaceChildren(new Option('Select an installed face',''));
+ for(const f of fonts.sort((a,b)=>a.fullName.localeCompare(b.fullName))) {
+   if(localFonts.has(f.postscriptName))continue;
+   localFonts.set(f.postscriptName,f);
+   picker.append(new Option(f.fullName,f.postscriptName));
+ }
+ picker.parentElement.hidden=false;
+});
+$('localFontList').onchange=task(async()=>{
+ const key=$('localFontList').value;
+ const face=localFonts.get(key);
+ if(!face)return;
+ const blob=await face.blob();
+ if(blob.size>8e6)throw Error('Font exceeds 8 MB');
+ const buffer=await blob.arrayBuffer();
+ if($('localFontList').value===key)registerFont('Installed: '+key,buffer);
+});
+window.KerfTextTools={textObject};
 refreshBezier();
 $('export3D').onclick=task(()=>{const paths=objects.flatMap(o=>o.paths.map((p,i)=>p.map(([x,y],j)=>[x,y,o.depths?.[i]?.[j]??-Number($('depth').value)])));if(!paths.length)throw Error('Add artwork first');download('design.paths3d.json',JSON.stringify({format:'pi-cnc-paths3d/1',units:'mm',paths},null,2),'application/json');});
 }
