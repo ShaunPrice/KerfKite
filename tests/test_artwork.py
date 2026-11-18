@@ -12,7 +12,7 @@ class ArtworkTests(unittest.TestCase):
     def test_search_and_template_scaling(self):
         result=self.store.list_templates('flower')
         self.assertEqual(len(result),30)  # Default search page remains bounded.
-        self.assertEqual(len(self.store.builtins),1000)
+        self.assertGreaterEqual(len(self.store.builtins),1500)
         self.assertEqual(len(self.store.list_templates(category='Flowers',limit=100)),56)
         self.assertEqual(len(self.store.list_templates(category='Nautical',limit=100)),8)
         self.assertTrue(all('flower' in (row['name']+' '+row['category']).casefold() for row in result))

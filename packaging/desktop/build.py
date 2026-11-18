@@ -79,7 +79,8 @@ def linux(work, out, wheel, arch, version):
         im.resize((256,256),Image.Resampling.LANCZOS).save(icon)
     meta = pkg / "DEBIAN/control"
     meta.parent.mkdir()
-    meta.write_text(f"Package: kerfkite-studio\nVersion: {version}-2\nArchitecture: {arch}\nSection: graphics\n"
+    revision = 2 if version == "0.2.1" else 1
+    meta.write_text(f"Package: kerfkite-studio\nVersion: {version}-{revision}\nArchitecture: {arch}\nSection: graphics\n"
                     "Priority: optional\nMaintainer: KerfKite Studio contributors <maintainers@users.noreply.github.com>\n"
                     "Depends: xdg-utils, ca-certificates, libgl1\nDescription: KerfKite CAD and machining simulator\n")
     run("dpkg-deb","--root-owner-group","-Zxz","--build",pkg,out / f"KerfKite-Linux-{arch}.deb")

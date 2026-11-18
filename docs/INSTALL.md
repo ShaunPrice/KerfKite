@@ -4,7 +4,7 @@ See the [single-board computer guide](SBC.md) for board-specific downloads and t
 
 ## Desktop or phone installation
 
-Download the package for your device from the [official KerfKite release](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.2.1).
+Download the package for your device from the [official KerfKite release](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.2.2).
 
 * **Windows 10/11 x64.** Open the setup wizard and choose **Install**. It installs for your account and adds KerfKite Studio to Start. Windows may display a SmartScreen warning for this unsigned installer. Check the download came from the official release. On a managed PC, follow your organisation’s software approval process.
 * **macOS.** In **Apple menu → About This Mac**, check whether the computer has an Apple chip or an Intel processor. Open the matching DMG, drag KerfKite Studio onto Applications and launch it there. This community build has an ad-hoc signature and has not been notarised by Apple. If macOS blocks it, review the app under **System Settings → Privacy & Security** after the first open attempt. Managed Macs may require administrator approval.

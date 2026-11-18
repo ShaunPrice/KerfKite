@@ -15,22 +15,22 @@
 <tbody>
 <tr>
 <td>Windows 10 or 11, 64-bit Intel/AMD</td>
-<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Windows-x64-Setup.exe">Windows setup wizard</a></td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.2/KerfKite-Windows-x64-Setup.exe">Windows setup wizard</a></td>
 <td>Run Setup, then open <strong>KerfKite Studio</strong> from Start.</td>
 </tr>
 <tr>
 <td>Mac</td>
-<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-macOS-Apple-Silicon.dmg">Apple silicon</a> · <a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-macOS-Intel.dmg">Intel</a></td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.2/KerfKite-macOS-Apple-Silicon.dmg">Apple silicon</a> · <a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.2/KerfKite-macOS-Intel.dmg">Intel</a></td>
 <td>Open the disk image, drag <strong>KerfKite Studio</strong> to <strong>Applications</strong>, then open it there.</td>
 </tr>
 <tr>
 <td>Raspberry Pi OS, 64-bit, or Debian/Ubuntu ARM64</td>
-<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Linux-arm64.deb">ARM64 installer</a></td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.2/KerfKite-Linux-arm64.deb">ARM64 installer</a></td>
 <td>Open the package in the desktop software installer, then launch <strong>KerfKite Studio</strong> from the applications menu.</td>
 </tr>
 <tr>
 <td>Debian/Ubuntu, 64-bit Intel/AMD</td>
-<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Linux-amd64.deb">AMD64 installer</a></td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.2/KerfKite-Linux-amd64.deb">AMD64 installer</a></td>
 <td>Open the package in the desktop software installer.</td>
 </tr>
 <tr>
@@ -40,16 +40,20 @@
 </tr>
 </tbody>
 </table>
-<p>The <a href="#install">installation guide</a> covers first launch, security prompts, updates, removal and optional STEP exchange and controller access, and the source install for HTTPS and MCP services. The <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.2.1">release downloads</a> also include portable Linux archives and SHA-256 checksums.</p>
+<p>The <a href="#install">installation guide</a> covers first launch, security prompts, updates, removal and optional STEP exchange and controller access, and the source install for HTTPS and MCP services. The <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.2.2">release downloads</a> also include portable Linux archives and SHA-256 checksums.</p>
 <p>For Orange Pi, Radxa, Jetson, BeagleBoard, ODROID, LattePanda and RISC-V systems, the <a href="#sbc">single-board computer guide</a> maps each board to its installer. It also includes a browser-only edition for drawing and file export on smaller boards.</p>
 <h2>Inside the workshop</h2>
 <ul>
 <li>Parametric parts, sketches, Boolean features, assembly mates, interference checks, Bézier/NURBS surface editing and STEP exchange.</li>
-<li>Layer-based laser editing, image processing, material test grids, camera registration and 1,000 original vector templates.</li>
+<li>Layer-based laser editing, image processing, material test grids, camera registration and 1,768 original vector templates.</li>
 <li>Router relief, profile and pocket operations, drag-knife paths, rotary file export and simulated fixture clearance.</li>
 <li>Reviewed imports for LightBurn projects and settings, DXF drawings, G-code, HP-GL cutter programs and LinuxCNC workspace settings.</li>
 </ul>
 <p>See the <a href="docs/KerfKite-Release-Review.pdf">release report (PDF)</a>, <a href="#lightburn-import">file compatibility</a>, <a href="#protocols">controller matrix</a> and <a href="#platforms">platforms</a> for tested scope and open work. The machine limits in the public profiles are example dimensions. Enter your measured setup before preparing a physical job.</p>
+<h2>Stock artwork</h2>
+<p>Browse <strong>Templates → Template library</strong> to insert one of <strong>1,768 editable designs across 132 categories</strong>. The collection includes Australian wildflowers, natural-history plates, woodcut landscapes, workshop tools, storybook illustrations, decorative panels and stencil lettering.</p>
+<p><a href="#template-catalogue"><img src="stock-artwork-preview.png" alt="Twelve examples from the stock library, including native flowers, a coastal print, a twin-lens camera and a ginkgo earring" /></a></p>
+<p>For an earlier Studio installation or another vector editor, <a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.2/KerfKite-Stock-Artwork.zip">download the SVG library</a>. Extract it and open <strong>index.html</strong> to search the gallery or browse the SVG files by category. The <a href="#template-catalogue">template catalogue</a> lists every category and its design count.</p>
 <h2>CNC simulations</h2>
 <p><strong>Router stock removal.</strong> The purple lines show three 1 mm depth passes around a 20-tooth gear and its centre bore. The tan surface shows the sampled stock after a 2 mm flat end mill has followed the contours. See the stock from several angles in the <a href="simulation-router.mp4">router simulation video (MP4, 7 seconds)</a>.</p>
 <p><img src="simulation-router.png" alt="Oblique view of simulated gear stock showing contour passes and the central bore" /></p>
@@ -87,7 +91,7 @@
 <p>Layouts: straight, vertical text down, cubic Bezier baseline with adjustable rise, letter spacing, page rotation and Y-axis rotation. Choose symmetric rise or independent custom cubic control points. Custom control X positions are percentages of text width and Y positions are millimetres; numeric fields and draggable orange handles edit the same values. Endpoints remain fixed at the baseline start/end. Settings survive text load/replace and portable projects; cusp/stationary-tangent cases are rejected. Tight curves may still overlap letters. Latin kerning and composite glyphs are supported; complex-script shaping is rejected rather than misrepresented. No automatic ligatures are applied.</p>
 <p>Depth is separate from font style. Text creates per-vertex negative-Z contours, with shallowest depth and optional Y-axis tilt. Router CAM uses step-down limits and clearance retracts, with conservative plunge-feed speed for 3D contour segments. XYZ paths can also be exported. A rotatable 3D path view and sampled stock-removal preview are available. Separate operations provide pockets, sampled V-carving and raised/recessed text/artwork relief; solid STL extrusion preserves holes. The sampled preview is an approximation, not a collision/gouge certificate. Font style itself does not define cutter geometry or engraving depth.</p>
 <h2>Artwork</h2>
-<p>1000 original built-in vector templates across 52 categories, including botanical sets, ornamental borders, mandalas, seasonal designs, nautical motifs, music, space, workshop, food, travel, garden, celebrations, animals, coasters, bookmarks, jewellery and hanging ornaments. The library displays 36 previews per page, with category/search/favourites filters. The MCP snapshot contains the same artwork. Source reference sheets have not been traced or redistributed. Existing simple motifs remain available. Foreground leaf/berry masking trims underlying vector segments, so exports do not retain hidden stem lines. Natural aspect ratios are retained for built-in previews and insertion. These are engraving contours; automatic stencil bridges, automatic one-piece cutout construction and production minimum-feature validation are not provided; manual boolean editing and CAM warnings do not replace these checks. Artwork quality still needs user review at intended production size.</p>
+<p>1,768 original built-in vector templates across 132 categories, including botanical sets, ornamental borders, mandalas, seasonal designs, nautical motifs, music, space, workshop, food, travel, garden, celebrations, animals, coasters, bookmarks, jewellery and hanging ornaments. The library displays 36 previews per page, with category/search/favourites filters. The MCP snapshot contains the same artwork. Source reference sheets have not been traced or redistributed. Existing simple motifs remain available. Foreground leaf/berry masking trims underlying vector segments, so exports do not retain hidden stem lines. Natural aspect ratios are retained for built-in previews and insertion. These are engraving contours; automatic stencil bridges, automatic one-piece cutout construction and production minimum-feature validation are not provided; manual boolean editing and CAM warnings do not replace these checks. Artwork quality still needs user review at intended production size.</p>
 <h2>Protocols</h2>
 <p><code>studio/protocols.py</code> separates supported export dialects from controller transport. GRBL / GRBL-ESP32 retains its output. Marlin router export omits GRBL work-coordinate/modal setup and uses millisecond dwell; the controller must have CNC spindle support configured. Both GRBL and experimental Marlin live adapters have software tests. Physical ports are disabled by default and require <code>--enable-hardware</code>; no physical machine was commissioned. Marlin pause stops host scheduling and may not stop already buffered motion. Marlin dynamic-laser output remains unsupported.</p>
 <p>The separate rotary workflow exports continuous A-axis LinuxCNC G-code with diameter wrapping and seam checks; it is not a live LinuxCNC driver. The same rotary wrapping is implemented in JavaScript for supported offline contour jobs and covered by parity tests. The new file:// browser workflow was not accepted end-to-end because the automation browser blocked that URL; browser-policy blocking is not a CAM correctness result. General Mach, LinuxCNC, Duet and other live adapters remain outstanding. Do not interpret a postprocessor as a validated live controller driver.</p>
@@ -209,7 +213,7 @@
 <tr>
 <td>Libraries</td>
 <td>Materials, reusable artwork, templates, variables, serial numbers, barcodes/QR, material tests</td>
-<td>1,000 original templates, a feed/power test grid, custom creator/manager, local material/tool presets and portable project/library files implemented. Variables, serial numbers, barcodes/QR and full material-test workflows remain incomplete.</td>
+<td>1,768 original templates, a feed/power test grid, custom creator/manager, local material/tool presets and portable project/library files implemented. Variables, serial numbers, barcodes/QR and full material-test workflows remain incomplete.</td>
 </tr>
 <tr>
 <td>CNC CAM</td>
@@ -338,14 +342,15 @@
 <ol>
 <li>Update the project and Android versions, download links and dependency locks. Rebuild the bundled help with <code>python scripts/build_help.py</code>. To refresh the locks, run <code>uv pip compile pyproject.toml --universal --python-version 3.12 --only-binary :all: --generate-hashes --no-header --no-annotate -o packaging/desktop/requirements.lock</code> and repeat with <code>--extra step -c packaging/desktop/requirements.lock -o packaging/desktop/step.lock</code>.</li>
 <li>In a clean checkout, run <code>KERFKITE_PORTABLE_WHEEL=1 uv build --wheel --out-dir dist</code>. Inspect the wheel for the editor, licences and desktop server. It uses the portable Python relief engine. The normal source installation can compile the optional native kernel.</li>
-<li>Run <code>python packaging/desktop/build.py dist/kerfkite_studio-0.2.1-py3-none-any.whl dist/installers mac-arm64 mac-amd64 linux-arm64 linux-amd64 windows-amd64</code>. The staging filesystem needs free space for each package. <code>go build -trimpath</code> strips workstation paths. The macOS application has an ad-hoc signature. Windows Setup uses per-user installation.</li>
+<li>Run <code>python packaging/desktop/build.py dist/kerfkite_studio-0.2.2-py3-none-any.whl dist/installers mac-arm64 mac-amd64 linux-arm64 linux-amd64 windows-amd64</code>. The staging filesystem needs free space for each package. <code>go build -trimpath</code> strips workstation paths. The macOS application has an ad-hoc signature. Windows Setup uses per-user installation.</li>
 <li>Build the Android release from the android directory using <code>./gradlew assembleRelease</code>. Sign the aligned release APK with the project's existing release alias and Android SDK apksigner. Keep signing credentials in private storage. Verify the APK using <code>apksigner verify --verbose --print-certs</code>. Future upgrades must use the same certificate and increment the Android version code.</li>
 <li>For each release file, publish its SHA-256 as a line of <code>SHA256SUMS.txt</code>. Upload the packages and checksums to a release for the corresponding source commit. In <strong>Actions → Check desktop release installers</strong>, run the workflow against that tag. It installs the actual release package, tests a clean first launch, generates a simulated toolpath, exercises STEP, then relaunches with uv offline.</li>
 </ol>
 <p>For local smoke testing, run <code>python validation/installer_smoke.py &quot;/path/to/installed/KerfKite&quot; --step</code> with ports 18764 and 18765 free. The test uses a temporary application-data directory. The application shortcut opens a browser tab. Platform-specific Gatekeeper, SmartScreen and desktop shell prompts need a graphical desktop to check.</p>
 <p>The Debian packaging revision for Studio 0.2.1 is <code>-2</code>. It declares <code>libgl1</code> so OpenCascade STEP loads on minimal Debian installations. A portable Linux archive expects the desktop to provide <code>libGL.so.1</code> for STEP. The application wheel is shared across all platforms.</p>
 <h2>Browser-only SBC packages</h2>
-<p>Run <code>python packaging/desktop/build_browser.py path/to/kerfkite_studio-0.2.1-py3-none-any.whl dist/sbc</code> with Python and dpkg-deb. Use the same verified wheel as the full release. It supplies the static editor and all vendor notices. The output is an architecture-independent Debian package with a desktop menu entry, and a portable ZIP with the same editor. Publish both under the release tag with <code>SBC-SHA256SUMS.txt</code>. Run <strong>Check SBC release packages</strong> in Actions against the tag to verify the downloads and exercise both installation paths.</p>
+<p>Run <code>python packaging/desktop/build_browser.py path/to/kerfkite_studio-0.2.2-py3-none-any.whl dist/sbc</code> with Python and dpkg-deb. Use the same verified wheel as the full release. It supplies the static editor and all vendor notices. The output is an architecture-independent Debian package with a desktop menu entry, and a portable ZIP with the same editor. Publish both under the release tag with <code>SBC-SHA256SUMS.txt</code>. Run <strong>Check SBC release packages</strong> in Actions against the tag to verify the downloads and exercise both installation paths.</p>
+<p>Build the stock-art SVG archive from the same source tree with <code>python scripts/export_stock_art.py dist/KerfKite-Stock-Artwork.zip</code>. Its offline index links to each individual design.</p>
 </section><section id="sbc"><h1>KerfKite on single-board computers</h1>
 <p><strong>For a full CAD/CAM workstation</strong>, use the Studio installer that matches the board’s desktop operating system. Studio connects to a supported CNC controller over USB serial. The CAD and toolpath calculations run on the CPU. A board-specific GPIO driver, AI accelerator or custom firmware image is unnecessary for this workflow.</p>
 <p><strong>For drawing and file export</strong>, install <strong>KerfKite Browser Editor</strong>. It opens directly from local storage in a current graphical browser. You can draw, reopen portable projects, preview supported contour operations and export G-code for a router, laser or drag knife. For STEP, server-side solids, relief generation or machine control, transfer the project to full Studio. The browser package includes the editor and its artwork, fonts and help. It requires no Python runtime or local service.</p>
@@ -360,19 +365,19 @@
 <tbody>
 <tr>
 <td>A 64-bit ARM Debian, Ubuntu or Armbian desktop</td>
-<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Linux-arm64.deb">Full Studio ARM64 DEB</a></td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.2/KerfKite-Linux-arm64.deb">Full Studio ARM64 DEB</a></td>
 </tr>
 <tr>
 <td>A 64-bit Intel/AMD Debian or Ubuntu desktop</td>
-<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Linux-amd64.deb">Full Studio AMD64 DEB</a></td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.2/KerfKite-Linux-amd64.deb">Full Studio AMD64 DEB</a></td>
 </tr>
 <tr>
 <td>A Debian-family desktop where you want browser editing only, including ARM32 or RISC-V with a modern browser</td>
-<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Browser-Editor-all.deb">Browser Editor DEB, all architectures</a></td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.2/KerfKite-Browser-Editor-all.deb">Browser Editor DEB, all architectures</a></td>
 </tr>
 <tr>
 <td>Another desktop OS with a modern browser, or a computer where you cannot install packages</td>
-<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.1/KerfKite-Browser-Editor.zip">Portable Browser Editor ZIP</a></td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.2/KerfKite-Browser-Editor.zip">Portable Browser Editor ZIP</a></td>
 </tr>
 </tbody>
 </table>
@@ -891,7 +896,7 @@
 </section><section id="install"><h1>Install KerfKite Studio</h1>
 <p>See the <a href="#sbc">single-board computer guide</a> for board-specific downloads and the offline Browser Editor.</p>
 <h2>Desktop or phone installation</h2>
-<p>Download the package for your device from the <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.2.1">official KerfKite release</a>.</p>
+<p>Download the package for your device from the <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.2.2">official KerfKite release</a>.</p>
 <ul>
 <li><strong>Windows 10/11 x64.</strong> Open the setup wizard and choose <strong>Install</strong>. It installs for your account and adds KerfKite Studio to Start. Windows may display a SmartScreen warning for this unsigned installer. Check the download came from the official release. On a managed PC, follow your organisation’s software approval process.</li>
 <li><strong>macOS.</strong> In <strong>Apple menu → About This Mac</strong>, check whether the computer has an Apple chip or an Intel processor. Open the matching DMG, drag KerfKite Studio onto Applications and launch it there. This community build has an ad-hoc signature and has not been notarised by Apple. If macOS blocks it, review the app under <strong>System Settings → Privacy &amp; Security</strong> after the first open attempt. Managed Macs may require administrator approval.</li>
@@ -1326,7 +1331,7 @@ bash scripts/ci-local.sh --list
 <p>Holding tabs are retained when reassigning CAM settings or a manual tool. Use <strong>Remove tabs from selected object</strong> before clearing operation settings; the editor prevents implicit removal. Incompatible tool/mode combinations retain the tab request and fail CAM validation.</p>
 </section><section id="platforms"><h1>Platforms and verification</h1>
 <p>See the <a href="#sbc">single-board computer guide</a> for board-specific downloads and the offline Browser Editor.</p>
-<p><a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.2.1">Download the desktop installers or Android app</a>. The table below records source-installation and hardware evidence. See the <a href="#install">installation guide</a> for the graphical installers.</p>
+<p><a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.2.2">Download the desktop installers or Android app</a>. The table below records source-installation and hardware evidence. See the <a href="#install">installation guide</a> for the graphical installers.</p>
 <p><strong>Public source release.</strong> All 11 CAD/CAM harness groups passed on macOS ARM64, Windows 11 Pro x86-64 and a physical Raspberry Pi 5 ARM64. The Windows and Pi hosts installed the public source in isolated environments. Each run exercised the STEP runtime and native C++ relief kernels, with 151 Python and 114 JavaScript tests. See the <a href="#release-review">release review</a> for the browser checks and the limits of physical verification. Earlier measurements below identify their own host and workload.</p>
 <p>Use the desktop browser editor with a local Python service on 64-bit macOS, Windows or Linux. The service provides solid modelling, CAM and simulation. The Android edition is a native 2D design companion with portable project and SVG exchange.</p>
 <table>
@@ -1754,8 +1759,10 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <h2>Scope</h2>
 <p>Studio models one ordered solid history, which may contain disconnected bodies. General assembly mates, arbitrary NURBS surfaces, STEP exchange, five-axis machining and continuous machine collision detection remain outside this release. The solid modeller requires a Studio server. The downloadable project carries the editable model between workstations.</p>
 </section><section id="template-catalogue"><h1>Template catalogue</h1>
-<p>1000 original built-in vector templates across 52 categories. The browser and MCP share the same artwork.</p>
+<p>1768 original built-in vector templates across 132 categories. The browser and MCP share the same artwork.</p>
 <p>Open <strong>Templates → Template library</strong>, choose a category or search, then click an image to insert it. Previous/Next pages show 36 previews at a time. Favourites and custom templates remain available.</p>
+<p>Download the <a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.2/KerfKite-Stock-Artwork.zip">SVG stock library</a> for other editors or an earlier Studio installation. Extract the archive and open <strong>index.html</strong> to browse labelled previews. The catalogue keeps each SVG in its category folder. Closed paths describe outlines or holes. Open strokes are usually engraving details.</p>
+<p><img src="stock-artwork-preview.png" alt="A selection of actual stock vector designs" /></p>
 <table>
 <thead>
 <tr>
@@ -1765,12 +1772,72 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 </thead>
 <tbody>
 <tr>
+<td>Address numerals</td>
+<td style="text-align:right">10</td>
+</tr>
+<tr>
+<td>Aerostat studies</td>
+<td style="text-align:right">6</td>
+</tr>
+<tr>
+<td>Agate cross sections</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Alpine woodcuts</td>
+<td style="text-align:right">4</td>
+</tr>
+<tr>
+<td>Ammonites &amp; chambered shells</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Analogue photography</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
 <td>Animal portraits</td>
 <td style="text-align:right">24</td>
 </tr>
 <tr>
 <td>Animals &amp; pets</td>
 <td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Architectural friezes</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Art Deco escutcheons</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Astronomy equipment</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Australian wildflower studies</td>
+<td style="text-align:right">10</td>
+</tr>
+<tr>
+<td>Baker’s counter</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Balcony ironwork</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Birds of the shore</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Blank cameo surrounds</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Bookbinding corner tools</td>
+<td style="text-align:right">12</td>
 </tr>
 <tr>
 <td>Bookmarks</td>
@@ -1793,8 +1860,20 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <td style="text-align:right">17</td>
 </tr>
 <tr>
+<td>Bridal buttonholes</td>
+<td style="text-align:right">10</td>
+</tr>
+<tr>
+<td>Bud vase engravings</td>
+<td style="text-align:right">10</td>
+</tr>
+<tr>
 <td>Butterflies</td>
 <td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Camp equipment</td>
+<td style="text-align:right">8</td>
 </tr>
 <tr>
 <td>Cars &amp; road vehicles</td>
@@ -1805,20 +1884,84 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <td style="text-align:right">8</td>
 </tr>
 <tr>
+<td>Ceramic forms</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
 <td>Children’s toy artwork</td>
 <td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Coastal navigation</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Coastal woodcuts</td>
+<td style="text-align:right">4</td>
 </tr>
 <tr>
 <td>Coasters</td>
 <td style="text-align:right">16</td>
 </tr>
 <tr>
+<td>Coffee and tea rituals</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Compass marquetry</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Crescent floral wreaths</td>
+<td style="text-align:right">10</td>
+</tr>
+<tr>
+<td>Crystal specimens</td>
+<td style="text-align:right">10</td>
+</tr>
+<tr>
 <td>Decorative borders</td>
 <td style="text-align:right">24</td>
 </tr>
 <tr>
+<td>Desert woodcuts</td>
+<td style="text-align:right">3</td>
+</tr>
+<tr>
+<td>Drawer &amp; hamper labels</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Engine-turned engraving</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Fairground rides</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Fairy dwellings</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Feather studies</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Fern specimens</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Finial bookmarks</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
 <td>Floral corners</td>
 <td style="text-align:right">30</td>
+</tr>
+<tr>
+<td>Floral place-card swags</td>
+<td style="text-align:right">10</td>
 </tr>
 <tr>
 <td>Floral sprays</td>
@@ -1837,6 +1980,10 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <td style="text-align:right">19</td>
 </tr>
 <tr>
+<td>Frost &amp; ice crystals</td>
+<td style="text-align:right">10</td>
+</tr>
+<tr>
 <td>Fruit &amp; orchard</td>
 <td style="text-align:right">20</td>
 </tr>
@@ -1853,6 +2000,18 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <td style="text-align:right">16</td>
 </tr>
 <tr>
+<td>Geometric tilework</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Gift box apertures</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Hand-tied bouquets</td>
+<td style="text-align:right">10</td>
+</tr>
+<tr>
 <td>Hanging ornaments</td>
 <td style="text-align:right">16</td>
 </tr>
@@ -1865,11 +2024,23 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <td style="text-align:right">20</td>
 </tr>
 <tr>
+<td>Houseplant accessories</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
 <td>Insects</td>
 <td style="text-align:right">18</td>
 </tr>
 <tr>
 <td>Jewellery</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Joinery tools</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Lattice screens</td>
 <td style="text-align:right">12</td>
 </tr>
 <tr>
@@ -1883,6 +2054,14 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <tr>
 <td>Mandalas</td>
 <td style="text-align:right">16</td>
+</tr>
+<tr>
+<td>Meadow border panels</td>
+<td style="text-align:right">10</td>
+</tr>
+<tr>
+<td>Moonlit nursery</td>
+<td style="text-align:right">8</td>
 </tr>
 <tr>
 <td>Motorbikes &amp; cycles</td>
@@ -1921,16 +2100,120 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <td style="text-align:right">19</td>
 </tr>
 <tr>
+<td>Outdoor camp kitchen</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Pantry implements</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Paper and book arts</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Patchwork blocks</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Pelagic wildlife</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Personal library plates</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Personalisation coasters</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Pierced earring blanks</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Plaster ceiling roses</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Playground sketches</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Pressed flower mounts</td>
+<td style="text-align:right">10</td>
+</tr>
+<tr>
+<td>Printer’s rules</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Printmaker’s studio</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Puppet theatre</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Ribbon-slot bag charms</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
 <td>River scenes</td>
 <td style="text-align:right">16</td>
+</tr>
+<tr>
+<td>River woodcuts</td>
+<td style="text-align:right">3</td>
+</tr>
+<tr>
+<td>Running stitch samplers</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Sand dollars &amp; sea biscuits</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Scallops &amp; bivalves</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Seaside storybook</td>
+<td style="text-align:right">8</td>
 </tr>
 <tr>
 <td>Seasonal</td>
 <td style="text-align:right">12</td>
 </tr>
 <tr>
+<td>Seed pods &amp; samaras</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Sewing basket</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Sound and recording</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
 <td>Space &amp; astronomy</td>
 <td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Stars of the reef</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Stencil initials</td>
+<td style="text-align:right">26</td>
+</tr>
+<tr>
+<td>Stone tracery</td>
+<td style="text-align:right">12</td>
 </tr>
 <tr>
 <td>Succulents &amp; cacti</td>
@@ -1941,11 +2224,39 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <td style="text-align:right">28</td>
 </tr>
 <tr>
+<td>Table display picks</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Tabletop play</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
 <td>Tags &amp; badges</td>
 <td style="text-align:right">24</td>
 </tr>
 <tr>
+<td>Textile workshop</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Timekeeping and optics</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Toy chest</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Transom fanlights</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
 <td>Travel &amp; outdoors</td>
+<td style="text-align:right">8</td>
+</tr>
+<tr>
+<td>Travellers’ keepsakes</td>
 <td style="text-align:right">8</td>
 </tr>
 <tr>
@@ -1953,8 +2264,20 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <td style="text-align:right">50</td>
 </tr>
 <tr>
+<td>Two-point pendants</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
+<td>Veneer inlay bands</td>
+<td style="text-align:right">12</td>
+</tr>
+<tr>
 <td>Vines</td>
 <td style="text-align:right">24</td>
+</tr>
+<tr>
+<td>Wave engraving panels</td>
+<td style="text-align:right">12</td>
 </tr>
 <tr>
 <td>Wheat &amp; grain</td>
@@ -1971,6 +2294,10 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <tr>
 <td>Wreaths</td>
 <td style="text-align:right">14</td>
+</tr>
+<tr>
+<td>Writing gift tags</td>
+<td style="text-align:right">12</td>
 </tr>
 </tbody>
 </table>

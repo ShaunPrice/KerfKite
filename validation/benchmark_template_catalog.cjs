@@ -18,7 +18,7 @@ const {templates} = require('../studio/static/templates.js');
 report('load', start);
 start = performance.now();
 const categories = new Set(templates.map(template => template.category));
-if (categories.size !== 52) throw new Error('Category count changed');
+if (categories.size < 100) throw new Error('Expected the expanded stock catalogue');
 report('browse metadata', start);
 start = performance.now();
 let pointCount = 0;

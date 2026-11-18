@@ -1,7 +1,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {templates,normalize}=require('../studio/static/templates.js');
-test('library has diverse uniquely identified artwork',()=>{assert.equal(templates.length,1000);assert.equal(new Set(templates.map(t=>t.category)).size,52);assert.equal(new Set(templates.map(t=>t.id)).size,templates.length);for(const category of ['Flowers','Vines','Leaves','Symbols','Tags & badges','Frames','World landmarks','Historic buildings','Mountain scenes','River scenes','Animal portraits','Insects','Children’s toy artwork','Learning & play','Cars & road vehicles','Motorbikes & cycles','Musical instruments','Music notation'])assert.ok(templates.some(t=>t.category===category));});
+test('library has diverse uniquely identified artwork',()=>{assert.ok(templates.length >= 1500);assert.ok(new Set(templates.map(t=>t.category)).size >= 100);assert.equal(new Set(templates.map(t=>t.id)).size,templates.length);for(const category of ['Flowers','Vines','Leaves','Symbols','Tags & badges','Frames','World landmarks','Historic buildings','Mountain scenes','River scenes','Animal portraits','Insects','Children’s toy artwork','Learning & play','Cars & road vehicles','Motorbikes & cycles','Musical instruments','Music notation'])assert.ok(templates.some(t=>t.category===category));});
 test('all templates have finite bounded geometry with drawable segments',()=>{for(const t of templates){assert.ok(t.paths.length>0,t.name);for(const p of t.paths){assert.ok(p.length>=2,t.name);for(const point of p){assert.equal(point.length,2);for(const n of point)assert.ok(Number.isFinite(n)&&n>=0&&n<=100,t.name);}}}});
 test('normalization preserves open versus closed paths and relative positioning',()=>{const result=normalize([[[10,20],[20,20],[20,40],[10,20]],[[15,30],[18,35]]]);assert.deepEqual(result[0][0],result[0].at(-1));assert.notDeepEqual(result[1][0],result[1].at(-1));assert.deepEqual(result[1][0],[50,50]);});
 // Trigonometric results vary by a few ULPs across CPU/JS runtimes.
@@ -38,7 +38,10 @@ test('classic-script editor browses all metadata without generating artwork', ()
     designs: {get() { artisanBuilds++; return ornaments.designs; }}
   });
   const page = {CNCOrnaments: observed};
-  vm.runInNewContext(fs.readFileSync(require.resolve('../studio/static/templates.js'), 'utf8'), page);
+  const entry = fs.readFileSync(require.resolve('../studio/static/index.html'), 'utf8');
+  for (const match of entry.matchAll(/<script src="\.\/(stock-[\w-]+\.js|templates\.js)"><\/script>/g)) {
+    vm.runInNewContext(fs.readFileSync(require.resolve('../studio/static/' + match[1]), 'utf8'), page);
+  }
   const items = page.CNCTemplates.templates;
   assert.equal(items.filter(item => item.category === 'World landmarks').length, 12);
   assert.equal(artisanBuilds, 0);
@@ -49,4 +52,17 @@ test('classic-script editor browses all metadata without generating artwork', ()
   assert.equal(artisanBuilds, 1);
   assert.ok(items[1].paths.length);
   assert.equal(artisanBuilds, 1);
+});
+
+test('stock artwork produces router, laser and knife contour previews at its native aspect', () => {
+  const {generate} = require('../studio/static/offline-cam.js');
+  for (const item of templates.filter(t => t.id.startsWith('stock-'))) {
+    const w = Math.min(1, item.aspect), h = Math.min(1, 1 / item.aspect);
+    const paths = item.paths.map(p => p.map(([x, y]) => [20 + x*w, 20 + y*h]));
+    for (const mode of ['laser', 'router', 'knife']) {
+      const job = generate({mode, operation:'line', width:160, height:160, paths,
+        feed:600, plunge:100, power:650, safe:3, passes:1, depth:1, step:1});
+      assert.ok(job.segments.length, item.id + ' in ' + mode);
+    }
+  }
 });
