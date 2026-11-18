@@ -1,7 +1,7 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#geometry">Geometry</a> <a href="#program-import">Program Import</a> <a href="#product">Product</a> <a href="#licensing">Licensing</a> <a href="#request-coverage">Request Coverage</a> <a href="#ai-vision">Ai Vision</a> <a href="#installer-builds">Installer Builds</a> <a href="#sbc">Sbc</a> <a href="#svg">Svg</a> <a href="#mcp">Mcp</a> <a href="#android">Android</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#assemblies">Assemblies</a> <a href="#sketch">Sketch</a> <a href="#fixtures">Fixtures</a> <a href="#status">Status</a> <a href="#drilling">Drilling</a> <a href="#install">Install</a> <a href="#developer">Developer</a> <a href="#laser-order">Laser Order</a> <a href="#user-guide">User Guide</a> <a href="#platforms">Platforms</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#phone-connections">Phone Connections</a> <a href="#branding">Branding</a> <a href="#simulation">Simulation</a> <a href="#web">Web</a> <a href="#router-entry">Router Entry</a> <a href="#release-review">Release Review</a> <a href="#labels">Labels</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#native">Native</a> <a href="#camera-register">Camera Register</a> <a href="#protocols">Protocols</a> <a href="#solid-cad">Solid Cad</a> <a href="#materials">Materials</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#lightburn-import">Lightburn Import</a> <a href="#laser-patterns">Laser Patterns</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
 <p>KerfKite Studio is an open-source CAD/CAM workbench for interchangeable CNC router, laser and drag-knife heads. Design in a browser, simulate a job, and prepare output for a supported controller. The Python application runs locally or as an authenticated HTTPS editor. KerfKite Pocket on Android includes an offline sketch editor and a CNC pendant paired with the Studio server.</p>
-<p><img src="workshop-artwork.jpg" alt="Layered kingfisher cut-vinyl decal beside laser-engraved reeds on maple and a router-carved wave relief in walnut" /></p>
-<p><em>Workshop illustration of the three processes: cut vinyl, laser engraving and router carving.</em></p>
+<p><a href="screen-desktop-workspace.png"><img src="screen-desktop-workspace.png" alt="KerfKite’s desktop editor showing wattle, banksia and scarlet gum tags on a shared sheet, with separate layers for the outlines, engraving and lettering" /></a></p>
+<p>Three botanical tags on one sheet in Studio 0.4.0. The <strong>Layers</strong> tab separates engraving, lettering and cut outlines.</p>
 <h2>Install KerfKite</h2>
 <p>Choose the installer for the computer where you want to design. First launch needs an internet connection to set up the desktop tools. After setup, choose <strong>Start workshop</strong>, then <strong>Open Studio</strong> to enter the simulator.</p>
 <table>
@@ -42,6 +42,63 @@
 </table>
 <p>The <a href="#install">installation guide</a> covers first launch, security prompts, updates, removal and optional STEP exchange and controller access, and the source install for HTTPS and MCP services. The <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.4.0">release downloads</a> also include portable Linux archives and SHA-256 checksums.</p>
 <p>For Orange Pi, Radxa, Jetson, BeagleBoard, ODROID, LattePanda and RISC-V systems, the <a href="#sbc">single-board computer guide</a> maps each board to its installer. It also includes a browser-only edition for drawing and file export on smaller boards.</p>
+<h2>Applications and features</h2>
+<p>These screenshots show the released Studio 0.4.0 desktop application and the signed Pocket 0.4.0 Android app. Open an image for the full-size view.</p>
+<table>
+<thead>
+<tr>
+<th>Parametric solid CAD</th>
+<th>Router stock simulation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="screen-desktop-solid-cad.png"><img src="screen-desktop-solid-cad.png" alt="Solid modeller showing a hollow duct adapter with four mounting holes and its selected two-section loft" /></a></td>
+<td><a href="screen-desktop-router.png"><img src="screen-desktop-router.png" alt="Oblique stock simulation showing scalloped clearing passes around an uncut circular island beside the router CAM settings" /></a></td>
+</tr>
+<tr>
+<td>A loft joins a rectangular inlet to an offset round outlet. Its base dimensions remain editable in the feature history. <a href="#solid-cad">Solid CAD guide</a></td>
+<td>A 4 mm pocket leaves a central island in a scalloped coaster. The preview shows the cutter path against the remaining stock. <a href="#simulation">Simulation guide</a></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Artwork library</th>
+<th>Interactive materials guide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="screen-template-library.png"><img src="screen-template-library.png" alt="Template library filtered to ten Australian wildflower designs, including wattle, banksia and scarlet gum" /></a></td>
+<td><a href="screen-desktop-materials.png"><img src="screen-desktop-materials.png" alt="Blue diode laser and surface engraving selected in the guide for dark anodised aluminium, with a diagram of the marked surface" /></a></td>
+</tr>
+<tr>
+<td>Select a template to place its editable paths in the drawing. <a href="#template-catalogue">Stock catalogue</a></td>
+<td>Pick the tool, operation and stock to see the material-specific conditions before making a test sample. <a href="#materials">Materials guide</a></td>
+</tr>
+</tbody>
+</table>
+<h3>KerfKite Pocket on Android</h3>
+<table>
+<thead>
+<tr>
+<th>Native project editor</th>
+<th>Paired CNC pendant</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="screen-pocket-project.png"><img src="screen-pocket-project.png" alt="Pocket editor showing a four-object alpine trail badge, the selected ridgeline, and Studio project and SVG export controls" /></a></td>
+<td><a href="screen-pocket-pendant.png"><img src="screen-pocket-pendant.png" alt="Pocket pendant paired to an idle GRBL simulator with a 0.1 mm jog increment, axis controls and an armed job" /></a></td>
+</tr>
+<tr>
+<td>Edit a drawing offline, reopen a named project or export the geometry as SVG. <a href="#android">Pocket guide</a></td>
+<td>Jog or operate a prepared job through the paired Studio server. This capture shows an Android emulator connected to the machine simulator. <a href="#phone-connections">Pairing guide</a></td>
+</tr>
+</tbody>
+</table>
 <h2>Inside the workshop</h2>
 <ul>
 <li>Parametric parts, sketches, Boolean features, assembly mates, interference checks, Bézier/NURBS surface editing and STEP exchange.</li>
@@ -67,6 +124,8 @@
 <h2>Materials guide</h2>
 <p>Open <strong>CAM → Materials guide</strong> to choose stock for a drill bit, flat end mill, ball end mill, V-bit, blue diode laser or drag knife. Compare two materials for the same operation and keep your measured sample results in a portable notebook. To use the guide on its own, <a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-Materials-Guide.html">download the single-file materials guide</a> and open it in your browser. <a href="#materials">Guide and workshop examples</a></p>
 <h2>CNC simulations</h2>
+<p><img src="workshop-artwork.jpg" alt="Layered kingfisher cut-vinyl decal beside laser-engraved reeds on maple and a router-carved wave relief in walnut" /></p>
+<p><em>Workshop illustration of the three processes: cut vinyl, laser engraving and router carving.</em></p>
 <p><strong>Router stock removal.</strong> The purple lines show three 1 mm depth passes around a 20-tooth gear and its centre bore. The tan surface shows the sampled stock after a 2 mm flat end mill has followed the contours. See the stock from several angles in the <a href="simulation-router.mp4">router simulation video (MP4, 7 seconds)</a>.</p>
 <p><img src="simulation-router.png" alt="Oblique view of simulated gear stock showing contour passes and the central bore" /></p>
 <table>

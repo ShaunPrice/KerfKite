@@ -2,9 +2,9 @@
 
 KerfKite Studio is an open-source CAD/CAM workbench for interchangeable CNC router, laser and drag-knife heads. Design in a browser, simulate a job, and prepare output for a supported controller. The Python application runs locally or as an authenticated HTTPS editor. KerfKite Pocket on Android includes an offline sketch editor and a CNC pendant paired with the Studio server.
 
-![Layered kingfisher cut-vinyl decal beside laser-engraved reeds on maple and a router-carved wave relief in walnut](studio/static/workshop-artwork.jpg)
+[![KerfKite’s desktop editor showing wattle, banksia and scarlet gum tags on a shared sheet, with separate layers for the outlines, engraving and lettering](studio/static/screen-desktop-workspace.png)](studio/static/screen-desktop-workspace.png)
 
-*Workshop illustration of the three processes: cut vinyl, laser engraving and router carving.*
+Three botanical tags on one sheet in Studio 0.4.0. The **Layers** tab separates engraving, lettering and cut outlines.
 
 ## Install KerfKite
 
@@ -21,6 +21,27 @@ Choose the installer for the computer where you want to design. First launch nee
 The [installation guide](docs/INSTALL.md) covers first launch, security prompts, updates, removal and optional STEP exchange and controller access, and the source install for HTTPS and MCP services. The [release downloads](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.4.0) also include portable Linux archives and SHA-256 checksums.
 
 For Orange Pi, Radxa, Jetson, BeagleBoard, ODROID, LattePanda and RISC-V systems, the [single-board computer guide](docs/SBC.md) maps each board to its installer. It also includes a browser-only edition for drawing and file export on smaller boards.
+
+## Applications and features
+
+These screenshots show the released Studio 0.4.0 desktop application and the signed Pocket 0.4.0 Android app. Open an image for the full-size view.
+
+| Parametric solid CAD | Router stock simulation |
+| --- | --- |
+| [![Solid modeller showing a hollow duct adapter with four mounting holes and its selected two-section loft](studio/static/screen-desktop-solid-cad.png)](studio/static/screen-desktop-solid-cad.png) | [![Oblique stock simulation showing scalloped clearing passes around an uncut circular island beside the router CAM settings](studio/static/screen-desktop-router.png)](studio/static/screen-desktop-router.png) |
+| A loft joins a rectangular inlet to an offset round outlet. Its base dimensions remain editable in the feature history. [Solid CAD guide](docs/SOLID-CAD.md) | A 4 mm pocket leaves a central island in a scalloped coaster. The preview shows the cutter path against the remaining stock. [Simulation guide](docs/SIMULATION.md) |
+
+| Artwork library | Interactive materials guide |
+| --- | --- |
+| [![Template library filtered to ten Australian wildflower designs, including wattle, banksia and scarlet gum](studio/static/screen-template-library.png)](studio/static/screen-template-library.png) | [![Blue diode laser and surface engraving selected in the guide for dark anodised aluminium, with a diagram of the marked surface](studio/static/screen-desktop-materials.png)](studio/static/screen-desktop-materials.png) |
+| Select a template to place its editable paths in the drawing. [Stock catalogue](docs/TEMPLATE-CATALOGUE.md) | Pick the tool, operation and stock to see the material-specific conditions before making a test sample. [Materials guide](docs/MATERIALS.md) |
+
+### KerfKite Pocket on Android
+
+| Native project editor | Paired CNC pendant |
+| --- | --- |
+| [![Pocket editor showing a four-object alpine trail badge, the selected ridgeline, and Studio project and SVG export controls](studio/static/screen-pocket-project.png)](studio/static/screen-pocket-project.png) | [![Pocket pendant paired to an idle GRBL simulator with a 0.1 mm jog increment, axis controls and an armed job](studio/static/screen-pocket-pendant.png)](studio/static/screen-pocket-pendant.png) |
+| Edit a drawing offline, reopen a named project or export the geometry as SVG. [Pocket guide](docs/ANDROID.md) | Jog or operate a prepared job through the paired Studio server. This capture shows an Android emulator connected to the machine simulator. [Pairing guide](docs/PHONE-CONNECTIONS.md) |
 
 ## Inside the workshop
 
@@ -56,6 +77,10 @@ For an earlier Studio installation or another vector editor, [download the SVG l
 Open **CAM → Materials guide** to choose stock for a drill bit, flat end mill, ball end mill, V-bit, blue diode laser or drag knife. Compare two materials for the same operation and keep your measured sample results in a portable notebook. To use the guide on its own, [download the single-file materials guide](https://github.com/ShaunPrice/KerfKite/releases/download/v0.4.0/KerfKite-Materials-Guide.html) and open it in your browser. [Guide and workshop examples](docs/MATERIALS.md)
 
 ## CNC simulations
+
+![Layered kingfisher cut-vinyl decal beside laser-engraved reeds on maple and a router-carved wave relief in walnut](studio/static/workshop-artwork.jpg)
+
+*Workshop illustration of the three processes: cut vinyl, laser engraving and router carving.*
 
 **Router stock removal.** The purple lines show three 1 mm depth passes around a 20-tooth gear and its centre bore. The tan surface shows the sampled stock after a 2 mm flat end mill has followed the contours. See the stock from several angles in the [router simulation video (MP4, 7 seconds)](studio/static/simulation-router.mp4).
 
