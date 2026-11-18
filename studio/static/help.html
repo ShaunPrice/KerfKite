@@ -1,6 +1,7 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#geometry">Geometry</a> <a href="#program-import">Program Import</a> <a href="#product">Product</a> <a href="#licensing">Licensing</a> <a href="#request-coverage">Request Coverage</a> <a href="#ai-vision">Ai Vision</a> <a href="#mcp">Mcp</a> <a href="#android">Android</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#assemblies">Assemblies</a> <a href="#sketch">Sketch</a> <a href="#fixtures">Fixtures</a> <a href="#status">Status</a> <a href="#install">Install</a> <a href="#developer">Developer</a> <a href="#laser-order">Laser Order</a> <a href="#user-guide">User Guide</a> <a href="#platforms">Platforms</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#branding">Branding</a> <a href="#simulation">Simulation</a> <a href="#web">Web</a> <a href="#release-review">Release Review</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#native">Native</a> <a href="#camera-register">Camera Register</a> <a href="#protocols">Protocols</a> <a href="#solid-cad">Solid Cad</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#lightburn-import">Lightburn Import</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
 <p>KerfKite Studio is an open-source CAD/CAM workbench for interchangeable CNC router, laser and drag-knife heads. Design in a browser, simulate a job, and prepare output for a supported controller. The Python application runs locally or as an authenticated HTTPS editor. The repository also includes a simplified Android companion.</p>
-<p><img src="header-wood.png" alt="KerfKite Studio engraved timber header" /></p>
+<p><img src="workshop-artwork.jpg" alt="Layered kingfisher cut-vinyl decal beside laser-engraved reeds on maple and a router-carved wave relief in walnut" /></p>
+<p><em>Workshop illustration of the three processes: cut vinyl, laser engraving and router carving.</em></p>
 <h2>Run it locally</h2>
 <ol>
 <li>Install a supported 64-bit Python and follow the <a href="#install">installation guide</a>.</li>
@@ -16,6 +17,28 @@
 <li>Reviewed imports for LightBurn projects and settings, DXF drawings, G-code, HP-GL cutter programs and LinuxCNC workspace settings.</li>
 </ul>
 <p>See the <a href="docs/KerfKite-Release-Review.pdf">release report (PDF)</a>, <a href="#lightburn-import">file compatibility</a>, <a href="#protocols">controller matrix</a> and <a href="#platforms">platforms</a> for tested scope and open work. The machine limits in the public profiles are example dimensions. Enter your measured setup before preparing a physical job.</p>
+<h2>CNC simulations</h2>
+<p><strong>Router stock removal.</strong> The purple lines show three 1 mm depth passes around a 20-tooth gear and its centre bore. The tan surface shows the sampled stock after a 2 mm flat end mill has followed the contours. See the stock from several angles in the <a href="simulation-router.mp4">router simulation video (MP4, 7 seconds)</a>.</p>
+<p><img src="simulation-router.png" alt="Oblique view of simulated gear stock showing contour passes and the central bore" /></p>
+<table>
+<thead>
+<tr>
+<th>Laser engraving</th>
+<th>Drag-knife cutting</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="simulation-laser.png" alt="Laser lesson with a colour-coded entry ramp along the sample outline" /></td>
+<td><img src="simulation-knife.png" alt="Drag-knife lesson showing compensated corner moves around the sample outline" /></td>
+</tr>
+<tr>
+<td>Power rises from zero over the first 5 mm of travel. <a href="simulation-laser.mp4">Watch the laser toolpath (MP4, 8 seconds)</a>.</td>
+<td>The pivot travels around each corner to turn a blade with a 0.5 mm offset. <a href="simulation-knife.mp4">Watch the knife toolpath (MP4, 8 seconds)</a>.</td>
+</tr>
+</tbody>
+</table>
+<p>These captures come from KerfKite running in simulator mode. To change the settings and replay the paths yourself, open <strong>Help → Interactive machining lessons</strong> in the running app.</p>
 <h2>Development and licensing</h2>
 <p>Start with <a href="#agents">AGENTS.md</a> and the <a href="#developer">developer handoff</a> for the architecture, simulation and browser tests. The command names <code>cnc-studio</code> and <code>cnc-studio-web</code> and the project format <code>pi-cnc-studio/1</code> preserve interoperability with existing Studio installations.</p>
 <p><a href="vendor/Studio-MIT.txt">MIT</a> covers first-party software and documentation. Fonts, the bundled parser and native runtime components have their own licences. See the <a href="#licensing">licensing inventory</a>, <a href="#contributing">contributing guide</a> and <a href="#security">security policy</a>.</p>
@@ -197,7 +220,7 @@
 <tbody>
 <tr>
 <td>Source repository</td>
-<td>First-party Python, C++, Java and JavaScript, geometric template generators, docs, bundled font/parser files, Gradle wrapper, screenshots and generated branding</td>
+<td>First-party Python, C++, Java and JavaScript, geometric template generators, docs, bundled font/parser files, Gradle wrapper, simulator screenshots, silent demonstration clips and generated branding</td>
 <td>Preserve MIT and third-party notices. The public source edition omits recorded marketing audio and video.</td>
 </tr>
 <tr>
@@ -237,9 +260,15 @@
 <p>To refresh the inventory in a build environment, run <code>python -m pip install --dry-run --ignore-installed --report resolved.json &quot;.[web,step,mcp]&quot;</code>. Use the target OS, architecture and Python for each build, inspect the actual archives, and retain licence files even when a package's metadata reports a single permissive identifier. The recorded resolver output describes a specific platform and date.</p>
 <h2>Branding, audio and video</h2>
 <ul>
-<li>The application icon and engraved-wood header have documented generation prompts. OpenAI's published terms assign applicable rights in output to the user as between the parties, subject to the applicable agreement and law. Generated artwork may resemble other outputs. Keep the recorded provenance with the images. <a href="#branding">Branding record</a> · <a href="https://openai.com/policies/terms-of-use/">OpenAI terms</a>
-The public repository distributes the application source, original template generators, generated branding and documented third-party assets. No voice recording or narrated marketing video is included.</li>
-<li>LightBurn, controller, device, and software names identify compatibility or comparisons. The Studio MIT licence conveys the project's own software rights. Third-party trademarks and official logos remain with their owners.</li>
+<li>
+<p>The application icon, engraved-wood header and README workshop illustration have documented generation prompts. OpenAI's published terms assign applicable rights in output to the user as between the parties, subject to the applicable agreement and law. Generated artwork may resemble other outputs. Keep the recorded provenance with the images. <a href="#branding">Branding record</a> · <a href="https://openai.com/policies/terms-of-use/">OpenAI terms</a></p>
+</li>
+<li>
+<p>The first-party simulator stills and silent MP4 clips accompany the documentation under MIT. The public repository distributes the application source, original template generators, generated branding and documented third-party assets. No voice recording or narrated marketing video is included.</p>
+</li>
+<li>
+<p>LightBurn, controller, device, and software names identify compatibility or comparisons. The Studio MIT licence conveys the project's own software rights. Third-party trademarks and official logos remain with their owners.</p>
+</li>
 </ul>
 </section><section id="request-coverage"><h1>Compatibility and acceptance</h1>
 <p>The <a href="#product">feature matrix</a> records capabilities and open work. See the <a href="#release-review">release verification</a>, <a href="#lightburn-import">format compatibility</a>, <a href="#protocols">controller support</a> and <a href="#platforms">platform measurements</a>. Device commissioning requires an independently measured work envelope, tools, clearances, work origin and controller settings.</p>
@@ -1189,6 +1218,12 @@ sh start.sh --port 8765
 <p>Create a professional wide website header background image for an open-source CNC router and laser design program originally named Pi CNC Studio. Landscape panoramic 3:1 composition, warm premium walnut and maple wood grain, realistic macro craftsmanship. At the right third a beautiful flowing botanical flourish and a small precise spur-gear motif are machined into the wood: some smooth deep V-carved router grooves revealing pale fresh timber with convincing depth and bevel shadows, alongside dark crisp fine laser-engraved linework. Flat overhead view, subtle raking warm light. Left half is quiet dark walnut negative space so HTML white app title can overlay legibly. Sophisticated maker workshop aesthetic, restrained, high quality, no machine hardware, no sparks, no text, no letters, no watermark, no border. Deliver a finished banner texture suitable for cropping to a shallow application header.</p>
 <h2>Icon design brief</h2>
 <p>Design one finished square application icon for KerfKite Studio, an open-source CNC router, laser engraving and vinyl cutting application. Bold memorable precision-machining emblem: a single substantial copper-orange C-shaped routed channel forms a clean circular toolpath around a small cyan-blue diamond laser point, with one short diagonal cutter stroke implying creation and motion. Deep midnight teal rounded-square tile, subtle dimensional beveled edges and finely machined metal/wood inlay texture, refined orange and cyan accents, strong simple silhouette readable at 32 pixels, centered with generous safe padding. Contemporary professional maker CAD/CAM identity. No text, no letters as typography, no tiny decorative details, no multiple icons, no mockup/device, no watermark. Full square image with solid background.</p>
+<h2>README workshop illustration</h2>
+<p>The README uses <code>studio/static/workshop-artwork.jpg</code>, generated with ImageGen. The application header uses the original engraved timber artwork.</p>
+<p><strong>Design prompt</strong></p>
+<p>Create a wide landscape editorial workshop photograph-style illustration for a CNC design software README, landscape 3:2 or wider, optimised for a wide header. Three tactile workshop samples fill the composition edge to edge in a single cohesive overhead still life under warm raking daylight. The foreground hero on the left is an intricate layered matte teal, golden ochre and muted coral kingfisher cut-vinyl decal on ivory release liner, crisp cut silhouettes forming wing feathers, a corner of transparent transfer tape lifted with a small piece of negative vinyl peeled back. In the centre a pale maple panel carries delicate dark laser-engraved linework of reeds and rippling water with charred fine outlines. On the right a walnut block has deep CNC router-carved wave relief and a bevelled edge with pronounced shadows and visible wood grain. Each process is immediately distinguishable through material, depth and finish. Cropped workbench, uncluttered, professional macro craft photography, elegant natural materials. No lettering, numbers, logos, watermark, machines or people.</p>
+<h2>Simulator captures</h2>
+<p>The three PNG stills and silent MP4 clips in the README were captured from KerfKite with hardware disabled. The router clip rotates the editor’s sampled stock view. The laser and drag-knife clips advance the playback slider in the corresponding machining lessons. Playback illustrates move order and is independent of machine feed rate.</p>
 </section><section id="simulation"><h1>Simulation and acceptance</h1>
 <p>From a source checkout, install the workstation dependencies using the <a href="#install">installation guide</a>. Run the harness from the project root using the same Python environment as the workstation. The extended run also requires Node.js with its built-in test runner and the dependencies used by the web tests.</p>
 <pre><code class="language-sh">python scripts/simulate_studio.py --all --json simulation-result.json

@@ -9,3 +9,15 @@ Create a professional wide website header background image for an open-source CN
 ## Icon design brief
 
 Design one finished square application icon for KerfKite Studio, an open-source CNC router, laser engraving and vinyl cutting application. Bold memorable precision-machining emblem: a single substantial copper-orange C-shaped routed channel forms a clean circular toolpath around a small cyan-blue diamond laser point, with one short diagonal cutter stroke implying creation and motion. Deep midnight teal rounded-square tile, subtle dimensional beveled edges and finely machined metal/wood inlay texture, refined orange and cyan accents, strong simple silhouette readable at 32 pixels, centered with generous safe padding. Contemporary professional maker CAD/CAM identity. No text, no letters as typography, no tiny decorative details, no multiple icons, no mockup/device, no watermark. Full square image with solid background.
+
+## README workshop illustration
+
+The README uses `studio/static/workshop-artwork.jpg`, generated with ImageGen. The application header uses the original engraved timber artwork.
+
+**Design prompt**
+
+Create a wide landscape editorial workshop photograph-style illustration for a CNC design software README, landscape 3:2 or wider, optimised for a wide header. Three tactile workshop samples fill the composition edge to edge in a single cohesive overhead still life under warm raking daylight. The foreground hero on the left is an intricate layered matte teal, golden ochre and muted coral kingfisher cut-vinyl decal on ivory release liner, crisp cut silhouettes forming wing feathers, a corner of transparent transfer tape lifted with a small piece of negative vinyl peeled back. In the centre a pale maple panel carries delicate dark laser-engraved linework of reeds and rippling water with charred fine outlines. On the right a walnut block has deep CNC router-carved wave relief and a bevelled edge with pronounced shadows and visible wood grain. Each process is immediately distinguishable through material, depth and finish. Cropped workbench, uncluttered, professional macro craft photography, elegant natural materials. No lettering, numbers, logos, watermark, machines or people.
+
+## Simulator captures
+
+The three PNG stills and silent MP4 clips in the README were captured from KerfKite with hardware disabled. The router clip rotates the editor’s sampled stock view. The laser and drag-knife clips advance the playback slider in the corresponding machining lessons. Playback illustrates move order and is independent of machine feed rate.
