@@ -1,14 +1,16 @@
 """Exercise a freshly installed desktop launcher without connecting any machine."""
 import argparse
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
 import re
+import socket
 import subprocess
 import tempfile
 import time
 from urllib.error import URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 LAUNCH = "http://127.0.0.1:18764/"
@@ -44,6 +46,39 @@ def submit(page, action, **fields):
                 data=urlencode(dict(action=action,token=token,**fields)).encode())
 
 
+def wait_for_studio_exit():
+    endpoint = urlsplit(STUDIO)
+    deadline = time.monotonic() + 12
+    while True:
+        try:
+            with socket.create_connection((endpoint.hostname, endpoint.port), timeout=1):
+                pass
+        except ConnectionRefusedError:
+            return
+        if time.monotonic() >= deadline:
+            raise RuntimeError("Studio still accepts connections after its launcher exited")
+        time.sleep(.2)
+
+
+@contextmanager
+def install_directory():
+    directory = tempfile.TemporaryDirectory(prefix="kerfkite clean install ")
+    try:
+        yield Path(directory.name)
+    finally:
+        # Windows can briefly retain mapped Python extension DLLs after shutdown.
+        deadline = time.monotonic() + 30
+        while True:
+            try:
+                directory.cleanup()
+                break
+            except OSError as error:
+                if (os.name != "nt" or getattr(error, "winerror", None) not in (5, 32, 33)
+                        or time.monotonic() >= deadline):
+                    raise
+                time.sleep(.5)
+
+
 def check(exe, data, offline, step):
     env = {**os.environ, "KERFKITE_DATA_DIR": str(data)}
     if offline:
@@ -66,6 +101,7 @@ def check(exe, data, offline, step):
             subprocess.run([python,"-I","-c","from OCP.STEPControl import STEPControl_Writer; STEPControl_Writer()"],check=True)
         submit(page,"quit")
         assert proc.wait(timeout=12)==0
+        wait_for_studio_exit()
     finally:
         if proc.poll() is None:
             proc.terminate()
@@ -77,8 +113,7 @@ if __name__=="__main__":
     parser.add_argument("executable",type=Path)
     parser.add_argument("--step",action="store_true")
     args=parser.parse_args()
-    with tempfile.TemporaryDirectory(prefix="kerfkite clean install ") as tmp:
-        data=Path(tmp)
+    with install_directory() as data:
         try:
             for offline in (False,True):
                 check(args.executable.resolve(),data,offline,args.step)
