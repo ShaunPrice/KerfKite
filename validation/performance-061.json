@@ -28,6 +28,27 @@
         "pipeline": 0.4159289160743356,
         "peak_rss_mib": 90.4375
       }
+    },
+    "verification_after_review": {
+      "medians": {
+        "python": {
+          "relief": 0.5625752909108996,
+          "gcode": 0.17218866618350148,
+          "stock_preview": 0.5415167910978198,
+          "rotary_generation": 0.7927331668324769,
+          "pipeline": 1.2811377081088722,
+          "peak_rss_mib": 97.1875
+        },
+        "native": {
+          "relief": 0.030437916982918978,
+          "gcode": 0.16555675026029348,
+          "stock_preview": 0.006325083784759045,
+          "rotary_generation": 0.5828856248408556,
+          "pipeline": 0.20238295895978808,
+          "peak_rss_mib": 89.640625
+        }
+      },
+      "max_stock_error_mm": 4.440892098500626e-16
     }
   },
   "installer_archive_checks": [
