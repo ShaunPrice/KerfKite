@@ -1,7 +1,7 @@
 """Local stdio MCP: artwork and CAM artifacts only, no controller import."""
 import argparse
 from pathlib import Path
-from fastmcp import FastMCP
+from .windows_support import require_supported_windows
 from .artwork import ArtworkStore
 from .cam import generate
 
@@ -10,6 +10,7 @@ WRITE={'readOnlyHint':False,'destructiveHint':False,'idempotentHint':False,'open
 
 
 def create_server(output_dir):
+    from fastmcp import FastMCP
     store=ArtworkStore(output_dir)
     mcp=FastMCP('KerfKite Studio Artwork',instructions='Create vector artwork and reusable template files for KerfKite Studio. XY in millimetres, bottom-left origin. Paths are ordered polylines; explicitly repeat the first point to close a contour. Inner contours before outer contours. No machine control tools. Defaults are not material recommendations. The shared CAM supports compensated profiles, pockets, V-carving, knife paths and supplied per-vertex router depths. This server has no dedicated bitmap/STL-to-relief, camera, rotary or parametric gear tool. Physical commissioning remains required outside MCP.')
 
@@ -52,6 +53,7 @@ def create_server(output_dir):
 
 
 def main():
+    require_supported_windows()
     parser=argparse.ArgumentParser(description='KerfKite Studio local artwork MCP server')
     parser.add_argument('--output-dir',default=str(Path.cwd()/'artifacts'))
     args=parser.parse_args()

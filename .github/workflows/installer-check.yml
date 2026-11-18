@@ -5,7 +5,7 @@ on:
       tag:
         description: Release tag to verify
         required: true
-        default: v0.5.0
+        default: v0.5.1
 permissions:
   contents: read
 jobs:
@@ -33,16 +33,24 @@ jobs:
         run: |
           gh release download "$TAG" --pattern "$INSTALLER" --pattern SHA256SUMS.txt
           python -c 'import hashlib,os,pathlib; p=pathlib.Path(os.environ["INSTALLER"]); assert hashlib.sha256(p.read_bytes()).hexdigest()+"  "+p.name in pathlib.Path("SHA256SUMS.txt").read_text().splitlines()'
-      - name: Install and exercise Windows setup
+      - name: Verify Windows Server rejection
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          if ((Get-CimInstance Win32_OperatingSystem).ProductType -eq 1) { throw "This rejection check requires a Server runner." }
           $setup = Start-Process ".\$env:INSTALLER" -ArgumentList "/S" -Wait -PassThru
-          if ($setup.ExitCode -ne 0) { throw "Setup failed" }
-          $dir = Join-Path $env:LOCALAPPDATA "Programs\KerfKite Studio"
-          python validation/installer_smoke.py "$dir\KerfKite.exe" --step --native
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Start-Process "$dir\Uninstall.exe" -ArgumentList "/S" -Wait
+          if ($setup.ExitCode -ne 1150) { throw "Expected unsupported Windows exit 1150, got $($setup.ExitCode)" }
+          $installed = Join-Path $env:LOCALAPPDATA "Programs\KerfKite Studio"
+          if (Test-Path $installed) { throw "Setup unexpectedly created an installation directory" }
+          $key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\KerfKiteStudio"
+          if (Test-Path $key) { throw "Setup unexpectedly registered an installation" }
+          $extract = Join-Path $env:RUNNER_TEMP "kerfkite-platform-test"
+          7z x -y "-o$extract" ".\$env:INSTALLER" | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "Failed to extract the packaged executables" }
+          foreach ($name in "KerfKite.exe", "KerfKiteNative.exe") {
+            $check = Start-Process (Join-Path $extract $name) -ArgumentList "--check-windows" -PassThru -Wait
+            if ($check.ExitCode -ne 1150) { throw "$name returned $($check.ExitCode) on Server" }
+          }
       - name: Install and exercise macOS disk image
         if: runner.os == 'macOS'
         run: |

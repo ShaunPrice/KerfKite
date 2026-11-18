@@ -2,10 +2,12 @@
 import argparse
 
 from werkzeug.serving import make_server
+from .windows_support import require_supported_windows
 from .server import create_app
 
 
 def main():
+    require_supported_windows()
     parser = argparse.ArgumentParser()
     parser.add_argument("--enable-hardware", action="store_true")
     args = parser.parse_args()

@@ -45,6 +45,7 @@ namespace KerfKite {
 
         [STAThread]
         static int Main(string[] args) {
+            if (!Program.ApprovedWindowsClient()) return 1150;
             if (args.Length != 2 || !Directory.Exists(args[1])) return 2;
             string dir = Path.GetFullPath(args[1]), receipt = Path.Combine(dir, "receipt.txt");
             if (File.Exists(receipt)) return 2;

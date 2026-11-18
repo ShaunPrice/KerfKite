@@ -261,6 +261,9 @@ func disconnected() bool {
 }
 
 func main() {
+	if stop, code := windowsStartup(os.Args[1:], runtime.GOOS == "windows", approvedWindowsClient, showWindowsRequirement); stop {
+		os.Exit(code)
+	}
 	ex, err := os.Executable()
 	if err != nil {
 		return

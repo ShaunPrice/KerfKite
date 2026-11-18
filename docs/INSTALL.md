@@ -4,12 +4,12 @@ See the [single-board computer guide](SBC.md) for board-specific downloads and t
 
 ## Desktop or phone installation
 
-Download the desktop package from the [official KerfKite release](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.5.0).
+Download the desktop package from the [official KerfKite release](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.5.1).
 
-* **Windows 10/11 x64.** Open the setup wizard and choose **Install**. It installs for your account and adds KerfKite Studio to Start. Windows may display a SmartScreen warning for this unsigned installer. Check the download came from the official release. On a managed PC, follow your organisation’s software approval process.
+* **Windows 10 or Windows 11 on Intel/AMD x64.** Open the setup wizard and choose **Install**. It installs for your account and adds KerfKite Studio to Start. Windows may display a SmartScreen warning for this unsigned installer. Check the download came from the official release. On a managed PC, follow your organisation’s software approval process.
 * **macOS.** In **Apple menu → About This Mac**, check whether the computer has an Apple chip or an Intel processor. Open the matching DMG, drag KerfKite Studio onto Applications and launch it there. This community build has an ad-hoc signature and has not been notarised by Apple. If macOS blocks it, review the app under **System Settings → Privacy & Security** after the first open attempt. Managed Macs may require administrator approval.
 * **Raspberry Pi OS, Debian and Ubuntu.** Use a 64-bit graphical desktop. Open the ARM64 DEB on a Pi 4/5 or other ARM64 system, or the AMD64 DEB on an Intel/AMD PC. Choose **Install** in the package manager and open KerfKite Studio from the applications menu. On another compatible glibc desktop with a browser and xdg-open, extract the matching Linux archive to a permanent folder and open the KerfKite executable inside.
-* **Android.** Download the [Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.0/KerfKite-Pocket-Android.apk) on your phone, open **My Files → Downloads**, tap the APK and choose **Install**. If prompted, allow this source to install apps and revoke that permission afterwards. Device management and Samsung Auto Blocker can restrict sideloading. If replacing a development APK, export your draft first. Android requires the previous build to be removed if its signing certificate differs. [Pocket user guide](ANDROID.md)
+* **Android.** Download the [Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/download/v0.5.1/KerfKite-Pocket-Android.apk) on your phone, open **My Files → Downloads**, tap the APK and choose **Install**. If prompted, allow this source to install apps and revoke that permission afterwards. Device management and Samsung Auto Blocker can restrict sideloading. If replacing a development APK, export your draft first. Android requires the previous build to be removed if its signing certificate differs. [Pocket user guide](ANDROID.md)
 
 ### First launch
 
@@ -20,6 +20,8 @@ Download the desktop package from the [official KerfKite release](https://github
 When **Open directly next time** is selected, the next launch opens the native simulator window directly. Closing that window shows the launcher. Choose **Show setup next launch** there to change STEP or controller options on the next start. Controller access always requires an explicit choice in setup.
 
 ### Desktop window requirements
+
+Windows Setup checks for a 64-bit Intel/AMD Windows 10 or 11 client before installation. The Windows launcher also checks the host before opening the workshop.
 
 The Windows window uses .NET Framework 4.8 and the Microsoft Edge WebView2 Evergreen Runtime. Windows 11 includes WebView2. If the window reports that the runtime is missing, install the x64 Evergreen Runtime and reopen the window. [Microsoft WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
 

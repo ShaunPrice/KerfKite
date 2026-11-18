@@ -16,8 +16,35 @@ namespace KerfKite {
     using Map = Dictionary<string, object>;
 
     internal static class Program {
+        // Use the exact same native eligibility probe as Setup and the launcher, including when
+        // the user opens this executable directly. The probe performs no application setup.
+        internal static bool ApprovedWindowsClient() {
+            string launcher = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KerfKite.exe");
+            try {
+                var command = new System.Diagnostics.ProcessStartInfo(launcher, "--check-windows") {
+                    UseShellExecute = false, CreateNoWindow = true
+                };
+                using (var probe = System.Diagnostics.Process.Start(command)) {
+                    return probe != null && probe.WaitForExit(10000) && probe.ExitCode == 0;
+                }
+            } catch (System.ComponentModel.Win32Exception) { return false; }
+              catch (SystemException) { return false; }
+        }
+
         [STAThread]
         static void Main(string[] args) {
+            bool query = args.Length == 1 && args[0] == "--check-windows";
+            if (!ApprovedWindowsClient()) {
+                if (!query) MessageBox.Show("KerfKite Studio requires a native x64 client edition of Windows 10 or Windows 11. Reinstall Studio if this computer meets that requirement.",
+                    "KerfKite Studio", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Environment.ExitCode = 1150;
+                return;
+            }
+            if (!query) OpenWorkbench(args);
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static void OpenWorkbench(string[] args) {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             try {

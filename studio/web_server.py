@@ -8,6 +8,7 @@ import ssl
 from pathlib import Path
 from urllib.parse import urlsplit
 from flask import Flask, request, jsonify, g, redirect, send_file, send_from_directory, render_template_string, abort
+from .windows_support import require_supported_windows
 from .web_store import WebStore
 from .web_transfer import validate_upload, validate_destination, send_to_receiver
 from .cam import generate
@@ -142,6 +143,7 @@ def certificate(cert,key,hosts):
 
 
 def main():
+    require_supported_windows()
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--data-dir',default='web-data');sub=p.add_subparsers(dest='action',required=True)
     for action in ('create-user','reset-password'):
         q=sub.add_parser(action);q.add_argument('username');q.add_argument('--generate-password',action='store_true')

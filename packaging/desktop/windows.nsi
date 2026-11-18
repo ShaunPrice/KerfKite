@@ -1,5 +1,6 @@
 Unicode True
 !include "MUI2.nsh"
+!include "FileFunc.nsh"
 Name "KerfKite Studio"
 OutFile "KerfKite-Windows-x64-Setup.exe"
 InstallDir "$LOCALAPPDATA\Programs\KerfKite Studio"
@@ -15,6 +16,34 @@ Icon "app.ico"
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
+; Run the exact eligibility check used by the installed launcher before touching the
+; installation directory, shortcuts, registry, or an existing installation.
+Function .onInit
+  ClearErrors
+  InitPluginsDir
+  IfErrors unsupported
+  StrCmp $PLUGINSDIR "" unsupported
+  File /oname=$PLUGINSDIR\KerfKitePlatform.exe "payload\KerfKite.exe"
+  IfErrors unsupported
+  ExecWait '"$PLUGINSDIR\KerfKitePlatform.exe" --check-windows' $0
+  IfErrors unsupported
+  StrCmp $0 0 accepted
+  unsupported:
+    IfSilent done
+    MessageBox MB_OK|MB_ICONSTOP "KerfKite Studio requires a native x64 client edition of Windows 10 or Windows 11. Setup could not confirm this computer meets that requirement."
+  done:
+    SetErrorLevel 1150
+    Quit
+  accepted:
+    ${GetParameters} $1
+    ClearErrors
+    ${GetOptions} "$1" "/CHECKPLATFORM" $2
+    IfErrors continue
+    SetErrorLevel 0
+    Quit
+  continue:
+FunctionEnd
+
 Section "KerfKite Studio"
   SetOutPath "$INSTDIR"
   Delete "$INSTDIR\kerfkite_studio-*-py3-none-any.whl"

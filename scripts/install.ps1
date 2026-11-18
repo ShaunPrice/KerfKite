@@ -4,6 +4,8 @@ $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot '..')
 & $Python -c "import sys; sys.exit('Python 3.10 or newer is required') if sys.version_info < (3,10) else None"
 if ($LASTEXITCODE -ne 0) { throw 'Python version check failed. Install 64-bit Python 3.12 and pass -Python with its executable path.' }
+& $Python -B studio/windows_support.py
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $CncVenvPython = Join-Path (Get-Location) '.venv\Scripts\python.exe'
 if (-not (Test-Path $CncVenvPython)) {
     & $Python -m venv .venv
@@ -11,6 +13,8 @@ if (-not (Test-Path $CncVenvPython)) {
 }
 & $CncVenvPython -c "import sys; sys.exit('Existing .venv requires Python 3.10 or newer') if sys.version_info < (3,10) else None"
 if ($LASTEXITCODE -ne 0) { throw 'Existing virtual environment uses an unsupported Python.' }
+& $CncVenvPython -B studio/windows_support.py
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $CncExtras = @()
 if ($Web) { $CncExtras += 'web' }
 if ($Mcp) { $CncExtras += 'mcp' }

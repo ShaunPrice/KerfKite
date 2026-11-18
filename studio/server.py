@@ -3,6 +3,7 @@ import math
 import atexit
 import secrets
 from flask import Flask, jsonify, request, send_from_directory, g
+from .windows_support import require_supported_windows
 from .cam import generate, number
 from .design_api import register_design_routes
 from .device import DeviceController as Controller
@@ -196,6 +197,7 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
 
 
 def main():
+    require_supported_windows()
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--enable-hardware', action='store_true', help='Operator opt-in to physical controller ports; requires machine setup and supervised commissioning')
