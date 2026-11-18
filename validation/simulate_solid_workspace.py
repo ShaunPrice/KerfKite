@@ -154,12 +154,13 @@ def main():
                 page.on("dialog",lambda dialog:dialog.accept())
                 page.goto(f"http://127.0.0.1:{server.server_port}/")
                 run(page)
+                from materials_workflow import run as materials
                 from lightburn_workflow import run as lightburn
                 from import_fixture_workflow import run as fixture_imports
                 from assembly_laser_workflow import run as assembly_laser
                 from simulate_exchange_workspace import run as exchange
                 # Each lesson can modify the example or viewport.
-                for lesson in (lightburn, fixture_imports, assembly_laser, exchange):
+                for lesson in (lightburn, fixture_imports, assembly_laser, exchange, materials):
                     with browser.new_context(viewport={"width":1440,"height":980},accept_downloads=True) as context:
                         workshop = context.new_page()
                         workshop.on("dialog",lambda dialog:dialog.accept())

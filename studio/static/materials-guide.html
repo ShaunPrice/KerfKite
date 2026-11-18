@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Materials guide · KerfKite Studio</title>
+  <link rel="icon" href="./app-icon.png">
+  <link rel="stylesheet" href="./materials-guide.css">
+  <link rel="stylesheet" href="./materials-notebook.css">
+</head>
+<body>
+  <a class="skip-link" href="#guide-workspace">Skip to materials guide</a>
+  <header class="masthead">
+    <nav class="shell" aria-label="Studio navigation">
+      <a href="./index.html" class="brand"><img src="./app-icon.png" alt="" width="34" height="34">KerfKite <span>Studio</span></a>
+      <a href="./help.html" class="help-link">Help centre</a>
+    </nav>
+  </header>
+  <main id="guide-workspace" class="shell">
+    <div class="intro">
+      <h1>Materials guide</h1>
+      <p>Choose a tool and operation to check stock suitability and plan a sample.</p>
+    </div>
+
+    <noscript><p>Enable JavaScript to browse the interactive materials guide.</p></noscript>
+    <p id="guide-error" role="alert" hidden>The materials catalogue could not be loaded. Open the guide from a complete Studio installation.</p>
+    <div id="guide-body" hidden>
+      <section class="tool-strip" aria-label="Machining setup">
+        <div><label for="guide-tool">Tool</label><select id="guide-tool"></select></div>
+        <div><label for="guide-operation">Operation</label><select id="guide-operation"></select></div>
+      </section>
+      <div class="workspace">
+        <aside class="library panel" aria-labelledby="library-title">
+          <div class="library-head"><h2 id="library-title">Material library</h2><button id="guide-reset" type="button" disabled>Clear filters</button></div>
+          <label for="guide-search">Find a material</label>
+          <input type="search" id="guide-search" placeholder="Name or common term" autocomplete="off">
+          <div class="filters">
+            <div><label for="guide-group">Material family</label><select id="guide-group"></select></div>
+            <div><label for="guide-status">Suitability</label>
+              <select id="guide-status">
+                <option value="all">All ratings</option>
+                <option value="candidate">Sample candidate</option>
+                <option value="conditional">Conditional</option>
+                <option value="avoid">Avoid</option>
+              </select>
+            </div>
+          </div>
+          <div class="library-results">
+            <label for="guide-material">Matching materials</label>
+            <span id="guide-count" role="status" aria-live="polite"></span>
+          </div>
+          <select id="guide-material" size="8"></select>
+        </aside>
+        <div id="guide-empty" class="panel empty" hidden>
+          <h2>No matching materials</h2>
+          <p>Try a different name or clear the filters to browse the catalogue for this tool.</p>
+          <button type="button" id="guide-empty-reset">Show all materials</button>
+        </div>
+        <article id="guide-detail" class="panel detail" aria-labelledby="guide-title">
+          <div class="detail-top">
+            <p class="family" id="detail-family"></p>
+            <h2 id="guide-title"></h2>
+            <p id="detail-description"></p>
+          </div>
+          <section id="guide-verdict" class="verdict" aria-labelledby="verdict-title">
+            <p id="verdict-context" class="verdict-context"></p>
+            <h3 id="verdict-title"></h3>
+            <p id="guide-advice"></p>
+            <p id="guide-summary" hidden></p>
+          </section>
+          <figure id="guide-schematic" class="schematic" hidden>
+            <svg viewBox="0 0 200 88" aria-hidden="true" focusable="false">
+              <defs>
+                <pattern id="stock-section" patternUnits="userSpaceOnUse" width="7" height="7">
+                  <rect width="7" height="7" fill="#e9d6ae"/>
+                  <path d="M-2 2L2-2M0 7L7 0M5 9L9 5" fill="none" stroke="#cfb787" stroke-width=".8"/>
+                </pattern>
+              </defs>
+              <path id="schematic-backing" fill="#b7cfcc" stroke="#47796f" stroke-width="1.4"/>
+              <path id="schematic-stock" fill="url(#stock-section)" stroke="#856d48" stroke-width="1.1"/>
+              <path id="schematic-edge" fill="none" stroke="#a54718" stroke-width="2.5"/>
+              <path id="schematic-tool" fill="#476670" stroke="#223b43" stroke-width="1.4"/>
+              <path id="schematic-beam" fill="none" stroke="#a54718" stroke-width="2" stroke-dasharray="3 2"/>
+            </svg>
+            <figcaption><strong>Conceptual cross-section</strong><span id="schematic-caption"></span></figcaption>
+          </figure>
+          <div class="checklists" id="guide-checklists">
+            <section aria-labelledby="setup-title"><h3 id="setup-title">Before you begin</h3><ul id="guide-setup"></ul></section>
+            <section aria-labelledby="inspect-title"><h3 id="inspect-title">What to check</h3><ul id="guide-inspect"></ul></section>
+          </div>
+          <section class="sources" aria-labelledby="sources-title"><h3 id="sources-title">References</h3><ul id="guide-sources"></ul></section>
+          <section class="compare-section" aria-labelledby="compare-title">
+            <h3 id="compare-title">Compare materials</h3>
+            <label for="guide-compare">Second material for this tool and operation</label>
+            <select id="guide-compare"></select>
+            <div id="guide-comparison" class="comparison" hidden></div>
+          </section>
+          <section id="sample-notebook"></section>
+        </article>
+      </div>
+    </div>
+  </main>
+  <script src="./materials-data.js"></script>
+  <script src="./materials-notebook.js"></script>
+  <script src="./materials-guide.js"></script>
+</body>
+</html>

@@ -33,6 +33,8 @@ The centre holds the work area, toolpath controls, messages and expandable G-cod
 | Control | Machine profile, connection-related setup, jogging, head mode, job/phone controls and manual pendant input |
 | Quote | Cost estimates, quote output and design printing |
 
+Open **CAM → Materials guide** to check the selected tool against your stock, compare materials and record sample results. [Materials guide and examples](MATERIALS.md)
+
 Click a tab to select it. When a tab button has keyboard focus, Left/Right changes tabs and Home/End selects the first/last tab. In a server session, machine connection controls also appear in the application header. Hosted/file modes hide unavailable live-control functions.
 
 ## First project: design, preview and save
