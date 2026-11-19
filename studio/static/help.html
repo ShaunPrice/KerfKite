@@ -1,9 +1,9 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#geometry">Geometry</a> <a href="#cad-scripting">Cad Scripting</a> <a href="#program-import">Program Import</a> <a href="#product">Product</a> <a href="#licensing">Licensing</a> <a href="#request-coverage">Request Coverage</a> <a href="#ai-vision">Ai Vision</a> <a href="#cad-macros">Cad Macros</a> <a href="#installer-builds">Installer Builds</a> <a href="#sbc">Sbc</a> <a href="#svg">Svg</a> <a href="#mcp">Mcp</a> <a href="#android">Android</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#assemblies">Assemblies</a> <a href="#rotary">Rotary</a> <a href="#sketch">Sketch</a> <a href="#desktop">Desktop</a> <a href="#fixtures">Fixtures</a> <a href="#status">Status</a> <a href="#drilling">Drilling</a> <a href="#install">Install</a> <a href="#developer">Developer</a> <a href="#performance">Performance</a> <a href="#laser-order">Laser Order</a> <a href="#user-guide">User Guide</a> <a href="#platforms">Platforms</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#phone-connections">Phone Connections</a> <a href="#branding">Branding</a> <a href="#simulation">Simulation</a> <a href="#web">Web</a> <a href="#mcp-hosting">Mcp Hosting</a> <a href="#router-entry">Router Entry</a> <a href="#release-review">Release Review</a> <a href="#labels">Labels</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#native">Native</a> <a href="#camera-register">Camera Register</a> <a href="#protocols">Protocols</a> <a href="#solid-cad">Solid Cad</a> <a href="#materials">Materials</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#lightburn-import">Lightburn Import</a> <a href="#laser-patterns">Laser Patterns</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
 <p>KerfKite Studio is an open-source CAD/CAM workbench for interchangeable CNC router, laser and drag-knife heads. Design in a browser, simulate a job, and prepare output for a supported controller. The Python application runs locally or as an authenticated HTTPS editor. KerfKite Pocket on Android includes an offline sketch editor and a CNC pendant paired with the Studio server.</p>
 <p><a href="screen-desktop-workspace.png"><img src="screen-desktop-workspace.png" alt="KerfKite’s desktop editor showing wattle, banksia and scarlet gum tags on a shared sheet, with separate layers for the outlines, engraving and lettering" /></a></p>
-<p>Three botanical tags on one sheet in Studio 0.4.0. The <strong>Layers</strong> tab separates engraving, lettering and cut outlines.</p>
+<p>Three botanical tags share a sheet. The <strong>Layers</strong> tab separates engraving, lettering and cut outlines.</p>
 <h2>Install KerfKite</h2>
-<p>Choose the installer for the computer where you want to design. First launch needs an internet connection to set up the desktop tools. Choose <strong>Native desktop → Start workshop</strong> to open the simulator in its own application window. Leave <strong>Open directly next time</strong> selected to start there on later launches.</p>
+<p>Choose the installer for the computer where you want to design. The download links below follow the <a href="https://github.com/ShaunPrice/KerfKite/releases/latest">latest public release</a>. First launch needs an internet connection to set up the desktop tools. Choose <strong>Native desktop → Start workshop</strong> to open the simulator in its own application window. Leave <strong>Open directly next time</strong> selected to start there on later launches.</p>
 <table>
 <thead>
 <tr>
@@ -50,7 +50,7 @@
 <p>The desktop window has system file dialogs, undo and redo, an object list, and numeric position and size controls for drawing. Add a rectangle, ellipse or line, select it, then move it in millimetres. Preview the toolpath before exporting G-code. The full 3D CAD workspace, CAM settings and stock simulation open inside the same window. <a href="#desktop">Desktop walkthrough</a></p>
 <p><a href="screen-native-linux.png"><img src="screen-native-linux.png" alt="GTK desktop with a pair of involute gears on the canvas and the selected gear in the native object inspector" /></a></p>
 <p>The Linux native window running on ARM64, with the 18-tooth gear selected.</p>
-<p>The following screenshots show the Studio 0.4.0 editor and the signed Pocket 0.4.1 Android app. Open an image for the full-size view.</p>
+<p>The desktop examples in the following gallery were captured in Studio 0.4.0. The Android examples show Pocket 0.4.1. Open an image for the full-size view.</p>
 <table>
 <thead>
 <tr>
@@ -116,7 +116,7 @@
 <p>See the <a href="#performance">0.6.1 performance measurements</a>, the <a href="docs/KerfKite-Release-Review.pdf">18 November CAD and workshop review (PDF)</a>, <a href="#lightburn-import">file compatibility</a>, <a href="#protocols">controller matrix</a> and <a href="#platforms">platforms</a> for tested scope and open work. The machine limits in the public profiles are example dimensions. Enter your measured setup before preparing a physical job.</p>
 <p>To trim two crossing lines, open the <a href="#geometry">geometry guide</a>. In a solid sketch, you can <a href="#sketch">trim a crossing, dimension a fillet or constrain a profile</a>. A rebuilt solid can update linked machining contours, sections and reliefs. See <a href="#solid-cad">solid CAD</a>.</p>
 <p>For phone control, open <strong>Control → Phone pendant</strong> on the Studio workstation and choose <strong>Enable phone pairing</strong>. Use the private pairing link in Pocket. Wi-Fi, USB tethering and Bluetooth tethering all connect the phone to the same server. See the <a href="#phone-connections">connection guide</a>.</p>
-<h2>Workshop tools in 0.4</h2>
+<h2>Workshop tools</h2>
 <ul>
 <li><strong>Router.</strong> Create a single hole or drilling pattern, choose a peck depth, place holding tabs directly on a compensated contour, and use ramp or helical entry on eligible toolpaths. <a href="#drilling">Drilling</a> · <a href="#router-entry">Router entry</a></li>
 <li><strong>Laser and layout.</strong> Place perforations or holding bridges, choose straight or curved leads, move layout groups and snap to a grid or visible vertices. <a href="#laser-patterns">Laser patterns</a> · <a href="#geometry">Layout tools</a></li>
@@ -544,11 +544,12 @@ difference() {
 </section><section id="licensing"><h1>Licences and redistribution</h1>
 <p><strong>Shaun Price's Studio code and project documentation use MIT.</strong> Keep the copyright and permission notice with copies. The font licences, upstream software licences, and permission to publish a specific recording follow the material they cover. <a href="vendor/Studio-MIT.txt">Studio MIT licence</a></p>
 <h2>What the checked packages contain</h2>
+<p>On 19 November 2026, the five published Studio 0.6.1 wheels and the Pocket 0.4.1 release APK were matched to their SHA-256 digests and inspected. Pocket is versioned separately from Studio. <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.6.1">Release files and checksums</a></p>
 <table>
 <thead>
 <tr>
 <th>Artefact</th>
-<th>Evidence checked on 18 November 2026</th>
+<th>Evidence</th>
 <th>Distribution terms</th>
 </tr>
 </thead>
@@ -559,19 +560,19 @@ difference() {
 <td>Preserve MIT and third-party notices. The public source edition omits recorded marketing audio and video.</td>
 </tr>
 <tr>
-<td>Studio wheel for macOS ARM64</td>
-<td>ZIP member inspection of the 0.2.0 CPython 3.12 wheel found the Studio native relief extension, static fonts/parser, templates and MIT file. Python geometry/runtime wheels and marketing audio/video are separate.</td>
-<td>Include MIT and the bundled font/parser notices when copying, mirroring or extracting static assets. The updated vendor directory also carries OCCT and OCP notices.</td>
+<td>Studio wheels</td>
+<td>All five wheels declare Studio 0.6.1 and contain the MIT licence, template catalogue, bundled fonts, OpenType parser, QR encoder and vendor notices. The four CPython 3.12 wheels contain the compiled CAM extension for Windows x64, macOS (Intel and Apple silicon), Linux x86-64 or Linux ARM64. The portable wheel uses Python for CAM.</td>
+<td>Include MIT and the bundled notices when copying, mirroring or extracting assets. The vendor directory includes the notices for OCP and OCCT.</td>
 </tr>
 <tr>
-<td>Android source and APK</td>
-<td>Studio Pocket declares no external app dependency. Gradle 8.9 wrapper JAR embeds its Apache licence. The debug APK contains Studio DEX/resources and an MIT licence asset. SDK, Gradle, desktop fonts, STEP libraries and the marketing track are outside the APK.</td>
-<td>Keep Android source headers and the embedded <code>assets/LICENSE.txt</code> in the application. The wrapper and build tools have their own terms. <a href="https://docs.gradle.org/current/userguide/licenses.html">Gradle licence information</a></td>
+<td>Android source and release APK</td>
+<td>The published APK declares Pocket 0.4.1 (version code 5). Its signature verifies, and its embedded <code>assets/LICENSE.txt</code> matches the repository MIT licence byte for byte. The Gradle 8.9 wrapper is part of the source tree.</td>
+<td>Retain the Android source notices and the embedded MIT licence. The wrapper and build tools have their own terms. <a href="https://docs.gradle.org/current/userguide/licenses.html">Gradle licence information</a></td>
 </tr>
 <tr>
 <td>Local source install and HTTPS service</td>
-<td>pip resolves dependencies on the installation host. The reference CPython 3.12/macOS ARM64 resolution included 83 external distributions for base + web + step + mcp.</td>
-<td>Package metadata is an index. Keep libraries' own notices and review the native payload of any wheel you redistribute. The resolved list records version, declared licence, reference wheel SHA-256 and release URL. <a href="vendor/python-licenses-macos-arm64.csv">Resolved dependency inventory</a></td>
+<td>pip resolves dependencies on the installation host. The reference inventory from 18 November 2026 records 83 external distributions for the CPython 3.12/macOS ARM64 base, web, STEP and MCP environment.</td>
+<td>Keep each library’s notices and review the native payload of any wheel you redistribute. The inventory records each resolved version, declared licence, reference wheel SHA-256 and release URL. <a href="vendor/python-licenses-macos-arm64.csv">Resolved dependency inventory</a></td>
 </tr>
 <tr>
 <td>Self-contained installer, wheelhouse or Pi image</td>
@@ -581,7 +582,7 @@ difference() {
 </tbody>
 </table>
 <h2>Desktop installers</h2>
-<p>Studio 0.5.0 includes first-party native desktop window code under MIT. AppKit and WebKit come from macOS. The Linux package depends on the distribution's GTK, PyGObject and WebKitGTK. Windows Setup redistributes Microsoft WebView2 SDK assemblies and the x64 loader from the pinned SDK NuGet package. The installer places the original Microsoft licence and third-party notices beside those files. The Microsoft Evergreen WebView2 Runtime is installed separately and has its own terms. The .NET Framework reference assemblies from the build are excluded from the installer. <a href="https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.4314.35">Microsoft WebView2 SDK</a></p>
+<p>KerfKite’s native desktop window code uses the project’s MIT licence. AppKit and WebKit come from macOS. The Linux package depends on the distribution's GTK, PyGObject and WebKitGTK. Windows Setup redistributes Microsoft WebView2 SDK assemblies and the x64 loader from the pinned SDK NuGet package. The installer places the original Microsoft licence and third-party notices beside those files. The Microsoft Evergreen WebView2 Runtime is installed separately and has its own terms. The .NET Framework reference assemblies from the build are excluded from the installer. <a href="https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.4314.35">Microsoft WebView2 SDK</a></p>
 <p>The desktop packages include the first-party platform Studio wheel containing its C++ CAM module, its bundled vendor notices, a hash-pinned dependency list and a Go launcher. The launcher ships Go notices under <code>runtime-notices</code>. First launch downloads the pinned Astral uv executable after checking the release digest. uv installs a private Python runtime and the listed third-party wheels on the user’s computer. Each downloaded distribution retains its upstream terms. The Android release APK uses a dedicated project signing certificate. <a href="https://github.com/astral-sh/uv/blob/0.13.1/LICENSE-MIT">uv licence</a> · <a href="https://go.dev/LICENSE">Go licence</a></p>
 <h2>Assets included in the frontend</h2>
 <p>The bundled minified opentype.js matched the upstream 2.0.0 npm distribution byte for byte. That distribution embeds tiny-inflate 1.0.3. The accompanying vendor directory now includes the MIT notices for opentype.js and tiny-inflate and the zlib notice for the tinf decoder from which tiny-inflate was ported. <a href="https://www.npmjs.com/package/opentype.js/v/2.0.0">opentype.js release</a> · <a href="https://www.npmjs.com/package/tiny-inflate/v/1.0.3">tiny-inflate release</a> · <a href="https://github.com/jibsen/tinf/blob/master/LICENSE">tinf licence</a></p>
@@ -816,7 +817,7 @@ view top
 <h2>Release workstation</h2>
 <p>Use macOS with Go, Python 3.12, Pillow, uv, dpkg-deb, Apple command line tools and NSIS (makensis). Alternatively the Windows packaging step accepts a local Docker image named kerfkite-installer-nsis containing Debian’s NSIS package. All paths below are relative to the checkout root.</p>
 <ol>
-<li>Update the Studio version and download links. Refresh dependency locks when dependencies change. For a new Android build, update its version separately. Rebuild the bundled help with <code>python scripts/build_help.py</code>. To refresh the locks, run <code>uv pip compile pyproject.toml --universal --python-version 3.12 --only-binary :all: --generate-hashes --no-header --no-annotate -o packaging/desktop/requirements.lock</code> and repeat with <code>--extra step -c packaging/desktop/requirements.lock -o packaging/desktop/step.lock</code>.</li>
+<li>Set <code>__version__</code> in <code>studio/__init__.py</code> for a new Studio release and check its download links. Refresh dependency locks when dependencies change. For a new Android build, update its version separately. Rebuild the bundled help with <code>python scripts/build_help.py</code>. To refresh the locks, run <code>uv pip compile pyproject.toml --universal --python-version 3.12 --only-binary :all: --generate-hashes --no-header --no-annotate -o packaging/desktop/requirements.lock</code> and repeat with <code>--extra step -c packaging/desktop/requirements.lock -o packaging/desktop/step.lock</code>.</li>
 <li>Build one CPython 3.12 wheel per desktop target. Run the manual <strong>Build desktop CAM wheels</strong> workflow to build and exercise all five target wheels. Download its artifacts to one directory, for example with <code>gh run download RUN_ID --pattern '*-wheel' --dir dist/wheels --merge</code>. To build one wheel locally on its target, run <code>KERFKITE_REQUIRE_NATIVE=1 python -m build --wheel --outdir dist/wheels</code> with a C++ compiler installed. On Windows PowerShell set <code>$env:KERFKITE_REQUIRE_NATIVE='1'</code> first. For Linux releases use the workflow's manylinux build and repair steps. For the browser-only installer also build a portable wheel with <code>KERFKITE_PORTABLE_WHEEL=1 uv build --wheel --out-dir dist/browser</code>.</li>
 <li>Run <code>python packaging/desktop/build.py dist/wheels dist/installers mac-arm64 mac-amd64 linux-arm64 linux-amd64 windows-amd64</code>. Each desktop installer embeds its target's compiled wheel. A missing, ambiguous or portable-only wheel stops packaging. The launcher's private runtime installs that local wheel. The macOS application has an ad-hoc signature and Windows Setup uses per-user installation.</li>
 <li>When releasing the Android companion, build its release from the android directory using <code>./gradlew assembleRelease</code>. Sign the aligned release APK with the project's existing release alias and Android SDK apksigner. Keep signing credentials in private storage. Verify the APK using <code>apksigner verify --verbose --print-certs</code>. Future upgrades must use the same certificate and increment the Android version code.</li>
@@ -824,7 +825,7 @@ view top
 </ol>
 <p>For local smoke testing, run <code>python validation/installer_smoke.py &quot;/path/to/installed/KerfKite&quot; --step</code> with ports 18764 and 18765 free. The test uses a temporary application-data directory. The shortcut opens the setup tab. Starting a workshop opens the selected native interface. Platform-specific Gatekeeper, SmartScreen and desktop shell prompts need a graphical desktop to check.</p>
 <p>On Apple Silicon with Rosetta, add <code>--also-intel &quot;/path/to/Intel.app/Contents/MacOS/KerfKite&quot;</code> to the Apple Silicon smoke command to exercise both installers with the same data directory. Each architecture has its own private Python runtime and setup tool.</p>
-<p>The Debian packaging revision for Studio 0.2.1 is <code>-2</code>. It declares <code>libgl1</code> so OpenCascade STEP loads on minimal Debian installations. A portable Linux archive expects the desktop to provide <code>libGL.so.1</code> for STEP. The full application uses an architecture-specific wheel.</p>
+<p>The Debian package version combines the wheel version with the packaging revision, normally <code>-1</code>. The package declares <code>libgl1</code> so OpenCascade STEP loads on minimal Debian installations. A portable Linux archive expects the desktop to provide <code>libGL.so.1</code> for STEP. The full application uses an architecture-specific wheel.</p>
 <p>Build the assistant skill with <code>python scripts/package_skill.py dist/installers/kerfkite-workshop-skill.zip</code>.
 Include the ZIP in <code>SHA256SUMS.txt</code>. Extracting it produces the <code>kerfkite-workshop</code> folder with its instructions, interface metadata and MIT license.</p>
 <h2>Native windows</h2>
@@ -832,7 +833,11 @@ Include the ZIP in <code>SHA256SUMS.txt</code>. Extracting it produces the <code
 <p>From a signed-in desktop on a Windows 10 or 11 x64 client with Python, 7-Zip and the .NET SDK, run <code>validation/windows_client_smoke.ps1 -Installer &lt;setup.exe&gt; -Sha256 &lt;release-digest&gt;</code>. It checks the installer and both executables, exercises the extracted release in a temporary simulator, tests the native controls, and relaunches offline. The check leaves Start menu shortcuts and the installed application directory alone.</p>
 <p>The window sources and platform smoke checks are in <code>packaging/desktop/{macos,windows,linux}/</code>. The shared document adapter lives in <code>studio/static/desktop-workspace.js</code>. Its asynchronous open uses the regular project validator, including simulation of saved machining settings. Export checks that the preview still matches the current design. Run <code>validation/simulate_solid_workspace.py</code> for the shared editor regression checks.</p>
 <h2>Browser-only SBC packages</h2>
-<p>Run <code>python packaging/desktop/build_browser.py dist/browser/kerfkite_studio-0.6.1-py3-none-any.whl dist/sbc</code> with Python and dpkg-deb. Use the portable wheel from the same source revision as the full release. It supplies the static editor and all vendor notices. The output is an architecture-independent Debian package with a desktop menu entry, and a portable ZIP with the same editor. Publish both under the release tag with <code>SBC-SHA256SUMS.txt</code>. Run <strong>Check SBC release packages</strong> in Actions against the tag to verify the downloads and exercise both installation paths.</p>
+<p>Build the portable wheel from the release checkout as described above. From that checkout, use Python 3.12 and dpkg-deb to package the wheel matching the project version.</p>
+<pre><code class="language-sh">studio_version=$(python -c 'from studio import __version__; print(__version__)')
+python packaging/desktop/build_browser.py &quot;dist/browser/kerfkite_studio-${studio_version}-py3-none-any.whl&quot; dist/sbc
+</code></pre>
+<p>The portable wheel supplies the static editor and all vendor notices. The output is an architecture-independent Debian package with a desktop menu entry, and a portable ZIP with the same editor. Publish both under the release tag with <code>SBC-SHA256SUMS.txt</code>. Run <strong>Check SBC release packages</strong> in Actions against the tag to verify the downloads and exercise both installation paths.</p>
 <p>To package the interactive materials guide as one offline HTML file, run <code>python scripts/build_materials_guide.py dist/KerfKite-Materials-Guide.html</code>. Include that file in the release and its checksum in <code>SHA256SUMS.txt</code>. The wheel and browser packages already carry the guide as linked static assets.</p>
 <p>Build the stock-art SVG archive from the same source tree with <code>python scripts/export_stock_art.py dist/KerfKite-Stock-Artwork.zip</code>. Its offline index links to each individual design.</p>
 </section><section id="sbc"><h1>KerfKite on single-board computers</h1>
@@ -1682,7 +1687,7 @@ While Pocket waits for a Start or jog response, you can still tap <strong>Stop</
 <p>The calculation sweeps upright, flat-ended circular tool and holder envelopes continuously along each straight move, including the first move from the entered position, rapids, plunges and retracts. Contact at a face, edge or corner counts. The result reports the total number of motion–fixture–component contacts and lists the first 100 in program order.</p>
 <p>The checker reads the posted G0/G1 lines and explicit setup words emitted by Studio's three-axis profiles. Unsupported motion or coordinate-state instructions stop the check with a line number. Rotary motion, arcs, machine-specific rapid doglegs, machine-frame offsets, runout, flexible tooling, stock removal and machine-frame geometry are outside this model. A clear result covers only the fixture boxes, tool envelopes, initial position and straight travel supplied. It provides an offline planning check. It does not command the controller or interlock the Run control.</p>
 </section><section id="status"><h1>Implementation status</h1>
-<p>The <a href="#release-review">release review</a> and <a href="../validation/advanced-cad-simulation.json">simulation results</a> provide release context and current suite results. Start with the <a href="#product">feature and acceptance matrix</a> when extending the product.</p>
+<p>Start with the <a href="#product">feature and acceptance matrix</a> when extending the product. The <a href="#release-review">release review</a> records results for each reviewed version, and the <a href="#platforms">platform guide</a> identifies which checks ran on each operating system.</p>
 <ul>
 <li><a href="#solid-cad">Solid modelling</a>, <a href="#sketch">sketches</a>, <a href="#assemblies">assemblies</a>, <a href="#surfaces-step">surfaces and STEP</a>.</li>
 <li><a href="#laser-workshop">Laser image processing</a>, <a href="#laser-order">cut order</a>, <a href="#camera-register">camera registration</a>, <a href="#fixtures">fixture clearance</a>.</li>
@@ -1690,7 +1695,6 @@ While Pocket waits for a Start or jog response, you can still tap <strong>Stop</
 <li><a href="#developer">Development setup</a>, <a href="#simulation">simulation</a>, <a href="#platforms">platforms</a>, <a href="#licensing">licences</a>.</li>
 </ul>
 <p>The <a href="#android">Android pendant</a> pairs with the machine-side Studio server. The <a href="#phone-connections">connection guide</a> covers Wi-Fi, Bluetooth tethering and USB tethering. See the <a href="#geometry">geometry guide</a> for the 2D Trim &amp; Join workflow.</p>
-<p>The <a href="#product">0.4 feature matrix</a> links the new machining, design, interchange, identification and calibration features to their guides. The retained <a href="#release-review">release review</a> records the earlier release assessment.</p>
 <p>The keyboard CAD workspace supports editable 2D and 3D scripts, reusable parameterized macros and viewport commands. The assistant workshop exposes the same editor through MCP, with optional adapters for a paired machine and hosted files. <a href="#cad-scripting">Keyboard CAD</a> · <a href="#cad-macros">Macro programming</a> · <a href="#mcp">Assistant setup</a> · <a href="#rotary">Rotary engraving</a></p>
 </section><section id="drilling"><h1>Drill holes and peck cycles</h1>
 <p>Use <strong>CAM → Router drilling</strong> for a single bore or a rectangular hole pattern. Each hole is a circular design outline at the bit diameter. Studio preserves the centres through moves, rotation, save and reopen. The desktop, hosted and local-file editors can generate the same drilling program.</p>
@@ -2251,15 +2255,20 @@ bash scripts/ci-local.sh --list
 </section><section id="platforms"><h1>Platforms and verification</h1>
 <p>See the <a href="#sbc">single-board computer guide</a> for board-specific downloads and the offline Browser Editor.</p>
 <p><a href="https://github.com/ShaunPrice/KerfKite/releases/latest">Download the desktop installers</a> or the <a href="#android">Android companion</a>. The table below records source-installation and hardware evidence. See the <a href="#install">installation guide</a> for the graphical installers.</p>
+<h2>Studio 0.6.1 package verification</h2>
+<p>The public Windows build passed fresh and offline starts on Windows 11 Pro x64. With hardware disabled, the extracted launcher produced the expected CAD volume, laser toolpath and router relief depths. This run used a noninteractive session. The earlier 0.5.1 run below covers the Windows desktop controls. <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.6.1">Release notes</a></p>
+<p>The native CAM build passed on all five desktop targets. On macOS (Apple silicon and Intel) and Linux (AMD64 and ARM64), the published packages passed native window, STEP and offline relaunch checks. The Windows Server job confirmed that the installer rejects Server. Both Linux architectures passed the SBC package checks, including the offline Browser Editor. Physical Pi and CNC testing remains open for 0.6.1. <a href="https://github.com/ShaunPrice/KerfKite/actions/runs/44426960223">Native CAM builds</a> · <a href="https://github.com/ShaunPrice/KerfKite/actions/runs/44427177409">Desktop installers</a> · <a href="https://github.com/ShaunPrice/KerfKite/actions/runs/44427181115">SBC packages</a></p>
+<h2>Earlier platform checks</h2>
 <p><strong>Studio 0.5.1 native desktop verification.</strong> The published Windows installer and both executables accepted Windows 11 Pro x64 build 26300. In a signed-in desktop session, the packaged workbench created and moved geometry, handled unsaved-document cancellation, opened the materials guide, saved and reopened a project, previewed CAM and exported G-code. The Windows Server runner verified rejection before installation. Windows 10 x64 admission cases passed automated tests. A live Windows 10 desktop run is pending.</p>
 <p>The Apple silicon and Intel macOS runners and both Linux architectures passed native window, project and simulation checks. The SBC workflow exercised the desktop package on Ubuntu 22.04 and 26.04 userlands and tested the browser packages offline. The 0.5.1 runs used simulation. <a href="https://github.com/ShaunPrice/KerfKite/actions/runs/44410337833">Desktop installer checks</a> · <a href="https://github.com/ShaunPrice/KerfKite/actions/runs/44410344003">SBC package checks</a></p>
 <p><strong>Earlier public source release (18 November).</strong> All 11 CAD/CAM harness groups passed on macOS ARM64, Windows 11 Pro x86-64 and a physical Raspberry Pi 5 ARM64. The Windows and Pi hosts installed the public source in isolated environments. Each run exercised the STEP runtime and native C++ relief kernels, with 151 Python and 114 JavaScript tests. See the <a href="#release-review">release review</a> for the browser checks and the limits of physical verification. Earlier measurements below identify their own host and workload.</p>
+<h2>Platform support</h2>
 <p>The desktop installers provide AppKit on macOS, Windows Forms and WebView2 on Windows, and GTK 3 with WebKitGTK on Linux. Each native window embeds the shared editor and connects to a local Python service. The browser interface remains available from the launcher. The service provides solid modelling, CAM and simulation. The Android edition provides native 2D design, portable project and SVG exchange, and a CNC pendant paired with the Studio server.</p>
 <table>
 <thead>
 <tr>
 <th>Platform</th>
-<th>Installation and evidence</th>
+<th>Source installation and earlier hardware checks</th>
 </tr>
 </thead>
 <tbody>
@@ -2269,7 +2278,7 @@ bash scripts/ci-local.sh --list
 </tr>
 <tr>
 <td>macOS, Intel</td>
-<td>Use the same installer with x86-64 Python. The geometry kernel publishes Intel wheels. Hardware acceptance is pending.</td>
+<td>For a source installation, use x86-64 Python. The published Intel desktop package passed on a hosted Intel macOS runner.</td>
 </tr>
 <tr>
 <td>Windows 11, x86-64</td>
@@ -2385,7 +2394,8 @@ sh start.sh --port 8765
 <pre><code class="language-sh">python validation/android_pendant_workflow.py --serial emulator-5554 --route lan --apk path/to/KerfKite-Pocket-Android.apk
 </code></pre>
 <p>The harness installs the supplied APK and operates the native pendant. With <code>--route reverse</code> it also creates and removes an emulator port mapping. USB debugging and ADB are developer tools for this test. Normal pendant operation uses one of the network links above.</p>
-<p>The signed 0.3.0 APK upgraded an installed signed 0.2.1 on an Android API 37 emulator. Over the virtual LAN, the native screen paired and sent a 0.1 mm X jog, Home, Zero XYZ, Start, Pause, Resume and Stop to the simulator. Each action reached Studio once. The test also checked that Stop disarmed the job and that Forget cleared pairing. Physical Android handsets, Wi-Fi, USB tether drivers, Bluetooth PAN links and machine motion await equipment testing.</p>
+<p>Pocket 0.4.1 was exercised with Studio 0.6.1 on an Android API 37 emulator with 2 GB of RAM. The paired pendant reached the simulator over the virtual LAN and through ADB port forwarding. <a href="https://github.com/ShaunPrice/KerfKite/blob/v0.6.1/validation/performance-061.json">Studio 0.6.1 verification record</a></p>
+<p>In an earlier upgrade test, Pocket 0.3.0 replaced Pocket 0.2.1 on an Android API 37 emulator. Over the virtual LAN, the native screen paired and sent a 0.1 mm X jog, Home, Zero XYZ, Start, Pause, Resume and Stop to the simulator. Each action reached Studio once. The test also checked that Stop disarmed the job and that Forget cleared pairing. Physical Android handsets, Wi-Fi, USB tether drivers, Bluetooth PAN links and machine motion await equipment testing.</p>
 </section><section id="branding"><h1>Branding assets</h1>
 <p>Created with the built-in image-generation tool, 11 September 2026. Project copies: studio/static/app-icon.png and studio/static/header-wood.png. These are generated brand illustrations, not photographs of completed physical machining. The artwork predates the KerfKite name. The descriptions below summarise its design briefs.</p>
 <h2>Header design brief</h2>
@@ -2592,6 +2602,9 @@ curl -i -X POST -H 'Content-Type: application/json' -H 'Accept: application/json
 <p><strong>Helix clearance.</strong> The centreline radius must be positive and at most the cutter radius to clear the core. The available pocket must contain the entire swept bit around the helix, and the feed connecting the circle to the prepared ring must remain inside the cutter-centre region. The material boundary uses the original contours including islands. The preview checks nominal geometry at the configured diameter; stock holding and fixture clearances still depend on the machine setup.</p>
 <p><strong>Offline files.</strong> A browser opened from the filesystem supports closed-line ramps. Pocket and compensated entry calculations require server CAM. The local-file editor reports that requirement when you request a pocket helix.</p>
 </section><section id="release-review"><h1>KerfKite Studio | CAD and workshop release review</h1>
+<h2>Studio 0.6.1 · 19 November 2026</h2>
+<p>The simulation harness passed 11 groups, including 279 Python and 143 JavaScript tests, with no skipped regression tests. The browser suite passed 55 workflow checks. The native and reference CAM implementations produced identical G-code for the measured planar and rotary engraving jobs. <a href="#performance">Performance measurements</a></p>
+<p>The desktop and SBC packages passed their release workflows. The separately versioned Pocket 0.4.1 companion passed project editing and server-paired pendant checks on a 2 GB Android emulator. The Windows, Linux and macOS results and the scope of physical testing are documented in the <a href="#platforms">platform guide</a> and <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.6.1">0.6.1 release notes</a>.</p>
 <h2>0.4.1 pendant and workflow update · 19 November 2026</h2>
 <p>Pocket adds an optional <strong>Keep screen awake</strong> switch to its editor and pendant. A signed upgrade retained the previous version’s project. With the emulator set to a 10-second screen timeout, Pocket kept the foreground editor visible until the option was switched off. Leaving Pocket restored Android’s normal display behaviour. Physical handset and CNC testing remained pending.</p>
 <p>The GRBL simulator now exercises long confirmed feed holds and the remaining timeout budget on resume. DXF import handles planar block clipping before exposing artwork to CAM. In the regression drawing, a 100 mm source line clipped from X=10 to X=35 imports as a 25 mm path and survives project reopening at that size. See the <a href="#android">Android guide</a>, <a href="#troubleshooting">troubleshooting guide</a> and <a href="#program-import">program import coverage</a>.</p>
@@ -2986,7 +2999,7 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 </section><section id="template-catalogue"><h1>Template catalogue</h1>
 <p>1768 original built-in vector templates across 132 categories. The browser and MCP share the same artwork.</p>
 <p>Open <strong>Templates → Template library</strong>, choose a category or search, then click an image to insert it. Previous/Next pages show 36 previews at a time. Favourites and custom templates remain available.</p>
-<p>Download the <a href="https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.2/KerfKite-Stock-Artwork.zip">SVG stock library</a> for other editors or an earlier Studio installation. Extract the archive and open <strong>index.html</strong> to browse labelled previews. The catalogue keeps each SVG in its category folder. Closed paths describe outlines or holes. Open strokes are usually engraving details.</p>
+<p>Download the <a href="https://github.com/ShaunPrice/KerfKite/releases/latest/download/KerfKite-Stock-Artwork.zip">SVG stock library</a> for other editors or an earlier Studio installation. Extract the archive and open <strong>index.html</strong> to browse labelled previews. The catalogue keeps each SVG in its category folder. Closed paths describe outlines or holes. Open strokes are usually engraving details.</p>
 <p><img src="stock-artwork-preview.png" alt="A selection of actual stock vector designs" /></p>
 <table>
 <thead>

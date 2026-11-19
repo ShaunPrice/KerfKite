@@ -1,8 +1,10 @@
 """Streamable HTTP protocol and OAuth checks using a local, ephemeral issuer key."""
 
 from contextlib import ExitStack
+import asyncio
 import importlib.util
 import os
+from tempfile import TemporaryDirectory
 import time
 import unittest
 from unittest.mock import AsyncMock, patch
@@ -17,6 +19,23 @@ ENV = {
 RESOURCE = ENV["KERFKITE_MCP_PUBLIC_ORIGIN"] + "/mcp"
 METADATA = "/.well-known/oauth-protected-resource/mcp"
 ACCEPT = "application/json, text/event-stream"
+
+
+@unittest.skipUnless(importlib.util.find_spec("fastmcp"), "install the mcp optional dependency")
+class WorkshopIdentityTests(unittest.TestCase):
+    def test_initialize_reports_studio_release(self):
+        from fastmcp import Client
+        from studio import __version__
+        from studio.mcp_server import create_server
+
+        async def initialize(directory):
+            async with Client(create_server(directory)) as client:
+                return (await client.initialize()).serverInfo
+
+        with TemporaryDirectory() as directory:
+            identity = asyncio.run(initialize(directory))
+        self.assertEqual(identity.name, "KerfKite Studio")
+        self.assertEqual(identity.version, __version__)
 
 
 @unittest.skipUnless(importlib.util.find_spec("fastmcp"), "install the mcp optional dependency")

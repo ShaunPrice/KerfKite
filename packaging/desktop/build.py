@@ -120,16 +120,17 @@ def linux(work, out, wheel, arch, version):
     run("tar","-C",dest.parent,"-czf",out / f"KerfKite-Linux-{arch}.tar.gz",dest.name,env={**os.environ,"COPYFILE_DISABLE":"1"})
 
 
-def windows(work, out, wheel):
+def windows(work, out, wheel, version):
     payload(work / "payload", wheel, "windows", "amd64")
     run(sys.executable, HERE / "windows/build.py", work / "payload")
     with Image.open(ICON) as im:
         im.save(work / "app.ico", sizes=[(16,16),(32,32),(48,48),(256,256)])
     shutil.copy(HERE / "windows.nsi",work)
+    nsis_args = [f"-DSTUDIO_VERSION={version}", "windows.nsi"]
     if shutil.which("makensis"):
-        run("makensis","windows.nsi",cwd=work)
+        run("makensis", *nsis_args, cwd=work)
     else:
-        run("docker","run","--rm","-v",f"{work}:/build","-w","/build","kerfkite-installer-nsis","makensis","windows.nsi")
+        run("docker","run","--rm","-v",f"{work}:/build","-w","/build","kerfkite-installer-nsis","makensis", *nsis_args)
     (work / "KerfKite-Windows-x64-Setup.exe").replace(out / "KerfKite-Windows-x64-Setup.exe")
 
 
@@ -153,6 +154,6 @@ if __name__ == "__main__":
             work=Path(tmp)
             platform,arch=target.split("-")
             if platform=="windows":
-                windows(work,out,wheel)
+                windows(work,out,wheel,version)
             else:
                 {"mac":mac,"linux":linux}[platform](work,out,wheel,arch,version)

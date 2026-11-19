@@ -1,4 +1,4 @@
-Pi CNC Studio third-party notices
+KerfKite Studio third-party notices
 
 The Studio source and documentation written for this project use the MIT License,
 copyright 2026 Shaun Price. Retain the root LICENSE or Studio-MIT.txt with redistributed copies.

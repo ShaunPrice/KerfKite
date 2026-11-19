@@ -4,7 +4,7 @@
 
 Open **Templates → Template library**, choose a category or search, then click an image to insert it. Previous/Next pages show 36 previews at a time. Favourites and custom templates remain available.
 
-Download the [SVG stock library](https://github.com/ShaunPrice/KerfKite/releases/download/v0.2.2/KerfKite-Stock-Artwork.zip) for other editors or an earlier Studio installation. Extract the archive and open **index.html** to browse labelled previews. The catalogue keeps each SVG in its category folder. Closed paths describe outlines or holes. Open strokes are usually engraving details.
+Download the [SVG stock library](https://github.com/ShaunPrice/KerfKite/releases/latest/download/KerfKite-Stock-Artwork.zip) for other editors or an earlier Studio installation. Extract the archive and open **index.html** to browse labelled previews. The catalogue keeps each SVG in its category folder. Closed paths describe outlines or holes. Open strokes are usually engraving details.
 
 ![A selection of actual stock vector designs](../studio/static/stock-artwork-preview.png)
 

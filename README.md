@@ -4,11 +4,11 @@ KerfKite Studio is an open-source CAD/CAM workbench for interchangeable CNC rout
 
 [![KerfKite’s desktop editor showing wattle, banksia and scarlet gum tags on a shared sheet, with separate layers for the outlines, engraving and lettering](studio/static/screen-desktop-workspace.png)](studio/static/screen-desktop-workspace.png)
 
-Three botanical tags on one sheet in Studio 0.4.0. The **Layers** tab separates engraving, lettering and cut outlines.
+Three botanical tags share a sheet. The **Layers** tab separates engraving, lettering and cut outlines.
 
 ## Install KerfKite
 
-Choose the installer for the computer where you want to design. First launch needs an internet connection to set up the desktop tools. Choose **Native desktop → Start workshop** to open the simulator in its own application window. Leave **Open directly next time** selected to start there on later launches.
+Choose the installer for the computer where you want to design. The download links below follow the [latest public release](https://github.com/ShaunPrice/KerfKite/releases/latest). First launch needs an internet connection to set up the desktop tools. Choose **Native desktop → Start workshop** to open the simulator in its own application window. Leave **Open directly next time** selected to start there on later launches.
 
 | Device | Download | How to open it |
 | --- | --- | --- |
@@ -38,7 +38,7 @@ The desktop window has system file dialogs, undo and redo, an object list, and n
 
 The Linux native window running on ARM64, with the 18-tooth gear selected.
 
-The following screenshots show the Studio 0.4.0 editor and the signed Pocket 0.4.1 Android app. Open an image for the full-size view.
+The desktop examples in the following gallery were captured in Studio 0.4.0. The Android examples show Pocket 0.4.1. Open an image for the full-size view.
 
 | Parametric solid CAD | Router stock simulation |
 | --- | --- |
@@ -70,7 +70,7 @@ To trim two crossing lines, open the [geometry guide](docs/GEOMETRY.md). In a so
 
 For phone control, open **Control → Phone pendant** on the Studio workstation and choose **Enable phone pairing**. Use the private pairing link in Pocket. Wi-Fi, USB tethering and Bluetooth tethering all connect the phone to the same server. See the [connection guide](docs/PHONE-CONNECTIONS.md).
 
-## Workshop tools in 0.4
+## Workshop tools
 
 * **Router.** Create a single hole or drilling pattern, choose a peck depth, place holding tabs directly on a compensated contour, and use ramp or helical entry on eligible toolpaths. [Drilling](docs/DRILLING.md) · [Router entry](docs/ROUTER-ENTRY.md)
 * **Laser and layout.** Place perforations or holding bridges, choose straight or curved leads, move layout groups and snap to a grid or visible vertices. [Laser patterns](docs/LASER-PATTERNS.md) · [Layout tools](docs/GEOMETRY.md)

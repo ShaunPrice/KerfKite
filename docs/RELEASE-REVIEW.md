@@ -1,5 +1,11 @@
 # KerfKite Studio | CAD and workshop release review
 
+## Studio 0.6.1 · 19 November 2026
+
+The simulation harness passed 11 groups, including 279 Python and 143 JavaScript tests, with no skipped regression tests. The browser suite passed 55 workflow checks. The native and reference CAM implementations produced identical G-code for the measured planar and rotary engraving jobs. [Performance measurements](PERFORMANCE.md)
+
+The desktop and SBC packages passed their release workflows. The separately versioned Pocket 0.4.1 companion passed project editing and server-paired pendant checks on a 2 GB Android emulator. The Windows, Linux and macOS results and the scope of physical testing are documented in the [platform guide](PLATFORMS.md) and [0.6.1 release notes](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.6.1).
+
 ## 0.4.1 pendant and workflow update · 19 November 2026
 
 Pocket adds an optional **Keep screen awake** switch to its editor and pendant. A signed upgrade retained the previous version’s project. With the emulator set to a 10-second screen timeout, Pocket kept the foreground editor visible until the option was switched off. Leaving Pocket restored Android’s normal display behaviour. Physical handset and CNC testing remained pending.

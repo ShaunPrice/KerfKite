@@ -1,6 +1,9 @@
 Unicode True
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
+!ifndef STUDIO_VERSION
+  !error "Pass the packaged Studio wheel version as -DSTUDIO_VERSION"
+!endif
 Name "KerfKite Studio"
 OutFile "KerfKite-Windows-x64-Setup.exe"
 InstallDir "$LOCALAPPDATA\Programs\KerfKite Studio"
@@ -52,6 +55,7 @@ Section "KerfKite Studio"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateShortcut "$SMPROGRAMS\KerfKite Studio.lnk" "$INSTDIR\KerfKite.exe" "" "$INSTDIR\app.ico"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\KerfKiteStudio" "DisplayName" "KerfKite Studio"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\KerfKiteStudio" "DisplayVersion" "${STUDIO_VERSION}"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\KerfKiteStudio" "DisplayIcon" "$INSTDIR\app.ico"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\KerfKiteStudio" "UninstallString" '"$INSTDIR\Uninstall.exe"'
 SectionEnd

@@ -6,7 +6,7 @@ The desktop launcher contains only Go standard-library code. Each package carrie
 
 Use macOS with Go, Python 3.12, Pillow, uv, dpkg-deb, Apple command line tools and NSIS (makensis). Alternatively the Windows packaging step accepts a local Docker image named kerfkite-installer-nsis containing Debian’s NSIS package. All paths below are relative to the checkout root.
 
-1. Update the Studio version and download links. Refresh dependency locks when dependencies change. For a new Android build, update its version separately. Rebuild the bundled help with `python scripts/build_help.py`. To refresh the locks, run `uv pip compile pyproject.toml --universal --python-version 3.12 --only-binary :all: --generate-hashes --no-header --no-annotate -o packaging/desktop/requirements.lock` and repeat with `--extra step -c packaging/desktop/requirements.lock -o packaging/desktop/step.lock`.
+1. Set `__version__` in `studio/__init__.py` for a new Studio release and check its download links. Refresh dependency locks when dependencies change. For a new Android build, update its version separately. Rebuild the bundled help with `python scripts/build_help.py`. To refresh the locks, run `uv pip compile pyproject.toml --universal --python-version 3.12 --only-binary :all: --generate-hashes --no-header --no-annotate -o packaging/desktop/requirements.lock` and repeat with `--extra step -c packaging/desktop/requirements.lock -o packaging/desktop/step.lock`.
 2. Build one CPython 3.12 wheel per desktop target. Run the manual **Build desktop CAM wheels** workflow to build and exercise all five target wheels. Download its artifacts to one directory, for example with `gh run download RUN_ID --pattern '*-wheel' --dir dist/wheels --merge`. To build one wheel locally on its target, run `KERFKITE_REQUIRE_NATIVE=1 python -m build --wheel --outdir dist/wheels` with a C++ compiler installed. On Windows PowerShell set `$env:KERFKITE_REQUIRE_NATIVE='1'` first. For Linux releases use the workflow's manylinux build and repair steps. For the browser-only installer also build a portable wheel with `KERFKITE_PORTABLE_WHEEL=1 uv build --wheel --out-dir dist/browser`.
 3. Run `python packaging/desktop/build.py dist/wheels dist/installers mac-arm64 mac-amd64 linux-arm64 linux-amd64 windows-amd64`. Each desktop installer embeds its target's compiled wheel. A missing, ambiguous or portable-only wheel stops packaging. The launcher's private runtime installs that local wheel. The macOS application has an ad-hoc signature and Windows Setup uses per-user installation.
 4. When releasing the Android companion, build its release from the android directory using `./gradlew assembleRelease`. Sign the aligned release APK with the project's existing release alias and Android SDK apksigner. Keep signing credentials in private storage. Verify the APK using `apksigner verify --verbose --print-certs`. Future upgrades must use the same certificate and increment the Android version code.
@@ -16,7 +16,7 @@ For local smoke testing, run `python validation/installer_smoke.py "/path/to/ins
 
 On Apple Silicon with Rosetta, add `--also-intel "/path/to/Intel.app/Contents/MacOS/KerfKite"` to the Apple Silicon smoke command to exercise both installers with the same data directory. Each architecture has its own private Python runtime and setup tool.
 
-The Debian packaging revision for Studio 0.2.1 is `-2`. It declares `libgl1` so OpenCascade STEP loads on minimal Debian installations. A portable Linux archive expects the desktop to provide `libGL.so.1` for STEP. The full application uses an architecture-specific wheel.
+The Debian package version combines the wheel version with the packaging revision, normally `-1`. The package declares `libgl1` so OpenCascade STEP loads on minimal Debian installations. A portable Linux archive expects the desktop to provide `libGL.so.1` for STEP. The full application uses an architecture-specific wheel.
 
 Build the assistant skill with `python scripts/package_skill.py dist/installers/kerfkite-workshop-skill.zip`.
 Include the ZIP in `SHA256SUMS.txt`. Extracting it produces the `kerfkite-workshop` folder with its instructions, interface metadata and MIT license.
@@ -31,7 +31,14 @@ The window sources and platform smoke checks are in `packaging/desktop/{macos,wi
 
 ## Browser-only SBC packages
 
-Run `python packaging/desktop/build_browser.py dist/browser/kerfkite_studio-0.6.1-py3-none-any.whl dist/sbc` with Python and dpkg-deb. Use the portable wheel from the same source revision as the full release. It supplies the static editor and all vendor notices. The output is an architecture-independent Debian package with a desktop menu entry, and a portable ZIP with the same editor. Publish both under the release tag with `SBC-SHA256SUMS.txt`. Run **Check SBC release packages** in Actions against the tag to verify the downloads and exercise both installation paths.
+Build the portable wheel from the release checkout as described above. From that checkout, use Python 3.12 and dpkg-deb to package the wheel matching the project version.
+
+```sh
+studio_version=$(python -c 'from studio import __version__; print(__version__)')
+python packaging/desktop/build_browser.py "dist/browser/kerfkite_studio-${studio_version}-py3-none-any.whl" dist/sbc
+```
+
+The portable wheel supplies the static editor and all vendor notices. The output is an architecture-independent Debian package with a desktop menu entry, and a portable ZIP with the same editor. Publish both under the release tag with `SBC-SHA256SUMS.txt`. Run **Check SBC release packages** in Actions against the tag to verify the downloads and exercise both installation paths.
 
 To package the interactive materials guide as one offline HTML file, run `python scripts/build_materials_guide.py dist/KerfKite-Materials-Guide.html`. Include that file in the release and its checksum in `SHA256SUMS.txt`. The wheel and browser packages already carry the guide as linked static assets.
 
