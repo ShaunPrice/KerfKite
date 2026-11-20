@@ -388,6 +388,10 @@ job_test() {
   # test.yml, step: run: python -c "from studio import _relief_native; print(_relief_native.__file__)"
   run python -c "from studio import _relief_native; print(_relief_native.__file__)"
 
+  # Added after test.yml was removed: the lint gate configured in pyproject.toml.
+  run python -m pip install "ruff>=0.8"
+  run python -m ruff check studio
+
   # Exercise modelling and the sender simulator, then discover both language suites.
   run python scripts/simulate_studio.py --all
 

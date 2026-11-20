@@ -1,7 +1,7 @@
 """Polygon CAM and drag-knife preparation. Geometry stays separate from G-code."""
 import math
 from shapely.geometry import Polygon, LineString, GeometryCollection, MultiPoint
-from shapely.ops import unary_union, voronoi_diagram
+from shapely.ops import voronoi_diagram
 from shapely import affinity
 
 

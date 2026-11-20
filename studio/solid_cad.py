@@ -1,7 +1,6 @@
 """Parametric solid history. Dimensions are millimetres and rotations are degrees."""
 
 import ast
-import math
 import operator
 import re
 import struct

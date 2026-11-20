@@ -269,7 +269,7 @@ def surface_mesh(surface):
 
 def _ocp():
     try:
-        import OCP
+        import OCP  # noqa: F401  (availability probe)
     except (ImportError, OSError) as exc:
         raise ValueError('Install the Studio step extra to enable Open CASCADE STEP exchange: python -m pip install ".[step]"') from exc
 
