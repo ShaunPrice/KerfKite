@@ -10,10 +10,13 @@ Notable changes to KerfKite Studio and KerfKite Pocket. Versions before this fil
 - Machine-control routes of the local server (`/api/connect`, `/api/command`, `/api/run`, `/api/head`, `/api/arm` and the arm follow-ups, `/api/generate`, `/api/phone-monitor`) now answer a malformed or non-object body with a JSON `400` instead of an unhandled `500`.
 
 ### Security
+- The phone pendant listener is encrypted by default when the `cryptography` package is installed. Studio creates a certificate for each pairing and places its SHA-256 fingerprint in the pairing link; Pocket 0.5.0 accepts only that certificate. **Pocket 0.4.1 and earlier cannot use these links**: tick **Unencrypted pairing** or start with `--monitor-plaintext` until the phone is updated. The desktop installers do not yet bundle `cryptography` and continue to use HTTP.
 - `/api/command` accepts only `action`, `axis`, `distance` and `feed`; any other field is refused before the controller is called.
 - The local session token is compared in constant time.
 
 ### Development
+- `validation/pendant_tls_pin_check.py` checks Pocket's pinning class against a real phone listener with a JDK, without a phone.
+- Pocket is versioned 0.5.0 (version code 6).
 - `tests/test_design_api.py` covers the design routes (28% to 87% of `studio/design_api.py`). Overall coverage is 86% with the `mcp`, `web` and `step` extras and 76% on a plain install; the pre-push hook enforces a 75% floor when `pytest-cov` is installed.
 - Python sources are formatted with `ruff format` (120 columns, existing quote style kept). The change is layout only: the syntax tree of every file is identical before and after. The pre-push hook and `scripts/ci-local.sh` check formatting.
 - `scripts/build_help.py` orders the guide sections by file name, so the bundled help is identical whichever machine builds it.

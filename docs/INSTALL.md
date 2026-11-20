@@ -179,13 +179,13 @@ For internet hosting use a real DNS name, publicly trusted certificate and delib
 
 In the desktop installer, choose **Start workshop → Open Studio → Control → Phone pendant → Enable phone pairing**. Enter the server address reachable from the phone. Follow the [Android connection guide](PHONE-CONNECTIONS.md) to pair over Wi-Fi, USB tethering or Bluetooth tethering.
 
-For HTTPS from the command line, install `web` and supply a certificate valid for the server hostname used on the phone:
+From the command line, `sh start.sh --monitor` with the `web` extra installed serves an encrypted monitor whose certificate is identified in the pairing link; add `--monitor-plaintext` for Pocket 0.4.1 and earlier. To serve a certificate of your own instead, supply one valid for the server hostname used on the phone:
 
 ```sh
 sh start.sh --monitor --monitor-port 8766 --monitor-cert server.pem --monitor-key server-key.pem
 ```
 
-The console displays a fresh pairing URL containing a random token. Replace its `<PI-LAN-IP>` placeholder with the certificate's matching host/IP, then open it on the phone. Treat this URL as a credential; do not include it in screenshots or repository files. Restarting revokes it. This example remains simulator-only. Omitting both certificate options selects the explicit HTTP LAN monitor; HTTPS is preferable for credential protection.
+The console displays a fresh pairing URL containing a random token. Replace its `<PI-LAN-IP>` placeholder with the certificate's matching host/IP, then open it on the phone. Treat this URL as a credential; do not include it in screenshots or repository files. Restarting revokes it. This example remains simulator-only. Without the `web` extra the monitor falls back to HTTP on the LAN and the console says so.
 
 Monitor control is distinct from the upload inbox. Releasing a software pendant or sending feed hold is not a physical emergency stop, and accepted/buffered motion can continue depending on firmware.
 
