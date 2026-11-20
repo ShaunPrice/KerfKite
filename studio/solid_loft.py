@@ -84,13 +84,7 @@ def loft_mesh(feature, dimensions, kernel, face_limit):
     rings = []
     for section in (base, top):
         rings.append(
-            np.array(
-                [
-                    section.point(i, (i - 1.5 + j / steps) * math.pi / 2)
-                    for i in range(4)
-                    for j in range(steps)
-                ]
-            )
+            np.array([section.point(i, (i - 1.5 + j / steps) * math.pi / 2) for i in range(4) for j in range(steps)])
         )
     v = np.linspace(0.0, 1.0, tiers + 1)[:, None, None]
     vertices = ((1 - v) * rings[0] + v * rings[1]).reshape(-1, 3)

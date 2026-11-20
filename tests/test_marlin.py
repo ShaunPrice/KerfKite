@@ -37,7 +37,7 @@ class MarlinTests(unittest.TestCase):
         while time.monotonic() < deadline:
             if predicate():
                 return
-            time.sleep(.005)
+            time.sleep(0.005)
         self.fail('Timed out waiting for fake transport')
 
     def test_checksum_and_only_one_outstanding_line(self):
@@ -136,10 +136,24 @@ class MarlinTests(unittest.TestCase):
 
     def test_invalid_inputs_and_number_reset_rejected(self):
         c = self.controller()
-        for lines in [[], ['M5\nG1 X1'], ['N1 G1 X1*33'], ['M110 N0'], ['M110N0'], ['G1 X1\x18'], ['; only comment'], ['(comment)'], ['G1 X1'] * (c.MAX_LINES + 1)]:
+        for lines in [
+            [],
+            ['M5\nG1 X1'],
+            ['N1 G1 X1*33'],
+            ['M110 N0'],
+            ['M110N0'],
+            ['G1 X1\x18'],
+            ['; only comment'],
+            ['(comment)'],
+            ['G1 X1'] * (c.MAX_LINES + 1),
+        ]:
             with self.assertRaises(ValueError):
                 c.start(lines)
-        for kwargs in [dict(axis='A', distance=1, feed=100), dict(axis='X', distance=float('nan'), feed=100), dict(axis='Z', distance=11, feed=100)]:
+        for kwargs in [
+            dict(axis='A', distance=1, feed=100),
+            dict(axis='X', distance=float('nan'), feed=100),
+            dict(axis='Z', distance=11, feed=100),
+        ]:
             with self.assertRaises(ValueError):
                 c.command('jog', **kwargs)
 
@@ -177,7 +191,7 @@ class MarlinTests(unittest.TestCase):
         with c.lock:
             c.start(['G1 X1'] * 20)
             c.command('hold')
-        time.sleep(.04)
+        time.sleep(0.04)
         self.assertEqual(c.progress, 0)
         c.command('resume')
         self.until(lambda: not c.active)

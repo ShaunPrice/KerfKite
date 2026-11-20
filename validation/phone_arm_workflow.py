@@ -1,4 +1,5 @@
 """Exercise current-preview confirmation and concurrent Stop across two real browser sessions."""
+
 import secrets
 from threading import Thread
 from playwright.sync_api import expect
@@ -39,8 +40,9 @@ def run(editor, controller, jobs):
             def wait_for_new_arm():
                 # Start displays the epoch from the last real status poll. Wait for this
                 # workstation preview, even if the previous arm had also enabled Start.
-                phone.wait_for_function("epoch => lastState?.armed && lastState.control_epoch === epoch",
-                                       arg=jobs.control_epoch)
+                phone.wait_for_function(
+                    "epoch => lastState?.armed && lastState.control_epoch === epoch", arg=jobs.control_epoch
+                )
                 expect(phone.locator('#start')).to_be_enabled()
 
             arm_preview(editor)

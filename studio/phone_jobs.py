@@ -1,4 +1,5 @@
 """One-use jobs prepared at the workstation for a paired phone."""
+
 import secrets
 import threading
 import time
@@ -20,7 +21,12 @@ class PhoneJobs:
     def arm(self, lines, validator=None, *, require_workstation=False):
         with self.changed:
             state = self.controller.status()
-            if not state['connected'] or (not state['simulated'] and not self.allow_physical) or state['state'] != 'Idle' or state['active']:
+            if (
+                not state['connected']
+                or (not state['simulated'] and not self.allow_physical)
+                or state['state'] != 'Idle'
+                or state['active']
+            ):
                 raise ValueError('Connect an idle controller before arming (physical control needs operator opt-in)')
             if not require_workstation and not state['simulated']:
                 raise ValueError('A physical machine requires an armed workstation preview.')
@@ -52,7 +58,9 @@ class PhoneJobs:
     def require_current_controls(self, epoch):
         with self.lock:
             if not isinstance(epoch, str) or not epoch:
-                raise ValueError('Update the phone pendant or refresh the monitor before using job or pendant controls. Stop remains available.')
+                raise ValueError(
+                    'Update the phone pendant or refresh the monitor before using job or pendant controls. Stop remains available.'
+                )
             if self.control_epoch != epoch:
                 raise ValueError('Controller controls changed. Read the latest status before issuing another action.')
 
@@ -75,8 +83,13 @@ class PhoneJobs:
 
     def confirm_preview(self, arm_id, challenge):
         with self.changed:
-            if (not self.challenge or self.challenge != challenge or self.arm_id != arm_id
-                    or self.confirmed or time.monotonic() >= self.challenge_deadline):
+            if (
+                not self.challenge
+                or self.challenge != challenge
+                or self.arm_id != arm_id
+                or self.confirmed
+                or time.monotonic() >= self.challenge_deadline
+            ):
                 raise ValueError('Phone Start request expired or cancelled. Check controller status before rearming.')
             self.confirmed = True
             self.changed.notify_all()
@@ -94,13 +107,16 @@ class PhoneJobs:
                 self.challenge_deadline = time.monotonic() + self.confirmation_timeout
                 # Condition.wait_for releases the controller lock. Stop, disconnect and
                 # revocation can invalidate this exact arm while its editor responds.
-                self.changed.wait_for(lambda: self.arm_id != arm_id or self.confirmed,
-                                      timeout=self.confirmation_timeout)
+                self.changed.wait_for(
+                    lambda: self.arm_id != arm_id or self.confirmed, timeout=self.confirmation_timeout
+                )
                 if self.arm_id != arm_id:
                     raise ValueError('The armed preview changed or was disarmed. No job started.')
                 if not self.confirmed or time.monotonic() >= self.challenge_deadline:
                     self.disarm()
-                    raise ValueError('The workstation did not confirm this preview in time. No job started. Reopen and rearm the preview.')
+                    raise ValueError(
+                        'The workstation did not confirm this preview in time. No job started. Reopen and rearm the preview.'
+                    )
             lines, validator = self.lines, self.validator
             self.disarm()  # A failed or ambiguous dispatch also consumes the arm.
             if not self.controller.status()['simulated'] and (not self.allow_physical or not arm_id):

@@ -1,4 +1,5 @@
 """Run CAD macros through the browser and measure the resulting geometry."""
+
 import json
 import math
 from pathlib import Path
@@ -64,7 +65,9 @@ class Workshop:
         self.close()
         self.page.get_by_role('tab', name='Projects', exact=True).click()
         self.loc('#projectNew').click()
-        self.page.wait_for_function('CNCProjects.document().objects.length === 0 && !CNCSolidExchange.model().features.length')
+        self.page.wait_for_function(
+            'CNCProjects.document().objects.length === 0 && !CNCSolidExchange.model().features.length'
+        )
 
     def objects(self):
         return self.page.evaluate('CNCProjects.document().objects')
@@ -82,22 +85,22 @@ class Workshop:
         return json.loads(Path(file.value.path()).read_bytes())
 
     def upload(self, text):
-        self.loc('#cad-macro-file').set_input_files({
-            'name': 'fixtures.kerfkite-macros.json', 'mimeType': 'application/json', 'buffer': text.encode()
-        })
+        self.loc('#cad-macro-file').set_input_files(
+            {'name': 'fixtures.kerfkite-macros.json', 'mimeType': 'application/json', 'buffer': text.encode()}
+        )
 
 
 def command_recipe(workshop):
-    workshop.define('Border', 'commands', COMMANDS, {'width':18})
+    workshop.define('Border', 'commands', COMMANDS, {'width': 18})
     workshop.select('Border')
     workshop.loc('.macro-param-run').fill('24')
     workshop.run_button.click()
     workshop.page.wait_for_function('CNCProjects.document().objects.length === 2')
-    assert workshop.sizes() == [[1,2,25,8],[1,5,24,5]]
+    assert workshop.sizes() == [[1, 2, 25, 8], [1, 5, 24, 5]]
     workshop.command('macro Border width=32')
-    assert workshop.sizes()[2:] == [[1,2,33,8],[1,5,32,5]]
+    assert workshop.sizes()[2:] == [[1, 2, 33, 8], [1, 5, 32, 5]]
     workshop.command('macro Border')
-    assert workshop.sizes()[4:] == [[1,2,19,8],[1,5,18,5]]
+    assert workshop.sizes()[4:] == [[1, 2, 19, 8], [1, 5, 18, 5]]
 
     # The malformed last command must leave both artwork and camera untouched.
     workshop.select('Border')
@@ -112,7 +115,7 @@ def command_recipe(workshop):
 
 
 def solid_recipe(workshop):
-    workshop.define('Strip', 'scad', MODEL, {'width':12, 'offset':0})
+    workshop.define('Strip', 'scad', MODEL, {'width': 12, 'offset': 0})
     workshop.command('macro Strip width=20')
     expect(workshop.loc('#solid-size')).to_have_text('20 × 6 × 3')
     expect(workshop.loc('#solid-volume')).to_have_text(re.compile(r'^360(?:\.0+)?$'))
@@ -120,53 +123,54 @@ def solid_recipe(workshop):
     expect(workshop.loc('#solid-size')).to_have_text('52 × 6 × 3')
     expect(workshop.loc('#solid-volume')).to_have_text(re.compile(r'^576(?:\.0+)?$'))
     before = workshop.feature_model()
-    assert [(f['source'],f['scriptParameters']) for f in before['features']] == [
-        (MODEL,{'width':20,'offset':0}), (MODEL,{'width':12,'offset':40})
+    assert [(f['source'], f['scriptParameters']) for f in before['features']] == [
+        (MODEL, {'width': 20, 'offset': 0}),
+        (MODEL, {'width': 12, 'offset': 40}),
     ]
     field = workshop.loc('#cad-command')
     field.fill('macro Strip width=-1')
     field.press('Enter')
-    expect(workshop.loc('#cad-command-result')).to_contain_text(re.compile(r'positive',re.I))
+    expect(workshop.loc('#cad-command-result')).to_contain_text(re.compile(r'positive', re.I))
     assert workshop.feature_model() == before
     field.fill('macro Strip offset=abc')
     field.press('Enter')
-    expect(workshop.loc('#cad-command-result')).to_contain_text(re.compile(r'number|numeric|finite',re.I))
+    expect(workshop.loc('#cad-command-result')).to_contain_text(re.compile(r'number|numeric|finite', re.I))
     assert workshop.feature_model() == before
 
 
 def library_exchange(workshop):
     original = workshop.export()
     assert original['format'] == 'kerfkite-cad-macros' and original['version'] == 1
-    recipes = {recipe['name']:recipe for recipe in original['macros']}
-    assert (recipes['Border']['source'], recipes['Border']['parameters']) == (COMMANDS, {'width':18})
-    assert recipes['Strip']['source'] == MODEL and recipes['Strip']['parameters'] == {'width':12,'offset':0}
+    recipes = {recipe['name']: recipe for recipe in original['macros']}
+    assert (recipes['Border']['source'], recipes['Border']['parameters']) == (COMMANDS, {'width': 18})
+    assert recipes['Strip']['source'] == MODEL and recipes['Strip']['parameters'] == {'width': 12, 'offset': 0}
     workshop.close()
     workshop.page.reload()
     workshop.ready()
     workshop.select('Border')
     expect(workshop.loc('#cad-macro-source')).to_have_value(COMMANDS)
     workshop.loc('#cad-macro-delete').click()
-    expect(workshop.list.locator('option',has_text='Border')).to_have_count(0)
+    expect(workshop.list.locator('option', has_text='Border')).to_have_count(0)
     workshop.upload(json.dumps(original))
-    expect(workshop.list.locator('option',has_text='Border')).to_have_count(1)
-    restored = {recipe['name']:recipe for recipe in workshop.export()['macros']}
+    expect(workshop.list.locator('option', has_text='Border')).to_have_count(1)
+    restored = {recipe['name']: recipe for recipe in workshop.export()['macros']}
     assert restored == recipes
 
     # Identical definitions merge even after a second import. An invalid file changes nothing.
     workshop.upload(json.dumps(original))
     expect(workshop.list.locator('option')).to_have_count(len(recipes))
     workshop.upload('{')
-    expect(workshop.status).to_contain_text(re.compile(r'json|invalid|expected',re.I))
-    assert {r['name']:r for r in workshop.export()['macros']} == recipes
-    another = {**recipes['Strip'], 'source':'cube([width, 9, 2]);'}
-    workshop.upload(json.dumps({**original,'macros':[another]}))
-    expect(workshop.list.locator('option')).to_have_count(len(recipes)+1)
+    expect(workshop.status).to_contain_text(re.compile(r'json|invalid|expected', re.I))
+    assert {r['name']: r for r in workshop.export()['macros']} == recipes
+    another = {**recipes['Strip'], 'source': 'cube([width, 9, 2]);'}
+    workshop.upload(json.dumps({**original, 'macros': [another]}))
+    expect(workshop.list.locator('option')).to_have_count(len(recipes) + 1)
     merged = workshop.export()['macros']
-    assert any(r['name']!='Strip' and r['source']==another['source'] for r in merged)
-    assert next(r for r in merged if r['name']=='Strip') == recipes['Strip']
-    workshop.upload(json.dumps({**original,'macros':[another]}))
+    assert any(r['name'] != 'Strip' and r['source'] == another['source'] for r in merged)
+    assert next(r for r in merged if r['name'] == 'Strip') == recipes['Strip']
+    workshop.upload(json.dumps({**original, 'macros': [another]}))
     expect(workshop.status).to_contain_text('no new macros')
-    expect(workshop.list.locator('option')).to_have_count(len(recipes)+1)
+    expect(workshop.list.locator('option')).to_have_count(len(recipes) + 1)
     workshop.close()
 
 
@@ -179,8 +183,10 @@ def run(page):
     library_exchange(workshop)
     starter_recipes(workshop)
     assert not errors, errors
-    print('PASS CAD macro authoring, repeat runs, atomic validation, solid measurements, '
-          'browser persistence, library import/export and all starter recipes')
+    print(
+        'PASS CAD macro authoring, repeat runs, atomic validation, solid measurements, '
+        'browser persistence, library import/export and all starter recipes'
+    )
 
 
 def starter_recipes(workshop):
@@ -193,14 +199,14 @@ def starter_recipes(workshop):
         'Flanged bushing': ('22 × 22 × 16', area64 * ((7**2 - 4**2) * 16 + (11**2 - 7**2) * 3)),
     }
     objects = {
-        'Drawing frame': [[0,0,60,30]],
-        'Fastener layout': [[6,6,10,10],[50,6,54,10],[50,26,54,30],[6,26,10,30]],
-        'Rounded tag': [[0,0,60,24]],
-        'Slotted panel': [[0,0,80,40]],
+        'Drawing frame': [[0, 0, 60, 30]],
+        'Fastener layout': [[6, 6, 10, 10], [50, 6, 54, 10], [50, 26, 54, 30], [6, 26, 10, 30]],
+        'Rounded tag': [[0, 0, 60, 24]],
+        'Slotted panel': [[0, 0, 80, 40]],
     }
     # A fresh library is seeded with exactly these examples. Future additions need a measured fixture.
     workshop.open()
-    starter_names = {m['name'] for m in workshop.export()['macros']} - {'Border','Strip','Strip (2)'}
+    starter_names = {m['name'] for m in workshop.export()['macros']} - {'Border', 'Strip', 'Strip (2)'}
     assert starter_names == set(solids) | set(objects), starter_names
     for name in sorted(starter_names):
         workshop.new_project()
@@ -211,14 +217,19 @@ def starter_recipes(workshop):
             expect(workshop.loc('#solid-size')).to_have_text(size)
             expect(workshop.loc('#solid-status')).to_have_text('Solid ready.')
             actual = float(workshop.loc('#solid-volume').inner_text().replace(',', ''))
-            assert math.isclose(actual, volume, abs_tol=.02), (name, actual, volume)
+            assert math.isclose(actual, volume, abs_tol=0.02), (name, actual, volume)
         else:
-            workshop.page.wait_for_function('n => CNCProjects.document().objects.length === n',arg=len(objects[name]))
+            workshop.page.wait_for_function('n => CNCProjects.document().objects.length === n', arg=len(objects[name]))
             assert workshop.sizes() == objects[name], name
-            if name in ('Rounded tag','Slotted panel'):
+            if name in ('Rounded tag', 'Slotted panel'):
                 paths = workshop.objects()[0]['paths']
-                spans = sorted((round(max(x for x,_ in path)-min(x for x,_ in path),3),
-                                round(max(y for _,y in path)-min(y for _,y in path),3)) for path in paths)
-                expected = [(5,5),(60,24)] if name=='Rounded tag' else [(34,3)]*4 + [(80,40)]
+                spans = sorted(
+                    (
+                        round(max(x for x, _ in path) - min(x for x, _ in path), 3),
+                        round(max(y for _, y in path) - min(y for _, y in path), 3),
+                    )
+                    for path in paths
+                )
+                expected = [(5, 5), (60, 24)] if name == 'Rounded tag' else [(34, 3)] * 4 + [(80, 40)]
                 assert spans == expected, (name, spans)
     workshop.close()

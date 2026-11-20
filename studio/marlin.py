@@ -4,6 +4,7 @@ Pause only suspends host transmission. Already buffered movement may continue.
 M112 requires firmware emergency-parser support for immediate processing; neither
 software pause nor abort replaces a physical emergency stop.
 """
+
 import math
 import re
 import threading
@@ -44,12 +45,21 @@ class Controller:
 
     def status(self):
         with self.lock:
-            return dict(connected=self.connected, simulated=self.simulated, state=self.state,
-                        error=self.error, position=None, settings={}, progress=self.progress,
-                        active=self.active, log=list(self.log), protocol='marlin',
-                        notes='Host pause lets buffered motion drain. Position is not polled. '
-                              'Completion uses M400. M112 immediacy depends on firmware; '
-                              'use the hardware emergency stop when needed.')
+            return dict(
+                connected=self.connected,
+                simulated=self.simulated,
+                state=self.state,
+                error=self.error,
+                position=None,
+                settings={},
+                progress=self.progress,
+                active=self.active,
+                log=list(self.log),
+                protocol='marlin',
+                notes='Host pause lets buffered motion drain. Position is not polled. '
+                'Completion uses M400. M112 immediacy depends on firmware; '
+                'use the hardware emergency stop when needed.',
+            )
 
     @staticmethod
     def frame(number, line):
@@ -72,7 +82,7 @@ class Controller:
             self.state = 'Idle' if self.simulated else 'Connecting'
             if not self.simulated:
                 try:
-                    self.serial = self.factory(port, baudrate=115200, timeout=.05, write_timeout=1)
+                    self.serial = self.factory(port, baudrate=115200, timeout=0.05, write_timeout=1)
                 except Exception as exc:
                     self.state = 'Disconnected'
                     raise RuntimeError(f'Cannot open serial port: {exc}') from exc
@@ -131,11 +141,19 @@ class Controller:
             self._idle()
             if not isinstance(lines, list) or not 1 <= len(lines) <= self.MAX_LINES:
                 raise ValueError('Job must contain 1–200000 lines')
-            if any(not isinstance(s, str) or len(s) > 78 or
-                   any(ord(c) < 32 or ord(c) > 126 for c in s) or '*' in s or
-                   '(' in s or ')' in s or '\\' in s or '"' in s or
-                   re.match(r'\s*N\d', s, re.I) or re.match(r'\s*M0*110(?=\D|$)', s, re.I)
-                   for s in lines):
+            if any(
+                not isinstance(s, str)
+                or len(s) > 78
+                or any(ord(c) < 32 or ord(c) > 126 for c in s)
+                or '*' in s
+                or '(' in s
+                or ')' in s
+                or '\\' in s
+                or '"' in s
+                or re.match(r'\s*N\d', s, re.I)
+                or re.match(r'\s*M0*110(?=\D|$)', s, re.I)
+                for s in lines
+            ):
                 raise ValueError('Invalid or pre-numbered G-code line')
             lines = [s.split(';', 1)[0].strip() for s in lines]
             lines = [s for s in lines if s]
@@ -171,7 +189,13 @@ class Controller:
                     distance, feed = float(kwargs['distance']), float(kwargs['feed'])
                 except (KeyError, TypeError, ValueError):
                     raise ValueError('Invalid jog distance/feed') from None
-                if axis not in ('X', 'Y', 'Z') or not math.isfinite(distance) or not math.isfinite(feed) or not 0 < abs(distance) <= 10 or not 0 < feed <= 1000:
+                if (
+                    axis not in ('X', 'Y', 'Z')
+                    or not math.isfinite(distance)
+                    or not math.isfinite(feed)
+                    or not 0 < abs(distance) <= 10
+                    or not 0 < feed <= 1000
+                ):
                     raise ValueError('Jog requires XYZ, at most 10 mm and 1000 mm/min')
                 self.start(['G21', 'G91', f'G1 {axis}{distance:.3f} F{feed:.1f}', 'G90'])
             elif action in ('home', 'zero'):
@@ -242,7 +266,7 @@ class Controller:
         started = time.monotonic()
         initialized = self.simulated
         try:
-            while not self.stop.wait(.01):
+            while not self.stop.wait(0.01):
                 with self.lock:
                     now = time.monotonic()
                     if not self.simulated:

@@ -1,4 +1,5 @@
 """Single-owner, acknowledgement-paced GRBL transport with an explicit simulator."""
+
 import math
 import re
 import threading
@@ -50,9 +51,20 @@ class Controller:
 
     def status(self):
         with self.lock:
-            return dict(connected=self.connected, simulated=self.simulated, state=self.state,
-                        error=self.error, position=dict(self.position) if self.position else None, settings=dict(self.settings), position_count=self.position_count, spindle_type=self.spindle_type, identification=list(self.identification),
-                        progress=self.progress, log=list(self.log), active=self.active)
+            return dict(
+                connected=self.connected,
+                simulated=self.simulated,
+                state=self.state,
+                error=self.error,
+                position=dict(self.position) if self.position else None,
+                settings=dict(self.settings),
+                position_count=self.position_count,
+                spindle_type=self.spindle_type,
+                identification=list(self.identification),
+                progress=self.progress,
+                log=list(self.log),
+                active=self.active,
+            )
 
     def connect(self, port):
         if port != 'simulator' and port not in [p['device'] for p in self.ports()]:
@@ -75,7 +87,7 @@ class Controller:
                 self.settings = {'30': 1000, '32': 0}
             else:
                 try:
-                    self.serial = self.factory(port, baudrate=115200, timeout=.05, write_timeout=1)
+                    self.serial = self.factory(port, baudrate=115200, timeout=0.05, write_timeout=1)
                 except Exception as exc:
                     self.state = 'Disconnected'
                     raise RuntimeError(f'Cannot open serial port: {exc}') from exc
@@ -196,8 +208,9 @@ class Controller:
                     self._check_timeouts(now)
                 if self.error or not self.ready or not self.paused:
                     raise RuntimeError('No resumable held job')
-                if not self.simulated and (self.held_since is None or self.state != 'Hold'
-                                            or now - self.last_status > 2):
+                if not self.simulated and (
+                    self.held_since is None or self.state != 'Hold' or now - self.last_status > 2
+                ):
                     raise RuntimeError('Wait for a fresh, fully stopped feed hold before resuming')
                 self._write(b'~')
                 self._end_confirmed_hold(now)
@@ -218,7 +231,12 @@ class Controller:
                     distance, feed = float(kwargs['distance']), float(kwargs['feed'])
                 except (KeyError, TypeError, ValueError):
                     raise ValueError('Invalid jog distance/feed') from None
-                if not math.isfinite(distance) or not math.isfinite(feed) or not 0 < abs(distance) <= 10 or not 0 < feed <= 1000:
+                if (
+                    not math.isfinite(distance)
+                    or not math.isfinite(feed)
+                    or not 0 < abs(distance) <= 10
+                    or not 0 < feed <= 1000
+                ):
                     raise ValueError('Jog limited to 10 mm and 1000 mm/min')
                 line = f'$J=G91 G21 {axis}{distance:.3f} F{feed:.1f}'
             else:
@@ -282,7 +300,13 @@ class Controller:
                 self.active = self.draining = self.paused = False
                 self.hold_requested_at = self.held_since = self.resume_requested_at = None
                 self.progress = 100
-            if '30' in self.settings and '32' in self.settings and not self.pending and not self.init_remaining and not self.error:
+            if (
+                '30' in self.settings
+                and '32' in self.settings
+                and not self.pending
+                and not self.init_remaining
+                and not self.error
+            ):
                 self.ready = True
         elif line.startswith('$') and '=' in line:
             key, value = line[1:].split('=', 1)
@@ -294,7 +318,8 @@ class Controller:
             try:
                 parsed = float(value.split()[0])
                 if not math.isfinite(parsed):
-                    self._fault('Nonfinite controller setting readback');return
+                    self._fault('Nonfinite controller setting readback')
+                    return
                 self.settings[key] = parsed
             except ValueError:
                 pass
@@ -305,12 +330,13 @@ class Controller:
                 if any(re.fullmatch(r'\[AXS:[4-9]:XYZ[A-Z]+\]', line) for line in self.identification):
                     self.init_remaining.append('$376')
             if self.pending == '$I' and any(
-                    re.fullmatch(r'\[MSG:Using machine:CNC_xPRO_V5_XYAZ_(?:NC|NO)\]', row) for row in self.identification):
-                self.init_remaining.extend(('$Spindle/Type','$Laser/FullPower'))
+                re.fullmatch(r'\[MSG:Using machine:CNC_xPRO_V5_XYAZ_(?:NC|NO)\]', row) for row in self.identification
+            ):
+                self.init_remaining.extend(('$Spindle/Type', '$Laser/FullPower'))
             self.pending = None
             if not self.active and self.init_remaining and not self.error:
                 self.pending = self.init_remaining.popleft()
-                self._write((self.pending+'\n').encode('ascii'))
+                self._write((self.pending + '\n').encode('ascii'))
                 self.sent_at = now
             if self.active:
                 self.acked += 1
@@ -341,7 +367,7 @@ class Controller:
         polled = started
         initialized = False
         try:
-            while not self.stop.wait(.01):
+            while not self.stop.wait(0.01):
                 with self.lock:
                     now = time.monotonic()
                     if self.simulated:
@@ -352,7 +378,12 @@ class Controller:
                                 if line.startswith(('G0 ', 'G1 ')):
                                     for word in line.split()[1:]:
                                         if re.fullmatch(r'[XYZABC][+-]?(?:\d+(?:\.\d*)?|\.\d+)', word):
-                                            self.position = self.position or {'basis':'WPos','x':0.0,'y':0.0,'z':0.0}
+                                            self.position = self.position or {
+                                                'basis': 'WPos',
+                                                'x': 0.0,
+                                                'y': 0.0,
+                                                'z': 0.0,
+                                            }
                                             self.position[word[0].lower()] = float(word[1:])
                                 self.acked += 1
                                 self.progress = min(99, self.acked / self.total * 100)
@@ -374,7 +405,7 @@ class Controller:
                     self._check_timeouts(now)
                     if raw:
                         self._receive(raw.decode('ascii', errors='replace').strip())
-                    if now - polled > .25:
+                    if now - polled > 0.25:
                         self._write(b'?')
                         polled = now
                     if self.active and not self.paused and not self.pending and self.queue and not self.error:

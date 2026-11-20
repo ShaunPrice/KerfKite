@@ -24,11 +24,15 @@ class PendantTests(unittest.TestCase):
         self.client = create_monitor_app(self.controller, 'x' * 43, self.jobs).test_client()
 
     def post(self, action, **values):
-        return self.client.post('/api/pendant', json=dict(action=action, request_id=str(uuid4()), control_epoch=self.jobs.control_epoch, **values), headers=self.headers)
+        return self.client.post(
+            '/api/pendant',
+            json=dict(action=action, request_id=str(uuid4()), control_epoch=self.jobs.control_epoch, **values),
+            headers=self.headers,
+        )
 
     def test_step_disarms_and_duplicate_is_rejected(self):
         self.jobs.arm(['M5'])
-        request = dict(action='jog', axis='X', distance=.5, feed=100, request_id=str(uuid4()))
+        request = dict(action='jog', axis='X', distance=0.5, feed=100, request_id=str(uuid4()))
         request['control_epoch'] = self.jobs.control_epoch
         self.assertEqual(self.client.post('/api/pendant', json=request).status_code, 401)
         self.assertEqual(self.client.post('/api/pendant', json=request, headers=self.headers).status_code, 200)
@@ -36,10 +40,14 @@ class PendantTests(unittest.TestCase):
         self.assertIn('already', self.client.post('/api/pendant', json=request, headers=self.headers).json['error'])
 
     def test_active_job_and_invalid_commands(self):
-        for data in [dict(action='raw'),dict(action='home', value='extra'),
-                     dict(action='jog',axis='A',distance=1,feed=200), dict(action='jog',axis='Y',distance=12,feed=100)]:
+        for data in [
+            dict(action='raw'),
+            dict(action='home', value='extra'),
+            dict(action='jog', axis='A', distance=1, feed=200),
+            dict(action='jog', axis='Y', distance=12, feed=100),
+        ]:
             self.assertEqual(self.post(**data).status_code, 400)
-        self.jobs.arm(['M5']*60)
+        self.jobs.arm(['M5'] * 60)
         self.jobs.start()
         self.assertEqual(self.post('zero').status_code, 400)
 
@@ -47,22 +55,23 @@ class PendantTests(unittest.TestCase):
         service = PhoneMonitor(self.controller, self.jobs, port=0)
         client = create_app(self.controller, self.jobs, phone_monitor=service).test_client()
         self.addCleanup(service.disable)
-        request = lambda action, headers: client.post('/api/phone-monitor', json={'action':action}, headers=headers)
+        request = lambda action, headers: client.post('/api/phone-monitor', json={'action': action}, headers=headers)
         self.assertEqual(request('enable', {}).status_code, 403)
         auth = {'X-Studio-Token': client.get('/api/session').json['token']}
         first = request('enable', auth).json
         self.assertTrue(first['enabled'])
         self.assertEqual(first['token'], request('status', auth).json['token'])
         old = create_monitor_app(self.controller, first['token'], self.jobs, service.revoked).test_client()
-        bearer = {'Authorization':'Bearer '+first['token']}
+        bearer = {'Authorization': 'Bearer ' + first['token']}
         self.assertTrue(old.get('/api/status', headers=bearer).json['pendant'])
         self.assertFalse(request('disable', auth).json['enabled'])
-        self.assertEqual(old.get('/api/status',headers=bearer).status_code, 401)
-        self.assertNotEqual(first['token'],request('enable', auth).json['token'])
+        self.assertEqual(old.get('/api/status', headers=bearer).status_code, 401)
+        self.assertNotEqual(first['token'], request('enable', auth).json['token'])
 
     @unittest.skipUnless(find_spec('cheroot') and find_spec('cryptography'), 'HTTPS web extra required')
     def test_trusted_https_request(self):
         from studio.web_server import certificate
+
         with TemporaryDirectory() as directory:
             cert = Path(directory) / 'server.pem'
             key = Path(directory) / 'server-key.pem'

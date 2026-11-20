@@ -1,4 +1,5 @@
 """Exercise one signed Pocket, a real browser workstation and the simulated machine together."""
+
 import argparse
 from contextlib import contextmanager
 import logging
@@ -13,6 +14,7 @@ import time
 from flask import request
 from playwright.sync_api import sync_playwright
 from werkzeug.serving import make_server
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from android_pendant_workflow import Phone, wait_until
 from phone_arm_workflow import arm_preview, connect_editor
@@ -127,9 +129,13 @@ def run(phone, apk, chrome):
             wait_until(lambda: responses == [("start", 200)], "Workstation-confirmed Start failed.")
             assert confirmations == [200] and not jobs.status()["armed"]
             wait_until(lambda: not controller.status()["active"], "Simulated job did not finish.")
-            print("PASS signed Pocket Start with browser-generated preview and live workstation confirmation", flush=True)
+            print(
+                "PASS signed Pocket Start with browser-generated preview and live workstation confirmation", flush=True
+            )
 
-            wait_until(lambda: phone.find("Manual controls enabled · No job armed"), "First native job status did not settle.")
+            wait_until(
+                lambda: phone.find("Manual controls enabled · No job armed"), "First native job status did not settle."
+            )
             arm_preview(page)
             # Locate real native buttons before measuring the short confirmation interval:
             # UIAutomator's hierarchy dump waits for an idle display.
@@ -138,29 +144,43 @@ def run(phone, apk, chrome):
             positive = wait_until(lambda: button_location(phone, "Stop", dialog=True), "Missing Stop confirmation.")
             phone.run("shell", "input", "keyevent", "KEYCODE_BACK")
             phone.tap("Start", button=True)
-            start_confirm = wait_until(lambda: button_location(phone, "Start", dialog=True), "Missing Start confirmation.")
+            start_confirm = wait_until(
+                lambda: button_location(phone, "Start", dialog=True), "Missing Start confirmation."
+            )
             delay_confirm.set()
             touch(phone, start_confirm)
-            assert saw_confirm.wait(5), ("Missing pending Start", [r["action"] for r in requests], responses, action_errors)
+            assert saw_confirm.wait(5), (
+                "Missing pending Start",
+                [r["action"] for r in requests],
+                responses,
+                action_errors,
+            )
             touch(phone, stop)
-            time.sleep(.20)  # Native dialog opening animation.
+            time.sleep(0.20)  # Native dialog opening animation.
             touch(phone, positive)
             assert stop_done.wait(1.3), "Same phone could not stop its own pending Start."
             release_confirm.set()
-            wait_until(lambda: ("start", 400) in responses and 400 in confirmations, "Overtaken Start/confirmation was accepted.")
+            wait_until(
+                lambda: ("start", 400) in responses and 400 in confirmations,
+                "Overtaken Start/confirmation was accepted.",
+            )
             assert not jobs.status()["armed"] and not controller.status()["active"]
             wait_until(lambda: phone.find("Receiver acknowledged stop."), "Late Start replaced the Stop status.")
-            print("PASS same phone cancels pending Start, late browser confirmation rejected, fresh Stop result retained", flush=True)
+            print(
+                "PASS same phone cancels pending Start, late browser confirmation rejected, fresh Stop result retained",
+                flush=True,
+            )
 
             # Hold a normal jog request before the server operation lock, then deliver
             # the ordinary POST after Stop has rotated the receiver's control generation.
-            delay_jog.set(); stop_done.clear()
+            delay_jog.set()
+            stop_done.clear()
             jog = wait_until(lambda: phone.find("Jog X positive", button=True), "Idle jog unavailable.")
             stop = button_location(phone, "Stop")
             touch(phone, jog)
             assert saw_jog.wait(1.2)
             touch(phone, stop)
-            time.sleep(.20)
+            time.sleep(0.20)
             touch(phone, positive)
             assert stop_done.wait(1.3), "Stop was blocked by the pending jog."
             release_jog.set()
@@ -172,10 +192,13 @@ def run(phone, apk, chrome):
             delay_confirm.clear()
             legacy.set()
             arm_preview(page)
-            wait_until(lambda: phone.find("Update the Studio receiver for motion controls · Job armed"),
-                       "Receiver without control generation did not prompt for update.")
+            wait_until(
+                lambda: phone.find("Update the Studio receiver for motion controls · Job armed"),
+                "Receiver without control generation did not prompt for update.",
+            )
             assert phone.find("Start", button=True) is None and phone.find("Jog X positive", button=True) is None
-            phone.tap("Stop", button=True); phone.confirm()
+            phone.tap("Stop", button=True)
+            phone.confirm()
             wait_until(lambda: not jobs.status()["armed"], "Stop failed on legacy status.")
             assert [r["action"] for r in requests] == ["start", "start", "stop", "jog", "stop", "stop"]
             assert len({r["request_id"] for r in requests}) == len(requests)

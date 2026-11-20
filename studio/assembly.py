@@ -1,4 +1,5 @@
 """Rigid assemblies of parametric solid parts, in millimetres and degrees."""
+
 import itertools
 import math
 
@@ -14,8 +15,11 @@ MAX_TRIANGLES = 150_000
 
 
 def _vector(value):
-    if (not isinstance(value, list) or len(value) != 3 or
-            any(type(v) not in (int, float) or not -100_000 <= v <= 100_000 for v in value)):
+    if (
+        not isinstance(value, list)
+        or len(value) != 3
+        or any(type(v) not in (int, float) or not -100_000 <= v <= 100_000 for v in value)
+    ):
         raise ValueError('Use three finite coordinates within ±100000')
     return np.array(value, dtype=float)
 
@@ -30,9 +34,9 @@ def _pose(frame):
     # Extrinsic XYZ orientation, equivalent to Rz @ Ry @ Rx.
     matrix = np.eye(4)
     matrix[:3, :3] = [
-        [cz*cy, cz*sy*sx - sz*cx, cz*sy*cx + sz*sx],
-        [sz*cy, sz*sy*sx + cz*cx, sz*sy*cx - cz*sx],
-        [-sy, cy*sx, cy*cx],
+        [cz * cy, cz * sy * sx - sz * cx, cz * sy * cx + sz * sx],
+        [sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx],
+        [-sy, cy * sx, cy * cx],
     ]
     matrix[:3, 3] = position
     return matrix
@@ -86,19 +90,24 @@ def solve(document, include_mesh=False):
         local[child] = _joint(mate)
 
     world = {}
+
     def resolve(name, visiting):
         if name in visiting:
             raise ValueError('Assembly mates contain a cycle')
         if name not in world:
-            world[name] = (resolve(parents[name], visiting | {name}) @ local[name]
-                           if name in parents else free[name])
+            world[name] = resolve(parents[name], visiting | {name}) @ local[name] if name in parents else free[name]
         return world[name]
+
     for name in free:
         resolve(name, set())
 
-    world = fit(world, {m['child']: m for m in mates},
-                {name: frame for name, frame in free.items() if name not in parents},
-                document.get('constraints', []), _pose)
+    world = fit(
+        world,
+        {m['child']: m for m in mates},
+        {name: frame for name, frame in free.items() if name not in parents},
+        document.get('constraints', []),
+        _pose,
+    )
 
     solids, result, contacts, collisions = {}, {}, [], []
     total_triangles = 0
@@ -118,7 +127,7 @@ def solve(document, include_mesh=False):
 
     for a, b in itertools.combinations(solids, 2):
         ba, bb = result[a]['bounds'], result[b]['bounds']
-        if any(ba[i+3] + CONTACT_MM < bb[i] or bb[i+3] + CONTACT_MM < ba[i] for i in range(3)):
+        if any(ba[i + 3] + CONTACT_MM < bb[i] or bb[i + 3] + CONTACT_MM < ba[i] for i in range(3)):
             continue
         overlap = solids[a] ^ solids[b]
         if overlap.status() != kernel.Error.NoError:
@@ -134,14 +143,41 @@ def solve(document, include_mesh=False):
 def example_assembly():
     """A shaft constrained to the bore of an upright bearing plate."""
     bore = [20, 15, 0]
-    return {'version': 1, 'parts': [
-        {'id': 'Bearing plate', 'model': {'version': 1, 'features': [
-            {'id': 'plate', 'kind': 'box', 'size': [40, 30, 8]},
-            {'id': 'bore', 'kind': 'cylinder', 'op': 'cut', 'height': 10, 'radius': 5, 'origin': [20, 15, -1]}]}},
-        {'id': 'Shaft', 'model': {'version': 1, 'features': [
-            {'id': 'shaft', 'kind': 'cylinder', 'radius': 4, 'height': 24}]}},
-    ], 'mates': [{'child': 'Shaft', 'parent': 'Bearing plate', 'kind': 'concentric',
-                  'parentFrame': {'origin': bore}, 'offset': [0, 0, -4]}]}
+    return {
+        'version': 1,
+        'parts': [
+            {
+                'id': 'Bearing plate',
+                'model': {
+                    'version': 1,
+                    'features': [
+                        {'id': 'plate', 'kind': 'box', 'size': [40, 30, 8]},
+                        {
+                            'id': 'bore',
+                            'kind': 'cylinder',
+                            'op': 'cut',
+                            'height': 10,
+                            'radius': 5,
+                            'origin': [20, 15, -1],
+                        },
+                    ],
+                },
+            },
+            {
+                'id': 'Shaft',
+                'model': {'version': 1, 'features': [{'id': 'shaft', 'kind': 'cylinder', 'radius': 4, 'height': 24}]},
+            },
+        ],
+        'mates': [
+            {
+                'child': 'Shaft',
+                'parent': 'Bearing plate',
+                'kind': 'concentric',
+                'parentFrame': {'origin': bore},
+                'offset': [0, 0, -4],
+            }
+        ],
+    }
 
 
 def register(app):

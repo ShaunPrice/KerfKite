@@ -1,4 +1,5 @@
 """Read foreign drawing and toolpath files as editable artwork for layer-gated review."""
+
 import io
 import math
 import re
@@ -8,8 +9,8 @@ from pathlib import Path
 from flask import jsonify, request
 
 
-UNITS = {'mm': 1., 'in': 25.4, 'inch': 25.4, 'cm': 10., 'm': 1000., 'ft': 304.8}
-TOLERANCE = .025   # millimetres
+UNITS = {'mm': 1.0, 'in': 25.4, 'inch': 25.4, 'cm': 10.0, 'm': 1000.0, 'ft': 304.8}
+TOLERANCE = 0.025  # millimetres
 MAX_POINTS = 100_000
 MAX_PATHS = 3000
 NUMBER = r'[-+]?(?:\d+(?:\.\d*)?|\.\d+)'
@@ -43,16 +44,16 @@ class Drawing:
 
     def finish(self):
         if not self.objects:
-            raise ValueError('File contains no supported drawing paths' +
-                             ('. ' + ' '.join(self.warnings) if self.warnings else ''))
+            raise ValueError(
+                'File contains no supported drawing paths' + ('. ' + ' '.join(self.warnings) if self.warnings else '')
+            )
         # The sender accepts at most 100 ordered operations. Retain individually
         # selectable contours on small drawings and batch long consecutive runs
         # with identical layer/depth semantics on more densely posted artwork.
         if len(self.objects) > 100:
             groups = []
             for obj in self.objects:
-                if (groups and groups[-1]['sourceLayer'] == obj['sourceLayer']
-                        and groups[-1].keys() == obj.keys()):
+                if groups and groups[-1]['sourceLayer'] == obj['sourceLayer'] and groups[-1].keys() == obj.keys():
                     group = groups[-1]
                     group['name'] = group['sourceLayer'][:80] + ' contours'
                     for key in ('paths', 'depths', 'sourceZ'):
@@ -61,21 +62,31 @@ class Drawing:
                 else:
                     groups.append(obj)
             self.objects = groups
-        return {'objects': self.objects, 'layers': list(self.layers.values()),
-                'presets': self.presets, 'devices': [], 'warnings': self.warnings,
-                'mode': self.mode}
+        return {
+            'objects': self.objects,
+            'layers': list(self.layers.values()),
+            'presets': self.presets,
+            'devices': [],
+            'warnings': self.warnings,
+            'mode': self.mode,
+        }
 
 
 def _arc(start, centre, sweep, radius):
     if not 0 < radius <= 1e6 or not 0 < abs(sweep) <= math.tau + 1e-9:
         raise ValueError('Arc radius or sweep outside supported range')
-    delta = min(math.pi / 8, 4 * math.asin(math.sqrt(min(1., TOLERANCE / (2 * radius)))))
+    delta = min(math.pi / 8, 4 * math.asin(math.sqrt(min(1.0, TOLERANCE / (2 * radius)))))
     count = math.ceil(abs(sweep) / delta)
     if count > MAX_POINTS:
         raise ValueError('Arc is too large to flatten')
     angle = math.atan2(start[1] - centre[1], start[0] - centre[0])
-    return [[centre[0] + radius * math.cos(angle + sweep * i / count),
-             centre[1] + radius * math.sin(angle + sweep * i / count)] for i in range(1, count + 1)]
+    return [
+        [
+            centre[0] + radius * math.cos(angle + sweep * i / count),
+            centre[1] + radius * math.sin(angle + sweep * i / count),
+        ]
+        for i in range(1, count + 1)
+    ]
 
 
 def _dxf_clip_polygon(clip, transform):
@@ -85,10 +96,15 @@ def _dxf_clip_polygon(clip, transform):
 
     spatial = clip.get_spatial_filter()
     dxf = spatial.dxf
-    if (clip.is_inverted_clip or dxf.has_front_clipping_plane or dxf.has_back_clipping_plane
-            or not dxf.extrusion.isclose(Z_AXIS) or dxf.origin.x or dxf.origin.y
-            or not all(math.isclose(a, b, abs_tol=1e-12)
-                       for a, b in zip(spatial.transform_matrix, Matrix44()))):
+    if (
+        clip.is_inverted_clip
+        or dxf.has_front_clipping_plane
+        or dxf.has_back_clipping_plane
+        or not dxf.extrusion.isclose(Z_AXIS)
+        or dxf.origin.x
+        or dxf.origin.y
+        or not all(math.isclose(a, b, abs_tol=1e-12) for a, b in zip(spatial.transform_matrix, Matrix44()))
+    ):
         raise ValueError('unsupported inverted, 3D or custom-plane XCLIP')
     matrix = spatial.inverse_insert_matrix @ transform
     # Clipping is an infinite prism through XY. A tilted axis needs a 3D intersection.
@@ -157,6 +173,7 @@ def _dxf(text, default_scale):
     from ezdxf.math import Matrix44
     from ezdxf.path import make_path
     from ezdxf.xclip import XClip
+
     try:
         doc = ezdxf.read(io.StringIO(text))
     except (ezdxf.DXFError, TypeError, ValueError, IndexError, StopIteration) as exc:
@@ -247,6 +264,7 @@ def _dxf(text, default_scale):
             if color:
                 drawing.layers[layer]['color'] = '#%02x%02x%02x' % tuple(color)
             drawing.layers[layer]['visible'] = not (entry.is_off() or entry.is_frozen())
+
     try:
         unit_transform = Matrix44.scale(scale)
         for entity in doc.modelspace():
@@ -254,10 +272,14 @@ def _dxf(text, default_scale):
     except ezdxf.DXFError as exc:
         raise ValueError('Malformed or unsupported DXF entity') from exc
     if clipped_instances:
-        drawing.warnings.append(f'Applied XCLIP to {clipped_instances} block instance(s). Only visible contour segments are retained.')
+        drawing.warnings.append(
+            f'Applied XCLIP to {clipped_instances} block instance(s). Only visible contour segments are retained.'
+        )
     if skipped:
         drawing.warnings.append('Skipped DXF entities: ' + ', '.join(f'{k} ({v})' for k, v in sorted(skipped.items())))
-    drawing.warnings.append('Imported model-space outlines in XY. Elevation, widths, paper layouts and plot styles are omitted.')
+    drawing.warnings.append(
+        'Imported model-space outlines in XY. Elevation, widths, paper layouts and plot styles are omitted.'
+    )
     return drawing.finish()
 
 
@@ -265,11 +287,13 @@ def _hpgl(text):
     drawing = Drawing()
     drawing.mode = 'knife'
     absolute, down, pen = True, False, 1
-    position = [0., 0.]
+    position = [0.0, 0.0]
     stroke = []
+
     def flush():
         drawing.path(f'Pen {pen} stroke', f'Pen {pen}', stroke.copy())
         stroke.clear()
+
     def move(point):
         nonlocal position
         if down and pen > 0 and position != point:
@@ -279,6 +303,7 @@ def _hpgl(text):
             if drawing.points + len(stroke) > MAX_POINTS:
                 raise ValueError('Simplify HP-GL pen strokes')
         position = point
+
     velocities, forces = {}, {}
     for idx, statement in enumerate(text.split(';'), 1):
         statement = statement.strip().upper()
@@ -292,11 +317,11 @@ def _hpgl(text):
         if op in ('IN', 'DF') and not values:
             flush()
             if op == 'IN':
-                pen, position = 1, [0., 0.]
+                pen, position = 1, [0.0, 0.0]
             absolute, down = True, False
         elif op == 'SP' and len(values) <= 1:
             flush()
-            chosen = values[0] if values else 0.
+            chosen = values[0] if values else 0.0
             if not chosen.is_integer() or not 0 <= chosen <= 255:
                 raise ValueError('Pen number must be between 0 and 255')
             pen = int(chosen)
@@ -309,8 +334,7 @@ def _hpgl(text):
             else:
                 down = True
             for x, y in zip(values[::2], values[1::2]):
-                move([x / 40 + (0 if absolute else position[0]),
-                      y / 40 + (0 if absolute else position[1])])
+                move([x / 40 + (0 if absolute else position[0]), y / 40 + (0 if absolute else position[1])])
         elif op in ('AA', 'AR') and len(values) in (3, 4):
             centre = [v / 40 + (position[i] if op == 'AR' else 0) for i, v in enumerate(values[:2])]
             for point in _arc(position, centre, math.radians(values[2]), math.dist(position, centre)):
@@ -337,13 +361,15 @@ def _hpgl(text):
     flush()
     for pen_id, speeds in velocities.items():
         for speed in sorted(speeds):
-            feed = speed * 600    # HP-GL VS uses centimetres / second
+            feed = speed * 600  # HP-GL VS uses centimetres / second
             if 1 <= feed <= 10_000:
                 drawing.presets.append({'name': f'Pen {pen_id} · {speed:g} cm/s', 'settings': {'feed': feed}})
         drawing.warnings.append(f'Pen {pen_id} velocity (cm/s): ' + ', '.join(f'{v:g}' for v in sorted(speeds)))
     for pen_id, pressures in forces.items():
         drawing.warnings.append(f'Pen {pen_id} force (source units): ' + ', '.join(f'{v:g}' for v in sorted(pressures)))
-    drawing.warnings.append('HP-GL uses 40 plotter units per mm. Pen travel is omitted. Confirm blade offset, drag depth and pressure on the target cutter.')
+    drawing.warnings.append(
+        'HP-GL uses 40 plotter units per mm. Pen travel is omitted. Confirm blade offset, drag depth and pressure on the target cutter.'
+    )
     return drawing.finish()
 
 
@@ -351,11 +377,10 @@ def _arc_centre(start, end, radius, clockwise):
     chord = math.dist(start, end)
     if chord == 0 or chord > 2 * abs(radius) + 1e-8:
         raise ValueError('Ambiguous or impossible radius-format arc')
-    offset = math.sqrt(max(0., radius ** 2 - chord ** 2 / 4))
+    offset = math.sqrt(max(0.0, radius**2 - chord**2 / 4))
     side = (-1 if clockwise else 1) * (-1 if radius < 0 else 1)
     dx, dy = (end[0] - start[0]) / chord, (end[1] - start[1]) / chord
-    return [(start[0]+end[0]) / 2 - side * offset * dy,
-            (start[1]+end[1]) / 2 + side * offset * dx]
+    return [(start[0] + end[0]) / 2 - side * offset * dy, (start[1] + end[1]) / 2 + side * offset * dx]
 
 
 def _gcode(text, default_scale):
@@ -380,8 +405,10 @@ def _gcode(text, default_scale):
         heights.clear()
 
     for index, raw in enumerate(text.splitlines(), 1):
+
         def fail(why):
             raise ValueError(f'G-code line {index}: {why}')
+
         raw = raw.split(';')[0].upper()
         raw = re.sub(r'\([^()]*\)', '', raw).strip()
         if not raw or raw == '%':
@@ -392,7 +419,7 @@ def _gcode(text, default_scale):
         args = {}
         gcodes, mcodes = [], []
         for match in words.finditer(raw):
-            if raw[cursor:match.start()].strip():
+            if raw[cursor : match.start()].strip():
                 fail('unsupported expressions or syntax')
             cursor = match.end()
             key, number = match[1], float(match[2])
@@ -417,7 +444,7 @@ def _gcode(text, default_scale):
             elif code == 80:
                 motion = None
             elif code in (20, 21):
-                scale, explicit_units = (25.4 if code == 20 else 1.), True
+                scale, explicit_units = (25.4 if code == 20 else 1.0), True
             elif code in (90, 91):
                 absolute = code == 90
             elif code in (90.1, 91.1):
@@ -480,16 +507,15 @@ def _gcode(text, default_scale):
                 elif any(k in args for k in 'IJ'):
                     if absolute_centre and not {'I', 'J'} <= args.keys():
                         fail('absolute arc centres require I and J')
-                    centre = [args.get(k, 0) * scale + (0 if absolute_centre else start[i])
-                              for i, k in enumerate('IJ')]
+                    centre = [args.get(k, 0) * scale + (0 if absolute_centre else start[i]) for i, k in enumerate('IJ')]
                 else:
                     fail('missing arc centre')
                 radius = math.dist(start, centre)
-                if abs(radius - math.dist(end, centre)) > max(.005, radius * .0001):
+                if abs(radius - math.dist(end, centre)) > max(0.005, radius * 0.0001):
                     fail('inconsistent arc endpoints and centre')
-                angles = [math.atan2(p[1]-centre[1], p[0]-centre[0]) for p in (start, end)]
+                angles = [math.atan2(p[1] - centre[1], p[0] - centre[0]) for p in (start, end)]
                 sign = -1 if motion == 2 else 1
-                sweep = ((angles[1]-angles[0])*sign) % math.tau or math.tau
+                sweep = ((angles[1] - angles[0]) * sign) % math.tau or math.tau
                 points = _arc(start, centre, sign * sweep, radius)
                 points[-1] = end
             else:
@@ -504,7 +530,7 @@ def _gcode(text, default_scale):
                 if position[2] is None or target[2] is None:
                     heights.append(None)
                 else:
-                    heights.append(position[2] + (target[2]-position[2]) * i / len(points))
+                    heights.append(position[2] + (target[2] - position[2]) * i / len(points))
         elif target[2] != position[2]:
             # Start a new contour at the changed height instead of inventing a
             # sloping segment or attaching a drill plunge to unrelated artwork.
@@ -517,16 +543,21 @@ def _gcode(text, default_scale):
         if 1 <= feed <= 10000:
             drawing.presets.append({'name': f'Posted feed · {feed:g} mm/min', 'settings': {'feed': feed}})
     if feeds:
-        drawing.warnings.append(f'Source feed range {min(feeds):g}–{max(feeds):g} mm/min. Up to 32 feeds retained as presets.')
+        drawing.warnings.append(
+            f'Source feed range {min(feeds):g}–{max(feeds):g} mm/min. Up to 32 feeds retained as presets.'
+        )
     if speeds:
-        drawing.warnings.append(f'Source S range {min(speeds):g}–{max(speeds):g}. Power/RPM requires a matching controller configuration.')
+        drawing.warnings.append(
+            f'Source S range {min(speeds):g}–{max(speeds):g}. Power/RPM requires a matching controller configuration.'
+        )
     if assumed_start:
         drawing.warnings.append('Initial feed with unknown XY start excluded; subsequent positioned geometry retained.')
     if used_fallback:
         drawing.warnings.append(f'Motion before a units command interpreted at {default_scale:g} mm per unit.')
-    drawing.warnings.append('Feed contours imported. Rapids, stationary plunges, dwell and output commands are omitted. Compatible cutting Z is stored as depth; other known Z as source metadata. Regenerate with reviewed CAM settings.')
+    drawing.warnings.append(
+        'Feed contours imported. Rapids, stationary plunges, dwell and output commands are omitted. Compatible cutting Z is stored as depth; other known Z as source metadata. Regenerate with reviewed CAM settings.'
+    )
     return drawing.finish()
-
 
 
 def _linuxcnc_ini(text):
@@ -551,7 +582,7 @@ def _linuxcnc_ini(text):
             raise ValueError(f'Duplicate [{section}]{key} at line {index}')
         values[section, key] = value
     unit = values.get(('TRAJ', 'LINEAR_UNITS'))
-    scale = {'MM': 1., 'METRIC': 1., 'IN': 25.4, 'INCH': 25.4, 'IMPERIAL': 25.4}.get(unit)
+    scale = {'MM': 1.0, 'METRIC': 1.0, 'IN': 25.4, 'INCH': 25.4, 'IMPERIAL': 25.4}.get(unit)
     if scale is None:
         raise ValueError('LinuxCNC INI needs explicit [TRAJ]LINEAR_UNITS in mm or inch')
     coords = values.get(('TRAJ', 'COORDINATES'))
@@ -574,7 +605,7 @@ def _linuxcnc_ini(text):
             fields[key] = value
         if axis == 'Z' and not fields:
             continue
-        if not {'MIN_LIMIT','MAX_LIMIT'} <= fields.keys():
+        if not {'MIN_LIMIT', 'MAX_LIMIT'} <= fields.keys():
             raise ValueError(f'Supply both [{section}]MIN_LIMIT and MAX_LIMIT')
         lo, hi = fields['MIN_LIMIT'], fields['MAX_LIMIT']
         span = hi - lo
@@ -582,16 +613,25 @@ def _linuxcnc_ini(text):
             raise ValueError(f'Invalid or unsupported {axis} travel span')
         spans[axis] = span
         notes.append(f'{axis} limits {lo:g} to {hi:g} mm; travel {span:g} mm.')
-        for key, title, unit_label in [('MAX_VELOCITY','velocity','mm/s'),
-                                       ('MAX_ACCELERATION','acceleration','mm/s²')]:
+        for key, title, unit_label in [
+            ('MAX_VELOCITY', 'velocity', 'mm/s'),
+            ('MAX_ACCELERATION', 'acceleration', 'mm/s²'),
+        ]:
             if key in fields:
                 if fields[key] <= 0:
                     raise ValueError(f'[{section}]{key} must be positive')
                 notes.append(f'{axis} maximum {title} {fields[key]:g} {unit_label}.')
-    notes.append('The workspace setup stores XY travel. Axis limits, velocity and acceleration are source references. HAL, routing, joint settings, homing and external files are omitted.')
-    return {'objects': [], 'layers': [], 'presets': [], 'devices': [
-        {'name': 'LinuxCNC workspace', 'width': spans['X'], 'height': spans['Y']}],
-        'warnings': notes, 'mode': None}
+    notes.append(
+        'The workspace setup stores XY travel. Axis limits, velocity and acceleration are source references. HAL, routing, joint settings, homing and external files are omitted.'
+    )
+    return {
+        'objects': [],
+        'layers': [],
+        'presets': [],
+        'devices': [{'name': 'LinuxCNC workspace', 'width': spans['X'], 'height': spans['Y']}],
+        'warnings': notes,
+        'mode': None,
+    }
 
 
 def import_program(payload):
@@ -622,6 +662,7 @@ def register(app):
     @app.post('/api/pdf-import')
     def review_pdf():
         from .pdf_import import import_pdf
+
         return jsonify(import_pdf(request.get_json()))
 
     @app.post('/api/program-import')

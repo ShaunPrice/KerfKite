@@ -1,4 +1,5 @@
 """Session-scoped phone listener managed by the local workstation."""
+
 import ipaddress
 import secrets
 import socket
@@ -25,7 +26,6 @@ class MonitorRequestHandler(WSGIRequestHandler):
         pass
 
 
-
 class PhoneMonitor:
     def __init__(self, controller, jobs, port=8766, certificate=None, key=None):
         self.controller, self.jobs = controller, jobs
@@ -43,8 +43,13 @@ class PhoneMonitor:
                     addresses = sorted({ip[4][0] for ip in ips if not ipaddress.ip_address(ip[4][0]).is_loopback})
                 except OSError:
                     pass
-            return dict(enabled=self.listener is not None, port=self.bound_port, hosts=addresses,
-                        scheme='https' if self.certificate else 'http', token=self.token)
+            return dict(
+                enabled=self.listener is not None,
+                port=self.bound_port,
+                hosts=addresses,
+                scheme='https' if self.certificate else 'http',
+                token=self.token,
+            )
 
     def enable(self):
         with self.lock:
@@ -67,8 +72,9 @@ class PhoneMonitor:
                 run = listener.serve
                 port = listener.socket.getsockname()[1]
             else:
-                listener = make_server(*address, app, server_class=ThreadedHTTPServer,
-                                       handler_class=MonitorRequestHandler)
+                listener = make_server(
+                    *address, app, server_class=ThreadedHTTPServer, handler_class=MonitorRequestHandler
+                )
                 run = listener.serve_forever
                 port = listener.server_port
             self.worker = threading.Thread(target=run, daemon=True)

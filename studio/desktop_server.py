@@ -1,4 +1,5 @@
 """Local simulator for the installed desktop launcher."""
+
 import argparse
 
 from werkzeug.serving import make_server

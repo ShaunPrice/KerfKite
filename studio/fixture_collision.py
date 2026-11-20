@@ -4,6 +4,7 @@ The cutter and holder are upright cylinders. A translated cylinder touches
 an axis-aligned box when its Z interval overlaps the box and its centre is
 within one radius of the XY rectangle, at the same instant along the move.
 """
+
 import math
 import re
 
@@ -16,8 +17,7 @@ MAX_CHECKS = 2_000_000
 
 
 def _number(value, field, low=-1_000_000, high=1_000_000):
-    if (isinstance(value, bool) or not isinstance(value, (int, float))
-            or not low <= value <= high):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not low <= value <= high:
         raise ValueError(f'{field} must be a finite number from {low} to {high}')
     return float(value)
 
@@ -38,14 +38,12 @@ def _slab(interval, origin, delta, low, high):
 
 
 def _contact(start, delta, box_min, box_max, radius, bottom, top):
-    interval = _slab((0., 1.), start[2], delta[2],
-                     box_min[2] - top, box_max[2] - bottom)
+    interval = _slab((0.0, 1.0), start[2], delta[2], box_min[2] - top, box_max[2] - bottom)
     if interval is None:
         return None
     # Reject XY travel outside the bounding rectangle of the rounded footprint.
     for axis in (0, 1):
-        interval = _slab(interval, start[axis], delta[axis],
-                         box_min[axis] - radius, box_max[axis] + radius)
+        interval = _slab(interval, start[axis], delta[axis], box_min[axis] - radius, box_max[axis] + radius)
         if interval is None:
             return None
     contacts = []
@@ -83,8 +81,10 @@ def _moves(lines, start):
     position = start
     metric = absolute = ended = False
     for line_no, raw in enumerate(lines, 1):
+
         def reject(reason):
             raise ValueError(f'Cannot check line {line_no}: {reason}')
+
         if not isinstance(raw, str) or len(raw) > 256:
             reject('invalid line')
         words = raw.strip().upper().split()
@@ -135,11 +135,9 @@ def check_fixtures(payload):
     if not isinstance(tool, dict):
         raise ValueError('Supply the mounted tool and holder dimensions')
     diameter, stickout, holder_diameter, length = (
-        _number(tool.get(key), key, .001, 2000)
-        for key in ('diameter', 'stickout', 'holder_diameter', 'holder_length')
+        _number(tool.get(key), key, 0.001, 2000) for key in ('diameter', 'stickout', 'holder_diameter', 'holder_length')
     )
-    components = [('tool', diameter / 2, 0, stickout),
-                  ('holder', holder_diameter / 2, stickout, stickout + length)]
+    components = [('tool', diameter / 2, 0, stickout), ('holder', holder_diameter / 2, stickout, stickout + length)]
     fixtures = payload.get('fixtures')
     if not isinstance(fixtures, list) or not 1 <= len(fixtures) <= 64:
         raise ValueError('Supply between 1 and 64 fixture boxes')
@@ -162,7 +160,7 @@ def check_fixtures(payload):
         moves += 1
         if moves * len(boxes) * len(components) > MAX_CHECKS:
             raise ValueError('Program/fixture combination exceeds two million sweep checks')
-        delta = tuple(b-a for a, b in zip(origin, destination))
+        delta = tuple(b - a for a, b in zip(origin, destination))
         hits = []
         for index, (name, low, high) in enumerate(boxes):
             for component, radius, bottom, top in components:
@@ -171,15 +169,30 @@ def check_fixtures(payload):
                     count += 1
                     if len(events) < MAX_EVENTS:
                         point = [round(p + t * d, 5) for p, d in zip(origin, delta)]
-                        hits.append((t, index, component, {
-                            'line': line, 'motion': motion, 'component': component,
-                            'fixture': name, 'position': point,
-                        }))
-        events.extend(hit[3] for hit in sorted(hits)[:MAX_EVENTS-len(events)])
+                        hits.append(
+                            (
+                                t,
+                                index,
+                                component,
+                                {
+                                    'line': line,
+                                    'motion': motion,
+                                    'component': component,
+                                    'fixture': name,
+                                    'position': point,
+                                },
+                            )
+                        )
+        events.extend(hit[3] for hit in sorted(hits)[: MAX_EVENTS - len(events)])
     if not moves:
         raise ValueError('Program contains no supported XYZ motion')
-    return {'collision': bool(count), 'events': events, 'contact_count': count,
-            'moves_checked': moves, 'fixtures_checked': len(boxes)}
+    return {
+        'collision': bool(count),
+        'events': events,
+        'contact_count': count,
+        'moves_checked': moves,
+        'fixtures_checked': len(boxes),
+    }
 
 
 def register(app):

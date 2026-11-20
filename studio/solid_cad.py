@@ -25,7 +25,9 @@ class Dimensions:
         if not isinstance(definitions, dict) or len(definitions) > 64:
             raise ValueError('Define at most 64 named parameters')
         if any(not isinstance(name, str) or not _NAME.fullmatch(name) for name in definitions):
-            raise ValueError('Use a letter or underscore followed by letters, digits or underscores for parameter names')
+            raise ValueError(
+                'Use a letter or underscore followed by letters, digits or underscores for parameter names'
+            )
         self.definitions = definitions
         self.values = {}
         self.resolving = set()
@@ -108,9 +110,11 @@ def _primitive(feature, dimensions, kernel, script_budget=None):
     kind = feature.get('kind')
     if kind == 'step':
         from .cad_exchange import step_manifold
+
         solid = step_manifold(feature, kernel)
     elif kind == 'script':
         from .scad_geometry import build_script
+
         parameters = dimensions.script_parameters(feature.get('scriptParameters', {}))
         dimension, solid = build_script(feature.get('source'), parameters, budget=script_budget)
         if dimension != 3:
@@ -130,6 +134,7 @@ def _primitive(feature, dimensions, kernel, script_budget=None):
         solid = kernel.Manifold.sphere(dimensions.positive(feature.get('radius')), _SEGMENTS)
     elif kind == 'loft':
         from .solid_loft import loft_mesh
+
         solid = loft_mesh(feature, dimensions, kernel, _MAX_FACES)
     elif kind == 'extrude':
         solid = _sketch(feature, dimensions, kernel).extrude(dimensions.positive(feature.get('height')))
@@ -168,7 +173,7 @@ def _instances(solid, pattern, dimensions, kernel):
         if count > 1 and angle % 360 == 0:
             raise ValueError('Polar pattern needs a nonzero angular step')
         centered = solid.translate([-cx, -cy, -cz])
-        copies.extend(centered.rotate([0, 0, angle*i]).translate([cx, cy, cz]) for i in indices)
+        copies.extend(centered.rotate([0, 0, angle * i]).translate([cx, cy, cz]) for i in indices)
     else:
         raise ValueError('Pattern must be linear or polar')
     return kernel.Manifold.batch_boolean(copies, kernel.OpType.Add)
@@ -189,14 +194,20 @@ def _build(model):
     solid = None
     identifiers = set()
     script_budget = None
-    if any(isinstance(f, dict) and f.get('kind')=='script' and f.get('enabled', True) for f in features):
+    if any(isinstance(f, dict) and f.get('kind') == 'script' and f.get('enabled', True) for f in features):
         from .scad_geometry import ScriptGeometryBudget
+
         script_budget = ScriptGeometryBudget()
     for i, feature in enumerate(features, 1):
         if not isinstance(feature, dict):
             raise ValueError(f'Invalid feature {i}')
         identifier = feature.get('id')
-        if not isinstance(identifier, str) or not identifier.strip() or len(identifier) > 80 or identifier in identifiers:
+        if (
+            not isinstance(identifier, str)
+            or not identifier.strip()
+            or len(identifier) > 80
+            or identifier in identifiers
+        ):
             raise ValueError(f'Feature {i} needs a unique ID of 1–80 characters')
         identifiers.add(identifier)
         if type(feature.get('enabled', True)) is not bool:
@@ -209,7 +220,9 @@ def _build(model):
                 raise ValueError('Choose add, cut or intersect')
             if solid is None and op != 'add':
                 raise ValueError('First enabled feature must add material')
-            tool = _instances(_primitive(feature, dimensions, kernel, script_budget), feature.get('pattern'), dimensions, kernel)
+            tool = _instances(
+                _primitive(feature, dimensions, kernel, script_budget), feature.get('pattern'), dimensions, kernel
+            )
             if solid is None:
                 solid = tool
             elif op == 'add':
@@ -251,9 +264,14 @@ def rebuild(model):
     solid, dimensions, kernel = _build(model)
     mesh = solid.to_mesh64()
     silhouette = kernel.CrossSection(solid.project().to_polygons(), kernel.FillRule.Positive)
-    return {'vertices': mesh.vert_properties[:, :3].tolist(), 'triangles': mesh.tri_verts.tolist(),
-            'bounds': list(solid.bounding_box()), 'volume': solid.volume(), 'profiles': _rings(silhouette),
-            'parameters': dimensions.values}
+    return {
+        'vertices': mesh.vert_properties[:, :3].tolist(),
+        'triangles': mesh.tri_verts.tolist(),
+        'bounds': list(solid.bounding_box()),
+        'volume': solid.volume(),
+        'profiles': _rings(silhouette),
+        'parameters': dimensions.values,
+    }
 
 
 def binary_stl(result):
@@ -279,7 +297,7 @@ def _encode_stl(vertices, triangles):
     output.write(struct.pack('<I', len(triangles)))
     layout = [('normal', '<f4', 3), ('vertices', '<f4', (3, 3)), ('attr', '<u2')]
     for start in range(0, len(triangles), 2048):
-        points = vertices[triangles[start:start + 2048]]
+        points = vertices[triangles[start : start + 2048]]
         normals = np.cross(points[:, 1] - points[:, 0], points[:, 2] - points[:, 0])
         lengths = np.linalg.norm(normals, axis=1)
         normals /= np.where(lengths == 0, 1, lengths)[:, None]

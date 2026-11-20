@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build the x64 WinForms desktop using Roslyn on Windows, Linux or macOS."""
+
 import argparse
 import hashlib
 import os
@@ -13,7 +14,10 @@ import zipfile
 HERE = Path(__file__).resolve().parent
 PACKAGES = {
     'Microsoft.Web.WebView2': ('1.0.4314.35', '90778deb1b77e36292828b4b5833c9255c27533f40e0ddd55891ae718944edc4'),
-    'Microsoft.NETFramework.ReferenceAssemblies.net48': ('1.0.3', '8a7e348538e7eb91351696911689f49e3d4f63f8bab517432bbe159b8b1104a2'),
+    'Microsoft.NETFramework.ReferenceAssemblies.net48': (
+        '1.0.3',
+        '8a7e348538e7eb91351696911689f49e3d4f63f8bab517432bbe159b8b1104a2',
+    ),
 }
 REFERENCES = ('mscorlib', 'System', 'System.Core', 'System.Windows.Forms', 'System.Drawing', 'System.Web.Extensions')
 WEB = ('Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.WinForms.dll')
@@ -64,34 +68,61 @@ def build(output, smoke=False, smoke_only=False):
                         raise ValueError(f'Installed WebView2 assembly differs from pinned SDK: {name}')
                 else:
                     (output / name).write_bytes(data)
-            for source, name in [('runtimes/win-x64/native/WebView2Loader.dll', 'WebView2Loader.dll'),
-                                ('LICENSE.txt', 'WebView2-LICENSE.txt'), ('NOTICE.txt', 'WebView2-NOTICE.txt')]:
+            for source, name in [
+                ('runtimes/win-x64/native/WebView2Loader.dll', 'WebView2Loader.dll'),
+                ('LICENSE.txt', 'WebView2-LICENSE.txt'),
+                ('NOTICE.txt', 'WebView2-NOTICE.txt'),
+            ]:
                 data = webview.read(source)
                 if smoke_only:
                     if data != (output / name).read_bytes():
                         raise ValueError(f'Installed dependency differs from pinned SDK: {name}')
                 else:
                     (output / name).write_bytes(data)
-        compiler_args = [dotnet, str(compiler), '/nologo', '/nostdlib+', '/noconfig', '/deterministic+',
-                         '/platform:x64', '/optimize+', '/target:winexe', '/win32manifest:' + str(HERE / 'app.manifest')]
+        compiler_args = [
+            dotnet,
+            str(compiler),
+            '/nologo',
+            '/nostdlib+',
+            '/noconfig',
+            '/deterministic+',
+            '/platform:x64',
+            '/optimize+',
+            '/target:winexe',
+            '/win32manifest:' + str(HERE / 'app.manifest'),
+        ]
         compiler_args += ['/reference:' + str(reference_dir / (name + '.dll')) for name in REFERENCES]
         compiler_args += ['/reference:' + str(output / name) for name in WEB]
         sources = [str(HERE / 'Workbench.cs'), str(HERE / 'StudioSession.cs')]
         if not smoke_only:
             from PIL import Image
+
             icon = reference_dir / 'studio.ico'
             with Image.open(HERE.parents[2] / 'studio/static/app-icon.png') as artwork:
                 artwork.save(icon, sizes=[(16, 16), (32, 32), (48, 48), (256, 256)])
-            subprocess.run([*compiler_args, '/win32icon:' + str(icon), '/out:' + str(output / 'KerfKiteNative.exe'), *sources], check=True)
+            subprocess.run(
+                [*compiler_args, '/win32icon:' + str(icon), '/out:' + str(output / 'KerfKiteNative.exe'), *sources],
+                check=True,
+            )
         if smoke or smoke_only:
-            subprocess.run([*compiler_args, '/main:KerfKite.Smoke', '/out:' + str(output / 'KerfKiteNativeSmoke.exe'),
-                            '/reference:' + str(output / 'KerfKiteNative.exe'), str(HERE / 'Smoke.cs')], check=True)
+            subprocess.run(
+                [
+                    *compiler_args,
+                    '/main:KerfKite.Smoke',
+                    '/out:' + str(output / 'KerfKiteNativeSmoke.exe'),
+                    '/reference:' + str(output / 'KerfKiteNative.exe'),
+                    str(HERE / 'Smoke.cs'),
+                ],
+                check=True,
+            )
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('output', type=Path)
     parser.add_argument('--smoke', action='store_true', help='also compile the Windows simulator test runner')
-    parser.add_argument('--smoke-only', action='store_true', help='compile only the simulator runner against an installed desktop')
+    parser.add_argument(
+        '--smoke-only', action='store_true', help='compile only the simulator runner against an installed desktop'
+    )
     args = parser.parse_args()
     build(args.output, args.smoke, args.smoke_only)
