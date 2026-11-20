@@ -1707,6 +1707,7 @@ rotary = generate_rotary(project, options, backend='python')
 <li>Every generator call made by the regression suite (578 calls, 174 of which must fail) returns the same result or error as the Python-only baseline. The suite also passes with the Python loops forced and with the extension removed.</li>
 <li>The extension was rebuilt with the address and undefined-behaviour sanitizers and the CAM tests and benchmark jobs were run under them without a report.</li>
 </ul>
+<p>On Windows x64 (MSVC 2022 Build Tools, Python 3.10 and 3.12) the extension builds without compiler warnings, the parity tests and the installed-wheel check pass, and the five benchmark programs have the same hashes as on Linux. macOS and ARM builds have not been run.</p>
 <p><code>validation/benchmark_gcode.py</code> times both backends and fails if their program hashes differ; <code>validation/check_installed_cam.py</code> repeats the parity check on an installed wheel.</p>
 </section><section id="performance"><h1>Native CAM and editor verification</h1>
 <p>The Studio 0.6.1 simulator benchmark uses a 256 × 256 height map, a ball end mill and a cylindrical router setup. Three fresh processes per backend generated the same 135,886 planar instructions and the same 136,691 rotary instructions. The largest difference between corresponding stock-preview cells was 2.7 × 10⁻¹⁴ mm. These timings were measured on an Apple Silicon Mac during integration testing.</p>

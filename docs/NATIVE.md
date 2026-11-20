@@ -57,5 +57,7 @@ Verification on Linux x86-64 (GCC, Python 3.13):
 * Every generator call made by the regression suite (578 calls, 174 of which must fail) returns the same result or error as the Python-only baseline. The suite also passes with the Python loops forced and with the extension removed.
 * The extension was rebuilt with the address and undefined-behaviour sanitizers and the CAM tests and benchmark jobs were run under them without a report.
 
+On Windows x64 (MSVC 2022 Build Tools, Python 3.10 and 3.12) the extension builds without compiler warnings, the parity tests and the installed-wheel check pass, and the five benchmark programs have the same hashes as on Linux. macOS and ARM builds have not been run.
+
 `validation/benchmark_gcode.py` times both backends and fails if their program hashes differ; `validation/check_installed_cam.py` repeats the parity check on an installed wheel.
 
