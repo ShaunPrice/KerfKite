@@ -14,3 +14,17 @@ Run `python -m validation.benchmark_native result.json` from the checkout with t
 The indexed artwork catalog retained all 1,768 original entries and all 1,358,040 coordinate pairs in a value-for-value comparison. An isolated Mac process searching metadata and loading one template peaked at 32.6 MiB with the index. The earlier eager loader peaked at 432.8 MiB. The compressed catalog payload decreased from 18.89 MiB to 15.11 MiB.
 
 Pocket's signed Android app was exercised on an ARM64 Android API 37 emulator configured with 2,048 MiB of RAM. The editor passed file import, reference-preserving export, resizing, SVG conversion, recovery, and library persistence after a cold restart. The paired pendant passed jog, home, zero, start, pause, resume and stop against the Studio simulator over virtual LAN and ADB reverse. The APK minimum is API 26. On a physical Galaxy S23 Ultra running Android 17, the published Pocket 0.4.1 APK started cold in 273 ms and 499 ms, used 41 to 97 MiB proportional memory while editing, and rendered 648 frames with a 5 ms median and a 13 ms 90th percentile. Pi 4/5 performance for this revision and material-cutting tests require their respective devices.
+
+## G-code and rotary generation after 0.6.1
+
+The relief and stock-preview kernels are native, which left G-code and rotary generation in Python as the largest stages. Their per-move loops were tightened without changing the output: plain in-range numbers skip the general validator, per-block sets are built once per job, and packed rows are written through a bound function. `validation/benchmark_gcode.py` gives best-of-nine times and a hash of each generated program on the 256 × 256 relief fixture.
+
+| Stage (Linux x86-64, Python 3.13) | Before | After | Program hash, unchanged |
+| --- | ---: | ---: | --- |
+| Relief job, 135,886 lines | 291 ms | 200 ms | `08c0811b116f` |
+| Flat six-level job, 135,886 lines | 201 ms | 143 ms | `31c8a9794b61` |
+| Laser job, 67,945 lines | 269 ms | 213 ms | `6636b83bda44` |
+| Rotary job, 136,691 lines | 1,060 ms | 773 ms | `cfe252049e5c` |
+
+Every generator, relief and stock-preview call made by the regression suite (578 calls, including 174 that must fail) returned the same result or the same error before and after. Start-up was measured and left alone: importing the server takes about 0.2 s warm and 48 MiB, with the geometry, PDF, DXF and STEP libraries already loaded on first use.
+
