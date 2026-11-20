@@ -24,7 +24,7 @@ Stop works while a Start awaits confirmation. It cancels the arm and invalidates
 
 4. **Forget pairing** clears the phone session. **Disable and revoke pairing** on the server ends access for all paired clients. For another network link, use the server's address on that link and pair again.
 
-If pairing times out, open the monitor base URL in the phone browser on the same link. Getting the monitor page confirms reachability. If it cannot load, check the server interface address, monitor port, host firewall for this private subnet, Wi-Fi client isolation or whether the tether/PAN adapter is active. An expired token needs a fresh pairing link. If the connection drops during a job, check the controller at the workstation before taking further action. A network disconnect does not establish that motion stopped.
+If pairing times out, open the monitor base URL in the phone browser on the same link. Getting the monitor page confirms reachability. If it cannot load, check the server interface address, monitor port, host firewall for this private subnet (on Windows the inbound rule must cover the network profile the adapter is actually using, and third-party security software may apply its own), Wi-Fi client isolation or whether the tether/PAN adapter is active. An expired token needs a fresh pairing link. If the connection drops during a job, check the controller at the workstation before taking further action. A network disconnect does not establish that motion stopped.
 
 ## Emulator acceptance
 

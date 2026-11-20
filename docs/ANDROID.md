@@ -2,7 +2,7 @@
 
 Studio Pocket combines an offline vector sketch editor with a native CNC pendant for Android. Pocket supports Android 8.0 (API 26) or later with a minimum supported device RAM of 2 GB. It uses a touch canvas and numerical dimensions. Files saved from the app open in the desktop and Raspberry Pi workstation. The current template, solid modelling and machining workflows run on that workstation.
 
-The minimum OS comes from the APK manifest. The editor and server-paired pendant were exercised on an ARM64 emulator configured with 2 GB of RAM.
+The minimum OS comes from the APK manifest. The editor and server-paired pendant were exercised on an ARM64 emulator configured with 2 GB of RAM, and on one physical handset (see Physical handset check below).
 
 ## Install and draw
 
@@ -53,3 +53,23 @@ While Pocket waits for a Start or jog response, you can still tap **Stop** and c
 ## Scope
 
 Portable imports accept Studio version 1 vector documents up to 4 MB, 128 objects and 100,000 XY points within the declared work area. Projects with only solid features, unsupported formats, invalid coordinates or larger geometry stay on the desktop. Pocket displays sampled planar outlines. The workstation owns 3D modelling, CAM, simulation and the controller connection. Portable import and export use Android’s system document picker; project files require no storage permission.
+
+## Physical handset check
+
+On 21 November 2026 the published Pocket 0.4.1 APK was exercised on a Samsung Galaxy S23 Ultra (SM-S918B, Android 17 / API 37, One UI 9.0, display set to 1080 × 2316) over wireless ADB. The installed package had the same SHA-256 as the release download. The pendant ran against Studio 0.6.1's simulated GRBL controller on a Windows workstation over Wi-Fi; no machine was connected.
+
+| Check | Result |
+| --- | --- |
+| Cold start | Two cold starts, 273 ms and 499 ms, with no crash or not-responding entry |
+| Project exchange | A two-shape drawing exported as `pi-cnc-studio/1`; Studio generated G-code from the file; the drawing survived a cold restart and reopened from the file as a copy |
+| Layout | In portrait and landscape every control cleared the status bar, camera cut-out and three-button navigation bar |
+| Pendant | Pair, 0.1 mm X jog, Home, Zero XYZ, Start, Pause, Resume, Stop and Forget pairing; each action reached Studio once |
+| Background return | With a job running, Pocket spent 6 s in the background, returned to the pendant from the launcher and Stop then aborted the job |
+| S Pen | 53 pen contacts were recorded. Add shape, Apply and the objects list worked with the pen as a pointer. Pressure and hover are not used |
+
+`validation/android_handset_pendant_workflow.py` repeats the pendant and background-return rows on a supervised handset. The workstation firewall must admit the handset on the monitor port: the first attempt showed **The receiver timed out** until the inbound rule covered every network profile.
+
+**Open defect found in this check.** A new shape is placed at the same default position and size as the previous one, and a tap in the drawing preview selects the topmost shape whose bounding box contains it. Two shapes left at the defaults therefore overlap exactly, and the lower one can be selected only from the objects list. Of 44 pen taps on the preview, 31 landed inside the shared box and selected the topmost shape each time, and 13 missed the box by a few pixels because the test has no tolerance. Injected finger and stylus taps behaved identically, so this is not specific to the pen.
+
+Not exercised on the handset: the **Keep screen awake** switch, the pendant in landscape, the panel's full-resolution display mode, USB and Bluetooth tethering, the HTTPS monitor, and any physical controller.
+
