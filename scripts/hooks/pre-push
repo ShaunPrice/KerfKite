@@ -13,7 +13,12 @@ echo "pre-push: ruff"
 "$PY" -m ruff check studio
 "$PY" -m ruff format --check .
 echo "pre-push: Python tests"
-"$PY" -m pytest -q -p no:cacheprovider tests
+if "$PY" -c "import pytest_cov" 2>/dev/null; then
+  # Fails below the floor in pyproject.toml ([tool.coverage.report] fail_under).
+  "$PY" -m pytest -q -p no:cacheprovider tests --cov --cov-report=
+else
+  "$PY" -m pytest -q -p no:cacheprovider tests
+fi
 echo "pre-push: JavaScript tests"
 for test in tests/js/*.cjs tests/*.cjs; do
   node "$test" >/dev/null || { echo "pre-push: FAILED $test" >&2; exit 1; }
