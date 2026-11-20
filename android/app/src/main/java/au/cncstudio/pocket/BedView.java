@@ -42,7 +42,10 @@ final class BedView extends View {
             for(float x=left%grid; x<w; x+=grid) canvas.drawLine(x,0,x,h,pen);
             for(float y=bottom%grid; y<h; y+=grid) canvas.drawLine(0,y,w,y,pen);
         }
-        for(int i=0;i<model.parts.size();i++){
+        // The selected shape is drawn last so its highlight is not hidden by a shape stacked on top of it.
+        for(int k=0;k<=model.parts.size();k++){
+            int i=k<model.parts.size()?k:model.selected;
+            if(i<0 || i>=model.parts.size() || (k<model.parts.size() && i==model.selected))continue;
             Path path=new Path();
             for(double[][] points:model.parts.get(i).paths()){
             for(int j=0;j<points.length;j++){
@@ -58,10 +61,10 @@ final class BedView extends View {
     @Override public boolean onTouchEvent(MotionEvent event){
         if(event.getAction()==MotionEvent.ACTION_UP && scale>0) {
             double x=(event.getX()-left)/scale,y=(bottom-event.getY())/scale;
-            for(int i=model.parts.size()-1;i>=0;i--){
-                Part p=model.parts.get(i);
-                if(x>=p.x && x<=p.x+p.width && y>=p.y && y<=p.y+p.height){select.accept(i); break;}
-            }
+            // A fingertip or pen rarely lands exactly on an outline: allow 12 dp, expressed in millimetres.
+            double tolerance=12*getResources().getDisplayMetrics().density/scale;
+            int hit=Picking.pick(model.boxes(),model.selected,x,y,tolerance);
+            if(hit>=0)select.accept(hit);
             performClick();
         }
         return true;

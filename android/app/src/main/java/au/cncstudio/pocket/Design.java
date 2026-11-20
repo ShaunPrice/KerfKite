@@ -15,6 +15,13 @@ final class Design {
     boolean artwork;
     String reference; // Complete desktop document kept for lossless re-export.
 
+    /** Each shape's bounding box as {x, y, width, height} in millimetres, in drawing order. */
+    double[][] boxes() {
+        double[][] boxes=new double[parts.size()][];
+        for(int i=0;i<boxes.length;i++){Part p=parts.get(i);boxes[i]=new double[]{p.x,p.y,p.width,p.height};}
+        return boxes;
+    }
+
     void setBed(double width,double height) throws JSONException {
         if(!(width>=.2 && width<=100000 && height>=.2 && height<=100000))
             throw new JSONException("Invalid work area dimensions.");
