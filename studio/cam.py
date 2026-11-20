@@ -10,6 +10,17 @@ from .protocols import postprocess, get_protocol
 from .operations import prepare as prepare_operation, router_tool_shape
 
 
+def _bounds(paths):
+    """[min x, min y, max x, max y] over every vertex."""
+    xs = [p[0] for path in paths for p in path]
+    ys = [p[1] for path in paths for p in path]
+    return [min(xs), min(ys), max(xs), max(ys)]
+
+
+# Exact float and int only: bool, strings and other numeric types go through number().
+_PLAIN = (float, int)
+
+
 def number(value, name, low, high):
     if isinstance(value, bool):
         raise ValueError(f'{name} must be a number')
@@ -225,7 +236,12 @@ def _generate_single(project, packed_segments, rotary_blocks):
         for point in path:
             if not isinstance(point, list) or len(point) != 2:
                 raise ValueError('Invalid XY point')
-            points.append([number(point[0], 'X', 0, width), number(point[1], 'Y', 0, height)])
+            px, py = point
+            # Plain in-range numbers need no further checks; anything else takes the full validation and its messages.
+            if type(px) in _PLAIN and type(py) in _PLAIN and 0 <= px <= width and 0 <= py <= height:
+                points.append([float(px), float(py)])
+            else:
+                points.append([number(px, 'X', 0, width), number(py, 'Y', 0, height)])
         count += len(points)
         if count > 100000:
             raise ValueError('Too many vertices; simplify the design')
@@ -239,10 +255,14 @@ def _generate_single(project, packed_segments, rotary_blocks):
         raise ValueError('Choose a milling cutter for a contour or pocket; a drill bit is for drilling')
     source = clean
     clean, prepared_depths, operation_warnings = prepare_operation(project, clean)
-    for path in clean:
-        for point in path:
-            number(point[0], 'Compensated X', 0, width)
-            number(point[1], 'Compensated Y', 0, height)
+    if clean is not source:
+        # The line operation returns the validated input unchanged; only compensated geometry needs rechecking.
+        for path in clean:
+            for point in path:
+                px, py = point[0], point[1]
+                if not (type(px) in _PLAIN and type(py) in _PLAIN and 0 <= px <= width and 0 <= py <= height):
+                    number(px, 'Compensated X', 0, width)
+                    number(py, 'Compensated Y', 0, height)
     if tabs_enabled:
         clean, prepared_depths, tab_warnings = _holding_tabs(project, clean, depth)
         operation_warnings += tab_warnings
@@ -255,9 +275,10 @@ def _generate_single(project, packed_segments, rotary_blocks):
             if not isinstance(values, list) or len(values) != len(path):
                 raise ValueError('Each vertex must have a matching depth')
             for value in values:
-                number(value, 'Vertex Z', -50, 0)
+                if not (type(value) in _PLAIN and -50 <= value <= 0):
+                    number(value, 'Vertex Z', -50, 0)
         depths = [[float(v) for v in path] for path in depths]
-        depth = max(-v for path in depths for v in path)
+        depth = max(-min(path) for path in depths)
         if depth <= 0:
             raise ValueError('No contour cuts below the stock surface')
     if mode == 'router' and entry != 'plunge':
@@ -323,45 +344,55 @@ def _generate_single(project, packed_segments, rotary_blocks):
         if mode == 'router':
             lines += [f'M3 S{power:.0f}', 'G4 P2']
     segments = PackedSegments() if packed_segments or rotary_blocks else []
+    # The loop below runs once per cutting move (up to 200,000): keep its lookups local.
+    packed = isinstance(segments, PackedSegments)
+    add = segments.appender() if packed else segments.append
+    emit = lines.append
+    sqrt = math.sqrt
+    laser = mode == 'laser'
+    safe_line = f'G0 Z{safe:.3f}'
+    cut_feed = min(feed, plunge) if depths is not None else feed
+    feed_word = f' F{cut_feed:.1f}'
     length = 0
     for z in levels:
         for path_index, original in enumerate(clean):
-            path = laser_paths[path_index] if mode == 'laser' else [(x, y, None) for x, y in original]
+            path = laser_paths[path_index] if laser else original
             x, y = path[0][:2]
-            current_z = max(z, depths[path_index][0]) if depths is not None else z
-            if mode != 'laser':
-                lines += [f'G0 Z{safe:.3f}', f'G0 X{x:.3f} Y{y:.3f}', f'G1 Z{current_z:.3f} F{plunge:.1f}']
+            row_depths = depths[path_index] if depths is not None else None
+            current_z = max(z, row_depths[0]) if row_depths is not None else z
+            if not laser:
+                lines += [safe_line, f'G0 X{x:.3f} Y{y:.3f}', f'G1 Z{current_z:.3f} F{plunge:.1f}']
             else:
                 lines += ['M5', f'G0 X{x:.3f} Y{y:.3f}', f'M4 S{path[0][2]:.0f}']
             run_start = len(segments)
-            cut_feed = min(feed, plunge) if depths is not None else feed
-            for vertex_index, (nx, ny, segment_power) in enumerate(path[1:], 1):
-                next_z = max(z, depths[path_index][vertex_index]) if depths is not None else current_z
+            start_z = 0 if current_z is None else current_z
+            for vertex_index in range(1, len(path)):
+                vertex = path[vertex_index]
+                nx, ny = vertex[0], vertex[1]
+                segment_power = vertex[2] if laser else None
+                next_z = max(z, row_depths[vertex_index]) if row_depths is not None else current_z
+                end_z = 0 if next_z is None else next_z
                 if not rotary_blocks:
-                    suffix = f' S{segment_power:.0f}' if mode == 'laser' else ''
-                    if depths is not None:
-                        suffix += f' Z{next_z:.3f}'
-                    lines.append(f'G1 X{nx:.3f} Y{ny:.3f} F{cut_feed:.1f}' + suffix)
-                segments.append(
-                    [
-                        x,
-                        y,
-                        nx,
-                        ny,
-                        0 if next_z is None else next_z,
-                        segment_power,
-                        0 if current_z is None else current_z,
-                    ]
-                )
-                length += math.sqrt((nx - x) ** 2 + (ny - y) ** 2 + ((next_z or 0) - (current_z or 0)) ** 2)
+                    if laser:
+                        emit(f'G1 X{nx:.3f} Y{ny:.3f}{feed_word} S{segment_power:.0f}')
+                    elif row_depths is not None:
+                        emit(f'G1 X{nx:.3f} Y{ny:.3f}{feed_word} Z{next_z:.3f}')
+                    else:
+                        emit(f'G1 X{nx:.3f} Y{ny:.3f}{feed_word}')
+                if packed:
+                    add(x, y, nx, ny, end_z, segment_power, start_z)
+                else:
+                    add([x, y, nx, ny, end_z, segment_power, start_z])
+                length += sqrt((nx - x) ** 2 + (ny - y) ** 2 + (end_z - start_z) ** 2)
                 current_z = next_z
+                start_z = end_z
                 x, y = nx, ny
             if rotary_blocks:
-                lines.append(CutRun(segments, run_start, len(segments), cut_feed, depths is not None, mode == 'laser'))
-            if mode == 'laser':
-                lines.append('M5')
+                emit(CutRun(segments, run_start, len(segments), cut_feed, depths is not None, laser))
+            if laser:
+                emit('M5')
             else:
-                lines.append(f'G0 Z{safe:.3f}')
+                emit(safe_line)
     lines.append('M5')
     envelope = laser_paths if mode == 'laser' else clean
     warnings = (
@@ -386,12 +417,7 @@ def _generate_single(project, packed_segments, rotary_blocks):
         'cut_length': round(length, 2),
         'cut_minutes': round(length / (min(feed, plunge) if depths is not None else feed), 2),
         'mode': mode,
-        'bounds': [
-            min(p[0] for path in envelope for p in path),
-            min(p[1] for path in envelope for p in path),
-            max(p[0] for path in envelope for p in path),
-            max(p[1] for path in envelope for p in path),
-        ],
+        'bounds': _bounds(envelope),
         'warnings': warnings,
         'prepared_paths': clean,
         'prepared_depths': depths,

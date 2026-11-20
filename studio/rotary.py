@@ -133,6 +133,11 @@ def _wrap_job(job, options, *, generated):
     max_angle = max_axial = max_z = -math.inf
     units = absolute = feed_mode = inverse_active = emitting = False
     last_feed, minutes = None, 0.0
+    # Word sets are fixed for the job: build them once, not for each of up to 200,000 blocks.
+    spindle = 'M4' if mode == 'laser' else 'M3'
+    laser = mode == 'laser'
+    rapid_words = frozenset('GXY' if laser else 'GXYZ')
+    linear_words = rapid_words | ({'F', 'S'} if laser else {'F'})
     for command, words, raw in _blocks(source, generated):
         if command in ('G21', 'G90', 'G17', 'G54', 'G94', 'M5', 'G40', 'G49', 'G80', 'G61') and len(words) == 1:
             if post in STREAM_POSTS and command in ('G40', 'G49', 'G80', 'G61'):
@@ -149,7 +154,6 @@ def _wrap_job(job, options, *, generated):
                 command = 'G93' if inverse_active else 'G94'
             output.append(command)
             continue
-        spindle = 'M4' if mode == 'laser' else 'M3'
         if command == spindle and set(words) == {'M', 'S'}:
             _number(words['S'], 'Spindle power', 0 if mode == 'laser' else 0.001, 100000)
             emitting = True
@@ -163,17 +167,16 @@ def _wrap_job(job, options, *, generated):
         if not (units and absolute and feed_mode):
             raise ValueError('Rotary source must establish G21 G90 G94 before motion')
         linear = command == 'G1'
-        allowed = set('GXYZ') | ({'F'} if linear else set())
-        if mode == 'laser':
-            allowed.discard('Z')
+        if laser:
             if linear:
-                allowed.add('S')
                 if not emitting:
                     raise ValueError('Laser cutting requires M4')
                 _number(words.get('S'), 'Laser segment power', 0, 100000)
             elif emitting:
                 raise ValueError('Laser rapids require M5')
-        if set(words) - allowed or not set(words).intersection('XYZ'):
+        if not words.keys() <= (linear_words if linear else rapid_words) or not (
+            'X' in words or 'Y' in words or 'Z' in words
+        ):
             raise ValueError('Unsupported words in rotary motion')
         coords = {k: words[k] for k in 'XYZ' if k in words}
         z = coords.get('Z', state['Z'])
@@ -195,11 +198,20 @@ def _wrap_job(job, options, *, generated):
             if x > max_axial:
                 max_axial = x
         if linear:
-            last_feed = _number(words.get('F'), 'Source linear feed', 0.001, 100000)
-            if any(state[k] is None for k in coords):
-                raise ValueError('Cutting move starts from an unknown position; establish rapid coordinates first')
-            delta = {k: coords[k] - state[k] if k in coords else 0 for k in 'XYZ'}
-            length = _cut_length(delta[wrapped], delta[axial], delta['Z'], radius, state['Z'] or 0, reference)
+            last_feed = words.get('F')
+            if not (type(last_feed) is float and 0.001 <= last_feed <= 100000):
+                last_feed = _number(last_feed, 'Source linear feed', 0.001, 100000)
+            for k in coords:
+                if state[k] is None:
+                    raise ValueError('Cutting move starts from an unknown position; establish rapid coordinates first')
+            length = _cut_length(
+                coords[wrapped] - state[wrapped] if wrapped in coords else 0,
+                coords[axial] - state[axial] if axial in coords else 0,
+                coords['Z'] - state['Z'] if 'Z' in coords else 0,
+                radius,
+                state['Z'] or 0,
+                reference,
+            )
         transformed = []
         for k, destination in coords.items():
             if k == wrapped:
@@ -219,7 +231,9 @@ def _wrap_job(job, options, *, generated):
         if linear:
             if length <= 1e-12:
                 continue
-            inverse = _number(last_feed / length, 'Inverse-time feed', 1e-9, 1e9)
+            inverse = last_feed / length
+            if not 1e-9 <= inverse <= 1e9:
+                inverse = _number(inverse, 'Inverse-time feed', 1e-9, 1e9)
             if not inverse_active:
                 output.append('G93')
                 inverse_active = True
