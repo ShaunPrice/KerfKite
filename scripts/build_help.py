@@ -5,7 +5,7 @@ from markdown_it import MarkdownIt
 import re, html
 
 root = Path(__file__).resolve().parents[1]
-files = [root / 'README.md'] + list((root / 'docs').glob('*.md'))
+files = [root / 'README.md'] + sorted((root / 'docs').glob('*.md'))  # sorted: directory order differs between machines
 md = MarkdownIt('commonmark', {'html': False}).enable('table')
 body = ''
 nav = ''
