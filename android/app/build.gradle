@@ -2,6 +2,8 @@ plugins { id 'com.android.application' version '8.7.3' }
 android {
     namespace 'au.cncstudio.pocket'
     compileSdk 35
+    // The guide asks for Build Tools 35. Without this the plugin fetches its own default and stops at the SDK licence prompt.
+    buildToolsVersion '35.0.0'
     defaultConfig {
         applicationId 'au.cncstudio.pocket'
         minSdk 26
