@@ -106,7 +106,22 @@ static PyObject *contact(PyObject *, PyObject *args) {
 }
 
 PyObject* stock_heights(PyObject*, PyObject*);
+PyObject* gcode_moves(PyObject*, PyObject*);
+PyObject* rotary_run(PyObject*, PyObject*);
+PyObject* fixed_text(PyObject*, PyObject*);
+PyObject* rounded_value(PyObject*, PyObject*);
+PyObject* plain_points(PyObject*, PyObject*);
+PyObject* plain_depths(PyObject*, PyObject*);
+PyObject* segment_rows(PyObject*, PyObject*);
 
-static PyMethodDef methods[]={{"stock_heights",stock_heights,METH_VARARGS,"Compute a bounded stock-removal grid from planar moves."},{"contact",contact,METH_VARARGS,"Compute bounded conservative cutter contact depths from cell maxima."},{nullptr,nullptr,0,nullptr}};
+static PyMethodDef methods[]={{"stock_heights",stock_heights,METH_VARARGS,"Compute a bounded stock-removal grid from planar moves."},
+    {"gcode_moves",gcode_moves,METH_VARARGS,"Emit the cutting moves of one operation; None when the Python loop must run."},
+    {"rotary_run",rotary_run,METH_VARARGS,"Translate one generated cutting run to rotary blocks; None when the Python loop must run."},
+    {"fixed_text",fixed_text,METH_VARARGS,"Format a float with a fixed number of decimals exactly as Python does."},
+    {"rounded_value",rounded_value,METH_VARARGS,"Round a float to 0..3 decimals exactly as Python does."},
+    {"plain_points",plain_points,METH_VARARGS,"Copy plain in-range XY paths; None when the Python validator must run."},
+    {"plain_depths",plain_depths,METH_VARARGS,"Copy plain per-vertex depths; None when the Python validator must run."},
+    {"segment_rows",segment_rows,METH_VARARGS,"Unpack a packed segment buffer into list rows."},
+    {"contact",contact,METH_VARARGS,"Compute bounded conservative cutter contact depths from cell maxima."},{nullptr,nullptr,0,nullptr}};
 static PyModuleDef module={PyModuleDef_HEAD_INIT,"_relief_native","Optional CNC Studio relief contact kernel.",-1,methods};
 PyMODINIT_FUNC PyInit__relief_native(void) {return PyModule_Create(&module);}

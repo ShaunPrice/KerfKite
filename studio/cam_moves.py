@@ -6,6 +6,11 @@ from array import array
 from dataclasses import dataclass
 from struct import Struct
 
+try:  # Optional C++ unpacking: see docs/NATIVE.md.
+    from ._relief_native import segment_rows as _native_rows
+except ImportError:
+    _native_rows = None
+
 
 # Fields match the public preview row: start/end XY, end Z, laser power, start Z.
 # Missing power (router/knife) is represented by NaN only in the packed buffer.
@@ -26,6 +31,15 @@ class PackedSegments:
             values.frombytes(data)
             values.byteswap()
             data = values.tobytes()
+        segments._data = data
+        return segments
+
+    @classmethod
+    def from_native(cls, data):
+        """Wrap rows already packed in this machine's byte order, as the C++ move loop returns them."""
+        if not isinstance(data, bytes) or len(data) % _ROW.size:
+            raise ValueError('Invalid packed segment buffer')
+        segments = cls()
         segments._data = data
         return segments
 
@@ -59,6 +73,14 @@ class PackedSegments:
     def __iter__(self):
         for x, y, nx, ny, z, power, start in self.rows(0, len(self)):
             yield [x, y, nx, ny, z, None if math.isnan(power) else power, start]
+
+    def to_list(self):
+        """Every row as a list, for a public JSON boundary."""
+        if _native_rows is not None:
+            rows = _native_rows(self._data)
+            if rows is not None:
+                return rows
+        return list(self)
 
     def buffer(self):
         # Freeze at the native boundary so the GIL can be released safely.

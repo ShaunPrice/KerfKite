@@ -11,7 +11,7 @@ setup(
     else [
         Extension(
             'studio._relief_native',
-            ['studio/_relief_native.cpp', 'studio/_stock_native.cpp'],
+            ['studio/_relief_native.cpp', 'studio/_stock_native.cpp', 'studio/_gcode_native.cpp'],
             language='c++',
             optional=os.environ.get('KERFKITE_REQUIRE_NATIVE') != '1',
             extra_compile_args=['/O2', '/fp:precise']
