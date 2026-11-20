@@ -91,7 +91,7 @@ public final class WorkshopActivity extends Activity {
         formats.addView(project,weight());formats.addView(svg,weight());
         feedback=label(warning,14); feedback.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);page.addView(feedback);
         page.addView(button("Quick guide",()->new AlertDialog.Builder(this).setTitle("Design on your phone")
-                .setMessage("Use My projects to create, open, rename or duplicate local drawings. Open file imports a separate library entry.\n\n1. Tap Add shape. Choose a shape and enter its lower-left position and size in millimetres.\n\n2. Tap an object or its row to select it. Edit changes its dimensions.\n\n3. Choose a machine head, then Studio project. Open the saved file in CNC Studio to set cutting parameters and simulate it. SVG saves the artwork in millimetres.\n\n"+getString(R.string.keep_screen_awake_help))
+                .setMessage("Use My projects to create, open, rename or duplicate local drawings. Open file imports a separate library entry.\n\n1. Tap Add shape. Choose a shape and enter its lower-left position and size in millimetres.\n\n2. Tap an object or its row to select it. Where shapes overlap, tap again to reach the one underneath. Edit changes its dimensions.\n\n3. Choose a machine head, then Studio project. Open the saved file in CNC Studio to set cutting parameters and simulate it. SVG saves the artwork in millimetres.\n\n"+getString(R.string.keep_screen_awake_help))
                 .setPositiveButton("Close",null).show()));
         refresh();
     }
@@ -149,7 +149,10 @@ public final class WorkshopActivity extends Activity {
     private void editor(boolean editing){
         if(active==null || design.reference!=null)return;
         if(!editing && design.parts.size()>=128){feedback.setText("This drawing has reached 128 shapes.");return;}
-        Part base=editing?design.parts.get(design.selected):new Part(0,6,design.width>=50?10:0,design.height>=35?10:0,Math.min(40,design.width),Math.min(25,design.height));
+        double newWidth=Math.min(40,design.width),newHeight=Math.min(25,design.height);
+        // Step each new shape clear of the last default corner so it does not hide the previous one.
+        double[] corner=Picking.place(design.boxes(),design.width>=50?10:0,design.height>=35?10:0,newWidth,newHeight,design.width,design.height);
+        Part base=editing?design.parts.get(design.selected):new Part(0,6,corner[0],corner[1],newWidth,newHeight);
         LinearLayout form=column();form.setPadding(dp(20),0,dp(20),0);ScrollView scroller=new ScrollView(this);scroller.addView(form);
         Spinner type=choices(Part.TYPES);type.setContentDescription("Shape type");type.setSelection(base.type==Part.PATH?0:base.type);form.addView(type);if(base.type==Part.PATH)type.setVisibility(View.GONE);
         LinearLayout dims=row();form.addView(dims);LinearLayout a=column(),b=column();dims.addView(a,weight());dims.addView(b,weight());
