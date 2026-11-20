@@ -1150,7 +1150,7 @@ python -m studio.mcp_server --help
 <p>For protocol testing from a source checkout run <code>python validation/mcp_smoke.py</code> in the activated MCP environment with the repository root on the Python path. The smoke test starts a temporary stdio server and calls it using the MCP client SDK. The standalone editor simulation runs with <code>python validation/simulate_solid_workspace.py</code>. A passing local protocol test, a successfully authenticated cloud chat and a physical machine test are separate checks. Record each client connection and actual tool response before reporting that it works in a given deployment. <a href="#developer">Developer handoff</a></p>
 </section><section id="android"><h1>Studio Pocket for Android</h1>
 <p>Studio Pocket combines an offline vector sketch editor with a native CNC pendant for Android. Pocket supports Android 8.0 (API 26) or later with a minimum supported device RAM of 2 GB. It uses a touch canvas and numerical dimensions. Files saved from the app open in the desktop and Raspberry Pi workstation. The current template, solid modelling and machining workflows run on that workstation.</p>
-<p>The minimum OS comes from the APK manifest. The editor and server-paired pendant were exercised on an ARM64 emulator configured with 2 GB of RAM.</p>
+<p>The minimum OS comes from the APK manifest. The editor and server-paired pendant were exercised on an ARM64 emulator configured with 2 GB of RAM, and on one physical handset (see Physical handset check below).</p>
 <h2>Install and draw</h2>
 <p>For normal installation, download the <a href="https://github.com/ShaunPrice/KerfKite/releases/latest/download/KerfKite-Pocket-Android.apk">signed KerfKite Pocket APK</a> on the phone, open it from Downloads and choose <strong>Install</strong>.</p>
 <p>For development, build the debug APK using Android Studio with JDK 17 or newer, Android SDK Platform 35 and Build Tools 35 installed. Open the repository’s android directory as the project. Alternatively, from the android directory run:</p>
@@ -1194,6 +1194,45 @@ While Pocket waits for a Start or jog response, you can still tap <strong>Stop</
 </ol>
 <h2>Scope</h2>
 <p>Portable imports accept Studio version 1 vector documents up to 4 MB, 128 objects and 100,000 XY points within the declared work area. Projects with only solid features, unsupported formats, invalid coordinates or larger geometry stay on the desktop. Pocket displays sampled planar outlines. The workstation owns 3D modelling, CAM, simulation and the controller connection. Portable import and export use Android’s system document picker; project files require no storage permission.</p>
+<h2>Physical handset check</h2>
+<p>On 21 November 2026 the published Pocket 0.4.1 APK was exercised on a Samsung Galaxy S23 Ultra (SM-S918B, Android 17 / API 37, One UI 9.0, display set to 1080 × 2316) over wireless ADB. The installed package had the same SHA-256 as the release download. The pendant ran against Studio 0.6.1's simulated GRBL controller on a Windows workstation over Wi-Fi; no machine was connected.</p>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cold start</td>
+<td>Two cold starts, 273 ms and 499 ms, with no crash or not-responding entry</td>
+</tr>
+<tr>
+<td>Project exchange</td>
+<td>A two-shape drawing exported as <code>pi-cnc-studio/1</code>; Studio generated G-code from the file; the drawing survived a cold restart and reopened from the file as a copy</td>
+</tr>
+<tr>
+<td>Layout</td>
+<td>In portrait and landscape every control cleared the status bar, camera cut-out and three-button navigation bar</td>
+</tr>
+<tr>
+<td>Pendant</td>
+<td>Pair, 0.1 mm X jog, Home, Zero XYZ, Start, Pause, Resume, Stop and Forget pairing; each action reached Studio once</td>
+</tr>
+<tr>
+<td>Background return</td>
+<td>With a job running, Pocket spent 6 s in the background, returned to the pendant from the launcher and Stop then aborted the job</td>
+</tr>
+<tr>
+<td>S Pen</td>
+<td>53 pen contacts were recorded. Add shape, Apply and the objects list worked with the pen as a pointer. Pressure and hover are not used</td>
+</tr>
+</tbody>
+</table>
+<p><code>validation/android_handset_pendant_workflow.py</code> repeats the pendant and background-return rows on a supervised handset. The workstation firewall must admit the handset on the monitor port: the first attempt showed <strong>The receiver timed out</strong> until the inbound rule covered every network profile.</p>
+<p><strong>Open defect found in this check.</strong> A new shape is placed at the same default position and size as the previous one, and a tap in the drawing preview selects the topmost shape whose bounding box contains it. Two shapes left at the defaults therefore overlap exactly, and the lower one can be selected only from the objects list. Of 44 pen taps on the preview, 31 landed inside the shared box and selected the topmost shape each time, and 13 missed the box by a few pixels because the test has no tolerance. Injected finger and stylus taps behaved identically, so this is not specific to the pen.</p>
+<p>Not exercised on the handset: the <strong>Keep screen awake</strong> switch, the pendant in landscape, the panel's full-resolution display mode, USB and Bluetooth tethering, the HTTPS monitor, and any physical controller.</p>
 </section><section id="troubleshooting"><h1>Troubleshooting and fault finding</h1>
 <p>Use this guide with the <a href="#user-guide">user guide</a>, <a href="#status">current acceptance status</a> and <a href="#web">HTTPS setup</a>. Simulator results, browser tests and successful file transfers do not establish physical machine behavior.</p>
 <h2>Preserve evidence first</h2>
@@ -2004,7 +2043,7 @@ bash scripts/ci-local.sh --list
 </table>
 <p>Run <code>python -m validation.benchmark_native result.json</code> from the checkout with the extension installed. The benchmark requires matching G-code hashes and a maximum stock-cell difference below 1 × 10⁻¹⁰ mm. For the viewport, <code>python validation/benchmark_viewport.py --browser PATH</code> compares the same camera orbit through WebGL2 and Canvas. On Apple M4 using Metal, median frame intervals for an 18,432-triangle mesh were 16.7 ms and 50.0 ms respectively.</p>
 <p>The indexed artwork catalog retained all 1,768 original entries and all 1,358,040 coordinate pairs in a value-for-value comparison. An isolated Mac process searching metadata and loading one template peaked at 32.6 MiB with the index. The earlier eager loader peaked at 432.8 MiB. The compressed catalog payload decreased from 18.89 MiB to 15.11 MiB.</p>
-<p>Pocket's signed Android app was exercised on an ARM64 Android API 37 emulator configured with 2,048 MiB of RAM. The editor passed file import, reference-preserving export, resizing, SVG conversion, recovery, and library persistence after a cold restart. The paired pendant passed jog, home, zero, start, pause, resume and stop against the Studio simulator over virtual LAN and ADB reverse. The APK minimum is API 26. Physical handset, Pi 4/5 performance for this revision and material-cutting tests require their respective devices.</p>
+<p>Pocket's signed Android app was exercised on an ARM64 Android API 37 emulator configured with 2,048 MiB of RAM. The editor passed file import, reference-preserving export, resizing, SVG conversion, recovery, and library persistence after a cold restart. The paired pendant passed jog, home, zero, start, pause, resume and stop against the Studio simulator over virtual LAN and ADB reverse. The APK minimum is API 26. On a physical Galaxy S23 Ultra running Android 17, the published Pocket 0.4.1 APK started cold in 273 ms and 499 ms, used 41 to 97 MiB proportional memory while editing, and rendered 648 frames with a 5 ms median and a 13 ms 90th percentile. Pi 4/5 performance for this revision and material-cutting tests require their respective devices.</p>
 </section><section id="laser-order"><h1>Plan the laser cut order</h1>
 <p>In <strong>Layers → Laser cut order</strong>, enable <strong>Plan compatible line cuts within each layer</strong>. The preview, generated G-code and downloaded job use the planned sequence. Object geometry stays editable in its original design order. Save the project to retain the planning switches.</p>
 <ul>
@@ -2302,7 +2341,7 @@ bash scripts/ci-local.sh --list
 </tr>
 <tr>
 <td>Android 8.0 (API 26) or later, minimum supported RAM 2 GB</td>
-<td>Install the Android APK or build it from source. The editor, project and SVG exchange, cold-relaunch persistence and server-paired pendant controls were exercised on a 2 GB ARM64 emulator running API 37. Physical handset testing is pending. See <a href="#android">Android</a>.</td>
+<td>Install the Android APK or build it from source. The editor, project and SVG exchange, cold-relaunch persistence and server-paired pendant controls were exercised on a 2 GB ARM64 emulator running API 37. Pocket 0.4.1 also passed on a physical Samsung Galaxy S23 Ultra (SM-S918B, Android 17, One UI 9.0); see <a href="#android">Android</a> for the scope and the open selection defect.</td>
 </tr>
 </tbody>
 </table>
@@ -2388,7 +2427,7 @@ sh start.sh --port 8765
 <ol start="4">
 <li><strong>Forget pairing</strong> clears the phone session. <strong>Disable and revoke pairing</strong> on the server ends access for all paired clients. For another network link, use the server's address on that link and pair again.</li>
 </ol>
-<p>If pairing times out, open the monitor base URL in the phone browser on the same link. Getting the monitor page confirms reachability. If it cannot load, check the server interface address, monitor port, host firewall for this private subnet, Wi-Fi client isolation or whether the tether/PAN adapter is active. An expired token needs a fresh pairing link. If the connection drops during a job, check the controller at the workstation before taking further action. A network disconnect does not establish that motion stopped.</p>
+<p>If pairing times out, open the monitor base URL in the phone browser on the same link. Getting the monitor page confirms reachability. If it cannot load, check the server interface address, monitor port, host firewall for this private subnet (on Windows the inbound rule must cover the network profile the adapter is actually using, and third-party security software may apply its own), Wi-Fi client isolation or whether the tether/PAN adapter is active. An expired token needs a fresh pairing link. If the connection drops during a job, check the controller at the workstation before taking further action. A network disconnect does not establish that motion stopped.</p>
 <h2>Emulator acceptance</h2>
 <p>The native test uses a disposable Android emulator, an authenticated loopback monitor and the simulated GRBL controller. Select <code>--route lan</code> to reach Studio through the emulator’s virtual LAN, or <code>--route reverse</code> to forward the connection with ADB. Both routes reach a local Studio receiver. From the repository root, with a disposable emulator already booted and platform-tools on PATH, run</p>
 <pre><code class="language-sh">python validation/android_pendant_workflow.py --serial emulator-5554 --route lan --apk path/to/KerfKite-Pocket-Android.apk
