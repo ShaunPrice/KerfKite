@@ -273,6 +273,35 @@ json polygon_call(const std::string &command, const json &request) {
         }
         return json{{"where", where}};
     }
+    if (op == "delaunay" || op == "voronoi") {
+        std::vector<Point> sites;
+        for (const PointMm &point : path(field(request, "points"))) sites.push_back(to_grid(point));
+        const Triangulation triangulation = delaunay(sites);
+        json out{{"points", points(triangulation.points)}};
+        if (op == "delaunay") {
+            json triangles = json::array(), edges = json::array();
+            for (const std::array<std::uint32_t, 3> &t : triangulation.triangles) triangles.push_back(json::array({t[0], t[1], t[2]}));
+            const auto side = [](std::uint32_t triangle) { return triangle == kNoTriangle ? json() : json(triangle); };
+            for (const Triangulation::Edge &e : triangulation.edges) edges.push_back(json::array({e.a, e.b, side(e.left), side(e.right)}));
+            out["triangles"] = triangles;
+            out["edges"] = edges;
+            return out;
+        }
+        const PathMm box = path(field(request, "box"));
+        if (box.size() != 2) throw ValueError("A box must be two points");
+        json edges = json::array();
+        for (const VoronoiEdge &e : voronoi_edges(triangulation, to_grid(box[0]), to_grid(box[1])))
+            edges.push_back(json{{"ends", points({e.ends[0], e.ends[1]})}, {"sites", json::array({e.sites[0], e.sites[1]})}});
+        out["edges"] = edges;
+        return out;
+    }
+    if (op == "distance") {
+        const PolygonSet region = normalise(rings(field(request, "rings")), fill(request));
+        const BoundaryDistance wall(region);
+        json distances = json::array();
+        for (const PointMm &point : path(field(request, "points"))) distances.push_back(wall.to(to_grid(point)) / kUnitsPerMm);
+        return json{{"distances", distances}};
+    }
     if (op == "statistics") return json{{"rounds", polygon::detail::resolve_rounds()}};
     throw ValueError("Unknown polygon operation: " + op);
 }

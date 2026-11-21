@@ -16,7 +16,8 @@ Three comparisons, all against values computed by Python in this run:
    Ramp, helix and holding-tab jobs have their own generator (entry_tab_cases), with contours that cross,
    touch, fold back or nearly close, and are counted separately. So are pockets entered by a helix
    (helix_pocket_cases): pockets of many shapes, with and without islands, for a range of cutters, depths
-   and helix radii.
+   and helix radii. And so are V-carves (vcarve_cases): words of block letters, shapes with holes, thin
+   strokes, flat areas and round shapes, with settings from valid to invalid.
 
 For each job the native core must either reproduce the reference exactly (program lines, preview segments,
 length, time, bounds and warnings, or the same error message) or decline it as not ported yet. A different
@@ -28,8 +29,11 @@ is therefore shared, not compared; what is compared is everything around it: the
 their order, the order of cutting, leads, tabs, ramp entries on the offset contours, laser power,
 post-processing and the totals. Where a helix enters a pocket is decided by the same kernel, through the
 same extension (native/core/src/pocket_entry.cpp), so the place is shared and the helix built on it is
-compared. validation/polygon_kernel_check.py compares the kernel itself with Shapely, and
-tests/test_router_entry.py checks every helix against the pocket's walls.
+compared. The paths and depths of a V-carve come from the same kernel in the same way
+(native/core/src/vcarve.cpp), and the program built on them is compared.
+validation/polygon_kernel_check.py compares the kernel itself with Shapely, tests/test_router_entry.py
+checks every helix against the pocket's walls, and validation/vcarve_check.py and tests/test_vcarve.py check
+every V-carve against the outline and against the Shapely V-carve.
 Without the extension the reference falls back to Shapely, whose vertices differ, so this comparison stops
 unless --without-polygon-operations is given, which leaves those jobs out and says so.
 """
@@ -492,8 +496,8 @@ def generated_cases(count, seed):
 
 def uses_polygon_operation(project):
     """Whether a project reads its contours as a region, at the top or in its ordered operations: an offset,
-    a pocket or a fill, and also V-carving or an unknown operation, which are refused only after the region
-    has been read. Only lines and drilling do not."""
+    a pocket, a fill or a V-carve, and also an unknown operation, which is refused only after the region has
+    been read. Only lines and drilling do not."""
     if not isinstance(project, dict):
         return False
     parts = [project]
@@ -992,6 +996,201 @@ def helix_pocket_cases(count, seed):
                    paths=[[[20, 20], [280, 20], [280, 280], [20, 280], [20, 20]]], stock_thickness=2, entry_angle=15)  # fmt: skip
 
 
+def vcarve_cases(count, seed):
+    """V-carving: shapes of the kinds a carve is used for, with settings from valid to invalid.
+
+    Words of block letters with straight and slanted strokes, from strokes thinner than the sampling allowance
+    (nothing to carve) to thick ones; frames and letters with holes; thin strokes at any slope; flat areas
+    far wider than the bit; round shapes of many short sides; stars; shapes nested, overlapping and apart.
+    Sampling intervals, bit angles, depths, step-downs and tool diameters run over their whole ranges, so that
+    the depth is limited by the walls, by the depth of cut and by the tool in turn. About a fifth are untidy:
+    contours that only nearly close or that cross, settings of the wrong size or type, other heads, entries,
+    tabs, depth paths and cutters, and ordered jobs, so that each rejection is compared in the reference's
+    order. A few at the end reach the limits on samples and on points.
+    """
+    rng = random.Random(seed)
+
+    def letter(kind, x, y, w, h, s):
+        if kind == 'E':
+            m = y + h / 2
+            return [[[x, y], [x + w, y], [x + w, y + s], [x + s, y + s], [x + s, m - s / 2], [x + w * 0.7, m - s / 2], [x + w * 0.7, m + s / 2], [x + s, m + s / 2], [x + s, y + h - s], [x + w, y + h - s], [x + w, y + h], [x, y + h]]]  # fmt: skip
+        if kind == 'L':
+            return [[[x, y], [x + w, y], [x + w, y + s], [x + s, y + s], [x + s, y + h], [x, y + h]]]
+        if kind == 'T':
+            c = x + w / 2
+            return [[[c - s / 2, y], [c + s / 2, y], [c + s / 2, y + h - s], [x + w, y + h - s], [x + w, y + h], [x, y + h], [x, y + h - s], [c - s / 2, y + h - s]]]  # fmt: skip
+        if kind == 'H':
+            m = y + h / 2
+            return [[[x, y], [x + s, y], [x + s, m - s / 2], [x + w - s, m - s / 2], [x + w - s, y], [x + w, y], [x + w, y + h], [x + w - s, y + h], [x + w - s, m + s / 2], [x + s, m + s / 2], [x + s, y + h], [x, y + h]]]  # fmt: skip
+        if kind == 'I':
+            return [[[x, y], [x + s, y], [x + s, y + h], [x, y + h]]]
+        if kind == 'O':  # an outline with a hole
+            return [
+                [[x, y], [x + w, y], [x + w, y + h], [x, y + h]],
+                [[x + s, y + s], [x + w - s, y + s], [x + w - s, y + h - s], [x + s, y + h - s]],
+            ]
+        if kind == 'V':  # slanted strokes meeting at a point
+            c = x + w / 2
+            return [[[x, y + h], [c - s / 2, y], [c + s / 2, y], [x + w, y + h], [x + w - s, y + h], [c, y + s * 1.5], [x + s, y + h]]]  # fmt: skip
+        c = x + w / 2  # 'A' without its bar: slanted strokes round a notch
+        return [
+            [[x, y], [x + s, y], [c, y + h - 2 * s], [x + w - s, y], [x + w, y], [c + s / 2, y + h], [c - s / 2, y + h]]
+        ]
+
+    def close(points, places, tidy):
+        if places is not None:
+            points = [[round(px, places), round(py, places)] for px, py in points]
+        chance = rng.random()
+        if tidy or chance < 0.85:
+            points.append(list(points[0]))
+        elif chance < 0.92:  # closed to within the tolerance but not exactly
+            points.append([points[0][0] + rng.choice([1e-7, -4e-7, 0]), points[0][1] + rng.choice([5e-7, -1e-9])])
+        elif chance < 0.96:  # just outside the tolerance
+            points.append([points[0][0] + 2e-6, points[0][1]])
+        return points
+
+    for _ in range(count):
+        tidy = rng.random() < 0.8
+        width, height = rng.choice([(100, 50), (100, 50), (300, 200), (40.5, 30)])
+        places = rng.choice([None, None, 1, 2, 3, 0])
+        resolution = rng.choice([0.2, 0.3, 0.5, 0.5, 0.5, 1, 1, 2])
+        x, y = rng.uniform(1, 12), rng.uniform(1, 8)
+        kind = rng.choice(['word', 'word', 'word', 'frame', 'stroke', 'stroke', 'flat', 'round', 'star', 'nested', 'overlap', 'apart'])  # fmt: skip
+        if kind == 'word':
+            h = rng.uniform(4, 12)
+            w = h * rng.uniform(0.5, 0.8)
+            s = min(rng.choice([0.3, 0.6, 1, 1, 1.5, 2, 3]) * rng.uniform(0.8, 1.2), w / 3.2)
+            contours = []
+            for i in range(rng.randrange(1, 4)):
+                contours += letter(rng.choice('ELTHIOVA'), x + i * (w + rng.choice([0.8, 1.5])), y, w, h, s)
+        elif kind == 'frame':
+            w, h = rng.uniform(5, 16), rng.uniform(5, 14)
+            contours = letter('O', x, y, w, h, min(w, h) * rng.uniform(0.08, 0.45))
+        elif kind == 'stroke':  # as thin as the allowance, or thinner
+            length, thick, turn = rng.uniform(5, 22), rng.choice([0.25, 0.6, 1, 1.5, 2.5]), rng.uniform(0, math.pi / 2)
+            ux, uy = math.cos(turn), math.sin(turn)
+            contours = [[[x + 3, y], [x + 3 + length * ux, y + length * uy], [x + 3 + length * ux - thick * uy, y + length * uy + thick * ux], [x + 3 - thick * uy, y + thick * ux]]]  # fmt: skip
+        elif kind == 'flat':  # far wider than the bit: the depth of cut or the tool limits the depth
+            w, h = rng.uniform(8, 20), rng.uniform(8, 16)
+            contours = [[[x, y], [x + w, y], [x + w, y + h], [x, y + h]]]
+            resolution = rng.choice([0.5, 1, 1, 2, 5])
+        elif kind == 'round':
+            radius, sides = rng.uniform(2, 7), rng.choice([5, 8, 24, 90])
+            turn = rng.uniform(0, 7)
+            contours = [[[x + radius + radius * math.cos(turn + 2 * math.pi * i / sides), y + radius + radius * math.sin(turn + 2 * math.pi * i / sides)] for i in range(sides)]]  # fmt: skip
+        elif kind == 'star':
+            n = rng.randrange(4, 12)
+            angles = sorted(rng.uniform(0, 2 * math.pi) for _ in range(n))
+            contours = [[[x + 8 + 7 * r * math.cos(a), y + 8 + 7 * r * math.sin(a)] for a, r in ((a, rng.uniform(0.3, 1)) for a in angles)]]  # fmt: skip
+        elif kind == 'nested':  # a hole with an island in it
+            size = rng.uniform(6, 14)
+            contours = [[[x + d, y + d], [x + size - d, y + d], [x + size - d, y + size - d], [x + d, y + size - d]] for d in (0, size * 0.18, size * 0.36)]  # fmt: skip
+        elif kind == 'overlap':  # two shapes that overlap, which the even-odd rule turns into three
+            size = rng.uniform(5, 10)
+            contours = [[[x, y], [x + size, y], [x + size, y + size], [x, y + size]]]
+            contours.append(
+                [[px + size * rng.uniform(0.3, 0.7), py + size * rng.uniform(0.2, 0.6)] for px, py in contours[0]]
+            )
+        else:  # separate parts, some too small to carve
+            part = rng.uniform(2, 5)
+            contours = [
+                [[px, py], [px + side, py], [px + side, py + side * rng.choice([1, 1, 0.5])], [px, py + side]]
+                for px, py, side in (
+                    (x + i * part * 1.3, y + j * part * 1.3, part * rng.choice([1, 1, 0.5, 0.25]))
+                    for i in range(2)
+                    for j in range(2)
+                )  # fmt: skip
+            ]
+            rng.shuffle(contours)
+        if rng.random() < 0.3:
+            contours = [contour[::-1] for contour in contours]
+        paths = [close(contour, places, tidy) for contour in contours]
+        project = dict(
+            mode='router', protocol=rng.choice(['grbl', 'grbl', 'grbl', 'linuxcnc', 'marlin', 'mach3', 'fluidnc']),
+            width=width, height=height, feed=rng.choice([600, 1200.5, 90]), power=rng.choice([12000, 800.4]),
+            paths=paths, operation='vcarve',
+        )  # fmt: skip
+        if project['protocol'] in ('linuxcnc', 'mach3'):
+            project['dwell_units'] = rng.choice(['seconds', 'milliseconds'])
+        if rng.random() < 0.8:
+            project['v_resolution'] = resolution
+            if not tidy and rng.random() < 0.25:
+                project['v_resolution'] = rng.choice([0.1, 5, 0.09, 5.01, 0, '0.5', ' 1 ', None, True, 'fine', [0.5]])
+        if rng.random() < 0.7:
+            angles = [10, 20, 30, 45, 60, 60, 60.0, 90, 90, 120, 150, 170, '90']
+            project['v_angle'] = rng.choice(angles if tidy else angles + [9.9, 170.5, 0, 180, None, False, 'sharp'])
+        if rng.random() < 0.75:
+            depths = [0.01, 0.3, 1, 1, 1.2, 2.55, 6, 50, '2']
+            project['depth'] = rng.choice(depths if tidy else depths + [0.005, 50.5, 0, -1, None, True, 'deep'])
+        if rng.random() < 0.7:
+            diameters = [0.1, 0.5, 1, 3, 3.175, 6, 6, 6.35, 12.7, 100, '6']
+            project['tool_diameter'] = rng.choice(
+                diameters if tidy else diameters + [0.05, 100.5, 0, None, True, 'wide']
+            )
+        if rng.random() < 0.7:
+            # Mostly a step-down that reaches the depth in a level or two: a carve is cut again at every level.
+            project['step'] = rng.choice([1, 3, 10, 10, 10, 0.5] if tidy else [1, 3, 10, 0.5, 0.01, 10.5, None, 'half'])
+        if rng.random() < 0.3:
+            project['plunge'] = rng.choice([30, 250.25, 1000, 600, 90])
+        if rng.random() < 0.2:
+            project['safe'] = rng.choice([0.1, 3, 12.345])
+        if not tidy:
+            for key, choices in (
+                ('mode', ['laser', 'knife', 'router', None]), ('router_entry', ['ramp', 'helix', 'plunge', 'spiral', None]),
+                ('tabs', [{'width': 3, 'height': 0.5, 'count': 2}, False, None]), ('tool_shape', ['flat', 'ball', 'v', 'drill', None]),
+                ('path_depths', [None, [[-1 for _ in path] for path in paths]]), ('stock_thickness', [1, 100]),
+                ('operation', ['line', 'inside', 'outside', 'pocket', 'drill', 'fill', 'engrave', None]), ('passes', [1, 2, 1.5]),
+            ):  # fmt: skip
+                if rng.random() < 0.1:
+                    project[key] = rng.choice(choices)
+            if rng.random() < 0.1:
+                project[rng.choice(KEYS + ['v_resolution', 'v_angle'])] = rng.choice(WEIRD)
+            if rng.random() < 0.12:
+                project['mode'] = rng.choice(['laser', 'laser', 'knife'])  # a head that cannot carve
+            if rng.random() < 0.08 and paths:
+                # A contour that crosses itself, or one moved off the edge of the work area.
+                if rng.random() < 0.5 and len(paths[0]) > 4:
+                    paths[0][1], paths[0][2] = paths[0][2], paths[0][1]
+                else:
+                    project['paths'] = [[[px - 20, py] for px, py in path] for path in paths]
+        if rng.random() < 0.07:
+            # An ordered job: the carve, and then a line traced with the same V-bit or, at times, another tool.
+            first = {key: project.pop(key) for key in ('paths', 'operation')}
+            second = dict(paths=[[list(point) for point in path] for path in paths[:1]], operation='line', depth=0.2)
+            choice = rng.random()
+            if choice < 0.6:
+                second.update(tool_shape='v')
+                for key in ('v_angle', 'tool_diameter'):
+                    if key in project:
+                        second[key] = project[key]
+            elif choice < 0.8:
+                second.update(tool_shape='v', v_angle=rng.choice([60, 90]))
+            project['operations'] = [first, second] if rng.random() < 0.8 else [second, first]
+        yield project
+
+    if count:
+        base = dict(mode='router', width=300, height=300, feed=600, power=12000, operation='vcarve', step=10)
+        nested = [
+            [[2 + d, 2 + d], [298 - d, 2 + d], [298 - d, 298 - d], [2 + d, 298 - d], [2 + d, 2 + d]]
+            for d in (0, 0.5, 1)
+        ]
+        # 12,000 samples are the most an outline may have: the three squares, 3,540 mm of outline, take 11,998
+        # at 0.2951 mm (and are then too thin to carve) and 12,001 at 0.295 mm.
+        yield dict(base, paths=nested, v_resolution=0.2951)
+        yield dict(base, paths=nested, v_resolution=0.295)
+        yield dict(base, paths=nested, v_resolution=0.1)
+        # A flat area whose carve has more points than a job may hold, and one just small enough to be cut.
+        square = lambda side: [[[5, 5], [5 + side, 5], [5 + side, 5 + side], [5, 5 + side], [5, 5]]]
+        yield dict(base, paths=square(200), v_resolution=0.5, depth=50, tool_diameter=100)
+        yield dict(base, paths=square(110), v_resolution=0.5, depth=50, tool_diameter=100)
+        yield dict(base, paths=square(110), v_resolution=0.5, depth=50, tool_diameter=100, step=10, v_angle=170)
+        # Shapes on the edge of the work area, a shape too thin to carve, and the same shape given twice.
+        yield dict(base, paths=[[[0, 0], [300, 0], [300, 6], [0, 6], [0, 0]]], v_resolution=1)
+        yield dict(base, paths=[[[294, 0], [300, 0], [300, 300], [294, 300], [294, 0]]], v_resolution=1, v_angle=90)
+        yield dict(base, paths=[[[10, 10], [40, 10], [40, 10.9], [10, 10.9], [10, 10]]])
+        yield dict(base, paths=square(20) + square(20))
+
+
 def drill_knife_cases(count, seed):
     """Drilling and drag-knife projects: most are valid, the rest have the awkward inputs each must handle."""
     rng = random.Random(seed)
@@ -1222,11 +1421,12 @@ def main():
     parser.add_argument('--entries', type=int, default=6000, help='generated ramp, helix and holding-tab cases')
     parser.add_argument('--lines', type=int, default=20000, help='lines for the self-crossing test')
     parser.add_argument('--helix', type=int, default=5000, help='generated pockets entered by a helix')
+    parser.add_argument('--vcarve', type=int, default=4000, help='generated V-carves')
     parser.add_argument('--skip-suite', action='store_true', help='do not replay the calls made by the test suite')
     parser.add_argument(
         '--without-polygon-operations',
         action='store_true',
-        help='leave out offsets, pockets and fills (for a reference without the compiled extension)',
+        help='leave out offsets, pockets, fills and V-carves (for a reference without the compiled extension)',
     )
     args = parser.parse_args()
     if not args.cli.is_file():
@@ -1252,25 +1452,32 @@ def main():
 
     from native_core_recorder import reference
     from studio.cam import generate
-    from studio.operations import kernel_available
+    from studio.operations import kernel_available, kernel_vcarve_available
 
     os.environ.pop('KERFKITE_POLYGON_BACKEND', None)  # the reference as Studio runs it
     os.environ.pop('KERFKITE_SOLID_BACKEND', None)
     shared = kernel_available()
+    if shared and not kernel_vcarve_available():
+        raise SystemExit(
+            'The compiled extension (studio._relief_native) was built before the core had V-carving, so the'
+            ' reference would carve with Shapely, whose paths differ from the kernel\'s. Build it again'
+            ' (python setup.py build_ext --inplace).'
+        )
     if shared:
         print(
-            'NOTE the reference computes offsets, pockets and fills with the core\'s polygon kernel, through the'
-            ' compiled extension: for those jobs the operation is shared, and what surrounds it is compared'
+            'NOTE the reference computes offsets, pockets, fills and V-carves with the core\'s polygon kernel,'
+            ' through the compiled extension: for those jobs the operation is shared, and what surrounds it is'
+            ' compared'
         )
     elif args.without_polygon_operations:
         print(
-            'NOTE the compiled extension is not installed, so the reference would compute offsets, pockets and'
-            ' fills with Shapely: jobs with those operations are NOT COMPARED in this run'
+            'NOTE the compiled extension is not installed, so the reference would compute offsets, pockets, fills'
+            ' and V-carves with Shapely: jobs with those operations are NOT COMPARED in this run'
         )
     else:
         raise SystemExit(
-            'The compiled extension (studio._relief_native) is not installed, so offsets, pockets and fills'
-            ' cannot be compared: the reference would compute them with Shapely, whose vertices differ from the'
+            'The compiled extension (studio._relief_native) is not installed, so offsets, pockets, fills and'
+            ' V-carves cannot be compared: the reference would compute them with Shapely, whose vertices differ from the'
             ' kernel\'s. Build it (python setup.py build_ext --inplace), or pass --without-polygon-operations'
             ' to compare everything else.'
         )
@@ -1340,25 +1547,29 @@ def main():
                     failures.append((case['project'], expect, got))
 
         compare(lines)
-        # A helix into a pocket is a long program, so these are compared a few hundred at a time and not kept.
+        # A helix into a pocket is a long program, and so is a V-carve, so these are compared a few hundred at
+        # a time and not kept.
         seen = set()
-        helices = helix_pocket_cases(args.helix, 91)
-        while True:
-            batch = list(itertools.islice(helices, 250))
-            if not batch:
-                break
-            lines = {}
-            for project in batch:
-                line, _ = reference(generate, project)
-                # A digest that is the same from run to run stands for the line, so the lines are not kept.
-                mark = None if line is None else hashlib.sha256(line.encode()).digest()
-                if mark is not None and mark not in seen:
-                    seen.add(mark)
-                    lines.setdefault(line, 'helix')
-            if lines:
-                compare(lines)
+        for origin, group in (
+            ('helix', helix_pocket_cases(args.helix, 91)),
+            ('v-carve', vcarve_cases(args.vcarve, 93)),
+        ):
+            while True:
+                batch = list(itertools.islice(group, 250))
+                if not batch:
+                    break
+                lines = {}
+                for project in batch:
+                    line, _ = reference(generate, project)
+                    # A digest that is the same from run to run stands for the line, so the lines are not kept.
+                    mark = None if line is None else hashlib.sha256(line.encode()).digest()
+                    if mark is not None and mark not in seen:
+                        seen.add(mark)
+                        lines.setdefault(line, origin)
+                if lines:
+                    compare(lines)
 
-    for origin in ('suite', 'generated', 'entry/tabs', 'helix'):
+    for origin in ('suite', 'generated', 'entry/tabs', 'helix', 'v-carve'):
         total = sum(n for (o, _), n in tally.items() if o == origin)
         if not total:
             continue
@@ -1378,7 +1589,9 @@ def main():
     if not tally['generated', 'program'] or (suite and not tally['suite', 'program']):
         raise SystemExit('No program was reproduced: the comparison did not exercise the native core.')
     if not shared:
-        print('PASS for the cases compared; offsets, pockets and fills were NOT COMPARED (no compiled extension).')
+        print(
+            'PASS for the cases compared; offsets, pockets, fills and V-carves were NOT COMPARED (no compiled extension).'
+        )
         return
     print('PASS the native core reproduces or declines every case; none differs from the Python reference.')
 
