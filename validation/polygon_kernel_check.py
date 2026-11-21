@@ -1238,10 +1238,17 @@ def check_fill(report, name, request, project, region, mine, reference):
                 (a[1][0] - a[0][0]) * (b[1][0] - b[0][0]) + (a[1][1] - a[0][1]) * (b[1][1] - b[0][1]) > 0
                 for a, b in zip(mine, reference)
             )
-            if forward:
+            # A piece whose middle is on the boundary runs along an edge, which the two need not cut alike
+            # (and which the reference gives the edge's direction).
+            along = any(
+                apart > 3 / UNITS
+                and boundary.distance(Point((part[0][0] + part[1][0]) / 2, (part[0][1] + part[1][1]) / 2)) <= 3 / UNITS
+                for part, apart in zip(mine, ends)
+            )
+            if forward and not along:
                 group['stray'] = max(group['stray'], worst)
             else:
-                group['thin'] += 1  # a row along an edge, which the reference gives the edge's direction
+                group['thin'] += 1
             return
     grown, shrunk = region.buffer(3 / UNITS), region.buffer(-3 / UNITS)
     if any(grown.distance(Point(p)) > 0 for part in mine for p in part):

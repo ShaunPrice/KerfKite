@@ -296,17 +296,16 @@ def generated_cases(count, seed):
         yield project
 
 
-POLYGON_OPERATIONS = ('inside', 'outside', 'pocket', 'fill')
-
-
 def uses_polygon_operation(project):
-    """Whether a project asks for an offset, pocket or fill, at the top or in its ordered operations."""
+    """Whether a project reads its contours as a region, at the top or in its ordered operations: an offset,
+    a pocket or a fill, and also V-carving or an unknown operation, which are refused only after the region
+    has been read. Only lines and drilling do not."""
     if not isinstance(project, dict):
         return False
     parts = [project]
     if isinstance(project.get('operations'), list):
         parts += [part for part in project['operations'] if isinstance(part, dict)]
-    return any(isinstance(part.get('operation'), str) and part['operation'] in POLYGON_OPERATIONS for part in parts)
+    return any('operation' in part and part['operation'] not in ('line', 'drill') for part in parts)
 
 
 def polygon_cases(count, seed):

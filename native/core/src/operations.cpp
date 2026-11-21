@@ -11,7 +11,7 @@
 // * Offsets are round, 32 segments a quarter turn, with the corners of each arc outside the true arc, so
 //   that a tool path is never nearer to the contour than the tool's radius.
 // * outlines() lists polygons by area, smallest first, and for each polygon its holes before its outer
-//   ring. Rings are closed, start at their lowest left-most vertex, and outer rings run clockwise.
+//   ring. Rings are closed, start at their left-most vertex, and outer rings run clockwise.
 // * A grid coordinate n becomes the double n / 1e6: one correctly rounded division, so the same double on
 //   every platform. The program writes three decimals, a thousand grid steps, so the conversion never
 //   decides a digit.
@@ -57,15 +57,21 @@ double value(const json &project, const char *key, double fallback, double lo, d
     return result;
 }
 
+}  // namespace
+
 // studio.operations.region(paths): the even-odd region of closed contours. The paths have passed
 // validation as lists of finite XY points before they arrive here.
-PolygonSet region(const std::vector<Path> &paths) {
+//
+// A contour counts as closed when its last point is within a millionth of a millimetre of its first, and
+// that last point is then taken to be the first: it is not a further vertex. (Placed on the grid on its own
+// it could land one step from the first and make a spike one step long.)
+PolygonSet contour_region(const std::vector<Path> &paths) {
     std::vector<polygon::Ring> contours;
     contours.reserve(paths.size());
     for (const Path &path : paths) {
         if (path.size() < 4 || pymath::dist(path.front()[0], path.front()[1], path.back()[0], path.back()[1]) > 1e-6)
             throw ValueError("This operation needs closed contours");
-        polygon::Ring ring = polygon::ring_from_mm(path);
+        polygon::Ring ring = polygon::ring_from_mm(Path(path.begin(), path.end() - 1));
         if (!polygon::is_simple(ring) || std::fabs(polygon::signed_area(ring)) < 1e-9)
             throw ValueError("Repair self-crossing or zero-area contours before CAM");
         contours.push_back(std::move(ring));
@@ -74,6 +80,8 @@ PolygonSet region(const std::vector<Path> &paths) {
     if (result.empty()) throw ValueError("Contours cancel under even-odd fill");
     return result;
 }
+
+namespace {
 
 // The cosine and sine of an angle given in degrees, the same bits on every platform. The angle is folded
 // into the first eighth of a turn exactly (fmod and these subtractions do not round), so that a whole
@@ -185,7 +193,7 @@ std::vector<std::string> prepare(const json &project, std::vector<Path> &paths) 
     const json *operation = get(project, "operation");
     const bool router = is_text(get(project, "mode"), "router"), laser = is_text(get(project, "mode"), "laser");
     std::vector<std::string> warnings;
-    const PolygonSet g = region(paths);
+    const PolygonSet g = contour_region(paths);
     const bool outside = is_text(operation, "outside");
     if (outside || is_text(operation, "inside")) {
         const double radius = (router ? value(project, "tool_diameter", 3.175, 0.01, 100, "0.01", "100")
@@ -269,7 +277,7 @@ Json operation_call(const std::string &command, const Json &request) {
     const json *name = request.is_object() ? get(request, "op") : nullptr;
     const std::string op = name && name->is_string() ? name->get<std::string>() : std::string();
     if (op != "region" && op != "offset" && op != "pocket" && op != "fill") throw ValueError("Unknown operation: " + op);
-    const PolygonSet g = region(contours(request));
+    const PolygonSet g = contour_region(contours(request));
     std::vector<Path> paths;
     if (op == "region") {
         paths = polygon::outlines(g);
