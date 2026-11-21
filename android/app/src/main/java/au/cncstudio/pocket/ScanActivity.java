@@ -172,9 +172,11 @@ public final class ScanActivity extends Activity implements SurfaceHolder.Callba
     }
 
     @Override public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
+        // An empty result means the question was interrupted, not answered: the permission itself is checked below.
         if (request != CAMERA_REQUEST) return;
-        if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) open();
-        else status.setText("Camera access was not allowed. Allow it in Settings, or paste the pairing link instead.");
+        if (permitted()) open();
+        else if (results.length > 0)
+            status.setText("Camera access was not allowed. Allow it in Settings, or paste the pairing link instead.");
     }
 
     @Override protected void onResume() {
@@ -264,7 +266,7 @@ public final class ScanActivity extends Activity implements SurfaceHolder.Callba
                         request.addTarget(read);
                         request.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
                         configured.setRepeatingRequest(request.build(), null, worker);
-                        main.post(() -> { if (camera == device) session = configured; });
+                        main.post(() -> { if (camera == device) { session = configured; status.setText(AIM); } });
                     } catch (CameraAccessException | IllegalStateException | IllegalArgumentException stopped) {
                         // The camera was closed while it was being set up.
                     }
