@@ -3,9 +3,10 @@
 // 1. resolve(). Every pair of edges that have a point in common, other than an end point they share, is
 //    split there: at an end point of one lying on the other, exactly; at the ends of a shared length,
 //    exactly; where two edges cross, at the crossing rounded to the nearest grid point, through which
-//    both edges are bent. Bending can make an edge meet another it missed before, so the pieces are
-//    tested again, round after round, until a round finds nothing. The edges then meet only at shared
-//    end points, which is decided by exact arithmetic, not assumed.
+//    both edges are bent, and with them every edge that passes within half a unit of that point. Bending
+//    can make an edge meet another it missed before, so the pieces are tested again, round after round,
+//    until a round finds nothing. The edges then meet only at shared end points, which is decided by
+//    exact arithmetic, not assumed.
 // 2. wind(). A sweep from left to right gives the winding number on each side of every edge.
 // 3. region(). Edges with the inside on one side only are the boundary. They are followed into closed
 //    walks, turning at each vertex so as to keep to one face of the inside; a walk that passes a vertex
@@ -58,6 +59,12 @@ bool passes(const Edge &e, const Point &p) {
     const Coord dy = e.b.y - e.a.y;
     const Int128 reach = Int128((e.b.x - e.a.x) + (dy < 0 ? -dy : dy));
     return (area < Int128(0) ? Int128(0) - area : area) * Int128(2) < reach;
+}
+
+// Whether a grid point that is not one of its ends lies exactly on an edge.
+bool holds(const Edge &e, const Point &p) {
+    if (p.x < e.a.x || p.x > e.b.x || p.y < std::min(e.a.y, e.b.y) || p.y > std::max(e.a.y, e.b.y)) return false;
+    return p != e.a && p != e.b && cross(p, e.a, e.b) == Int128(0);
 }
 
 // Where two edges cross at a point inside both, rounded to the grid; false when they do not.
@@ -202,8 +209,8 @@ void Arrangement::resolve() {
         // Each pair with at least one new edge is looked at once; two old edges were looked at in an earlier
         // round and neither has changed.
         // 1. Where the two cross, the crossing is rounded to a grid point and both are bent through it.
-        // 2. An edge that passes within half a unit of a vertex of the other is bent through it: that
-        //    covers a vertex lying on an edge and the ends of a shared length.
+        // 2. Where a vertex of one lies exactly on the other, the other is split there: a vertex on an edge,
+        //    and the ends of a length two edges share. Nothing moves.
         points.clear();
         for (std::uint32_t i = 0; i < n; ++i) {
             if (!edges_[i].fresh) continue;
@@ -218,15 +225,17 @@ void Arrangement::resolve() {
                     if (at != s.a && at != s.b) splits.push_back({i, at});
                     if (at != t.a && at != t.b) splits.push_back({j, at});
                 }
-                if (passes(s, t.a)) splits.push_back({i, t.a});
-                if (passes(s, t.b)) splits.push_back({i, t.b});
-                if (passes(t, s.a)) splits.push_back({j, s.a});
-                if (passes(t, s.b)) splits.push_back({j, s.b});
+                if (holds(s, t.a)) splits.push_back({i, t.a});
+                if (holds(s, t.b)) splits.push_back({i, t.b});
+                if (holds(t, s.a)) splits.push_back({j, s.a});
+                if (holds(t, s.b)) splits.push_back({j, s.b});
             });
         }
         // 3. Every edge that passes within half a unit of a rounded crossing is bent through it, not only
         //    the two that cross there. Without this, two edges at a fine angle chase each other along
-        //    their length, a unit a round.
+        //    their length, a unit a round. An edge is never bent towards a vertex that was already there:
+        //    an edge and a vertex may stay closer than a unit, exactly apart, and a result put through
+        //    the kernel again comes back unchanged.
         std::sort(points.begin(), points.end());
         points.erase(std::unique(points.begin(), points.end()), points.end());
         for (const Point &p : points)

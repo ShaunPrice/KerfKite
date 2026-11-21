@@ -220,7 +220,8 @@ class Artwork {
 // A straight segment between two grid points.
 using Segment = std::array<Point, 2>;
 
-// Cuts straight segments to a region. Build one for a region and use it for every line of a hatch.
+// Cuts straight segments to a region. Build one for a region and use it for every line of a hatch. One
+// LineClipper is for one thread at a time; separate ones, like every other function here, are independent.
 class LineClipper {
   public:
     explicit LineClipper(const PolygonSet &region);

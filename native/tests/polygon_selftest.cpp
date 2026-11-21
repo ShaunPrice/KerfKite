@@ -564,6 +564,7 @@ static double seconds_since(const std::chrono::steady_clock::time_point &start) 
 
 static void bench() {
     // 1. A pocket of a contour of 2,000 vertices: an inset by the tool radius and then 50 by the stepover.
+    //    The contour is 45 mm from its centre at the nearest, so 50 passes of 0.8 mm leave something.
     Random random(3);
     const PolygonSet contour = region(blob(random, 0, 0, 100000000, 2000));
     auto start = std::chrono::steady_clock::now();
@@ -571,10 +572,10 @@ static void bench() {
     std::size_t vertices = vertex_count(inset);
     int passes = 1;
     for (; passes <= 50 && !inset.empty(); ++passes) {
-        inset = offset(inset, -1.0);
+        inset = offset(inset, -0.8);
         vertices += vertex_count(inset);
     }
-    std::printf("pocket: contour of %zu vertices, %d passes, %zu vertices of tool path: %.2f s\n", vertex_count(contour), passes, vertices, seconds_since(start));
+    std::printf("pocket: contour of %zu vertices, %d insets, %zu vertices of tool path: %.2f s\n", vertex_count(contour), passes, vertices, seconds_since(start));
 
     // 2. The union of 50,000 small shapes that overlap their neighbours: pads and tracks on a board.
     start = std::chrono::steady_clock::now();
@@ -630,7 +631,7 @@ int main(int argc, char **argv) {
     }
     std::printf("resolving took at most %d rounds\n", detail::resolve_rounds());
     // The same on every compiler and processor, and with either 128-bit integer.
-    const std::uint64_t recorded = 0xd1e20f175ce1c906ULL;
+    const std::uint64_t recorded = 0xf3d117d67084a0ecULL;
     std::printf("digest %016llx\n", static_cast<unsigned long long>(digest));
     expect(digest == recorded, "the generated results differ from the recorded digest");
     std::printf(failures ? "polygon self-test FAILED\n" : "polygon self-test passed\n");
