@@ -1,6 +1,7 @@
 """Polygon CAM and drag-knife preparation. Geometry stays separate from G-code."""
 
 import math
+from numbers import Real
 from shapely.geometry import Polygon, LineString, GeometryCollection, MultiPoint
 from shapely.ops import voronoi_diagram
 from shapely import affinity
@@ -26,7 +27,20 @@ def router_tool_shape(settings):
     return settings.get('tool_shape', 'drill' if op == 'drill' else 'flat')
 
 
+def _point(point):
+    return (
+        isinstance(point, (list, tuple))
+        and len(point) == 2
+        and all(isinstance(v, Real) and not isinstance(v, bool) and math.isfinite(v) for v in point)
+    )
+
+
 def region(paths):
+    # Paths arrive from request bodies and imported files: reject anything that is not a list of XY points.
+    if not isinstance(paths, (list, tuple)) or not all(
+        isinstance(path, (list, tuple)) and all(map(_point, path)) for path in paths
+    ):
+        raise ValueError('Contours must be lists of finite XY points')
     result = GeometryCollection()
     for path in paths:
         if len(path) < 4 or math.dist(path[0], path[-1]) > 1e-6:

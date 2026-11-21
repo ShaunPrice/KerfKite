@@ -52,3 +52,10 @@ ignore = [
 "studio/web_server.py" = ["S104"]             # hosted HTTPS editor; the bind address is an operator option
 "studio/web_transfer.py" = ["S310"]           # destination is validated as HTTPS by validate_destination
 "studio/windows_support.py" = ["S603"]        # fixed argument list, no shell
+
+[tool.coverage.run]
+source = ["studio"]
+
+[tool.coverage.report]
+# Floor for a plain install. With the mcp, web and step extras the suite reaches 86%.
+fail_under = 75

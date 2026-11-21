@@ -12,9 +12,16 @@ def register_design_routes(app):
     for module in (assembly, cad_exchange, fixture_collision, program_import, import_bundle):
         module.register(app)
 
+    def body(message):
+        # Design routes accept one JSON object. Anything else is a JSON 400, never an unhandled error.
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            raise ValueError(message)
+        return payload
+
     def submitted_model():
-        payload = request.get_json()
-        if not isinstance(payload, dict) or not isinstance(payload.get('model'), dict):
+        payload = body('Supply a CAD model in the model field')
+        if not isinstance(payload.get('model'), dict):
             raise ValueError('Supply a CAD model in the model field')
         return payload['model']
 
@@ -29,9 +36,7 @@ def register_design_routes(app):
         from .scad_geometry import build_script
         from .solid_cad import Dimensions, _rings
 
-        payload = request.get_json()
-        if not isinstance(payload, dict):
-            raise ValueError('Supply a CAD script')
+        payload = body('Supply a CAD script')
         parameters = Dimensions(payload.get('parameters', {})).script_parameters(payload.get('overrides', {}))
         dimension, shape = build_script(payload.get('source'), parameters)
         if dimension == 2:
@@ -51,8 +56,8 @@ def register_design_routes(app):
         from .sketch_profile import profile_geometry
         from .sketch_constraints import solve_profile
 
-        payload = request.get_json()
-        if not isinstance(payload, dict) or not isinstance(payload.get('points'), list):
+        payload = body('Supply sketch points and parameters')
+        if not isinstance(payload.get('points'), list):
             raise ValueError('Supply sketch points and parameters')
         if len(payload['points']) > 256:
             raise ValueError('A sketch supports up to 256 vertices')
@@ -99,8 +104,8 @@ def register_design_routes(app):
     def section_solid():
         from .solid_cad import horizontal_section
 
-        payload = request.get_json()
-        if not isinstance(payload, dict) or not isinstance(payload.get('model'), dict):
+        payload = body('Supply a CAD model and section height')
+        if not isinstance(payload.get('model'), dict):
             raise ValueError('Supply a CAD model and section height')
         return jsonify(horizontal_section(payload['model'], payload.get('z')))
 
@@ -122,27 +127,29 @@ def register_design_routes(app):
     def tool_change_plan():
         from .tool_changes import plan_tool_changes
 
-        data = request.get_json()
-        if not isinstance(data, dict):
-            raise ValueError('Provide a project')
+        data = body('Provide a project')
         return jsonify(plan_tool_changes(data.get('project')))
 
     @app.post('/api/rotary')
     def rotary_export():
         from .rotary import generate_rotary
 
-        data = request.get_json()
-        if not isinstance(data, dict) or not isinstance(data.get('project'), dict):
+        data = body('Provide a project and rotary setup')
+        if not isinstance(data.get('project'), dict):
             raise ValueError('Provide a project and rotary setup')
         return jsonify(generate_rotary(data['project'], data.get('options', {})))
 
     @app.post('/api/geometry')
     def geometry():
-        data = request.get_json()
+        data = body('Select 1–200 objects')
         objects = data.get('objects', [])
         if not isinstance(objects, list) or not 1 <= len(objects) <= 200:
             raise ValueError('Select 1–200 objects')
-        if sum(len(path) for obj in objects for path in obj.get('paths', [])) > 100000:
+        if not all(isinstance(o, dict) and isinstance(o.get('paths'), list) for o in objects):
+            raise ValueError('Each object needs a list of paths')
+        if not all(isinstance(path, list) for o in objects for path in o['paths']):
+            raise ValueError('Each path is a list of points')
+        if sum(len(path) for obj in objects for path in obj['paths']) > 100000:
             raise ValueError('Geometry too complex')
         shapes = [region(o['paths']) for o in objects]
         op = data.get('action')
@@ -177,20 +184,20 @@ def register_design_routes(app):
             # Older clients post seven decimal numbers per row. Apply this bound
             # only after normal request authentication, on this design route.
             request.max_content_length = 36 * 1024 * 1024
-            data = request.get_json()
+            data = request.get_json(silent=True)
         return jsonify(simulate(data))
 
     @app.post('/api/extrude')
     def extrude_artwork():
         from .solid_text import extrude
 
-        return jsonify(extrude(request.get_json()))
+        return jsonify(extrude(body('Supply closed artwork paths')))
 
     @app.post('/api/artwork-relief')
     def artwork_relief():
         from shapely.geometry import box
 
-        data = request.get_json()
+        data = body('Supply closed artwork paths')
         g = region(data.get('paths', []))
         width = value(data, 'width', 100, 0.1, 2000)
         height = value(data, 'height', 100, 0.1, 2000)
@@ -218,9 +225,7 @@ def register_design_routes(app):
 
     @app.post('/api/relief')
     def relief():
-        data = request.get_json()
-        if not isinstance(data, dict):
-            raise ValueError('Expected relief settings')
+        data = body('Expected relief settings')
         warnings = []
         if data.get('content_base64'):
             from .mesh_import import stl_heightmap

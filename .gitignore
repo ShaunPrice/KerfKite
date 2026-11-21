@@ -29,3 +29,6 @@ marketing/render/
 *.jks
 *.keystore
 local.properties
+
+# Coverage data written by the pre-push hook
+.coverage
