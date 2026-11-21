@@ -293,6 +293,14 @@ def exercise(phone, host, port, replace_pairing, encrypted=False):
 
         step('forget pairing', forget)
         paired = False
+    except AssertionError:
+        # What the pendant was showing when a step failed, before the listener is closed.
+        try:
+            shown = [n.get('text') for n in phone.tree().iter('node') if n.get('class', '').endswith('TextView')]
+            print('Pendant showed:', ' | '.join(text for text in shown if text), flush=True)
+        except RuntimeError:
+            pass
+        raise
     finally:
         close()
         controller.disconnect()
