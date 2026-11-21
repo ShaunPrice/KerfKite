@@ -578,7 +578,7 @@ class GerberTests(Base):
         self.refused(
             lambda: pcb_import._core_call('excellon', '{"text": "M30", "offset": [1, 1]}'), 'not known: offset'
         )
-        self.refused(lambda: pcb_import._core_call('gerber-isolation', '{}'), 'Unknown command: gerber-isolation')
+        self.refused(lambda: pcb_import._core_call('gerber-panel', '{}'), 'Unknown command: gerber-panel')
 
 
 @unittest.skipUnless(HAS_CORE, 'The compiled extension with the native core is not installed')
@@ -1060,11 +1060,11 @@ class DamagedFileTests(Base):
         rng = random.Random(20261121)
         gerbers = [path.read_text() for path in sorted(FIXTURES.glob('*.gbr'))]
         drills = [path.read_text() for path in sorted(FIXTURES.glob('*.drl'))]
-        self.assertEqual((len(gerbers), len(drills)), (5, 4))
+        self.assertEqual((len(gerbers), len(drills)), (10, 4))
         outcomes = {'read': 0, 'refused': 0}
         for _ in range(400):
             for texts, calls in (
-                (gerbers, (pcb_import.gerber, pcb_import.outline_paths)),
+                (gerbers, (pcb_import.gerber, pcb_import.outline_paths, lambda text: pcb_import.isolation(text, 0.2))),
                 (drills, (pcb_import.excellon, pcb_import.drill_operations)),
             ):
                 text = self.damaged(rng, rng.choice(texts))

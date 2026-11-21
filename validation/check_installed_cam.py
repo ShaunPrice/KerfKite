@@ -125,3 +125,88 @@ assert (len(plan['lines']), len(levelled), digest) == (356, 367, 'c8dc676458939e
     len(levelled),
     digest,
 )
+
+# Isolation toolpaths exist only in the native core as well, on its own polygon kernel, whose arithmetic is in
+# whole nanometres: the copper image, the contours and the unreachable places of this board are pinned, so
+# that every platform a wheel is built for gives the same bytes. The board is written here because an
+# installed wheel carries no fixtures. It has no arcs and no rotated macro, the two places where the Gerber
+# importer itself calls the platform's mathematics library.
+import json
+
+from studio import pcb_import
+
+assert pcb_import.isolation_available()
+BOARD = '\n'.join(
+    [
+        '%FSLAX46Y46*%',
+        '%MOMM*%',
+        '%AMROUNDRECT*21,1,$1,$2-2x$3,0,0,0*21,1,$1-2x$3,$2,0,0,0*1,1,2x$3,$1/2-$3,$2/2-$3*'
+        '1,1,2x$3,$3-$1/2,$2/2-$3*1,1,2x$3,$3-$1/2,$3-$2/2*1,1,2x$3,$1/2-$3,$3-$2/2*%',
+        '%ADD10C,0.250000*%',
+        '%ADD11C,1.600000X0.700000*%',
+        '%ADD12R,1.500000X1.000000*%',
+        '%ADD13O,2.000000X1.000000*%',
+        '%ADD14P,1.500000X6*%',
+        '%ADD15ROUNDRECT,1.600000X1.200000X0.300000*%',
+        '%ADD16R,0.400000X0.300000*%',
+        '%ADD17C,2.400000*%',
+        'G01*',
+        '%LPD*%',
+        'G36*',
+        'X1000000Y1000000D02*',
+        'X19000000Y1000000D01*',
+        'X19000000Y7000000D01*',
+        'X1000000Y7000000D01*',
+        'X1000000Y1000000D01*',
+        'G37*',
+        '%LPC*%',
+        'D17*',
+        'X4000000Y4000000D03*',
+        'X8000000Y4000000D03*',
+        'D10*',
+        'X11000000Y2500000D02*',
+        'X17000000Y5500000D01*',
+        '%LPD*%',
+        'D11*',
+        'X4000000Y4000000D03*',
+        'D15*',
+        'X8000000Y4000000D03*',
+        '%SRX3Y2I4.130000J2.770000*%',
+        'D12*',
+        'X2000000Y9000000D03*',
+        'D10*',
+        'X2000000Y9000000D02*',
+        'X3310000Y10370000D01*',
+        'D13*',
+        'X3310000Y10370000D03*',
+        '%SR*%',
+        'D14*',
+        'X16000000Y10000000D03*',
+        'D16*',
+        'X15000000Y12500000D02*',
+        'X18000000Y13700000D01*',
+        'D10*',
+        'X15000000Y8900000D02*',
+        'X18000000Y8900000D01*',
+        'X15000000Y8520000D02*',
+        'X18000000Y8520000D01*',
+        'M02*',
+    ]
+)
+isolated = pcb_import.isolation(
+    BOARD,
+    pcb_import.v_bit_width(0.1, 30, 0.2),
+    passes=3,
+    overlap=0.3,
+    offset=[2.345, 1.005],
+    mirror_x=12.5,
+    clip=[[[2.5, 1.5], [24.0, 1.5], [24.0, 15.2], [2.5, 15.2], [2.5, 1.5]]],
+)
+digest = sha256(json.dumps(isolated, sort_keys=True, separators=(',', ':')).encode()).hexdigest()[:16]
+summary = (isolated['islands'], isolated['path_count'], isolated['point_count'], isolated['unreachable_count'], digest)
+assert summary == (13, 31, 2039, 1, '8f30b3062ac4865b'), summary
+assert (isolated['tool_width'], isolated['smallest_gap'], isolated['clipped']) == (
+    0.20718,
+    0.13,
+    {'cut': 1, 'dropped': 0},
+)

@@ -23,6 +23,13 @@ setup(
                 'native/core/src/excellon.cpp',
                 'native/core/src/gerber.cpp',
                 'native/core/src/pcb.cpp',
+                # Isolation toolpaths, and the polygon kernel they are built on (not its "polygon" command).
+                'native/core/src/isolation.cpp',
+                'native/core/src/polygon/arrangement.cpp',
+                'native/core/src/polygon/boolean.cpp',
+                'native/core/src/polygon/clip.cpp',
+                'native/core/src/polygon/measure.cpp',
+                'native/core/src/polygon/offset.cpp',
             ],
             language='c++',
             include_dirs=['native/core/include'],

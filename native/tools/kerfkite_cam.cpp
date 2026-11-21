@@ -6,6 +6,7 @@
 //   kerfkite-cam level REQUEST.json          a program corrected to follow that surface
 //   kerfkite-cam gerber FILE [--arc-tolerance MM]            a Gerber layer as drawn objects in millimetres
 //   kerfkite-cam gerber-outline FILE [--tolerance MM] [--offset [X,Y]]   a profile layer as closed paths
+//   kerfkite-cam gerber-isolation FILE --tool-width MM [--passes N] [--overlap F] [--mirror-x X]   isolation paths
 //   kerfkite-cam excellon FILE [--units mm|inch] [--integer N --decimal N] [--omitted-zeros leading|trailing]
 //   kerfkite-cam excellon-drills FILE [--offset [X,Y]]       the holes as drilling operations, by diameter
 //   kerfkite-cam polygon REQUEST.json        the polygon kernel: see kerfkite/polygon_command.hpp
@@ -42,7 +43,7 @@ namespace {
 int usage() {
     std::cerr << "usage: kerfkite-cam generate PROJECT.json [-o PROGRAM.nc] [--json]\n"
                  "       kerfkite-cam probe-plan|height-map|level REQUEST.json\n"
-                 "       kerfkite-cam gerber|gerber-outline|excellon|excellon-drills FILE [--option VALUE ...]\n"
+                 "       kerfkite-cam gerber|gerber-outline|gerber-isolation|excellon|excellon-drills FILE [--option VALUE ...]\n"
                  "       kerfkite-cam polygon REQUEST.json | polygon-batch CASES.jsonl\n"
                  "       kerfkite-cam batch CASES.jsonl\n"
                  "       kerfkite-cam numbers < VALUES\n";
@@ -263,7 +264,9 @@ int main(int argc, char **argv) {
     if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "polygon") && argc == 3)
         return request(command, argv[2]);
     if (command == "polygon-batch" && argc == 3) return polygon_batch(argv[2]);
-    if ((command == "gerber" || command == "gerber-outline" || command == "excellon" || command == "excellon-drills") && argc >= 3)
+    if ((command == "gerber" || command == "gerber-outline" || command == "gerber-isolation" || command == "excellon" ||
+         command == "excellon-drills") &&
+        argc >= 3)
         return board(command, argc, argv);
     if (command == "numbers" && argc == 2) return numbers();
     if (command == "arithmetic" && argc == 2) return arithmetic();

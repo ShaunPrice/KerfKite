@@ -150,6 +150,30 @@ inline Point offset_of(const json &request) {
     return offset;
 }
 
+// Where a conversion puts a board. "offset" moves it; "mirror_x": X then turns it over about the vertical line
+// at that X, which is how the underside of a board is machined: every layer cut with the board face down takes
+// the same mirror line, so that both sides register.
+struct Placement {
+    Point offset;
+    bool mirrored = false;
+    double axis = 0;
+    Point operator()(const Point &p) const {
+        const double x = p.x + offset.x;
+        return Point{mirrored ? 2 * axis - x : x, p.y + offset.y};
+    }
+};
+
+inline Placement placement_of(const json &request) {
+    Placement placement;
+    placement.offset = offset_of(request);
+    const json *mirror = detail::get(request, "mirror_x");
+    if (!detail::none(mirror)) {
+        placement.mirrored = true;
+        placement.axis = detail::number(mirror, "Mirror X", -MAX_COORDINATE, MAX_COORDINATE, "-10000", "10000");
+    }
+    return placement;
+}
+
 // "width" and "height" of the work area, when the caller wants the fit checked. False when neither is given.
 inline bool work_area(const json &request, double &width, double &height) {
     const json *w = detail::get(request, "width"), *h = detail::get(request, "height");

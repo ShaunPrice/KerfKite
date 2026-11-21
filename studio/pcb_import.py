@@ -1,23 +1,26 @@
-"""Circuit board import: Gerber layers and Excellon drill files.
+"""Circuit board import: Gerber layers, Excellon drill files and isolation toolpaths.
 
-The work is done by the native core (native/core/src/gerber.cpp and excellon.cpp), which is the only
-implementation: there is no Python version to fall back to. Without the compiled extension these functions
+The work is done by the native core (native/core/src/gerber.cpp, excellon.cpp and isolation.cpp), which is the
+only implementation: there is no Python version to fall back to. Without the compiled extension these functions
 raise ValueError. Everything returned is in millimetres. See docs/PCB.md.
 
-Importing only reads the file. Nothing here writes to a controller or starts a job, and isolation toolpaths
-are not generated yet: a copper layer comes back as the list of objects it draws.
+Importing only reads the files. Nothing here writes to a controller or starts a job.
 
 Typical use::
 
     outline = outline_paths(read('board-Edge_Cuts.gbr'))
     offset = placement([outline['bounds']], margin=5)          # bring the board to the work origin
     outline = outline_paths(read('board-Edge_Cuts.gbr'), offset=offset)
+    copper = isolation(read('board-F_Cu.gbr'), tool_width=v_bit_width(0.1, 30, 0.1), offset=offset)
+    for operation in copper['operations']:                     # engrave: one tool, so one ordered job
+        job = generate({**settings, 'depth': 0.1, **operation})
     drills = drill_operations(read('board.drl'), offset=offset)
     for operation in drills['operations']:                     # one job for each drill diameter
         job = generate({**settings, **operation})
 """
 
 import json
+import math
 import os
 
 try:
@@ -79,8 +82,83 @@ def excellon(text, units=None, integer=None, decimal=None, omitted_zeros=None):
     )
 
 
+def isolation_available():
+    """Whether the compiled extension carries isolation toolpaths (an older build may have only the importers)."""
+    if _core_call is None:
+        return False
+    try:
+        _core_call('gerber-isolation', '{}')
+    except ValueError as error:
+        return 'Unknown command' not in str(error)
+    return True
+
+
+def v_bit_width(tip_width, angle, depth):
+    """The width a V-bit cuts at a depth: its flat tip plus what the cone adds on both sides.
+
+    tip_width and depth are in millimetres and angle is the included angle of the cone in degrees.
+    """
+    values = (tip_width, angle, depth)
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in values):
+        raise ValueError('The tip width, angle and depth of a V-bit must be numbers')
+    if not (0 <= tip_width <= 10 and 1 <= angle <= 179 and 0 < depth <= 10):
+        raise ValueError('A V-bit needs a tip width of 0 to 10 mm, an angle of 1 to 179 degrees and a depth above 0')
+    return round(tip_width + 2 * depth * math.tan(math.radians(angle) / 2), 6)
+
+
+def isolation(
+    text,
+    tool_width,
+    passes=None,
+    overlap=None,
+    direction=None,
+    order=None,
+    offset=None,
+    mirror_x=None,
+    clip=None,
+    width=None,
+    height=None,
+    arc_tolerance=None,
+):
+    """Isolation toolpaths round the copper of a Gerber layer, as line operations for studio.cam.generate.
+
+    tool_width is the width of cut at the engraving depth (v_bit_width gives it for a V-bit). Contour k lies
+    tool_width / 2 + k * tool_width * (1 - overlap) outside the copper. mirror_x turns the layer over about
+    that X for the underside of a board; clip is a list of closed paths (the board outline) outside which
+    nothing is cut. 'unreachable' lists the places where copper features are nearer than the tool is wide and
+    stay joined; a warning names the smallest gap. See docs/PCB.md.
+    """
+    options = {
+        'tool_width': tool_width,
+        'passes': passes,
+        'overlap': overlap,
+        'direction': direction,
+        'order': order,
+        'offset': offset,
+        'mirror_x': mirror_x,
+        'clip': clip,
+        'width': width,
+        'height': height,
+        'arc_tolerance': arc_tolerance,
+    }
+    return _call('gerber-isolation', text, options)
+
+
+def isolation_paths(answer):
+    """Every contour of an isolation answer, in cutting order."""
+    return [path for operation in answer['operations'] for path in operation['paths']]
+
+
 def drill_operations(
-    text, offset=None, width=None, height=None, units=None, integer=None, decimal=None, omitted_zeros=None
+    text,
+    offset=None,
+    width=None,
+    height=None,
+    units=None,
+    integer=None,
+    decimal=None,
+    omitted_zeros=None,
+    mirror_x=None,
 ):
     """The holes of a drill file as drilling operations for studio.cam.generate, one group for each diameter.
 
@@ -88,12 +166,12 @@ def drill_operations(
     Operations of one diameter may share an ordered job; each diameter is a separate job. Slots are listed
     under 'slots' and are not drilled.
     """
-    options = {'offset': offset, 'width': width, 'height': height}
+    options = {'offset': offset, 'width': width, 'height': height, 'mirror_x': mirror_x}
     options.update(units=units, integer=integer, decimal=decimal, omitted_zeros=omitted_zeros)
     return _call('excellon-drills', text, options)
 
 
-def outline_paths(text, offset=None, tolerance=None, arc_tolerance=None, width=None, height=None):
+def outline_paths(text, offset=None, tolerance=None, arc_tolerance=None, width=None, height=None, mirror_x=None):
     """The board outline of a profile (Edge.Cuts) layer as closed 'paths' for a cut-out line job.
 
     Lines and arcs are joined end to end where their ends lie within tolerance (0.01 mm). An outline that
@@ -105,6 +183,7 @@ def outline_paths(text, offset=None, tolerance=None, arc_tolerance=None, width=N
         'arc_tolerance': arc_tolerance,
         'width': width,
         'height': height,
+        'mirror_x': mirror_x,
     }
     return _call('gerber-outline', text, options)
 

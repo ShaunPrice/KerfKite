@@ -2,8 +2,8 @@
 //
 // A circuit board layer is an ordered list of flashes, lines, arcs and filled regions, each dark (adds
 // copper, ink, mask) or clear (removes whatever lies beneath it). This module reads the file into that list
-// and stops there: turning the list into copper polygons, and those into isolation toolpaths, needs polygon
-// union and offsetting, which is a later step. See docs/PCB.md for the answer in full and for what is declined.
+// and stops there: kerfkite/isolation.hpp turns the list into copper polygons and isolation toolpaths.
+// See docs/PCB.md for the answer in full and for what is declined.
 //
 // There is no Python version of this module: it is written once, here, and Studio calls it.
 #ifndef KERFKITE_GERBER_HPP
@@ -26,8 +26,9 @@ Json gerber_import(const Json &request);
 
 // The board outline of a profile (Edge.Cuts) layer as closed paths for a cut-out line job.
 // Request: {"text", and optionally "arc_tolerance", "tolerance" (0.01): how far apart two line ends may be
-// and still join, "offset":[dx,dy] added to every point, and "width" and "height" of the work area to have
-// the fit checked}.
+// and still join, "offset":[dx,dy] added to every point, "mirror_x": X to turn the result over about that
+// line afterwards (the underside of a board), and "width" and "height" of the work area to have the fit
+// checked}.
 // Answer: {"paths":[[[x,y],...],...] each closed, largest first, "line_width", "bounds", "warnings"}.
 // An outline that is open or that branches is refused.
 Json gerber_outline(const Json &request);

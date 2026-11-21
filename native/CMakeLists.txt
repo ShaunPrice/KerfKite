@@ -20,6 +20,8 @@ add_library(kerfkite_core STATIC core/src/api.cpp core/src/cam.cpp core/src/dril
 target_sources(kerfkite_core PRIVATE core/src/json.cpp)
 # Circuit board import: Gerber layers and Excellon drill files.
 target_sources(kerfkite_core PRIVATE core/src/excellon.cpp core/src/gerber.cpp core/src/pcb.cpp)
+# Isolation toolpaths from a copper layer, on the polygon kernel below.
+target_sources(kerfkite_core PRIVATE core/src/isolation.cpp)
 target_include_directories(kerfkite_core PUBLIC core/include PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 if(MSVC)
   # Sources are UTF-8. Floating point stays strict so results match the reference on every platform.
