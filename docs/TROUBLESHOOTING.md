@@ -176,7 +176,7 @@ If the feed is rejected, use a feed accepted by the selected controller's jog gu
 | Phone displays stale/disconnected data | Check connectivity and the running monitor; do not infer a successful pause/stop from missing updates. Check the machine locally. |
 | Phone pairing fails after restart | Restarting generates a new pairing token. Use the new pairing link. |
 
-The account-based HTTPS editor and bearer-token phone monitor have different purposes. The monitor can use HTTPS with both certificate/key options; without them it uses plain HTTP on a trusted LAN. Do not expose the plain HTTP monitor through public port forwarding. The hosted receiver's upload tokens only store files, while the paired monitor can act on an explicitly armed job.
+The account-based HTTPS editor and bearer-token phone monitor have different purposes. With the `cryptography` package installed the monitor is encrypted by default, using a certificate created for each pairing and identified in the pairing link; Pocket 0.5.0 or later accepts only that certificate. It uses plain HTTP when that package is missing, when **Unencrypted pairing** or `--monitor-plaintext` is chosen for an older phone, and it uses your own certificate with both certificate/key options. If Pocket reports that the receiver's certificate does not match the pairing link, pairing was re-enabled since the link was copied: copy a fresh link. Do not expose the monitor through public port forwarding. The hosted receiver's upload tokens only store files, while the paired monitor can act on an explicitly armed job.
 
 ## Quotes and printed templates
 

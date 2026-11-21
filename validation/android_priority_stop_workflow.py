@@ -16,6 +16,7 @@ from playwright.sync_api import sync_playwright
 from werkzeug.serving import make_server
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pocket_app import PACKAGE, component
 from android_pendant_workflow import Phone, wait_until
 from phone_arm_workflow import arm_preview, connect_editor
 from studio.device import DeviceController
@@ -114,8 +115,8 @@ def run(phone, apk, chrome):
             page = browser.new_page()
             page.goto(f"http://127.0.0.1:{desk_port}/")
             connect_editor(page)
-            phone.run("shell", "am", "force-stop", "au.cncstudio.pocket")
-            phone.run("shell", "am", "start", "-W", "-n", "au.cncstudio.pocket/.WorkshopActivity")
+            phone.run("shell", "am", "force-stop", PACKAGE)
+            phone.run("shell", "am", "start", "-W", "-n", component())
             phone.tap("CNC pendant", button=True)
             phone.tap("Monitor pairing link")
             phone.run("shell", "input", "text", f"http://10.0.2.2:{phone_port}/#token={token}")

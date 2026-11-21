@@ -9,8 +9,8 @@ from xml.etree import ElementTree
 
 from android_pendant_workflow import Phone, wait_until
 from android_projects_workflow import replace_text
+from pocket_app import PACKAGE, component
 
-PACKAGE = "au.cncstudio.pocket"
 EDITOR = "WorkshopActivity"
 PENDANT = "PendantActivity"
 LABEL = "Keep screen awake"
@@ -20,7 +20,7 @@ def flags(phone, activity):
     windows = phone.run("shell", "dumpsys", "window", "windows")
     blocks = re.split(r"(?m)^\s*Window #\d+ ", windows)[1:]
     for block in blocks:
-        if f'{PACKAGE}/{PACKAGE}.{activity}' in block.splitlines()[0]:
+        if component(activity) in block.splitlines()[0]:
             found = re.search(r"(?m)^\s*fl=(.*)$", block)
             if found:
                 return set(found.group(1).split())
@@ -46,7 +46,7 @@ def check_switch(phone, checked):
 def launch(phone):
     phone.run("shell", "input", "keyevent", "KEYCODE_WAKEUP")
     phone.run("shell", "wm", "dismiss-keyguard")
-    phone.run("shell", "am", "start", "-W", "-n", f"{PACKAGE}/.{EDITOR}")
+    phone.run("shell", "am", "start", "-W", "-n", component(EDITOR))
 
 
 def awake(phone):
@@ -83,12 +83,22 @@ def test_timeout(phone):
         launch(phone)
 
 
+def source_version():
+    """Version name and code of the app in this checkout, so the check follows each release."""
+    gradle = (Path(__file__).resolve().parents[1] / "android/app/build.gradle").read_text()
+    return re.search(r"versionName '([^']+)'", gradle)[1], re.search(r"versionCode (\d+)", gradle)[1]
+
+
+def installed_version(phone):
+    return re.search(r"versionName=(\S+)", phone.run("shell", "dumpsys", "package", PACKAGE))[1]
+
+
 def exercise(phone, apk, previous):
     assert phone.run("shell", "getprop", "ro.kernel.qemu") == "1"
     assert phone.run("shell", "getprop", "sys.boot_completed") == "1"
     if previous:
         phone.run("install", "-r", str(previous))
-        assert "versionName=0.4.0" in phone.run("shell", "dumpsys", "package", PACKAGE)
+        earlier = installed_version(phone)
         launch(phone)
         project = "AwakeCheck-" + uuid.uuid4().hex[:8]
         phone.tap("My projects")
@@ -100,12 +110,16 @@ def exercise(phone, apk, previous):
         assert phone.find("Rectangle · 40.0 × 25.0 mm")
     phone.run("install", "-r", str(apk))
     pkg = phone.run("shell", "dumpsys", "package", PACKAGE)
-    assert "versionName=0.4.1" in pkg and "versionCode=5 " in pkg
+    name, code = source_version()
+    assert f"versionName={name}" in pkg and f"versionCode={code} " in pkg, (
+        "The APK does not match android/app/build.gradle."
+    )
     assert "android.permission.WAKE_LOCK" not in pkg
     launch(phone)
     if previous:
         assert phone.find(project) and phone.find("Rectangle · 40.0 × 25.0 mm")
-        print("PASS signed 0.4.0 → 0.4.1 upgrade preserves the drawing", flush=True)
+        assert earlier != name, "Supply an earlier release as --previous."
+        print(f"PASS signed {earlier} → {name} upgrade preserves the drawing", flush=True)
     check_window(phone, EDITOR, False)
     check_switch(phone, False)
     phone.tap(LABEL)
