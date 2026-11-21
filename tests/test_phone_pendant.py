@@ -157,6 +157,55 @@ class PendantTests(unittest.TestCase):
                 finally:
                     monitor.disable()
 
+    def test_the_routed_address_is_offered_first_and_self_assigned_ones_last(self):
+        from unittest import mock
+        from studio import phone_monitor_service as service
+
+        listed = [(2, 1, 6, '', (ip, 0)) for ip in ('172.27.144.1', '192.168.0.243', '169.254.108.138', '127.0.0.1')]
+        with mock.patch.object(service.socket, 'getaddrinfo', return_value=listed):
+            with mock.patch.object(service.PhoneMonitor, 'routed_address', return_value='192.168.0.243'):
+                # A virtual adapter sorts first numerically but is not where a phone can reach the workstation.
+                self.assertEqual(PhoneMonitor.addresses(), ['192.168.0.243', '172.27.144.1', '169.254.108.138'])
+            with mock.patch.object(service.PhoneMonitor, 'routed_address', return_value='10.0.0.7'):
+                self.assertEqual(
+                    PhoneMonitor.addresses()[0], '10.0.0.7'
+                )  # found by route though the resolver missed it
+            with mock.patch.object(service.PhoneMonitor, 'routed_address', return_value=None):
+                self.assertEqual(PhoneMonitor.addresses(), ['172.27.144.1', '192.168.0.243', '169.254.108.138'])
+        with mock.patch.object(service.socket, 'getaddrinfo', side_effect=OSError):
+            with mock.patch.object(service.PhoneMonitor, 'routed_address', return_value=None):
+                self.assertEqual(PhoneMonitor.addresses(), [])
+
+    def test_routed_address_never_offers_loopback_or_fails(self):
+        from unittest import mock
+        from studio import phone_monitor_service as service
+
+        class Probe:
+            def __init__(self, name=None, error=None):
+                self.name, self.error = name, error
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def connect(self, target):
+                if self.error:
+                    raise self.error
+
+            def getsockname(self):
+                return (self.name, 50000)
+
+        for probe, expected in [
+            (Probe('192.168.1.20'), '192.168.1.20'),
+            (Probe('127.0.0.1'), None),
+            (Probe('0.0.0.0'), None),
+            (Probe(error=OSError('Network is unreachable')), None),
+        ]:
+            with mock.patch.object(service.socket, 'socket', return_value=probe):
+                self.assertEqual(PhoneMonitor.routed_address(), expected)
+
     @unittest.skipUnless(find_spec('cryptography'), 'cryptography required for the pinned listener')
     def test_self_signed_certificate_names_the_listener_addresses(self):
         from cryptography import x509

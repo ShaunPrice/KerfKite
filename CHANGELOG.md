@@ -8,6 +8,7 @@ Notable changes to KerfKite Studio and KerfKite Pocket. Versions before this fil
 - Pair Pocket by QR code. Studio draws the pairing link as a QR code under **Phone pendant**, and Pocket's **CNC pendant** has **Scan QR code**, which reads it with the rear camera and pairs exactly as a pasted link does. Pocket asks for camera access when the scanner is first opened and uses it for nothing else. Decoding uses ZXing core (Apache-2.0).
 
 ### Fixed
+- Phone pairing offers the workstation's routed network address first. It used to offer the numerically lowest address, which on a machine with WSL, Hyper-V or a container bridge is a virtual adapter no phone can reach; the pairing link, and now the QR code, then pointed the phone at it. The other addresses are listed in the address box.
 - Pocket: the light navigation bar attribute, which needs API 27, is no longer referenced on API 26.
 - Design routes (`/api/geometry`, `/api/extrude`, `/api/artwork-relief` and the other design endpoints) answer malformed bodies with a JSON `400`. Contours that are not lists of finite XY points are rejected before any geometry is built.
 - Pocket: every shape can be selected from the drawing preview. New shapes no longer start exactly on top of the previous one, a repeated tap moves to the next overlapping shape, and a tap within 12 dp of an outline counts.
