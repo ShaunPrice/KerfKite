@@ -12,6 +12,7 @@ from flask import Flask, request, jsonify, g, redirect, send_file, send_from_dir
 from .windows_support import require_supported_windows
 from .web_store import WebStore
 from .web_transfer import validate_upload, validate_destination, send_to_receiver
+from . import pcb_import
 from .cam import generate
 from .design_api import register_design_routes
 from .profiles import PROFILES
@@ -157,6 +158,7 @@ def create_app(store, public_url, destinations=None, allow_file_upload=False):
             laser_patterns=True,
             router_entries=True,
             stock_wire_v1=True,
+            pcb_import=pcb_import.isolation_available(),
         )
 
     @app.get('/api/profiles')
