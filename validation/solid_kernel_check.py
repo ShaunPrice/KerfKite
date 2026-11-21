@@ -701,10 +701,11 @@ def application(report):
     """Run Studio's own solid tests on the stand-in, then compare every solid they made."""
     module = stand_in()
     sys.modules['manifold3d'] = module
+    # Studio models with its own kernel where the extension is installed. Here it is told to use the
+    # library, and the library it finds is the stand-in.
+    chosen = os.environ.get('KERFKITE_SOLID_BACKEND')
+    os.environ['KERFKITE_SOLID_BACKEND'] = 'manifold'
     try:
-        import studio.scad_geometry  # noqa: F401  (imported after the stand-in is in place)
-
-        studio.scad_geometry.kernel = module
         Dual.made.clear()
         names = ['tests.test_solid_cad', 'tests.test_scad_geometry', 'tests.test_assembly', 'tests.test_solid_loft']
         suite = unittest.defaultTestLoader.loadTestsFromNames(names)
@@ -712,6 +713,10 @@ def application(report):
         made = list(Dual.made)
     finally:
         sys.modules['manifold3d'] = oracle
+        if chosen is None:
+            del os.environ['KERFKITE_SOLID_BACKEND']
+        else:
+            os.environ['KERFKITE_SOLID_BACKEND'] = chosen
     report.compare(made, 'application')
     return result, len(made)
 

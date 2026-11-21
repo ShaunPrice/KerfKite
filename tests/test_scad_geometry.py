@@ -3,6 +3,15 @@ import unittest
 
 from studio.scad_geometry import build_script
 
+# The solid and polygon kernels place every vertex on a grid of 1 nm, so a vertex of a circle lies up to
+# half a grid diagonal from its exact place. Moving each vertex of an outline by at most that distance
+# changes the enclosed area by at most the perimeter times the distance.
+GRID_SHIFT = 1e-6 / math.sqrt(2)
+
+
+def circle_perimeter(radius, segments):
+    return 2 * segments * radius * math.sin(math.pi / segments)
+
 
 class ScriptGeometryTests(unittest.TestCase):
     def test_planar_boolean_preserves_holes(self):
@@ -16,7 +25,8 @@ class ScriptGeometryTests(unittest.TestCase):
         self.assertEqual(dim, 2)
         self.assertEqual(region.bounds(), (-15, -10, 15, 10))
         self.assertEqual(region.num_contour(), 3)
-        self.assertAlmostEqual(region.area(), 600 - 32 * math.sin(math.tau / 64) * 20, places=6)
+        rounding = (circle_perimeter(4, 64) + circle_perimeter(2, 64)) * GRID_SHIFT
+        self.assertAlmostEqual(region.area(), 600 - 32 * math.sin(math.tau / 64) * 20, delta=rounding)
 
     def test_parametric_module_array_can_be_drilled_and_extruded(self):
         source = """
@@ -29,7 +39,8 @@ class ScriptGeometryTests(unittest.TestCase):
         self.assertEqual(dim, 3)
         self.assertEqual(part.bounding_box(), (0, 0, -1.5, 24, 10, 1.5))
         self.assertEqual(part.slice(0).num_contour(), 4)
-        self.assertAlmostEqual(part.volume(), (240 - 9) * 3)
+        # Three 12-sided bores through 3 mm: their outlines are rounded to the grid, the plate's corners are on it.
+        self.assertAlmostEqual(part.volume(), (240 - 9) * 3, delta=3 * 3 * circle_perimeter(1, 12) * GRID_SHIFT)
 
     def test_nested_booleans_are_not_flattened(self):
         _, part = build_script("""
@@ -44,7 +55,10 @@ class ScriptGeometryTests(unittest.TestCase):
     def test_frustum_and_sphere(self):
         _, cone = build_script('cylinder(h=6,d1=8,d2=0,center=true,$fn=64);')
         self.assertEqual(cone.bounding_box(), (-4, -4, -3, 4, 4, 3))
-        self.assertAlmostEqual(cone.volume(), 32 * 4**2 * math.sin(math.tau / 64) * 2)
+        # A cone is a third of its height times its base, and the base outline is rounded to the grid.
+        self.assertAlmostEqual(
+            cone.volume(), 32 * 4**2 * math.sin(math.tau / 64) * 2, delta=6 / 3 * circle_perimeter(4, 64) * GRID_SHIFT
+        )
         _, ball = build_script('translate([10,0,0]) sphere(d=6,$fn=32);')
         self.assertEqual(ball.bounding_box(), (7, -3, -3, 13, 3, 3))
         self.assertAlmostEqual(ball.volume(), 4 * math.pi * 3**3 / 3, delta=4)

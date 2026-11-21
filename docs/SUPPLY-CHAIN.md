@@ -49,7 +49,7 @@ Each of these goes when the part that uses it is ported, under rule 5.
 | Flask, with Werkzeug, Jinja2, Click, itsdangerous, MarkupSafe, blinker | The local web server behind the editor | Replace on porting the server: a small local HTTP server of our own. |
 | ezdxf, with pyparsing, fonttools, typing-extensions | DXF import and export | Replace on porting: a reader and writer for the DXF entities Studio handles. |
 | pypdf | Vector import from PDF | Replace on porting. A sizeable piece: objects, compressed streams and drawing operators. |
-| manifold3d | Solid modelling: unions, differences and intersections of 3D shapes | **Replace** (owner's decision, 21 November 2026). An in-house 3D solid kernel is being written, because engravings can be three-dimensional and multi-axis machines are to follow. It also provides what those need: sections on any plane, ray casting with surface normals, and height maps. The kernel is written and tested ([Solid kernel](SOLID-KERNEL.md)); Studio is not yet moved onto it. |
+| manifold3d | Was: solid modelling and the 2D drawings of CAD scripts. Now: the fallback for both where the compiled extension is not installed, and the oracle the kernels are tested against | **Replaced where the extension is installed** (owner's decision to replace, 21 November 2026). Studio's 3D CAD runs on the in-house solid kernel and its script drawings on the in-house polygon kernel, through the compiled extension ([Solid kernel](SOLID-KERNEL.md#how-studio-uses-the-kernel)); the library is not imported then. It stays a dependency for the portable wheel and for a source checkout without a compiler, and for the differential tests. It goes when the fallback goes: when every installation carries the extension, or the test oracle is no longer wanted. |
 | Pillow | Used only by packaging and guide-building scripts, not by Studio when it runs | **Quick win:** move it from the installed dependencies to a build-time requirement, after confirming the installers still build. |
 | cadquery-ocp (Open Cascade, LGPL 2.1 with exception), optional | STEP import and export | **Keep, optional** (owner's decision, 21 November 2026). Writing a STEP and B-rep kernel is not realistic. It stays a separately installed part, so the main product does not carry it. |
 | cheroot and cryptography, optional | The hosted editor, and the encrypted pendant link | Keep cryptography: rule 2. In a native application the operating system's own TLS can take its place. |
@@ -102,7 +102,7 @@ Every part of the product reaches a user through an installer, so each part, and
 | Part | What the installer puts in place | State |
 | --- | --- | --- |
 | Studio and its Python environment | The launcher, the locked Python packages, and the compiled extension for the platform. Probe levelling and circuit-board import live in that extension, so they arrive with it. | Installed today; the installer check exercises it. |
-| The in-house kernels (2D polygons, 3D solids, JSON) | Nothing separate: they are compiled into the core and the extension. | Arrive with the extension once each is switched in. The JSON code and the polygon kernel are; the installed-wheel check runs offsets, a pocket and a fill through the kernel and compares the programs with a recorded digest. |
+| The in-house kernels (2D polygons, 3D solids, JSON) | Nothing separate: they are compiled into the core and the extension. | All three arrive with the extension and are in use. The installed-wheel check runs offsets, a pocket and a fill through the polygon kernel and compares the programs with a recorded digest; it models a part and a drawing through the solid and polygon kernels, by Studio's own entry points, and compares every vertex, triangle and outline with a recorded digest. |
 | `kerfkite-cam`, the command-line tool | The program for the platform. | **Not installed yet.** GEOS is out of it and it carries no third-party code; adding it to the installers is what remains. |
 | The editor of the C++ application | The program, and the Qt libraries it uses as separate files beside it, with Qt's notice, licence text and source offer. | To be built; the installer work is part of that stage, not after it. |
 | STEP add-on | Open Cascade and its wrapper, as a component the user chooses, with its notice and licence text. | Installed today as an option; the installer check has a STEP run. |
@@ -119,5 +119,6 @@ Rules for this:
 ## Order of work
 
 1. The polygon kernel, replacing GEOS in the core and Shapely in the CAM operations. Done for the core and for Studio with its compiled extension; the other Shapely users in Studio follow.
+2. The solid kernel, replacing manifold3d in Studio's 3D CAD. Done for Studio with its compiled extension; the library remains as the fallback without it and as the test oracle.
 3. Pillow out of the installed dependencies.
 4. The remaining items as their parts are ported.

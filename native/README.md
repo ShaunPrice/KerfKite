@@ -62,8 +62,9 @@ file as tools and holes, its holes as drilling operations, and a copper layer as
     kerfkite-cam polygon request.json
 
 answers a request to the core's own polygon kernel (`"op"`: `union`, `intersection`, `difference`, `xor`,
-`normalise`, `compose`, `offset`, `pocket`, `clip-lines`, `artwork`, `inspect`, `locate`), with rings in
-millimetres. It is there to test the kernel from outside; see [The polygon kernel](#the-polygon-kernel).
+`normalise`, `compose`, `offset`, `hull`, `circle`, `transform`, `rotate`, `pocket`, `clip-lines`, `artwork`,
+`inspect`, `locate`), with rings in millimetres. It tests the kernel from outside, and it is the command
+Studio's CAD scripts draw with; see [The polygon kernel](#the-polygon-kernel).
 
     kerfkite-cam operation request.json
 
@@ -94,7 +95,7 @@ centre and a start angle out. `generate` runs the same code for a whole project.
 | Shapely's `LineString.is_simple` and `.length`, which both features ask of each contour (`core/src/simple_line.cpp`) | Done by GEOS's own rules, including its double-double orientation test. A contour whose answer depends on rounding inside GEOS is declined. The work is bounded: a tree over the segments leaves out, a branch at a time, the pairs GEOS's test is certain to pass, so a contour of 100,000 long segments side by side (a comb, a fan, a spiral) takes a tenth of a second where testing every pair took a minute; and past a fixed count of work, about a second, a contour is declined (`a contour whose self-crossing test needs more comparisons than the core allows`). |
 | Inside and outside offsets (router: tool radius; laser: half the kerf), concentric pockets, hatch and cross-hatch fills (`core/src/operations.cpp`) | Done, on the core's own polygon kernel. This is the only implementation: Studio calls it through its extension (`studio/operations.py`), and keeps Shapely only as the fallback where the extension is not installed. |
 | The core's own polygon kernel (`core/src/polygon/`, `core/include/kerfkite/polygon.hpp`) | Done. See [The polygon kernel](#the-polygon-kernel). |
-| 3D solid modelling (`core/include/kerfkite/solid.hpp`, `core/src/solid/`) | Done as a kernel and a `solid` command. New in the core: Studio's Python still uses a third-party library and is not switched over. See `docs/SOLID-KERNEL.md`. |
+| 3D solid modelling (`core/include/kerfkite/solid.hpp`, `core/src/solid/`) | Done as a kernel and a `solid` command. New in the core, and the only implementation of KerfKite's own: Studio's 3D CAD calls it through its extension (`studio/solid_kernel.py`), and keeps a third-party library only as the fallback where the extension is not installed. See `docs/SOLID-KERNEL.md`. |
 | V-carving | Not yet. Declined with exit status 3. |
 | Rotary output, relief, stock simulation, importers, sender, pendant, editors | Not yet. |
 
@@ -117,9 +118,15 @@ kernel by invariants that need no reference;
 
     python validation/solid_kernel_check.py --tool build/native/kerfkite-cam
 
-compares it with the third-party library Studio uses today, which is needed for that comparison only.
-Studio's Python does not call the kernel yet. See `docs/SOLID-KERNEL.md` for the representation, the rounding
-rule, the limits, the measurements and what is ready for 3D engraving and multi-axis work.
+compares it with the third-party library Studio used before, which the core needs for that comparison only.
+
+Studio's 3D CAD is modelled by this kernel wherever its compiled extension is installed: `setup.py` compiles
+the kernel and `solid_command.cpp` into the extension, and `studio/solid_kernel.py` calls them. The 2D
+drawings of Studio's CAD scripts run on the polygon kernel, through the same command `kerfkite-cam polygon`
+answers, which gained the corners a drawing asks for (inscribed arcs, miters, bevels), a convex hull, a
+circle and affine maps. The third-party library remains Studio's fallback without the extension. See `docs/SOLID-KERNEL.md` for
+the representation, the rounding rule, the limits, the measurements, how Studio uses the kernel and what is
+ready for 3D engraving and multi-axis work.
 
 ## The polygon kernel
 

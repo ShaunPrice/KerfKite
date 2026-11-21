@@ -1254,6 +1254,7 @@ def main():
     from studio.operations import kernel_available
 
     os.environ.pop('KERFKITE_POLYGON_BACKEND', None)  # the reference as Studio runs it
+    os.environ.pop('KERFKITE_SOLID_BACKEND', None)
     shared = kernel_available()
     if shared:
         print(

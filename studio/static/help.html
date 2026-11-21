@@ -768,8 +768,8 @@ python -m studio.server --port 8765
 </tr>
 <tr>
 <td>Solid features, sketches, surfaces and assemblies</td>
-<td><code>studio/solid_cad.py</code>, <code>cad_exchange.py</code>, <code>assembly.py</code>; their browser modules</td>
-<td>Keep input parameters and source geometry in project extras. Meshes and solved poses are derived. STEP files use Open CASCADE; the editable feature history stays in the Studio project.</td>
+<td><code>studio/solid_cad.py</code>, <code>cad_exchange.py</code>, <code>assembly.py</code>; <code>studio/solid_kernel.py</code> for the kernel they model with; their browser modules</td>
+<td>Keep input parameters and source geometry in project extras. Meshes and solved poses are derived. STEP files use Open CASCADE; the editable feature history stays in the Studio project. Solids and script drawings are modelled by KerfKite's own kernels through the compiled extension, and by manifold3d without it; <code>tests/test_solid_backends.py</code> compares the two, so run it after a change to any of these modules.</td>
 </tr>
 <tr>
 <td>Import and migration</td>
@@ -1251,7 +1251,7 @@ python packaging/desktop/build_browser.py &quot;dist/browser/kerfkite_studio-${s
 <li><strong>PDF import.</strong> pypdf 7.1.1 is a pure-Python dependency under BSD-3-Clause. The hashed desktop install downloads its unmodified wheel with its upstream licence. <a href="https://github.com/py-pdf/pypdf/blob/7.1.1/LICENSE">pypdf licence</a></li>
 <li><strong>STEP.</strong> The exchange module uses Open CASCADE Technology through <code>cadquery-ocp-novtk</code>. The tested 7.9.3.1.1 wheel's metadata says Apache-2.0 for the bindings. Its Mach-O libraries include the <strong>OCCT 7.9.3</strong> kernel under LGPL 2.1 with the Open CASCADE exception. The exception concerns incorporation of material from headers and requires acknowledgement. Redistributing OCCT binaries still carries LGPL obligations. Supply the library licences, applicable corresponding source or compliant distribution arrangement, preserve notices and permit replacement/relinking and debugging of library modifications as the LGPL requires. Retain actual build and patch information corresponding to the binaries. <a href="https://github.com/CadQuery/OCP/blob/master/LICENSE">OCP licence</a> · <a href="https://github.com/Open-Cascade-SAS/OCCT/blob/V7_9_3/LICENSE_LGPL_21.txt">OCCT 7.9.3 licence</a> · <a href="https://github.com/Open-Cascade-SAS/OCCT/blob/V7_9_3/OCCT_LGPL_EXCEPTION.txt">OCCT exception</a></li>
 <li><strong>Additional STEP-wheel libraries.</strong> The inspected no-VTK macOS wheel contained FreeImage 3.18, LibRaw, FreeType, OpenEXR, Imath, Lerc, libjpeg, JPEG XR, Little CMS, OpenJPEG/OpenJPH, libpng, libtiff, libwebp, compression libraries and a C++ runtime. Its RECORD included no licence texts. The Studio source supplies the OCP and OCCT texts. A distributor bundling this wheel must also obtain the corresponding component notices and meet whichever upstream terms apply. FreeImage offers FIPL or GPL choices, and LibRaw offers LGPL 2.1 or CDDL 1.0. These additional notices, matching sources and any codec-specific conditions require review for the actual binary set before a bundled public distribution. <a href="https://freeimage.sourceforge.io/license.html">FreeImage terms</a> · <a href="https://www.libraw.org/about#license">LibRaw terms</a></li>
-<li><strong>2D and solid geometry.</strong> Shapely 2.2.0 is BSD-3-Clause. Its macOS wheel includes GEOS 3.14.1 and <code>LICENSE_GEOS</code> identifying LGPL 2.1. Preserve those notices, source access and library-replacement rights when distributing the libraries. Manifold 3.5.5 carries Apache 2.0 and an AUTHORS file. ezdxf 1.4.5 uses MIT. Retain the FontTools external licence file when distributing its font tools. <a href="https://github.com/shapely/shapely">Shapely</a> · <a href="https://github.com/libgeos/geos">GEOS source</a> · <a href="https://github.com/elalish/manifold/blob/master/LICENSE">Manifold licence</a> · <a href="https://github.com/mozman/ezdxf/blob/master/LICENSE">ezdxf licence</a></li>
+<li><strong>2D and solid geometry.</strong> Shapely 2.2.0 is BSD-3-Clause. Its macOS wheel includes GEOS 3.14.1 and <code>LICENSE_GEOS</code> identifying LGPL 2.1. Preserve those notices, source access and library-replacement rights when distributing the libraries. Manifold 3.5.5 carries Apache 2.0 and an AUTHORS file; Studio models with it only where the compiled extension is not installed (solids and script drawings otherwise run on KerfKite's own kernels), and it remains an installed dependency. ezdxf 1.4.5 uses MIT. Retain the FontTools external licence file when distributing its font tools. <a href="https://github.com/shapely/shapely">Shapely</a> · <a href="https://github.com/libgeos/geos">GEOS source</a> · <a href="https://github.com/elalish/manifold/blob/master/LICENSE">Manifold licence</a> · <a href="https://github.com/mozman/ezdxf/blob/master/LICENSE">ezdxf licence</a></li>
 <li><strong>Numerics, image, serial and web services.</strong> NumPy's distribution carries component-specific notices alongside its BSD and other permissive licences. Pillow uses MIT-CMU and its binary wheel contains separately licensed image codecs and font/text libraries. Preserve the actual wheel's complete licence bundle, including any attribution required by the included FreeType and JPEG components. pySerial uses BSD terms. Flask and its supporting libraries retain their upstream notices. Cheroot and cryptography carry separate terms, and a cryptography wheel can include OpenSSL. <a href="https://github.com/numpy/numpy/blob/main/LICENSE.txt">NumPy licences</a> · <a href="https://pillow.readthedocs.io/en/stable/about.html#license">Pillow licence</a> · <a href="https://pyserial.readthedocs.io/en/latest/appendix.html#license">pySerial licence</a> · <a href="https://cryptography.io/en/latest/installation/">cryptography installation</a></li>
 <li><strong>MCP.</strong> The resolved FastMCP and FastMCP Slim advertise Apache 2.0. The MCP SDK advertises MIT. The dependency set includes certifi's Mozilla trust bundle under MPL 2.0. Preserve the MPL notice and comply with its source-availability provisions if distributing the covered material. Other transitive licences are listed in the inventory. The optional service is installed independently of the Studio wheel. <a href="https://pypi.org/project/fastmcp/3.4.11/">FastMCP release</a> · <a href="https://github.com/certifi/python-certifi">certifi</a> · <a href="https://www.mozilla.org/en-US/MPL/2.0/">MPL 2.0</a></li>
 </ul>
@@ -1800,6 +1800,12 @@ operations.polygon_backend()   # 'kernel' with the extension, 'shapely' without 
 </code></pre>
 <p>Without the extension (the portable wheel) the same operations run on Shapely, as they did before the kernel. The fallback cuts the same regions, but its vertices are not the kernel's: arcs are approximated from inside the true arc and not from outside, rings start elsewhere, pockets have many more vertices, and a contour that closes only to within the tolerance is usually refused. <code>KERFKITE_POLYGON_BACKEND=shapely</code> selects the fallback where the extension is installed, and <code>=kernel</code> refuses to run without the extension. Kernel coordinates are whole millionths of a millimetre; each crosses the JSON boundary as the shortest text of the double <code>n / 1e6</code> and is read back as exactly that double, which <code>tests/test_polygon_operations.py</code> checks.</p>
 <p><code>validation/check_installed_cam.py</code> pins these operations on every platform a wheel is built for: an inside offset, an outside offset, a pocket and a cross-hatch fill at 33.3 degrees, generated through the installed extension, must give the recorded digest. On Linux x86-64 the extension (GCC 13) and <code>kerfkite-cam</code> built with GCC 13, with Clang 18 and with the address and undefined-behaviour sanitizers wrote the same four programs.</p>
+<p>Solid modelling is the fourth part computed by the core for Studio. The extension compiles the solid kernel (<code>native/core/src/solid/</code>, <code>solid_command.cpp</code>) and the polygon kernel's own command (<code>polygon/command.cpp</code>), and <code>studio/solid_kernel.py</code> gives them the interface Studio's 3D CAD modules call: parts, CAD scripts and their 2D drawings, lofts, STEP tessellations and assemblies. Unlike the operations above, a model is built in many steps, so the extension has a second entry beside <code>core_call</code>: <code>solid_call(request, kept)</code> answers with the JSON and with the solid itself, which Python keeps and passes back to later requests, so no mesh crosses as text between steps.</p>
+<pre><code class="language-python">from studio import solid_kernel
+solid_kernel.solid_backend()   # 'kernel' with the extension, 'manifold' without it
+</code></pre>
+<p>Without the extension the same modules model with the third-party library manifold3d, as before. <code>KERFKITE_SOLID_BACKEND=manifold</code> selects it where the extension is installed, and <code>=kernel</code> refuses to run without the extension. The two give the same shapes within nanometres, except where they facet differently (spheres, round offsets, twisted extrusions), and the kernel is slower. When the kernel refuses a result as too fine for its grid, Studio reports the error; it never switches library for one model. <a href="#solid-kernel">The solid kernel</a> has the details and the measurements.</p>
+<p><code>validation/check_installed_cam.py</code> pins this too: a part of seven features and a drawing, modelled through Studio's entry points with the installed extension, must give the recorded digest of every vertex, triangle and outline. On Linux x86-64 the extension built with GCC 13, with Clang 18, and with the portable 128-bit integers a compiler without a 128-bit type uses, gave the same digest. Windows (MSVC), macOS and ARM64 builds have not been run; the check is what tests them.</p>
 <p>The exact number formatting described above now lives in one header, <code>native/core/include/kerfkite/number_text.hpp</code>, used by both the Python extension and the core.</p>
 <p>The core reads and writes JSON with its own code (<code>native/core/include/kerfkite/json.hpp</code>, <code>native/core/src/json.cpp</code>), which replaced the vendored JSON for Modern C++ header; the core has no third-party source. It supports what the core uses: all of RFC 8259 on input, with every escape and surrogate pairs; numbers that keep their kind, so that <code>1</code> stays a whole number and <code>1.0</code> a float as the Python reference requires; objects with their names in byte order, the last value standing where a name repeats; and one-line output. Its limits: arrays and objects nest at most 200 deep in text that is read, text must be well-formed UTF-8 in both directions, a literal beyond the range of a double is refused, and there is no indented output, comment syntax or binary format. A float is read as the nearest double and written as the shortest text that reads back as the same double, by exact integer arithmetic in <code>native/core/include/kerfkite/decimal.hpp</code>; the C library's conversions and the C locale are not involved, and <code>repr</code> in <code>number_text.hpp</code> and <code>float()</code> of text in a project use the same code. Floats are therefore written as Python writes them. The old library wrote two things differently: a float from 1e15 up to 1e16 in exponent form (<code>1e+15</code>, now <code>1000000000000000.0</code>), and, for roughly one double in a thousand, digits that were not the shortest (<code>23.343139999999998</code>, now <code>23.34314</code>). Both forms read back as the same double.</p>
 <p>It was checked on Linux x86-64 (GCC 13 and Clang 18) in four ways. <code>native/tests/json_selftest.cpp</code>, which CTest runs on every platform, covers each construct, the number kinds, the limits and malformed input, holds tables of doubles computed by Python, and compares every short cut in the number conversions with the exact arithmetic behind it on some 300,000 doubles and the decimals written from them. Against Python, 5 million decimal texts (ties between doubles, decimals one digit either side of a tie hundreds of places along, subnormals, exponents far outside the range) gave the double <code>float()</code> gives, and 5 million doubles gave the text <code>repr()</code> gives, with the short cuts and without them. Against the library it replaced, while that was still in the tree, 440,000 documents (generated, damaged at random, and real: fixtures, projects recorded from the test suite and the answers to them) were read by both: the same were accepted and refused, with the same values, kinds and order; equality between 87,000 pairs of values agreed; and the 26,215 jobs of the parity comparison below gave answers equal in every value and type, 97.7% of them byte for byte, the rest differing only as described above. The one deliberate difference in what is accepted, apart from the depth limit, is that text after a NUL byte is refused, where the old library stopped reading at the NUL. Under the address and undefined-behaviour sanitizers, the self-tests, 500,000 mutated documents, the comparison corpus and 2,500 jobs through <code>kerfkite-cam</code> ran without a report. Windows (MSVC), macOS and ARM64 builds have not been run; the self-test is the check for them.</p>
@@ -3017,6 +3023,31 @@ the whole depth, to the same allowance as pass 1.</li>
 the series for one sine and cosine. No trigonometric function of the platform's library is called.</p>
 <p>Discs, obrounds and the ends and joins of strokes are drawn the same way, so a disc is never smaller than
 its diameter.</p>
+<h3>The corners of a drawing</h3>
+<p>A drawing asks for other corners than a tool path does. <code>offset(region, distance, JoinOptions)</code> gives
+them, for the <code>offset()</code> of Studio's CAD scripts:</p>
+<ul>
+<li><strong>Round</strong>: an arc whose vertices lie <strong>on</strong> the true arc, as a drawing program draws it. The arc is
+divided into equal parts of at most 1.0625 steps, a step being a whole turn divided by <code>segments</code>, so it
+is short of the distance between its vertices by at most <code>d * (1 - cos(0.53125 * step))</code>.</li>
+<li><strong>Miter</strong>: the two offset edges carried on until they meet. A corner that would reach further from the
+vertex than <code>miter_limit</code> times the distance is cut square instead, by the line across the corner at the
+distance from the vertex.</li>
+<li><strong>Bevel</strong>: the ends of the two offset edges joined by one straight edge.</li>
+</ul>
+<p>Only the points of the corner differ from the round offset above. They are joined to the vertex in the same
+fan of exactly checked triangles, so the result is the same kind of exact union or difference and is
+always a valid region, and the directions of an arc come from the same series and square roots. The
+self-test checks each join on small cases with known answers and, on generated shapes grown and shrunk,
+that every result is a valid region, that a bevel adds least, a miter most and an arc lies between, and that
+growing contains the region and shrinking is contained in it.</p>
+<p><code>convex_hull(points)</code> is the hull as one counter-clockwise ring, exact on the grid, and empty when the
+points lie on one line.</p>
+<p>Studio's script engine keeps a 2D drawing as the rings of a region and asks for each step through the
+kernel's <code>polygon</code> command (<code>kerfkite/polygon_command.hpp</code>): <code>normalise</code>, <code>union</code>, <code>intersection</code>,
+<code>difference</code>, <code>offset</code> with a <code>join</code>, <code>hull</code>, <code>circle</code> (the cross-section of the solid kernel's cylinder,
+vertex for vertex), <code>transform</code> and <code>rotate</code>. <a href="#solid-kernel">The solid kernel</a>
+describes that use and how it is compared with the third-party library it replaced.</p>
 <h2>Line clipping</h2>
 <p><code>LineClipper::clip(a, b)</code> gives the parts of the segment from <code>a</code> to <code>b</code> that lie in the region or along its
 boundary, in order from <code>a</code>. The boundary edges that cross the line are found exactly and ordered along it by
@@ -4404,7 +4435,7 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 <p>The loft supports two parallel sections, with lateral offset and no twist between them. Use feature rotation to orient the whole loft.</p>
 </section><section id="solid-kernel"><h1>The solid kernel</h1>
 <p>KerfKite has its own 3D solid modelling kernel in the native core: <code>native/core/include/kerfkite/solid.hpp</code>, implemented in <code>native/core/src/solid/</code>. It depends on the C++17 standard library and nothing else. It was written to replace the third-party library behind Studio's 3D CAD (see <a href="#supply-chain">Third-party components</a>) and to carry 3D engraving and, later, multi-axis machining.</p>
-<p><strong>Studio does not use it yet.</strong> Studio's Python modules still call the third-party library; switching them over is a separate step, and the section <a href="#moving-studio-over">Moving Studio over</a> lists what each of their calls becomes. Until then the kernel is reached from C++ and through the <code>kerfkite-cam solid</code> command.</p>
+<p><strong>Studio uses it.</strong> Wherever the compiled extension is installed, Studio's 3D CAD (parametric parts, CAD scripts, lofts, STEP tessellations, assemblies) is modelled by this kernel, and the 2D drawings of the script engine by the <a href="#polygon-kernel">polygon kernel</a>. The third-party library remains in two roles only: the fallback for an installation without the extension, and the oracle the kernel is tested against. The section <a href="#how-studio-uses-the-kernel">How Studio uses the kernel</a> describes the switch, what each of Studio's calls became, and what Studio does when the kernel refuses a result. The kernel is also reached from C++ and through the <code>kerfkite-cam solid</code> command.</p>
 <h2>What a solid is</h2>
 <p>A <code>Solid</code> is a closed triangle mesh whose vertices lie on a grid of <strong>1 nm</strong> (<code>kUnitsPerMm</code> = 10^6 grid units to the millimetre). Coordinates are limited to ±100 000 mm. Every solid the kernel returns satisfies all of the following, checked exactly:</p>
 <ul>
@@ -4508,7 +4539,7 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 <li>The refusal is rare. In the generated tests it occurred for solids whose faces nearly coincide after an arbitrary turn (solids built to share faces and then turned together; an intersection joined back to its turned operand), at about one case in a thousand of those kinds, and for 2 of 25 000 random trees; the measured counts are in <a href="#testing">Testing</a>.</li>
 </ul>
 <h2>Sections and projection</h2>
-<p><code>section(solid, z)</code> gives the material at the horizontal plane as closed rings, counter-clockwise around material and clockwise around holes. A vertex exactly in the plane counts as below it, so a face lying in the plane is included when the material is above it and excluded when it is below (&quot;lower faces inclusive, upper faces exclusive&quot;). Each triangle with vertices on both sides gives one directed segment, and the segments are joined through the triangles' shared edges, not by comparing coordinates, so the rings are closed for any input. Rings carry one point for each mesh edge crossed, so a straight side cut through several triangles has points along it.</p>
+<p><code>section(solid, z)</code> gives the material at the horizontal plane as closed rings, counter-clockwise around material and clockwise around holes. A vertex exactly in the plane counts as below it, so a face lying in the plane is included when the material is above it and excluded when it is below (&quot;lower faces inclusive, upper faces exclusive&quot;). Each triangle with vertices on both sides gives one directed segment, and the segments are joined through the triangles' shared edges, not by comparing coordinates, so the rings are closed for any input. A ring has a point where it passes from one triangle to the next, except where the two triangles are parts of one flat face (an exact test): the section of a box is four points however its faces are triangulated. A face that has been turned by an arbitrary angle is no longer exactly flat on the grid, and a section keeps a point where it crosses the crease between its triangles; Studio drops such points (within 2 nm of the line between their neighbours) before it shows or cuts an outline.</p>
 <p><code>section(solid, plane)</code> does the same for any plane, and returns the rings both in the plane's own (u, v) coordinates and in space. This is the section needed for tilted tool axes.</p>
 <p><code>projection(solid)</code> is the outline seen along Z. It takes the edges where the upward-facing part of the surface ends and fills them by the positive winding rule; a through hole shows, a blind pocket does not.</p>
 <p>Behind <code>extrude</code>, <code>revolve</code> and <code>projection</code> is a small exact 2D arrangement (<code>planar.cpp</code>, <code>profile.cpp</code>): segments on the grid are split where they cross, triangulated, and filled by the even-odd, non-zero or positive rule. <code>resolve_rings</code> exposes it. Rings may cross themselves or each other; crossings are resolved before rounding.</p>
@@ -4671,10 +4702,15 @@ kerfkite-cam solid-batch REQUESTS.jsonl
 <td><code>{&quot;translate&quot;: [x, y, z], &quot;of&quot;: NODE}</code>, and likewise <code>rotate</code>, <code>scale</code>, <code>mirror</code>, <code>rotate_about</code> (<code>{&quot;axis&quot;, &quot;degrees&quot;}</code>), <code>matrix</code> (three rows of four)</td>
 <td>Maps.</td>
 </tr>
+<tr>
+<td><code>{&quot;kept&quot;: i}</code></td>
+<td>A solid the caller kept from an earlier request (see below). Not available from the command line.</td>
+</tr>
 </tbody>
 </table>
-<p>The answer always has <code>volume</code>, <code>area</code>, <code>bounds</code>, <code>centroid</code>, <code>vertices</code>, <code>triangles</code>, <code>bodies</code>, <code>empty</code> and the counts of the last operation. On request it adds: <code>&quot;mesh&quot;: true</code> and <code>&quot;grid_mesh&quot;: true</code> (the arrays), <code>&quot;check&quot;: true</code> (the exact self-intersection count and the complete check), <code>&quot;sections&quot;: [z, …]</code>, <code>&quot;plane_sections&quot;: [{&quot;origin&quot;, &quot;normal&quot;}, …]</code>, <code>&quot;projection&quot;: true</code>, <code>&quot;height_map&quot;: {&quot;x0&quot;, &quot;y0&quot;, &quot;dx&quot;, &quot;dy&quot;, &quot;columns&quot;, &quot;rows&quot;, &quot;empty&quot;}</code>, <code>&quot;rays&quot;: [{&quot;origin&quot;, &quot;direction&quot;}, …]</code> and <code>&quot;stl&quot;: &quot;ascii&quot;</code>. <code>solid-batch</code> answers each line with <code>{&quot;ok&quot;: …}</code> or <code>{&quot;error&quot;: message}</code>.</p>
+<p>The answer always has <code>volume</code>, <code>area</code>, <code>bounds</code>, <code>centroid</code>, <code>vertices</code>, <code>triangles</code>, <code>bodies</code>, <code>empty</code> and the counts of the last operation. On request it adds: <code>&quot;mesh&quot;: true</code> and <code>&quot;grid_mesh&quot;: true</code> (the arrays), <code>&quot;check&quot;: true</code> (the exact self-intersection count and the complete check), <code>&quot;sections&quot;: [z, …]</code>, <code>&quot;plane_sections&quot;: [{&quot;origin&quot;, &quot;normal&quot;}, …]</code>, <code>&quot;projection&quot;: true</code>, <code>&quot;height_map&quot;: {&quot;x0&quot;, &quot;y0&quot;, &quot;dx&quot;, &quot;dy&quot;, &quot;columns&quot;, &quot;rows&quot;, &quot;empty&quot;}</code>, <code>&quot;rays&quot;: [{&quot;origin&quot;, &quot;direction&quot;}, …]</code>, <code>&quot;min_gap&quot;: {&quot;to&quot;: NODE, &quot;search_length&quot;}</code> (the distance to another shape) and <code>&quot;stl&quot;: &quot;ascii&quot;</code>. <code>solid-batch</code> answers each line with <code>{&quot;ok&quot;: …}</code> or <code>{&quot;error&quot;: message}</code>.</p>
 <p>JSON appears only in this command (<code>native/core/src/solid_command.cpp</code>); the kernel's own interface has none.</p>
+<p><strong>Kept solids.</strong> Studio builds a model one operation at a time and asks about each intermediate solid (its triangle count, its bounds). So that a mesh does not cross as text at every step, the compiled extension has a second entry beside <code>core_call(&quot;solid&quot;, request)</code>: <code>solid_call(request, kept)</code> answers with the same JSON and with the solid itself, as an opaque object that Python holds and hands back in the <code>kept</code> list of a later request, where the node <code>{&quot;kept&quot;: i}</code> stands for it. A kept solid shares its mesh, never changes, and remembers what the kernel has established about it (that it has no self-intersection), which a mesh sent back as text would lose. The object is released when Python drops it.</p>
 <h2>Testing</h2>
 <p>Correctness is shown in two independent ways.</p>
 <p><strong>Invariants that need no oracle</strong> (<code>native/tests/solid_selftest.cpp</code>, run by CTest as <code>solid</code>):</p>
@@ -4754,7 +4790,7 @@ kerfkite-cam solid-batch REQUESTS.jsonl
 </tr>
 <tr>
 <td>Studio's tests on the kernel's solids</td>
-<td>30 tests in four modules; 28 pass; 2 compare a volume to seven decimal places (see <a href="#moving-studio-over">Moving Studio over</a>). 368 solids made, 146 distinct ones compared, all within tolerance.</td>
+<td>30 tests in four modules, all passing. 370 solids made, 148 distinct ones compared, all within tolerance.</td>
 </tr>
 </tbody>
 </table>
@@ -4828,122 +4864,216 @@ python validation/solid_kernel_check.py --tool build/native/kerfkite-cam --trees
 </tbody>
 </table>
 <p>Time is spent where surfaces cross: an operation costs little for the triangles that stay whole and most for those that are cut. The two slow rows are the ones where nearly every triangle is cut. The batch union is slower than its size suggests because every cylinder overlaps its neighbours and the intermediate results are cut again at each level.</p>
-<h2>Moving Studio over</h2>
-<p>What each call Studio makes on the third-party library becomes. Lengths are millimetres on both sides.</p>
+<h2>How Studio uses the kernel</h2>
+<h3>Which code runs</h3>
+<p><code>studio.solid_kernel.solid_backend()</code> answers <code>kernel</code> when the compiled extension is installed and <code>manifold</code> when it is not (the portable wheel, or a source checkout that was never built). <code>KERFKITE_SOLID_BACKEND=manifold</code> selects the third-party library where the extension is installed; <code>=kernel</code> refuses to run without the extension; <code>auto</code> is the default. With neither the extension nor the library, modelling fails with a message that names both.</p>
+<pre><code class="language-python">from studio import solid_kernel
+solid_kernel.solid_backend()   # 'kernel' with the extension, 'manifold' without it
+</code></pre>
+<p><code>studio/solid_kernel.py</code> gives the two kernels the part of the library's interface that Studio calls, so the modelling code (<code>solid_cad.py</code>, <code>scad_geometry.py</code>, <code>solid_loft.py</code>, the STEP tessellation in <code>cad_exchange.py</code>, <code>assembly.py</code>) is the same on both. Nothing in Studio's modelling stays on the library when the kernel is in use, and the library is not imported then. Reading STEP itself is still the optional Open Cascade add-on; the kernel takes its triangles.</p>
 <table>
 <thead>
 <tr>
 <th>Studio calls</th>
-<th>Kernel</th>
-<th>Differences to expect</th>
+<th>Now runs on</th>
+<th>Notes</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>Manifold.cube(size, center)</code></td>
-<td><code>box(size, center)</code></td>
-<td>None beyond the grid.</td>
+<td><code>Manifold.cube</code>, <code>.cylinder</code>, <code>.sphere</code></td>
+<td><code>box</code>, <code>cylinder</code>, <code>sphere</code></td>
+<td>The sphere is faceted differently; see below.</td>
 </tr>
 <tr>
-<td><code>Manifold.cylinder(h, r_low, r_high, segments, center)</code></td>
-<td><code>cylinder(h, r_low, r_high, segments, center)</code></td>
-<td>Same polygon; vertices rounded to 1 nm.</td>
-</tr>
-<tr>
-<td><code>Manifold.sphere(r, segments)</code></td>
-<td><code>sphere(r, segments)</code></td>
-<td>Other faceting (bands, not a subdivided octahedron): other triangle count (9024 for 96 segments against 4608), volume a little different.</td>
-</tr>
-<tr>
-<td><code>Manifold(Mesh64(vertices, triangles))</code></td>
-<td><code>from_mesh(vertices, triangles)</code></td>
-<td>Refused with a reason (<code>ValueError</code>) where the library returns a status.</td>
+<td><code>Manifold(Mesh64(vertices, triangles))</code> (lofts, polyhedra)</td>
+<td><code>from_mesh</code></td>
+<td>A mesh that is not a closed solid gives a status the callers test, as the library does.</td>
 </tr>
 <tr>
 <td><code>mesh64.merge()</code> then <code>Manifold(mesh64)</code> (STEP tessellations)</td>
-<td><code>from_mesh(vertices, triangles, true)</code></td>
-<td>Welds on the 1 nm grid; accepts solids touching along edges. Reading STEP itself stays with the optional Open Cascade add-on; the kernel takes its triangles.</td>
+<td><code>from_mesh</code> with <code>weld</code></td>
+<td>Welds on the 1 nm grid.</td>
 </tr>
 <tr>
-<td><code>CrossSection(contours, fill)</code> then <code>.extrude(height, n_divisions, twist, scale)</code></td>
-<td><code>extrude(rings, height, {slices = n_divisions + 1, twist_degrees = twist, scale_x, scale_y, fill})</code></td>
-<td>Same twist sense and order (twist, then scale).</td>
+<td><code>.rotate</code>, <code>.translate</code>, <code>.scale</code>, <code>.mirror</code>, <code>.transform</code></td>
+<td><code>rotated</code>, <code>translated</code>, <code>scaled</code>, <code>mirrored</code>, <code>transformed</code></td>
+<td>Rounded to 1 nm; quarter turns, axis mirrors and whole-number scales are exact.</td>
 </tr>
 <tr>
-<td><code>.revolve(segments, degrees)</code></td>
-<td><code>revolve(rings, segments, degrees, fill)</code></td>
-<td>Same steps and start.</td>
-</tr>
-<tr>
-<td><code>.rotate([x, y, z])</code>, <code>.translate(v)</code>, <code>.scale(v)</code>, <code>.mirror(n)</code>, <code>.transform(3×4)</code></td>
-<td><code>rotated(x, y, z)</code>, <code>translated(v)</code>, <code>scaled(v)</code>, <code>mirrored(n)</code>, <code>transformed(matrix)</code></td>
-<td>Results rounded to 1 nm; a 2-vector for a 3D shape must be padded by the caller as now.</td>
-</tr>
-<tr>
-<td><code>a + b</code>, <code>a - b</code>, <code>a ^ b</code></td>
-<td>the same operators, or <code>boolean(a, b, op)</code></td>
-<td>See <a href="#rounding-and-why-the-result-stays-valid">Rounding</a>.</td>
-</tr>
-<tr>
-<td><code>Manifold.batch_boolean(list, op)</code></td>
-<td><code>batch_boolean(list, op)</code></td>
+<td><code>a + b</code>, <code>a - b</code>, <code>a ^ b</code>, <code>Manifold.batch_boolean</code></td>
+<td><code>batch_boolean</code></td>
 <td></td>
 </tr>
 <tr>
-<td><code>Manifold.batch_hull(list)</code></td>
-<td><code>convex_hull(list)</code></td>
-<td>The hull of empty solids is empty. Points that all lie in one plane are refused.</td>
+<td><code>Manifold.batch_hull</code></td>
+<td><code>convex_hull</code></td>
+<td>Points all in one plane are refused.</td>
 </tr>
 <tr>
-<td><code>.status() != NoError</code>, <code>.is_empty()</code></td>
-<td>a <code>ValueError</code> at the point of failure; <code>.empty()</code></td>
-<td>Every <code>Solid</code> that exists is valid; there is no status to test.</td>
+<td><code>.volume()</code>, <code>.surface_area()</code>, <code>.bounding_box()</code>, <code>.num_tri()</code>, <code>.num_vert()</code>, <code>.is_empty()</code>, <code>.status()</code></td>
+<td>the measures in every answer</td>
+<td></td>
 </tr>
 <tr>
-<td><code>.volume()</code>, <code>.bounding_box()</code>, <code>.num_tri()</code>, <code>.num_vert()</code></td>
-<td><code>.volume()</code>, <code>.bounds()</code>, <code>.num_triangles()</code>, <code>.num_vertices()</code></td>
-<td>Bounds are a <code>Box3</code>, not a tuple of six.</td>
+<td><code>.to_mesh64()</code></td>
+<td>the <code>mesh</code> of the answer</td>
+<td>Vertex and triangle order are the kernel's.</td>
 </tr>
 <tr>
-<td><code>.to_mesh64()</code>: <code>vert_properties</code>, <code>tri_verts</code></td>
-<td><code>.vertices()</code>, <code>.triangles()</code></td>
-<td>Vertex and triangle order differ; see the order above.</td>
-</tr>
-<tr>
-<td><code>.slice(z)</code> then <code>.to_polygons()</code></td>
+<td><code>.slice(z)</code></td>
 <td><code>section(solid, z)</code></td>
-<td>Same convention at faces in the plane. More points on straight sides.</td>
+<td>Then cleared of points on straight sides, as described under Sections.</td>
 </tr>
 <tr>
-<td><code>.project()</code> then <code>CrossSection(…, Positive).to_polygons()</code></td>
+<td><code>.project()</code></td>
 <td><code>projection(solid)</code></td>
-<td>Already resolved by the positive rule.</td>
-</tr>
-<tr>
-<td><code>.min_gap(other, length)</code></td>
-<td><code>min_gap(a, b, length)</code></td>
 <td></td>
 </tr>
 <tr>
-<td><code>kernel.triangulate(polygons)</code></td>
-<td>not offered</td>
-<td>Used by Studio only to build polyhedron faces; <code>from_mesh</code> with any triangulation of each face will do.</td>
+<td><code>.min_gap(other, length)</code> (assembly contact)</td>
+<td><code>min_gap</code></td>
+<td></td>
 </tr>
 <tr>
-<td>2D <code>CrossSection</code> operations: <code>square</code>, <code>circle</code>, <code>offset</code>, Boolean operations, <code>hull</code>, transforms, <code>bounds</code>, <code>num_vert</code>, <code>num_contour</code></td>
-<td>not in this kernel</td>
-<td>These belong to the 2D polygon kernel (<code>polygon.hpp</code>). This kernel takes rings and gives rings.</td>
+<td><code>triangulate(polygon)</code> (polyhedron faces)</td>
+<td>a small routine in <code>solid_kernel.py</code></td>
+<td>Cuts off one corner at a time and uses every vertex of the face.</td>
+</tr>
+<tr>
+<td><code>CrossSection</code>: polygons by a fill rule, <code>square</code>, <code>circle</code>, Boolean operations, <code>hull</code>, <code>offset</code>, transforms, <code>bounds</code>, <code>area</code></td>
+<td>the polygon kernel, through its <code>polygon</code> command</td>
+<td>A circle has exactly the vertices of the solid kernel's cylinder. Offsets are described in <a href="#polygon-kernel">The polygon kernel</a>.</td>
+</tr>
+<tr>
+<td><code>CrossSection.extrude</code>, <code>.revolve</code></td>
+<td><code>extrude</code>, <code>revolve</code></td>
+<td>Same twist sense and order (twist, then scale); same steps and start.</td>
 </tr>
 </tbody>
 </table>
-<p>Two of Studio's tests compare a volume with its exact value to seven decimal places (<code>test_frustum_and_sphere</code>, <code>test_parametric_module_array_can_be_drilled_and_extruded</code> in <code>tests/test_scad_geometry.py</code>). On the 1 nm grid those volumes differ from the exact ones by 4·10^-6 and 1.3·10^-5 mm³, so the two tests need a tolerance when Studio moves over. The other 28 tests in the four modules pass on the kernel's solids as they are.</p>
+<h3>When the kernel refuses</h3>
+<p>The kernel refuses a result it cannot represent validly on its grid (&quot;the result has features too fine for the 1 nm grid&quot;; see <a href="#rounding-and-why-the-result-stays-valid">Rounding</a>). Studio then reports an error that names the feature or the script line and says what to do: two faces almost coincide there, usually after a turn, and moving, turning or resizing one shape by a small amount removes the cause.</p>
+<p><strong>Studio never hands the model to the other library</strong>, whether the backend was chosen explicitly or by <code>auto</code>. The two facet differently, so a part that silently changed kernel between two rebuilds would change shape, triangle count and section outlines without the user having changed anything. A user who needs the model as it stood can set <code>KERFKITE_SOLID_BACKEND=manifold</code> for the whole installation. The refusal was not met in any model of Studio's tests or documents, nor in 5000 random scripts run on both backends (below).</p>
+<h3>What differs for a user</h3>
+<ul>
+<li><strong>Spheres.</strong> Both kernels put <code>$fn</code> vertices round the equator. The kernel's sphere is bands of latitude and has about twice the triangles of the library's (9024 against 4608 at 96 segments), so its volume is a little nearer the true sphere and models with many spheres reach Studio's triangle limits at about half the number of spheres. The script engine's limit on overlapping triangle pairs is four times as large on the kernel, so that two overlapping spheres within the limit before are within it now.</li>
+<li><strong>Round offsets</strong> (<code>offset(r=…)</code>). Both draw each round corner with vertices on the true arc. The kernel divides a corner into equal parts of at most 1.0625 steps of 360° / <code>$fn</code>; the library takes whole steps from one end. The outlines differ by slivers far inside the facet error either has against the true arc.</li>
+<li><strong>Twisted extrusions.</strong> The side of a twisted extrusion is made of quadrilaterals that are not flat, and the two kernels may split them along different diagonals. The outlines at each layer are the same; the volume between layers is not, and with few slices the difference is large (a 4.5 by 5.7 mm outline turned 30° and tapered in a single slice: 15% above the true volume on the kernel, 24% below it on the library). More slices bring both to the true shape.</li>
+<li><strong>Coordinates</strong> are whole nanometres. A value such as <code>14.649999998509884</code> is now <code>14.65</code>.</li>
+<li><strong>Section outlines</strong> have a point at each corner and none along straight sides. The library's sections carry points along straight sides too: a turned box cut through five of its faces gave 10 points there and gives 5 here.</li>
+<li><strong>Speed.</strong> The exact checks cost time: the kernel is slower than the library, by a factor of about 5 to 25 on the parts measured below. Parts whose cuts have vertical walls stay fast; tapered or turned tools cost more, because every vertex made by the cut has to be rounded and the result checked.</li>
+</ul>
+<p>Time for one rebuild through Studio, on the two-core sandbox this was developed in (best of three; the machine was shared with another build):</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Library</th>
+<th>Kernel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A plate with one bore</td>
+<td>2 ms</td>
+<td>11 ms</td>
+</tr>
+<tr>
+<td>The scripting guide's mounting plate (four holes)</td>
+<td>6 ms</td>
+<td>23 ms</td>
+</tr>
+<tr>
+<td>The scripting guide's tapered dial (eight radial holes)</td>
+<td>15 ms</td>
+<td>117 ms</td>
+</tr>
+<tr>
+<td>The pinned bracket of the installed check: seven features, a sphere, tapered bores, a turned rib, a revolved groove, a scripted post</td>
+<td>50 ms</td>
+<td>1.3 s</td>
+</tr>
+<tr>
+<td>A plate with a row of eight overlapping spheres</td>
+<td>69 ms</td>
+<td>1.7 s</td>
+</tr>
+<tr>
+<td>A plate with 64 overlapping bores in one pattern</td>
+<td>0.39 s</td>
+<td>4.4 s</td>
+</tr>
+</tbody>
+</table>
+<h3>How the switch is tested</h3>
+<ul>
+<li><code>tests/test_solid_backends.py</code> builds every model of Studio's tests and every program of the scripting guide on both backends, through the same Studio code, and compares them: 22 drawings and 33 solids by volume, surface area, bounds, three sections and the projection; 6 solids with spheres, a twisted extrusion and 2 assemblies by what their faceting leaves comparable. The tolerances are stated at the head of that file and follow from the grid: a 1 nm shift of each surface for each of the two results, so a volume within 2 nm times the surface area. The largest difference found is 0.12 of its tolerance (volume 5.6·10^-5 mm³, surface area 2.9·10^-5 mm², section area 2.5·10^-5 mm², bounds within 1 nm).</li>
+<li>The same file tests the choice of backend, modelling with the library absent, modelling with the extension absent, and that a refusal is an error and never another backend.</li>
+<li>Three tests in <code>tests/test_scad_geometry.py</code> compared an area or a volume with its exact value to six or seven decimal places. They now allow the rounding of a circle's vertices to the grid: the perimeter of the circles times half a grid diagonal (2.7·10^-5 mm² for the drawing, 4.0·10^-5 and 3.6·10^-5 mm³ for the two solids).</li>
+<li><code>validation/check_installed_cam.py</code> models a part and a drawing through Studio's entry points with the installed extension and compares every vertex, triangle and outline with a recorded digest (<code>6c12e0b4dd788bbb</code>). That is the proof, on every platform a wheel or installer is built for, that the package carries the kernel and that the kernel gives the same bytes there. The digest is the same from GCC 13.3, from Clang 18.1, and with the portable 128-bit integers that a compiler without a 128-bit type (MSVC) uses, all on x86-64 Linux.</li>
+<li><code>validation/solid_kernel_check.py</code> runs Studio's four solid test modules on a stand-in that builds every solid in both: 30 tests, all passing, 148 distinct solids compared, 0 failures.</li>
+<li><code>validation/simulate_solid_workspace.py</code>, the browser exercise of the solid workspace, passes on the kernel.</li>
+<li><code>validation/solid_backend_check.py</code> builds random CAD scripts through Studio on both backends: drawings (polygons with holes, Boolean operations, offsets with each kind of corner) and solids (every primitive, extrusions, revolutions, polyhedra, transforms, Boolean operations and hulls, nested up to three deep). It is run by hand, not by the test suite. Measured with seeds 1 to 5, 600 drawings and 400 solids each:</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Drawings</th>
+<th>Solids</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Built</td>
+<td>3000</td>
+<td>2000</td>
+</tr>
+<tr>
+<td>Agree within the grid's tolerance</td>
+<td>2954 (largest difference 0.35 of its tolerance)</td>
+<td>1421 (largest 0.083)</td>
+</tr>
+<tr>
+<td>Refused by both (an empty result, a budget)</td>
+<td>46</td>
+<td>187</td>
+</tr>
+<tr>
+<td>Not compared: a twisted extrusion in the script</td>
+<td></td>
+<td>390</td>
+</tr>
+<tr>
+<td>Refused by the kernel as too fine</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>The oracle wrong by a rule</td>
+<td>0</td>
+<td>2</td>
+</tr>
+<tr>
+<td>Differences</td>
+<td><strong>0</strong></td>
+<td><strong>0</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The two cases set aside are of the kinds already listed under <a href="#testing">Testing</a>. In one the library's result has a fin without thickness: the volumes agree, and the library's surface area and bounds are the larger. In the other the library's hull is not convex and leaves the vertices of its own operands 6.5 mm outside it, while the kernel's hull holds them. One further thing the runs showed is a property of the grid and not a fault: a Boolean operation can leave an edge shorter than a micrometre, rounding its ends to the grid turns it slightly, and a mitred offset of 2.8 mm from that edge then lay 24 nm from the library's. The check allows an offset that much (1.5 nm over the edge's length, times the distance).</p>
+<pre><code>python validation/solid_backend_check.py --drawings 600 --solids 400 --seed 1
+</code></pre>
 <h2>Known limitations</h2>
 <ul>
 <li><strong>The refusal for features too fine for the grid</strong> described above. It is an error, not a wrong result, but the third-party library returns a solid in those cases.</li>
 <li><strong>The validity of a result rests on the code of the exact checks</strong> listed under Rounding, and on the exact predicates under them. The tests found no invalid result, with every result re-checked by <code>count_self_intersections</code> and <code>verify_exact</code>; a test cannot prove there is none.</li>
 <li><strong>Which sub-resolution features are removed is decided with doubles</strong> (thin cells, ribbons, merged vertices, flipped caps). Those decisions choose between valid results, so they cannot make a result invalid, and they are deterministic; but they are thresholds, and a feature a few nanometres thick is kept or dropped by them.</li>
 <li><strong><code>from_mesh</code> checks that a mesh is closed, oriented and without zero-area triangles; it does not look for self-intersections.</strong> They are found, and resolved, the first time the solid takes part in a Boolean operation; <code>count_self_intersections</code> reports them on request.</li>
-<li><strong>Sections keep one point for each mesh edge crossed</strong>, so straight sides carry collinear points. They are not removed.</li>
+<li><strong>A section of a face that is not exactly flat keeps a point at each crease.</strong> Points inside an exactly flat face are left out; a face turned by an arbitrary angle is flat only to the grid's rounding, and the kernel does not remove points by a tolerance. Studio does, within 2 nm, for the outlines it shows and cuts.</li>
+<li><strong>The sphere has about twice the triangles of the third-party library's</strong> for the same segment count, with thin triangles at the poles. A sphere with triangles of even size would be cheaper for the same accuracy.</li>
+<li><strong>Speed against the third-party library</strong>: slower by a factor of about 5 to 25 through Studio; see <a href="#what-differs-for-a-user">What differs for a user</a>.</li>
 <li><strong>No simplification beyond exact removal of unneeded vertices.</strong> Triangles are not merged or re-meshed for quality; long thin triangles remain.</li>
 <li><strong>Results near the resolution are valid but may be untidy</strong>: where faces nearly coincide, the result can carry small steps and extra vertices a few nanometres in size.</li>
 <li><strong>Convex hull</strong> tests every point against every face: adequate for the sizes Studio allows, quadratic in the worst case.</li>
@@ -5091,8 +5221,8 @@ python validation/solid_kernel_check.py --tool build/native/kerfkite-cam --trees
 </tr>
 <tr>
 <td>manifold3d</td>
-<td>Solid modelling: unions, differences and intersections of 3D shapes</td>
-<td><strong>Replace</strong> (owner's decision, 21 November 2026). An in-house 3D solid kernel is being written, because engravings can be three-dimensional and multi-axis machines are to follow. It also provides what those need: sections on any plane, ray casting with surface normals, and height maps. The kernel is written and tested (<a href="#solid-kernel">Solid kernel</a>); Studio is not yet moved onto it.</td>
+<td>Was: solid modelling and the 2D drawings of CAD scripts. Now: the fallback for both where the compiled extension is not installed, and the oracle the kernels are tested against</td>
+<td><strong>Replaced where the extension is installed</strong> (owner's decision to replace, 21 November 2026). Studio's 3D CAD runs on the in-house solid kernel and its script drawings on the in-house polygon kernel, through the compiled extension (<a href="#solid-kernel">Solid kernel</a>); the library is not imported then. It stays a dependency for the portable wheel and for a source checkout without a compiler, and for the differential tests. It goes when the fallback goes: when every installation carries the extension, or the test oracle is no longer wanted.</td>
 </tr>
 <tr>
 <td>Pillow</td>
@@ -5246,7 +5376,7 @@ python validation/solid_kernel_check.py --tool build/native/kerfkite-cam --trees
 <tr>
 <td>The in-house kernels (2D polygons, 3D solids, JSON)</td>
 <td>Nothing separate: they are compiled into the core and the extension.</td>
-<td>Arrive with the extension once each is switched in. The JSON code and the polygon kernel are; the installed-wheel check runs offsets, a pocket and a fill through the kernel and compares the programs with a recorded digest.</td>
+<td>All three arrive with the extension and are in use. The installed-wheel check runs offsets, a pocket and a fill through the polygon kernel and compares the programs with a recorded digest; it models a part and a drawing through the solid and polygon kernels, by Studio's own entry points, and compares every vertex, triangle and outline with a recorded digest.</td>
 </tr>
 <tr>
 <td><code>kerfkite-cam</code>, the command-line tool</td>
@@ -5285,6 +5415,7 @@ python validation/solid_kernel_check.py --tool build/native/kerfkite-cam --trees
 <h2>Order of work</h2>
 <ol>
 <li>The polygon kernel, replacing GEOS in the core and Shapely in the CAM operations. Done for the core and for Studio with its compiled extension; the other Shapely users in Studio follow.</li>
+<li>The solid kernel, replacing manifold3d in Studio's 3D CAD. Done for Studio with its compiled extension; the library remains as the fallback without it and as the test oracle.</li>
 <li>Pillow out of the installed dependencies.</li>
 <li>The remaining items as their parts are ported.</li>
 </ol>
@@ -6008,6 +6139,10 @@ python validation/solid_kernel_check.py --tool build/native/kerfkite-cam --trees
 <h3>“Closed contours,” “self-crossing,” “tool does not fit” or empty output</h3>
 <p>Area operations need valid closed regions. An imported open centreline belongs in a line operation. Repair self-crossings, duplicate/canceling contours and zero-area shapes before using profiles, pockets, hatch fill or V-carving. Even-odd nesting creates holes; overlapping shapes can cancel in the filled region.</p>
 <p>For a fit error, compare tool diameter with the actual feature width. Reducing the numeric diameter without changing the physical cutter creates an incorrect toolpath. Use a suitable tool or change the design. Internal corners narrower than the cutter cannot be machined sharp by that cutter.</p>
+<h3>A solid rebuild reports “features too fine for the 1 nm grid”</h3>
+<p>Studio models solids on a grid of one nanometre and refuses a result it cannot represent validly there. This is rare. It happens where two faces almost coincide without coinciding, usually after both shapes were turned by an angle that is not a quarter turn: for example two blocks built to share a face and then rotated separately. The message names the feature or the script line. Move, turn or resize one of the two shapes by a small amount (a hundredth of a millimetre is plenty), or make them overlap properly instead of only touching. Studio does not fall back to another modelling library for one part, because the part would then change its facets between rebuilds. Setting <code>KERFKITE_SOLID_BACKEND=manifold</code> in the server's environment selects the earlier modelling library for the whole installation.</p>
+<h3>A model with many spheres exceeds the triangle budget</h3>
+<p>A sphere has about twice the triangles it had before Studio's own solid kernel, for the same <code>$fn</code>. Reduce <code>$fn</code> on the spheres, or the number of pattern instances.</p>
 <h3>Pocket has residual material</h3>
 <p>Use a stepover no larger than half cutter diameter. Inspect inaccessible corners and narrow regions even when the stepover passes validation. Concentric pocketing is not adaptive clearing, and the tool must support the generated plunge entry. V-carving can also leave wide flat areas; it is not automatically a complete flat-clearing strategy.</p>
 <h3>Text has depth outlines but no filled letter surface</h3>

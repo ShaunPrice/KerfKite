@@ -73,6 +73,9 @@ def pytest_configure(config):
         # A test that forces the Shapely fallback for offsets, pockets and fills is not asking it either: the
         # core has the kernel's paths, and the fallback's vertices differ.
         outer = outer and os.environ.get('KERFKITE_POLYGON_BACKEND') != 'shapely'
+        # Nor is one that forces the fallback library for solids and drawings: outlines taken from it are
+        # those of another kernel, and the reference is recorded as Studio runs when left alone.
+        outer = outer and os.environ.get('KERFKITE_SOLID_BACKEND') != 'manifold'
         _DEPTH[0] += 1
         try:
             if not outer:
