@@ -24,10 +24,24 @@ jobs:
           python-version: "3.12"
       - name: Install the Python reference
         run: python -m pip install -e ".[dev]"
+      - name: Use the Shapely release whose GEOS the core builds
+        # The core compiles GEOS 3.14.1 (native/cmake/geos.cmake). Shapely 2.2.0 wheels contain that release;
+        # with another GEOS the reference's polygons can differ from the core's.
+        run: python -m pip install "shapely==2.2.0"
+      - name: Identify the runner image
+        id: image
+        shell: bash
+        run: echo "version=${ImageOS:-unknown}-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
+      - name: Keep the GEOS download and build between runs
+        # Only a time saving: without it GEOS is fetched and compiled again, with the same result.
+        uses: actions/cache@v6
+        with:
+          path: build/native/_deps
+          key: geos-${{ matrix.runner }}-${{ steps.image.outputs.version }}-${{ hashFiles('native/cmake/geos.cmake') }}
       - name: Build the native core
         run: |
           cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release
-          cmake --build build/native --config Release
+          cmake --build build/native --config Release --parallel 4
       - name: Self-test without Python
         run: ctest --test-dir build/native -C Release --output-on-failure
       - name: Compare with the Python reference

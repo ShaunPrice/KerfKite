@@ -14,6 +14,7 @@
 #include "kerfkite/number_text.hpp"
 #include "kerfkite/py_math.hpp"
 #include "laser.hpp"
+#include "operations.hpp"
 #include "project.hpp"
 
 namespace kerfkite {
@@ -91,6 +92,7 @@ Job single(const json &project) {
         throw ValueError("Choose a milling cutter for a contour or pocket; a drill bit is for drilling");
 
     // studio.operations.prepare: the line operation leaves the paths as they are.
+    std::vector<std::string> operation_warnings;
     const bool line = is_text_or_absent(operation, "line");
     if (!line || knife) {
         if (!none(get(project, "path_depths")))
@@ -99,7 +101,7 @@ Job single(const json &project) {
             if (!line) throw ValueError("Knife uses contour lines, not pocket/fill operations");
             throw NotPorted("drag-knife paths");
         }
-        throw NotPorted("offset, pocket and fill operations");
+        operation_warnings = prepare_operation(project, clean, width, height);  // operations.cpp
     }
     if (tabs_enabled) throw NotPorted("holding tabs");
 
@@ -271,6 +273,7 @@ Job single(const json &project) {
     const Protocol &profile = get_protocol(protocol);
     job.warnings = {profile.notes, "Review tool geometry, stock and clearance before running.",
                     "Time estimate excludes travel, plunge, acceleration and spindle startup."};
+    job.warnings.insert(job.warnings.begin() + 1, operation_warnings.begin(), operation_warnings.end());
     if (profile.family == "rs274")
         job.warnings.push_back(
             "Before loading, clear controller scaling, rotation and local offsets. Set G54 Z zero for the current "

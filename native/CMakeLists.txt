@@ -23,6 +23,14 @@ else()
   target_compile_options(kerfkite_core PUBLIC -ffp-contract=off -Wall -Wextra)
 endif()
 
+# Polygon operations (offset, pocket, fill) use GEOS: cmake/geos.cmake has the pinned release and the options.
+include(cmake/geos.cmake)
+target_sources(kerfkite_core PRIVATE core/src/geometry.cpp core/src/operations.cpp)
+if(KERFKITE_GEOS_TARGET)
+  target_compile_definitions(kerfkite_core PRIVATE KERFKITE_WITH_GEOS=1)
+  target_link_libraries(kerfkite_core PRIVATE ${KERFKITE_GEOS_TARGET})
+endif()
+
 add_executable(kerfkite-cam tools/kerfkite_cam.cpp)
 target_link_libraries(kerfkite-cam PRIVATE kerfkite_core)
 
@@ -30,3 +38,6 @@ enable_testing()
 add_executable(kerfkite_selftest tests/selftest.cpp)
 target_link_libraries(kerfkite_selftest PRIVATE kerfkite_core)
 add_test(NAME selftest COMMAND kerfkite_selftest)
+add_executable(kerfkite_geometry_selftest tests/geometry_selftest.cpp)
+target_link_libraries(kerfkite_geometry_selftest PRIVATE kerfkite_core)
+add_test(NAME geometry COMMAND kerfkite_geometry_selftest)
