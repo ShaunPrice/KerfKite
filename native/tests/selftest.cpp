@@ -9,7 +9,7 @@
 #include "kerfkite/number_text.hpp"
 #include "kerfkite/pcb.hpp"
 
-using json = nlohmann::json;
+using json = kerfkite::Json;
 using namespace kerfkite;
 
 static int failures = 0;

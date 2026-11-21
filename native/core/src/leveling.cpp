@@ -11,7 +11,7 @@
 
 namespace kerfkite {
 
-using json = nlohmann::json;
+using json = Json;
 using namespace detail;
 
 namespace {
@@ -76,9 +76,18 @@ bool words(const std::string &line, std::vector<Word> &out) {
         while (i < line.size() && line[i] != ' ' && !(line[i] >= 'A' && line[i] <= 'Z')) ++i;
         const std::string number_text = line.substr(start, i - start);
         if (number_text.empty()) return false;
-        char *end = nullptr;
-        const double value = std::strtod(number_text.c_str(), &end);
-        if (end != number_text.c_str() + number_text.size() || !std::isfinite(value)) return false;
+        // A G-code number is [+-]digits[.digits]. It is read by the core's own parser, not the C library's,
+        // which follows the process locale and would misread the decimal point under some of them.
+        size_t digits = 0, points = 0;
+        for (size_t k = number_text[0] == '+' || number_text[0] == '-' ? 1 : 0; k < number_text.size(); ++k) {
+            if (number_text[k] == '.') ++points;
+            else if (number_text[k] >= '0' && number_text[k] <= '9') ++digits;
+            else return false;
+        }
+        double value = 0;
+        if (!digits || points > 1 || number_text.size() > 40 ||
+            !text::parse_double(number_text.data(), number_text.data() + number_text.size(), value) || !std::isfinite(value))
+            return false;
         out.push_back({letter, value, number_text});
     }
     return !out.empty();
