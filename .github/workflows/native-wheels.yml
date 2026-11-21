@@ -17,8 +17,8 @@ jobs:
     env:
       KERFKITE_REQUIRE_NATIVE: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Compile macOS or Windows wheel
@@ -41,7 +41,7 @@ jobs:
           python -m pip install dist/*.whl
           python -I -c 'from importlib.metadata import version; import studio; assert studio.__version__ == version("kerfkite-studio")'
           python -I validation/check_installed_cam.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target }}-wheel
           path: dist/*.whl
