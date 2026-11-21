@@ -13,6 +13,8 @@
 
 #include "kerfkite/number_text.hpp"
 #include "kerfkite/py_math.hpp"
+#include "drilling.hpp"
+#include "knife.hpp"
 #include "laser.hpp"
 #include "project.hpp"
 
@@ -86,7 +88,7 @@ Job single(const json &project) {
     const bool drilling = is_text(operation, "drill");
     if (router && !entry_plunge && drilling)
         throw ValueError("Use the drill peck setting for drilling; select plunge as the router entry");
-    if (drilling) throw NotPorted("drilling");
+    if (drilling) return drill_job(project, clean);
     if (router && is_text(get(project, "tool_shape"), "drill"))
         throw ValueError("Choose a milling cutter for a contour or pocket; a drill bit is for drilling");
 
@@ -97,9 +99,10 @@ Job single(const json &project) {
             throw ValueError("Per-vertex depth contours require the line operation");
         if (knife) {
             if (!line) throw ValueError("Knife uses contour lines, not pocket/fill operations");
-            throw NotPorted("drag-knife paths");
+            clean = knife_paths(project, clean, width, height);
+        } else {
+            throw NotPorted("offset, pocket and fill operations");
         }
-        throw NotPorted("offset, pocket and fill operations");
     }
     if (tabs_enabled) throw NotPorted("holding tabs");
 
@@ -193,6 +196,8 @@ Job single(const json &project) {
     const std::string safe_line = "G0 Z" + fixed(safe, 3);
     if (!laser) {
         lines.push_back(safe_line);
+    }
+    if (router) {
         lines.push_back("M3 S" + fixed(power, 0));
         lines.push_back("G4 P2");
     }
@@ -271,6 +276,7 @@ Job single(const json &project) {
     const Protocol &profile = get_protocol(protocol);
     job.warnings = {profile.notes, "Review tool geometry, stock and clearance before running.",
                     "Time estimate excludes travel, plunge, acceleration and spindle startup."};
+    if (knife) job.warnings.insert(job.warnings.begin() + 1, KNIFE_WARNING);
     if (profile.family == "rs274")
         job.warnings.push_back(
             "Before loading, clear controller scaling, rotation and local offsets. Set G54 Z zero for the current "
@@ -281,6 +287,8 @@ Job single(const json &project) {
     job.lines = postprocess(lines, protocol, mode, get(project, "dwell_units"));
     job.cut_length = rounded(length, 2);
     job.cut_minutes = rounded(length / cut_feed, 2);
+    // A knife job whose paths all had no travel has nothing to measure; the reference's min() says so.
+    if (knife && clean.empty()) throw ValueError("min() arg is an empty sequence");
     // [min x, min y, max x, max y] over every vertex of what is cut: for a laser, the paths with their leads.
     const auto cover = [&job](double x, double y, bool first) {
         if (first) job.bounds = {x, y, x, y};

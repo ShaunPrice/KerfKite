@@ -14,7 +14,7 @@ file(READ ${KERFKITE_PROTOCOLS} KERFKITE_PROTOCOLS_JSON)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${KERFKITE_PROTOCOLS})
 configure_file(core/src/protocols_data.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/generated/protocols_data.hpp @ONLY)
 
-add_library(kerfkite_core STATIC core/src/api.cpp core/src/cam.cpp core/src/laser.cpp core/src/leveling.cpp core/src/protocols.cpp)
+add_library(kerfkite_core STATIC core/src/api.cpp core/src/cam.cpp core/src/drilling.cpp core/src/knife.cpp core/src/laser.cpp core/src/leveling.cpp core/src/protocols.cpp)
 # Circuit board import: Gerber layers and Excellon drill files.
 target_sources(kerfkite_core PRIVATE core/src/excellon.cpp core/src/gerber.cpp core/src/pcb.cpp)
 target_include_directories(kerfkite_core PUBLIC core/include third_party PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)

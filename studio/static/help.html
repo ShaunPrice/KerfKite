@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#ai-vision">Ai Vision</a> <a href="#android">Android</a> <a href="#assemblies">Assemblies</a> <a href="#branding">Branding</a> <a href="#cad-macros">Cad Macros</a> <a href="#cad-scripting">Cad Scripting</a> <a href="#camera-register">Camera Register</a> <a href="#desktop">Desktop</a> <a href="#developer">Developer</a> <a href="#drilling">Drilling</a> <a href="#fixtures">Fixtures</a> <a href="#geometry">Geometry</a> <a href="#install">Install</a> <a href="#installer-builds">Installer Builds</a> <a href="#labels">Labels</a> <a href="#laser-order">Laser Order</a> <a href="#laser-patterns">Laser Patterns</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#licensing">Licensing</a> <a href="#lightburn-import">Lightburn Import</a> <a href="#materials">Materials</a> <a href="#mcp-hosting">Mcp Hosting</a> <a href="#mcp">Mcp</a> <a href="#native">Native</a> <a href="#pcb">Pcb</a> <a href="#performance">Performance</a> <a href="#phone-connections">Phone Connections</a> <a href="#platforms">Platforms</a> <a href="#probe-leveling">Probe Leveling</a> <a href="#product">Product</a> <a href="#program-import">Program Import</a> <a href="#protocols">Protocols</a> <a href="#release-review">Release Review</a> <a href="#request-coverage">Request Coverage</a> <a href="#rotary">Rotary</a> <a href="#router-entry">Router Entry</a> <a href="#sbc">Sbc</a> <a href="#simulation">Simulation</a> <a href="#sketch">Sketch</a> <a href="#solid-cad">Solid Cad</a> <a href="#status">Status</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#svg">Svg</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#user-guide">User Guide</a> <a href="#web">Web</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#ai-vision">Ai Vision</a> <a href="#android">Android</a> <a href="#assemblies">Assemblies</a> <a href="#branding">Branding</a> <a href="#cad-macros">Cad Macros</a> <a href="#cad-scripting">Cad Scripting</a> <a href="#camera-register">Camera Register</a> <a href="#desktop">Desktop</a> <a href="#developer">Developer</a> <a href="#drilling">Drilling</a> <a href="#fixtures">Fixtures</a> <a href="#geometry">Geometry</a> <a href="#install">Install</a> <a href="#installer-builds">Installer Builds</a> <a href="#labels">Labels</a> <a href="#laser-order">Laser Order</a> <a href="#laser-patterns">Laser Patterns</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#licensing">Licensing</a> <a href="#lightburn-import">Lightburn Import</a> <a href="#machine-setup">Machine Setup</a> <a href="#materials">Materials</a> <a href="#mcp-hosting">Mcp Hosting</a> <a href="#mcp">Mcp</a> <a href="#native">Native</a> <a href="#pcb">Pcb</a> <a href="#performance">Performance</a> <a href="#phone-connections">Phone Connections</a> <a href="#platforms">Platforms</a> <a href="#probe-leveling">Probe Leveling</a> <a href="#product">Product</a> <a href="#program-import">Program Import</a> <a href="#protocols">Protocols</a> <a href="#release-review">Release Review</a> <a href="#request-coverage">Request Coverage</a> <a href="#rotary">Rotary</a> <a href="#router-entry">Router Entry</a> <a href="#sbc">Sbc</a> <a href="#simulation">Simulation</a> <a href="#sketch">Sketch</a> <a href="#solid-cad">Solid Cad</a> <a href="#status">Status</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#svg">Svg</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#user-guide">User Guide</a> <a href="#web">Web</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
 <p>KerfKite Studio is an open-source CAD/CAM workbench for interchangeable CNC router, laser and drag-knife heads. Design in a browser, simulate a job, and prepare output for a supported controller. The Python application runs locally or as an authenticated HTTPS editor. KerfKite Pocket on Android includes an offline sketch editor and a CNC pendant paired with the Studio server.</p>
 <p><a href="screen-desktop-workspace.png"><img src="screen-desktop-workspace.png" alt="KerfKite’s desktop editor showing wattle, banksia and scarlet gum tags on a shared sheet, with separate layers for the outlines, engraving and lettering" /></a></p>
 <p>Three botanical tags share a sheet. The <strong>Layers</strong> tab separates engraving, lettering and cut outlines.</p>
@@ -1323,6 +1323,77 @@ python packaging/desktop/build_browser.py &quot;dist/browser/kerfkite_studio-${s
 </table>
 <p>LightBurn files vary across controller families and releases. Preserve the source file. Source-disabled objects keep an additional per-object Output restriction. Studio stores converted settings in its own project format. Recreating every LightBurn effect and writing a lossless LightBurn project remain open work. Commercial cutter-native formats such as Silhouette STUDIO3 and Cricut Design Space projects require a supported export from the originating program.</p>
 <p>LightBurn documents its supported project, device, preference and bundle types. <a href="https://docs.lightburnsoftware.com/2.1/Reference/UI/FileMenu/">LightBurn File menu</a> · <a href="https://docs.lightburnsoftware.com/latest/Guides/Migration/">LightBurn migration guide</a> · <a href="https://docs.lightburnsoftware.com/latest/Reference/UserBundles/">LightBurn bundles</a></p>
+</section><section id="machine-setup"><h1>Machine setup from the controller</h1>
+<p>When a controller is connected for the first time, Studio asks it what machine it is and sets the workspace to match. Nothing is written to the controller: its settings are read and left as they are.</p>
+<p>This is the same on Windows, macOS, Linux and the Raspberry Pi, and through the MCP workshop, which drives the same editor. The hosted web editor has no controller connection, and the simulator has no machine settings, so neither changes the workspace.</p>
+<h2>What is asked</h2>
+<table>
+<thead>
+<tr>
+<th>Firmware</th>
+<th>Requests</th>
+<th>What is read</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Grbl 1.1, grblHAL, FluidNC, xPRO V5</td>
+<td><code>$$</code>, <code>$I</code> and the start-up line</td>
+<td>Travel (<code>$130</code>–<code>$132</code>), maximum rates (<code>$110</code>–<code>$112</code>), maximum spindle speed or laser power (<code>$30</code>, or <code>Laser/FullPower</code> on an xPRO V5 in laser mode), laser mode (<code>$32</code>), soft and hard limits (<code>$20</code>, <code>$21</code>), homing (<code>$22</code>), reporting units (<code>$13</code>), firmware name and version</td>
+</tr>
+<tr>
+<td>Marlin</td>
+<td><code>M115</code>, <code>M211</code>, <code>M503</code></td>
+<td>Firmware name and machine type, soft endstop limits, maximum feed rates (<code>M203</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>A Marlin firmware that does not answer one of these reports still connects: the report is skipped after three seconds and the item is listed as not reported.</p>
+<h2>What is set</h2>
+<table>
+<thead>
+<tr>
+<th>Workspace setting</th>
+<th>From</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Work area width and height</td>
+<td>X and Y travel</td>
+</tr>
+<tr>
+<td>Z travel of the machine profile</td>
+<td>Z travel</td>
+</tr>
+<tr>
+<td>Largest feed and plunge feed the fields accept</td>
+<td>The slower of the X and Y maximum rates, and the Z maximum rate, up to Studio's own limit of 10,000 mm/min</td>
+</tr>
+<tr>
+<td>Largest spindle speed or laser power the field accepts</td>
+<td><code>$30</code></td>
+</tr>
+<tr>
+<td>Router or laser head</td>
+<td><code>$32</code>, when it differs from the head selected</td>
+</tr>
+</tbody>
+</table>
+<p>A value already above a new limit is lowered to it, and the message says so.</p>
+<p>The machine is saved under <strong>My machine profiles</strong> with a name made from its firmware and work area, for example <code>Grbl 1.1h · 300 × 180 mm</code>. On a later connection the same machine is recognised by its firmware and travel. A project already set up for that machine is left as it is, so a work area narrowed for one job is not undone; a project set up for a different machine is switched to the connected one.</p>
+<p><strong>Set up from controller</strong>, under <strong>My machine profiles</strong>, repeats the reading at any time while a controller is connected.</p>
+<h2>What is not guessed</h2>
+<ul>
+<li>A setting the controller does not report is listed as not reported and left for you to enter.</li>
+<li>Travel beyond 2,000 mm, the largest work area Studio accepts, is reported and not applied.</li>
+<li>If the firmware identifies itself as a different dialect from the one chosen for the connection, the message says so. The workspace keeps the dialect of the connection; reconnect with the matching dialect.</li>
+<li>If artwork already lies outside the reported work area, the work area is not changed and the message says why.</li>
+<li>Firmware travel settings are often left at their defaults. Check the reported travel against the machine before relying on it.</li>
+</ul>
+<h2>Not included</h2>
+<p>The phone pendant's status deliberately carries no machine configuration, so KerfKite Pocket does not receive these settings. Programs can read the description from <code>GET /api/machine</code> on the workstation.</p>
+<p>The readback has been tested with synthetic controllers that answer as each firmware does. It has not yet been run against physical controllers.</p>
 </section><section id="materials"><h1>Materials guide</h1>
 <p>Open <strong>CAM → Materials guide</strong> to start with the tool selected in Studio. <strong>3D relief → Materials guide</strong> starts with the relief cutter. The guide opens in a separate tab so you can keep the drawing and its preview in place. You can also <a href="materials-guide.html">open the guide directly</a> from a complete local copy of Studio. It works with a keyboard, a touchscreen or a mouse.</p>
 <h2>Look up a piece of stock</h2>
@@ -1711,11 +1782,12 @@ rotary = generate_rotary(project, options, backend='python')
 <p>On Windows x64 (MSVC 2022 Build Tools, Python 3.10 and 3.12) the extension builds without compiler warnings, the parity tests and the installed-wheel check pass, and the five benchmark programs have the same hashes as on Linux. macOS and ARM builds have not been run.</p>
 <p><code>validation/benchmark_gcode.py</code> times both backends and fails if their program hashes differ; <code>validation/check_installed_cam.py</code> repeats the parity check on an installed wheel.</p>
 <h2>Python-free core</h2>
-<p><code>native/</code> holds the start of the application's move to C++: a C++17 library and the <code>kerfkite-cam</code> command-line tool, which write G-code from a project file with no Python installed. It currently reproduces router line jobs, laser line jobs (leads, power ramps, perforation, holding bridges and raster powers), ordered multi-operation jobs and controller post-processing; everything else is declined, never approximated. <code>native/README.md</code> lists what is ported and how to build it.</p>
+<p><code>native/</code> holds the start of the application's move to C++: a C++17 library and the <code>kerfkite-cam</code> command-line tool, which write G-code from a project file with no Python installed. It currently reproduces router line jobs, laser line jobs (leads, power ramps, perforation, holding bridges and raster powers), drilling, drag-knife paths, ordered multi-operation jobs and controller post-processing; everything else is declined, never approximated. <code>native/README.md</code> lists what is ported and how to build it.</p>
 <p>Probe levelling (<code>native/core/src/leveling.cpp</code>) is the first part of the application written only in the core: it has no Python version. The extension compiles that file and exposes it as <code>core_call</code>, which <code>studio/leveling.py</code> wraps; the extension is therefore built as C++17 and includes the vendored JSON header. See <a href="#probe-leveling">Probe levelling</a>.</p>
 <p>Circuit board import (<code>gerber.cpp</code>, <code>excellon.cpp</code>, <code>pcb.cpp</code>) is written the same way, compiled into the extension and wrapped by <code>studio/pcb_import.py</code>. See <a href="#pcb">Circuit boards</a>.</p>
 <p>The exact number formatting described above now lives in one header, <code>native/core/include/kerfkite/number_text.hpp</code>, used by both the Python extension and the core.</p>
 <p><code>python validation/native_core_parity.py --cli &lt;kerfkite-cam&gt;</code> compares the core with the Python reference: number text, every generator call the test suite makes, and thousands of generated edge cases. A case must be reproduced exactly or declined; a different answer fails. With laser jobs ported, the measurement on Linux x86-64 is: 300,000 numbers and 360,000 distances and sums identical; 124 of 202 recorded suite calls reproduced (61%); 11,225 of 12,000 generated cases reproduced (94%), among them 1,137 laser programs; and no differences. The three benchmark programs written by <code>kerfkite-cam</code> have the same hashes as Python's.</p>
+<p>Drilling (<code>native/core/src/drilling.cpp</code>) and drag-knife paths (<code>native/core/src/knife.cpp</code>) are ported as well. The generated cases gained 4,000 drilling and knife projects. On Linux x86-64, with those two parts: 160 of 205 recorded suite calls reproduced (78%, from 62%); 15,562 of 16,000 generated cases reproduced (97%), among them 1,290 drilling and 1,634 drag-knife programs; and no differences. The one knife case declined is a path that returns to a point through steps too short to keep, where the Python divides by zero. Knife swivels use the platform's <code>atan2</code>, <code>sin</code> and <code>cos</code>, as Python does, so they are compared on each platform against the Python there.</p>
 </section><section id="pcb"><h1>Circuit boards: Gerber and Excellon import</h1>
 <p>KerfKite reads the two files a board design program exports for manufacture: <strong>Gerber</strong> layers (RS-274X and X2) and <strong>Excellon</strong> drill files. This is the second part of circuit board engraving, after <a href="#probe-leveling">probe levelling</a>.</p>
 <p><strong>Isolation toolpaths are not generated yet.</strong> A copper layer is read into the list of objects it draws, in millimetres, and stops there. Turning that list into copper outlines and offsetting a cutter around them needs polygon union and offsetting, which is the next step. What works today from an imported board:</p>

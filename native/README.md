@@ -54,7 +54,9 @@ file as tools and holes, and its holes as drilling operations. The board file it
 | Controller post-processing (Grbl family, Marlin, LinuxCNC, Mach3, Mach4, UCCNC) | Done. The table is read from `studio/static/protocols.json` at build time. |
 | Probe levelling: probing plan, height map, levelled program (`core/src/leveling.cpp`) | Done. New in the core: there is no Python version, and Studio calls this code through its extension. |
 | Circuit board import: Gerber layers, Excellon drill files, board outline paths, drilling operations (`core/src/gerber.cpp`, `core/src/excellon.cpp`) | Done. New in the core: there is no Python version. Isolation toolpaths are not generated yet. |
-| Drag-knife paths, ramp and helix entry, holding tabs, drilling | Not yet. Declined with exit status 3. |
+| Drilling at point markers and circular hole outlines, in one plunge or in pecks (`core/src/drilling.cpp`) | Done. The hole list and tool shape that Studio adds for its stock simulation are not in the core's job yet. |
+| Drag-knife paths: the alignment lead-in and the swivel at each corner (`core/src/knife.cpp`) | Done, except a path that returns to a point through steps too short to keep: the reference fails on it, and the core declines it. |
+| Ramp and helix entry, holding tabs | Not yet. Declined with exit status 3. |
 | Offset, pocket and fill operations | Not yet. These need a geometry library (GEOS, which the Python code reaches through Shapely). |
 | Rotary output, relief, stock simulation, importers, sender, pendant, editors | Not yet. |
 
@@ -75,6 +77,10 @@ compares the core with the Python reference in the same run:
 
 The reference for lengths and totals is CPython 3.12 or later: earlier versions computed `math.dist` and
 `sum()` differently in the last bit, so the comparison is run with 3.12 or later.
+
+Knife swivels and laser arc leads take their sines, cosines and arc tangents from the platform's maths
+library, as Python does. The core therefore matches the Python on the same machine, while the last bit of
+those points may differ from one platform to another.
 
 Each case must be reproduced exactly, or declined. A different answer fails the check. The share of cases
 reproduced is the measure of progress, and the list of declined features is the work that remains.
