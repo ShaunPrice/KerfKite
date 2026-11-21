@@ -11,7 +11,8 @@ class DeviceController:
     def __init__(self):
         self.lock = threading.RLock()
         self.protocol = 'grbl'
-        self.driver = GrblController()
+        # Every Grbl-family controller is asked to identify itself ($I), so that the machine can be described.
+        self.driver = GrblController(initialization_queries=('$I',))
 
     def select_protocol(self, protocol):
         with self.lock:
@@ -30,13 +31,7 @@ class DeviceController:
         self.driver.disconnect()
         self.protocol = protocol
         self.driver = (
-            GrblController(
-                initialization_queries=('$30', '$32', '$I')
-                if protocol == 'fluidnc'
-                else ('$I',)
-                if protocol in ('grblhal', 'xpro-v5')
-                else ()
-            )
+            GrblController(initialization_queries=('$30', '$32', '$I') if protocol == 'fluidnc' else ('$I',))
             if profile.family == 'grbl'
             else MarlinController()
         )

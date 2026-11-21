@@ -7,6 +7,7 @@ from .windows_support import require_supported_windows
 from . import leveling
 from .cam import generate, number
 from .design_api import register_design_routes
+from .machine_setup import describe as describe_machine
 from .device import DeviceController as Controller
 from .profiles import PROFILES
 from .rotary import generate_rotary, validate_rotary_machine
@@ -99,12 +100,18 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
             phone_arm_challenge=True,
             rotary_stream=True,
             probe_leveling=leveling.available(),
+            machine_readback=True,
             hardware_enabled=allow_hardware,
         )
 
     @app.get('/api/status')
     def status():
         return jsonify(ctl.status())
+
+    @app.get('/api/machine')
+    def machine():
+        # What the controller reports about its machine. Reading only: nothing is written to it.
+        return jsonify(describe_machine(ctl.status()))
 
     @app.get('/api/profiles')
     def profiles():
