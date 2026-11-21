@@ -9,7 +9,8 @@
 //   kerfkite-cam excellon FILE [--units mm|inch] [--integer N --decimal N] [--omitted-zeros leading|trailing]
 //   kerfkite-cam excellon-drills FILE [--offset [X,Y]]       the holes as drilling operations, by diameter
 //   kerfkite-cam polygon REQUEST.json        the polygon kernel: see kerfkite/polygon_command.hpp
-//   kerfkite-cam polygon-batch CASES.jsonl   one polygon request a line, each answered {"ok": ...} or {"error": ...}
+//   kerfkite-cam polygon-batch CASES.jsonl   one polygon request a line (or, with "command": "operation", one
+//                                            operation request), each answered {"ok": ...} or {"error": ...}
 //   kerfkite-cam operation REQUEST.json      an offset, pocket or fill: see kerfkite/operation_command.hpp
 //   kerfkite-cam batch CASES.jsonl
 //   kerfkite-cam numbers
@@ -199,7 +200,10 @@ int polygon_batch(const std::string &path) {
         if (line.empty()) continue;
         json answer;
         try {
-            answer = json{{"ok", kerfkite::call("polygon", json::parse(line))}};
+            const json request = json::parse(line);
+            // A line is a polygon request unless it names the other geometry command: "command": "operation".
+            const bool operation = request.is_object() && request.value("command", "") == "operation";
+            answer = json{{"ok", kerfkite::call(operation ? "operation" : "polygon", request)}};
         } catch (const kerfkite::ValueError &error) {
             answer = json{{"error", error.what()}};
         } catch (const std::exception &error) {

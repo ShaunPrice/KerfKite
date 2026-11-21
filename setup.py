@@ -23,6 +23,13 @@ setup(
                 'native/core/src/excellon.cpp',
                 'native/core/src/gerber.cpp',
                 'native/core/src/pcb.cpp',
+                # Offsets, pockets and fills, and the polygon kernel they are built on.
+                'native/core/src/operations.cpp',
+                'native/core/src/polygon/arrangement.cpp',
+                'native/core/src/polygon/boolean.cpp',
+                'native/core/src/polygon/clip.cpp',
+                'native/core/src/polygon/measure.cpp',
+                'native/core/src/polygon/offset.cpp',
             ],
             language='c++',
             include_dirs=['native/core/include'],
