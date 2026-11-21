@@ -1072,6 +1072,7 @@ sh start.sh --port 8765
 <p>Version 0.6.1 upgrades the browser project library the first time it opens. Before downgrading, open each design and revision you want to keep and choose <strong>Download project</strong>. Older releases can open the downloaded project files. The upgraded browser library requires version 0.6.1 or later.</p>
 </section><section id="installer-builds"><h1>Building KerfKite installers</h1>
 <p>The desktop launcher contains only Go standard-library code. Each package carries a platform-matched Studio wheel with the C++ relief and stock simulators and locked requirements. The launcher fetches the platform’s uv archive from the pinned upstream release, verifies its SHA-256, and uses it to install a private CPython 3.12 runtime. All application wheels are hash-checked. Python, geometry libraries and optional STEP binaries are installed on the user’s machine.</p>
+<p>The installers are how every part of the product, and each third-party component kept inside it, reaches a user. <a href="#supply-chain">What the installers install</a> lists each part, what has to be put in place for it, and the rule that a component and its installation land in the same change.</p>
 <h2>Release workstation</h2>
 <p>Use macOS with Go, Python 3.12, Pillow, uv, dpkg-deb, Apple command line tools and NSIS (makensis). Alternatively the Windows packaging step accepts a local Docker image named kerfkite-installer-nsis containing Debian’s NSIS package. All paths below are relative to the checkout root.</p>
 <ol>
@@ -3613,6 +3614,61 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 <li><strong>KerfKite is distributed through GitHub only, not through app stores.</strong> Releases are downloads: installers, the command-line tool and the Pocket APK. The LGPL's requirement that a user can replace the library is met by shipping Qt and Open Cascade as separate libraries beside the program. If store distribution is ever considered, this has to be looked at again first.</li>
 </ol>
 <p>This register describes what is done and what the licences ask; it is not legal advice.</p>
+<h2>What the installers install</h2>
+<p>Every part of the product reaches a user through an installer, so each part, and each component kept inside it, has to be installed by one. A part that the installer does not install does not exist for the user.</p>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>What the installer puts in place</th>
+<th>State</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Studio and its Python environment</td>
+<td>The launcher, the locked Python packages, and the compiled extension for the platform. Probe levelling and circuit-board import live in that extension, so they arrive with it.</td>
+<td>Installed today; the installer check exercises it.</td>
+</tr>
+<tr>
+<td>The in-house kernels (2D polygons, 3D solids, JSON)</td>
+<td>Nothing separate: they are compiled into the core and the extension.</td>
+<td>Arrive with the extension once each is switched in.</td>
+</tr>
+<tr>
+<td><code>kerfkite-cam</code>, the command-line tool</td>
+<td>The program for the platform.</td>
+<td><strong>Not installed yet.</strong> To be added once GEOS is out of it, so that it carries no third-party code.</td>
+</tr>
+<tr>
+<td>The editor of the C++ application</td>
+<td>The program, and the Qt libraries it uses as separate files beside it, with Qt's notice, licence text and source offer.</td>
+<td>To be built; the installer work is part of that stage, not after it.</td>
+</tr>
+<tr>
+<td>STEP add-on</td>
+<td>Open Cascade and its wrapper, as a component the user chooses, with its notice and licence text.</td>
+<td>Installed today as an option; the installer check has a STEP run.</td>
+</tr>
+<tr>
+<td>Encrypted links</td>
+<td>The cryptography library for the platform.</td>
+<td>Installed today.</td>
+</tr>
+<tr>
+<td>KerfKite Pocket</td>
+<td>The signed APK, downloaded from the release.</td>
+<td>Published separately.</td>
+</tr>
+</tbody>
+</table>
+<p>Rules for this:</p>
+<ol>
+<li><strong>A component and its installation land together.</strong> A change that adds a component to a part also adds it to the installers for every platform, with its licence files, and to the installer check.</li>
+<li><strong>The installer check proves presence by use</strong>, not by listing files: it runs the installed program and exercises the component.</li>
+<li><strong>A kept third-party library is installed as a separate, replaceable file</strong>, never merged into the program, so that the licence position above holds on every platform.</li>
+<li><strong>Nothing is fetched at install time that is not pinned by hash.</strong></li>
+</ol>
 <h2>Order of work</h2>
 <ol>
 <li>The polygon kernel, replacing GEOS in the core and Shapely in the CAM operations.</li>

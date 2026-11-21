@@ -95,6 +95,27 @@ The owner has decided both questions that this raised (21 November 2026):
 
 This register describes what is done and what the licences ask; it is not legal advice.
 
+## What the installers install
+
+Every part of the product reaches a user through an installer, so each part, and each component kept inside it, has to be installed by one. A part that the installer does not install does not exist for the user.
+
+| Part | What the installer puts in place | State |
+| --- | --- | --- |
+| Studio and its Python environment | The launcher, the locked Python packages, and the compiled extension for the platform. Probe levelling and circuit-board import live in that extension, so they arrive with it. | Installed today; the installer check exercises it. |
+| The in-house kernels (2D polygons, 3D solids, JSON) | Nothing separate: they are compiled into the core and the extension. | Arrive with the extension once each is switched in. |
+| `kerfkite-cam`, the command-line tool | The program for the platform. | **Not installed yet.** To be added once GEOS is out of it, so that it carries no third-party code. |
+| The editor of the C++ application | The program, and the Qt libraries it uses as separate files beside it, with Qt's notice, licence text and source offer. | To be built; the installer work is part of that stage, not after it. |
+| STEP add-on | Open Cascade and its wrapper, as a component the user chooses, with its notice and licence text. | Installed today as an option; the installer check has a STEP run. |
+| Encrypted links | The cryptography library for the platform. | Installed today. |
+| KerfKite Pocket | The signed APK, downloaded from the release. | Published separately. |
+
+Rules for this:
+
+1. **A component and its installation land together.** A change that adds a component to a part also adds it to the installers for every platform, with its licence files, and to the installer check.
+2. **The installer check proves presence by use**, not by listing files: it runs the installed program and exercises the component.
+3. **A kept third-party library is installed as a separate, replaceable file**, never merged into the program, so that the licence position above holds on every platform.
+4. **Nothing is fetched at install time that is not pinned by hash.**
+
 ## Order of work
 
 1. The polygon kernel, replacing GEOS in the core and Shapely in the CAM operations.
