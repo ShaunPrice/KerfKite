@@ -9,6 +9,7 @@
 
 #include "kerfkite/cam.hpp"
 #include "kerfkite/leveling.hpp"
+#include "kerfkite/line_check.hpp"
 #include "kerfkite/number_text.hpp"
 #include "kerfkite/operation_command.hpp"
 #include "kerfkite/pcb.hpp"
@@ -40,6 +41,162 @@ template <typename Thrown> static std::string message(const char *project) {
         return "(another exception)";
     }
     return "(nothing thrown)";
+}
+
+// Whether a line crosses itself (Shapely's is_simple), which a ramp entry and holding tabs ask of every
+// contour: known answers, the tree against the test of every pair on generated lines, and the work taken,
+// which must not grow with the square of the length of the line. validation/native_core_parity.py compares
+// the answers with Shapely's.
+static void self_crossing() {
+    using Line = std::vector<std::array<double, 2>>;
+    const LineMethod methods[3] = {LineMethod::Usual, LineMethod::Tree, LineMethod::EveryPair};
+    const auto says = [&](const Line &line, bool simple) {
+        for (const LineMethod method : methods) {
+            const LineCheck check = check_line(line, method);
+            if (check.declined || check.simple != simple) return false;
+        }
+        return true;
+    };
+    expect(says({{0, 0}, {10, 0}, {10, 10}, {0, 10}, {0, 0}}, true), "a closed square is simple: its ends may meet");
+    expect(says({{0, 0}, {10, 10}, {10, 0}, {0, 10}}, false), "a bow-tie crosses itself");
+    expect(says({{0, 0}, {10, 0}, {10, 10}, {5, 0}, {0, 10}}, false), "a vertex on another segment is a touch");
+    expect(says({{0, 0}, {10, 0}, {5, 0}, {5, 5}}, false), "a step back along a segment is an overlap");
+    expect(says({{0, 0}, {10, 0}, {10, 10}, {0, 0}, {-5, 5}}, false), "a vertex passed twice, away from the ends");
+    expect(says({{0, 0}, {5, 0}, {5, 0}, {10, 0}, {10, 10}}, true), "a repeated point and a vertex on a straight run are allowed");
+    expect(says({{3, 3}}, true) && says({{3, 3}, {3, 3}}, true) && says({}, true), "a line of one point is simple");
+
+    std::uint64_t state = 77;
+    const auto draw = [&](std::uint64_t below) {
+        state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+        return static_cast<double>((state >> 33) % below);
+    };
+    // Regular lines of n points, each simple: a zigzag, a comb of long parallel diagonals, a fan of rays, a
+    // square spiral and a line of short steps. Every coordinate is a ratio of whole numbers.
+    const auto regular = [&](int kind, int n) {
+        Line line;
+        double x = 0, y = 0;
+        for (int i = 0; i < n; ++i) {
+            if (kind == 0) {
+                line.push_back({i % 2 ? 100.0 : 0.0, i * 0.5});
+            } else if (kind == 1) {
+                line.push_back({(i % 2 ? 100.0 : 0.0) + i * 0.001, i % 2 ? 100.0 : 0.0});
+            } else if (kind == 2) {
+                // Ray k runs from (k, n - k) / n to a hundred times that; out along one, back along the next.
+                const int k = i / 2;
+                const double rx = static_cast<double>(k) / n, ry = static_cast<double>(n - k) / n;
+                const bool near = (i % 2 == 0) == (k % 2 == 0);
+                line.push_back({near ? rx : 100 * rx, near ? ry : 100 * ry});
+            } else if (kind == 3) {
+                line.push_back({x, y});
+                const double step = 100.0 - (i / 2) * (100.0 / n);
+                x += i % 4 == 0 ? step : i % 4 == 2 ? -step : 0;
+                y += i % 4 == 1 ? step : i % 4 == 3 ? -step : 0;
+            } else {
+                line.push_back({x, y});
+                x += 0.25 + draw(8) / 8;
+                y += draw(9) / 4 - 1;
+            }
+        }
+        return line;
+    };
+    // The same answer from the tree as from every pair: small lines on a coarse grid, where shared
+    // vertices, touches and overlaps are common, and regular lines with one fault somewhere.
+    std::size_t compared = 0, simple = 0, mismatched = 0, declined = 0, through_tree = 0;
+    const auto compare = [&](const Line &line) {
+        const LineCheck every = check_line(line, LineMethod::EveryPair), tree = check_line(line, LineMethod::Tree),
+                        usual = check_line(line, LineMethod::Usual);
+        if (every.declined || tree.declined || usual.declined) {
+            ++declined;
+            return;
+        }
+        ++compared;
+        simple += every.simple;
+        if (tree.simple != every.simple || usual.simple != every.simple) {
+            if (++mismatched <= 3) {
+                std::printf("a line answered %d by every pair, %d by the tree, %d as usual:", every.simple, tree.simple, usual.simple);
+                for (const std::array<double, 2> &point : line) std::printf(" (%.17g, %.17g)", point[0], point[1]);
+                std::printf("\n");
+            }
+        }
+        through_tree += tree.tree;
+    };
+    for (int round = 0; round < 4000; ++round) {
+        const double scale = draw(4) == 0 ? 0.1 : 0.5;
+        const int points = 2 + static_cast<int>(draw(11));
+        Line line;
+        for (int i = 0; i < points; ++i) {
+            const double x = scale * draw(5);
+            const double y = scale * draw(5);
+            line.push_back({x, y});
+        }
+        compare(line);
+    }
+    for (int round = 0; round < 1500; ++round) {
+        const int kind = static_cast<int>(draw(5));
+        const int n = 50 + static_cast<int>(draw(250));
+        Line line = regular(kind, n);
+        const std::size_t i = static_cast<std::size_t>(draw(line.size() - 1));
+        const std::size_t j = static_cast<std::size_t>(draw(line.size() - 1));
+        const std::array<double, 2> a = line[j], b = line[j + 1], middle = {(a[0] + b[0]) / 2, (a[1] + b[1]) / 2};
+        const std::uint64_t fault = static_cast<std::uint64_t>(draw(7));
+        if (fault == 0) {  // a vertex moved onto the middle of another segment
+            line[i] = middle;
+        } else if (fault == 1) {  // a vertex moved somewhere else
+            const double fx = draw(1200) / 10 - 10;
+            const double fy = draw(1200) / 10 - 10;
+            line[i] = {fx, fy};
+        } else if (fault == 2) {  // a vertex visited again later
+            line.insert(line.begin() + static_cast<std::ptrdiff_t>(i), a);
+        } else if (fault == 3) {  // a step back along a segment
+            line.insert(line.begin() + static_cast<std::ptrdiff_t>(j + 1), middle);
+            line.insert(line.begin() + static_cast<std::ptrdiff_t>(j + 1), b);
+        } else if (fault == 4) {  // a vertex one unit in the last place off the middle of another segment
+            line[i] = {middle[0], std::nextafter(middle[1], draw(2) == 0 ? -1e9 : 1e9)};
+        } else if (fault == 5) {  // closed
+            line.push_back(line[0]);
+        }
+        compare(line);
+    }
+    expect(mismatched == 0, "the tree and the test of every pair agree on whether a line crosses itself");
+    // A line of fewer than three distinct points is simple without a tree.
+    expect(compared > 5000 && simple > 500 && simple < compared - 2000 && declined < 20 && through_tree > compared - 400,
+           "enough lines of each kind were compared, nearly all through the tree");
+
+    // The work for long simple lines, where nothing ends the search early. Testing every pair of a comb of
+    // n long segments looks at n * n / 2 pairs; the tree's work is within a small multiple of n log n.
+    bool bounded = true;
+    for (int kind = 0; kind < 5; ++kind) {
+        const int n = 20000;
+        const LineCheck check = check_line(regular(kind, n));
+        const double allowed = 100.0 * n * std::log2(static_cast<double>(n));
+        if (check.declined || !check.simple || !check.tree || static_cast<double>(check.work) > allowed) {
+            std::printf("a line of kind %d: simple %d, declined %d, work %llu, allowed %.0f\n", kind, check.simple, check.declined,
+                        static_cast<unsigned long long>(check.work), allowed);
+            bounded = false;
+        }
+    }
+    expect(bounded, "the work for a long simple line grows no faster than n log n");
+    const Line comb = regular(1, 3000);
+    const LineCheck by_tree = check_line(comb), by_pairs = check_line(comb, LineMethod::EveryPair);
+    expect(by_tree.simple && by_pairs.simple && by_pairs.work > 3000ull * 3000 / 2 && by_tree.work * 10 < by_pairs.work,
+           "a comb of long segments, which the test of every pair takes the square of its length over");
+    // Past the budget a contour is declined, and the work stops there: that is the bound on the worst case.
+    const LineCheck stopped = check_line(comb, LineMethod::Usual, 20000);
+    expect(stopped.declined && stopped.reason == "a contour whose self-crossing test needs more comparisons than the core allows" &&
+               stopped.work > 20000 && stopped.work < 20000 + 40000,
+           "a contour whose test would take too long is declined");
+    expect(line_check_budget() >= 100000000 && line_check_budget() <= 1000000000, "the budget is about a second of work");
+    // A crossing ends the search: many long segments that all cross take almost no work.
+    Line scribble;
+    for (int i = 0; i < 20000; ++i) {
+        const double x = draw(100000) / 1000;
+        const double y = draw(100000) / 1000;
+        scribble.push_back({x, y});
+    }
+    const LineCheck crossed = check_line(scribble);
+    expect(!crossed.declined && !crossed.simple && crossed.work < 100.0 * 20000 * std::log2(20000.0), "a line with many crossings is answered at once");
+    std::printf("self-crossing: %zu lines compared by tree and by every pair (%zu simple, %zu declined); comb of 3000: %llu units by tree, %llu by every pair\n",
+                compared, simple, declined, static_cast<unsigned long long>(by_tree.work), static_cast<unsigned long long>(by_pairs.work));
 }
 
 // FNV-1a of the centres of the helices placed in the generated pockets of helical_entries(), recorded from
@@ -525,6 +682,7 @@ int main() {
         expect(std::string(error.what()).find("only straight moves") != std::string::npos, "an arc is refused");
     }
 
+    self_crossing();
     helical_entries();
     circuit_boards();
 

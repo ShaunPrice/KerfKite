@@ -18,6 +18,7 @@
 //   kerfkite-cam batch CASES.jsonl
 //   kerfkite-cam numbers
 //   kerfkite-cam arithmetic
+//   kerfkite-cam simple
 //
 // generate writes the program (or, with --json, the whole job) and exits 0. Exit 2 means the project was
 // rejected, with the reference's message on standard error; exit 3 means it needs a feature that is not
@@ -26,7 +27,10 @@
 // batch and numbers serve validation/native_core_parity.py. batch reads one {"project": ...} object per
 // line and answers each with {"ok": job}, {"error": message} or {"declined": feature}. numbers reads
 // "HEXFLOAT DECIMALS" lines and writes the fixed-point text, round() and repr() of each value. arithmetic
-// answers "dist" and "sum" requests with the core's versions of Python's math.dist and sum().
+// answers "dist" and "sum" requests with the core's versions of Python's math.dist and sum(). simple reads a
+// line of "METHOD X1 Y1 X2 Y2 ..." for each path (METHOD usual, tree or pairs; coordinates as hexadecimal
+// floats) and answers whether the path crosses itself as Shapely's is_simple would: "simple", "crossing"
+// or "declined", then the work it took, whether the tree was used, and the reason for declining.
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -37,6 +41,7 @@
 
 #include "kerfkite/cam.hpp"
 #include "kerfkite/leveling.hpp"
+#include "kerfkite/line_check.hpp"
 #include "kerfkite/number_text.hpp"
 #include "kerfkite/py_math.hpp"
 
@@ -264,6 +269,28 @@ int arithmetic() {
     return 0;
 }
 
+// "METHOD X1 Y1 X2 Y2 ..." a line, coordinates in hexadecimal float form.
+int simple() {
+    std::string row;
+    while (std::getline(std::cin, row)) {
+        std::istringstream words(row);
+        std::string method, x, y;
+        if (!(words >> method)) continue;
+        const kerfkite::LineMethod how = method == "tree"    ? kerfkite::LineMethod::Tree
+                                         : method == "pairs" ? kerfkite::LineMethod::EveryPair
+                                                             : kerfkite::LineMethod::Usual;
+        if (how == kerfkite::LineMethod::Usual && method != "usual") return usage();
+        std::vector<std::array<double, 2>> path;
+        while (words >> x >> y) path.push_back({std::strtod(x.c_str(), nullptr), std::strtod(y.c_str(), nullptr)});
+        const kerfkite::LineCheck check = kerfkite::check_line(path, how);
+        std::cout << (check.declined ? "declined" : check.simple ? "simple" : "crossing") << ' ' << check.work << ' '
+                  << (check.tree ? 1 : 0);
+        if (check.declined) std::cout << ' ' << check.reason;
+        std::cout << '\n';
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -283,5 +310,6 @@ int main(int argc, char **argv) {
         return board(command, argc, argv);
     if (command == "numbers" && argc == 2) return numbers();
     if (command == "arithmetic" && argc == 2) return arithmetic();
+    if (command == "simple" && argc == 2) return simple();
     return usage();
 }

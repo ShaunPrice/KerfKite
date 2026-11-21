@@ -7,7 +7,8 @@ Three comparisons, all against values computed by Python in this run:
 
 1. Number text and arithmetic: fixed-point formatting, round() and repr() for several hundred thousand
    values, including decimal ties and values next to them; and math.dist and sum(), which Python computes
-   with more care than the plain formulas.
+   with more care than the plain formulas. Also the core's answer to whether a line crosses itself, against
+   shapely's LineString.is_simple, for random lines and lines built to sit on the edge of each rule.
 2. Recorded jobs: every studio.cam.generate call the test suite makes, replayed through the native core.
 3. Generated edge cases: projects with one to three settings replaced by unusual values, so that the
    reference's error messages are compared as well as its programs. A third as many again are closed
@@ -155,6 +156,193 @@ def arithmetic(cli, count, seed):
             f'{request.strip()} gave {got!r}, Python {want!r}'
         )
     return len(expected)
+
+
+def crossing_lines(count, seed):
+    """Lines for the self-crossing test: random ones, and ones built to sit on the edge of each rule.
+
+    GEOS calls a line simple when no two of its segments cross, overlap or touch, except neighbours at the
+    vertex they share and the two ends of a closed line. The lines here have points on coarse grids, where
+    shared vertices, vertices on other segments, overlaps and returns along a segment are common; random
+    points; long regular lines (zigzags, combs of long parallel segments, fans, spirals, rings) left whole or
+    spoilt by one crossing, one touch or one overlap somewhere; points a few units in the last place either
+    side of another segment; and all of these moved and scaled, so that the coordinates round.
+    """
+    rng = random.Random(seed)
+
+    def regular(n):
+        kind = rng.randrange(7)
+        # Strokes from far apart down to a few units in the last place apart, where the signs GEOS works out
+        # need its double-double arithmetic and segments side by side cannot be told apart in groups.
+        pitch = rng.choice([0.5, 0.5, 0.01, 0.001, 1e-9, 1e-12, 3e-14])
+        if kind == 0:  # a zigzag of level strokes
+            return [[100.0 if i % 2 else 0.0, i * pitch] for i in range(n)]
+        if kind == 1:  # a comb of long parallel diagonals
+            return [[(100.0 if i % 2 else 0.0) + i * pitch, 100.0 if i % 2 else 0.0] for i in range(n)]
+        if kind == 2:  # a fan of rays, out along one and back along the next
+            points = []
+            for i in range(n // 2):
+                a = 1.5 * i / (n // 2)
+                ray = [[math.cos(a), math.sin(a)], [100 * math.cos(a), 100 * math.sin(a)]]
+                points += ray if i % 2 == 0 else ray[::-1]
+            return points
+        if kind == 3:  # a square spiral inwards
+            x = y = 0.0
+            points = []
+            for i in range(n):
+                points.append([x, y])
+                step = 100.0 - (i // 2) * (100.0 / n)
+                dx, dy = ((1, 0), (0, 1), (-1, 0), (0, -1))[i % 4]
+                x, y = x + dx * step, y + dy * step
+            return points
+        if kind == 4:  # a round spiral
+            return [[0.01 * i * math.cos(i * 0.1), 0.01 * i * math.sin(i * 0.1)] for i in range(n)]
+        if kind == 5:  # a ring, closed
+            points = [[50 * math.cos(2 * math.pi * i / n), 50 * math.sin(2 * math.pi * i / n)] for i in range(n)]
+            return points + [list(points[0])]
+        # a walk of short steps that never turns back
+        x = y = 0.0
+        points = []
+        for _ in range(n):
+            points.append([x, y])
+            x, y = x + rng.uniform(0.1, 1), y + rng.uniform(-1, 1)
+        return points
+
+    def spoil(points):
+        """One fault somewhere in a regular line, or none."""
+        points = [list(point) for point in points]
+        fault = rng.randrange(8)
+        i, j = rng.randrange(len(points) - 1), rng.randrange(len(points) - 1)
+        a, b = points[j], points[j + 1]
+        if fault == 0:  # a vertex moved onto the middle of another segment: a touch
+            points[i] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
+        elif fault == 1:  # a vertex moved far away: usually crossings
+            points[i] = [rng.uniform(-10, 110), rng.uniform(-10, 110)]
+        elif (
+            fault == 2
+        ):  # a vertex repeated later in the line: a shared vertex between segments that are not neighbours
+            points.insert(i, list(a))
+        elif fault == 3:  # a step back along the segment just drawn: an overlap
+            points.insert(j + 1, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2])
+            points.insert(j + 1, list(b))
+        elif fault == 4:  # a vertex within a few units in the last place of another segment's middle
+            x, y = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+            for _ in range(rng.randrange(0, 4)):
+                x = math.nextafter(x, rng.choice([-math.inf, math.inf]))
+                y = math.nextafter(y, rng.choice([-math.inf, math.inf]))
+            points[i] = [x, y]
+        elif fault == 5:  # closed, exactly or nearly
+            points.append([points[0][0] + rng.choice([0, 0, 1e-9]), points[0][1]])
+        elif fault == 6:  # a spur out and back from a vertex
+            points.insert(i + 1, list(points[i]))
+            points.insert(i + 1, [points[i][0] + rng.uniform(-3, 3), points[i][1] + rng.uniform(-3, 3)])
+        return points
+
+    for _ in range(count):
+        kind = rng.randrange(10)
+        if kind < 3:  # a few points on a coarse grid
+            scale = rng.choice([1, 1, 0.5, 0.1, 2.5, 1e-3])
+            points = [[scale * rng.randrange(0, 5), scale * rng.randrange(0, 5)] for _ in range(rng.randrange(2, 12))]
+        elif kind == 3:  # many points on a grid: certain to cross, in a line long enough for the tree
+            points = [[rng.randrange(0, 40) * 0.25, rng.randrange(0, 40) * 0.25] for _ in range(rng.randrange(50, 200))]
+        elif kind == 4:  # random points
+            points = [[rng.uniform(0, 100), rng.uniform(0, 100)] for _ in range(rng.randrange(3, 60))]
+        elif kind == 5:  # points in a line or nearly, in any order
+            slope, base = rng.choice([0, 1, 0.5, 1 / 3, 0.1]), rng.uniform(0, 5)
+            points = []
+            for _ in range(rng.randrange(3, 70)):
+                x = rng.choice([rng.randrange(0, 50) * 0.5, rng.uniform(0, 25)])
+                y = base + slope * x
+                if rng.random() < 0.1:
+                    y = math.nextafter(y, rng.choice([-math.inf, math.inf]))
+                points.append([x, y])
+            if rng.random() < 0.5:
+                points.sort()
+        else:  # a regular line of 50 to 400 points, usually with one fault
+            points = regular(rng.randrange(50, 400))
+            if rng.random() < 0.8:
+                points = spoil(points)
+        if rng.random() < 0.3:  # moved and scaled, as a design in a work area is
+            scale, dx, dy = rng.choice([1, 0.001, 1000, 1 / 3, 0.1]), rng.choice([0, 1000, 0.1]), rng.choice([0, 7.3])
+            points = [[x * scale + dx, y * scale + dy] for x, y in points]
+        if rng.random() < 0.05:
+            points.reverse()
+        yield points
+
+
+def self_crossing(cli, count, seed):
+    """line_is_simple of the core against shapely's LineString.is_simple, by each of the core's methods."""
+    from shapely.geometry import LineString
+
+    methods = ('usual', 'tree', 'pairs')
+
+    def ask(requests):
+        """The core's answer to each (method, points): [word, work, tree, reason]."""
+        text = ''.join(
+            f'{method} {" ".join(f"{float(x).hex()} {float(y).hex()}" for x, y in points)}\n'
+            for method, points in requests
+        )
+        rows = subprocess.run(
+            [str(cli), 'simple'], input=text, capture_output=True, text=True, check=True
+        ).stdout.splitlines()
+        assert len(rows) == len(requests), 'The native core did not answer every line.'
+        return [row.split(' ', 3) for row in rows]
+
+    tally = collections.Counter()
+    lines = crossing_lines(count, seed)
+    while True:
+        some = list(itertools.islice(lines, 1500))  # a few thousand at a time: the request is text
+        if not some:
+            break
+        answers = ask([(method, points) for points in some for method in methods])
+        for index, points in enumerate(some):
+            want = 'simple' if LineString(points).is_simple else 'crossing'
+            tally[want] += 1
+            for offset, method in enumerate(methods):
+                got = answers[index * len(methods) + offset]
+                if got[0] == 'declined':
+                    # Only for an answer that depends on rounding inside GEOS: none of these lines is long
+                    # enough to reach the limit on work.
+                    assert 'rounding inside GEOS' in got[3] or 'below 1e-140' in got[3], (
+                        f'{method} declined {points!r}: {got[3]}'
+                    )
+                    tally['declined', method] += 1
+                else:
+                    assert got[0] == want, f'is_simple is {want}, the core ({method}) says {got[0]}, for {points!r}'
+                if method == 'usual':
+                    tally['tree'] += got[2] == '1'
+
+    # Long lines of the kinds that used to take time growing with the square of their length. Each is
+    # simple, so nothing ends the search early, and the work is counted to show that it does not.
+    long_lines = []
+    for n in (2000, 8000):
+        long_lines.append(
+            [[(100.0 if i % 2 else 0.0) + i * 0.001, 100.0 if i % 2 else 0.0] for i in range(n)]
+        )  # a comb
+        fan = []
+        for i in range(n // 2):
+            a = 1.5 * i / (n // 2)
+            ray = [[math.cos(a), math.sin(a)], [100 * math.cos(a), 100 * math.sin(a)]]
+            fan += ray if i % 2 == 0 else ray[::-1]
+        long_lines.append(fan)
+        x = y = 0.0
+        spiral = []
+        for i in range(n):
+            spiral.append([x, y])
+            step = 100.0 - (i // 2) * (100.0 / n)
+            dx, dy = ((1, 0), (0, 1), (-1, 0), (0, -1))[i % 4]
+            x, y = x + dx * step, y + dy * step
+        long_lines.append(spiral)
+    for points, got in zip(long_lines, ask([('usual', points) for points in long_lines]), strict=True):
+        assert got[0] == 'simple' and got[2] == '1', f'A long simple line of {len(points)} points was answered {got}'
+        # Within a multiple of the length of the line times its logarithm. Testing every pair takes the
+        # square of the length: forty times this bound for the longer lines here, and a job may hold a
+        # line twelve times as long again.
+        assert int(got[1]) < 100 * len(points) * math.log2(len(points)), (
+            f'{len(points)} points took {got[1]} units of work'
+        )
+        tally['long'] += 1
+    return sum(tally[want] for want in ('simple', 'crossing')), tally
 
 
 WEIRD = [
@@ -1031,6 +1219,7 @@ def main():
     parser.add_argument('--numbers', type=int, default=300000, help='number-text comparisons')
     parser.add_argument('--generated', type=int, default=12000, help='generated edge cases')
     parser.add_argument('--entries', type=int, default=6000, help='generated ramp, helix and holding-tab cases')
+    parser.add_argument('--lines', type=int, default=20000, help='lines for the self-crossing test')
     parser.add_argument('--helix', type=int, default=5000, help='generated pockets entered by a helix')
     parser.add_argument('--skip-suite', action='store_true', help='do not replay the calls made by the test suite')
     parser.add_argument(
@@ -1051,6 +1240,14 @@ def main():
     else:
         # Python 3.10 and 3.11 computed math.dist and sum() differently in the last bit; the core follows 3.12.
         print('NOTE arithmetic not compared: it follows Python 3.12 and later, and this is an earlier Python')
+
+    compared, found = self_crossing(args.cli, args.lines, 90)
+    declined = ', '.join(f'{found["declined", method]} by {method}' for method in ('usual', 'tree', 'pairs'))
+    print(
+        f'PASS self-crossing: {compared} lines answered as shapely\'s is_simple answers them ({found["simple"]} simple,'
+        f' {found["crossing"]} not; {found["tree"]} through the tree; declined: {declined}), and {found["long"]} long'
+        ' lines within the bound on work'
+    )
 
     from native_core_recorder import reference
     from studio.cam import generate
