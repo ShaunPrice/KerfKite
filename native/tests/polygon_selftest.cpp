@@ -231,6 +231,21 @@ static void booleans() {
     r = unite(a, region(ring({{10, 5}, {14, 3}, {14, 7}})));
     expect(r.size() == 2 && r[0].shell.size() == 5 && r[0].shell[2] == to_grid(PointMm{10, 5}), "a vertex where another polygon touches a side is kept");
 
+    // United in spatial groups, as very many shapes are, the answer is the same: frames keep their holes.
+    detail::Shapes frames;
+    std::vector<Ring> every;
+    for (int i = 0; i < 200; ++i) {
+        const double x = (i * 37) % 100, y = (i * 53) % 90;
+        Ring inner = square(x + 2, y + 2, 4);
+        std::reverse(inner.begin(), inner.end());
+        frames.push_back({square(x, y, 8), inner});
+        every.push_back(square(x, y, 8));
+        every.push_back(inner);
+    }
+    const PolygonSet at_once = normalise(every, FillRule::Positive);
+    expect(detail::unite_positive(frames, 1000000) == at_once, "shapes united at once");
+    expect(detail::unite_positive(frames, 400) == at_once && detail::unite_positive(frames, 64) == at_once, "shapes united in groups, and in groups of groups");
+
     const std::vector<PolygonSet> many = {a, b, region(square(12, 12, 10)), region(square(40, 40, 1))};
     r = unite_all(many);
     expect(r.size() == 2 && area(r) == 100 + 100 - 25 + 100 - 9 + 1, "the union of several regions at once");
@@ -364,8 +379,16 @@ static void generated() {
         // Sizes from a few units to tens of millimetres, so that the rounding of crossings is in play.
         const Coord scale = Coord(1) << (3 + round % 24);
         std::vector<Ring> first, second;
-        for (int i = 0; i < 1 + round % 3; ++i) first.push_back(blob(random, random.between(-scale, scale), random.between(-scale, scale), scale, 3 + static_cast<int>(random.next() % 20)));
-        for (int i = 0; i < 1 + round % 2; ++i) second.push_back(blob(random, random.between(-scale, scale), random.between(-scale, scale), scale, 3 + static_cast<int>(random.next() % 20)));
+        // Draws are made in separate statements: the order in which a call's arguments are evaluated is
+        // the compiler's choice, and the cases must be the same everywhere.
+        const auto another = [&](std::vector<Ring> &rings) {
+            const Coord cx = random.between(-scale, scale);
+            const Coord cy = random.between(-scale, scale);
+            const int count = 3 + static_cast<int>(random.next() % 20);
+            rings.push_back(blob(random, cx, cy, scale, count));
+        };
+        for (int i = 0; i < 1 + round % 3; ++i) another(first);
+        for (int i = 0; i < 1 + round % 2; ++i) another(second);
         if (round % 5 == 0) {  // the first set again, moved by a unit or two: nearly coincident edges
             second = first;
             for (Ring &r : second)
@@ -579,7 +602,7 @@ int main(int argc, char **argv) {
         ++failures;
     }
     // The same on every compiler and processor, and with either 128-bit integer.
-    const std::uint64_t recorded = 0;
+    const std::uint64_t recorded = 0x93d1eb6e180871aeULL;
     std::printf("digest %016llx\n", static_cast<unsigned long long>(digest));
     expect(digest == recorded, "the generated results differ from the recorded digest");
     std::printf(failures ? "polygon self-test FAILED\n" : "polygon self-test passed\n");

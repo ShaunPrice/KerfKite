@@ -12,6 +12,15 @@
 #include "kerfkite/polygon.hpp"
 #include "wide.hpp"
 
+// The few floating-point steps that place vertices must not be fused into multiply-add instructions,
+// which round once where the source rounds twice. The build passes -ffp-contract=off or /fp:precise; these
+// say so again where a compiler listens.
+#if defined(__clang__)
+#pragma STDC FP_CONTRACT OFF
+#elif defined(_MSC_VER)
+#pragma fp_contract(off)
+#endif
+
 namespace kerfkite {
 namespace polygon {
 namespace detail {
@@ -267,6 +276,14 @@ template <class F> void each_ring(const PolygonSet &region, F &&visit) {
         for (const Ring &hole : polygon.holes) visit(hole);
     }
 }
+
+// Shapes for a union: each a set of rings that together wind zero or more times round every point (a ring
+// the right way round, a polygon with its holes, the curve round a stroke).
+using Shapes = std::vector<std::vector<Ring>>;
+
+// The union of shapes: where the winding number is positive. Above group_edges edges the shapes are first
+// united in spatial groups, so that edges buried inside the image are discarded early.
+PolygonSet unite_positive(const Shapes &shapes, std::size_t group_edges);
 
 // The cosine and sine of an angle of at most a quarter turn, from their series: the same on every
 // platform, which the library functions are not.
