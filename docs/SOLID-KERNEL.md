@@ -18,7 +18,7 @@ A solid may have several shells: separate bodies, and cavities inside bodies. Tw
 
 Vertices are stored in ascending (x, y, z) order. Each triangle starts at its lowest vertex, and the triangles are in ascending order of their three indices. This order is part of the result: the same input gives the same arrays on every platform.
 
-A `Solid` never changes after it is made, and copies share one mesh. Reading a solid from several threads is safe. Two Boolean operations running at the same time on the same solid are not synchronised (each may record that the solid has been checked for self-intersections).
+A `Solid` never changes after it is made, and copies share one mesh. Reading a solid, and running operations on the same solid, from several threads is safe: the one thing an operation records on a shared mesh, that it has been found free of self-intersection, is an atomic flag.
 
 ## Exact arithmetic
 

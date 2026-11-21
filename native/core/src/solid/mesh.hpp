@@ -2,6 +2,7 @@
 #ifndef KERFKITE_SOLID_MESH_HPP
 #define KERFKITE_SOLID_MESH_HPP
 
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -18,7 +19,9 @@ struct Mesh {
     int64_t lo[3] = {0, 0, 0}, hi[3] = {0, 0, 0};
     // Known to be free of self-intersections. Set where that was established exactly; a Boolean
     // operation establishes it for an operand that lacks it and records the answer here.
-    mutable bool simple = false;
+    // A cache: set once the mesh is known to have no self-intersection. Meshes are shared between copies
+    // of a solid, so the flag is atomic: operations on the same solid from several threads may all set it.
+    mutable std::atomic<bool> simple{false};
 };
 
 struct Access {
