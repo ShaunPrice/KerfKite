@@ -36,6 +36,7 @@ unless --without-polygon-operations is given, which leaves those jobs out and sa
 
 import argparse
 import collections
+import hashlib
 import itertools
 import json
 import math
@@ -1343,15 +1344,19 @@ def main():
         seen = set()
         helices = helix_pocket_cases(args.helix, 91)
         while True:
-            lines = {}
-            for project in itertools.islice(helices, 250):
-                line, _ = reference(generate, project)
-                if line is not None and hash(line) not in seen:
-                    seen.add(hash(line))
-                    lines.setdefault(line, 'helix')
-            if not lines:
+            batch = list(itertools.islice(helices, 250))
+            if not batch:
                 break
-            compare(lines)
+            lines = {}
+            for project in batch:
+                line, _ = reference(generate, project)
+                # A digest that is the same from run to run stands for the line, so the lines are not kept.
+                mark = None if line is None else hashlib.sha256(line.encode()).digest()
+                if mark is not None and mark not in seen:
+                    seen.add(mark)
+                    lines.setdefault(line, 'helix')
+            if lines:
+                compare(lines)
 
     for origin in ('suite', 'generated', 'entry/tabs', 'helix'):
         total = sum(n for (o, _), n in tally.items() if o == origin)
