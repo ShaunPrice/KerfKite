@@ -1211,11 +1211,11 @@ json gerber_import(const json &request) {
 
 json gerber_outline(const json &request) {
     const std::string &text =
-        file_text(request, "Gerber", MAX_TEXT, {"arc_tolerance", "tolerance", "offset", "width", "height"});
+        file_text(request, "Gerber", MAX_TEXT, {"arc_tolerance", "tolerance", "offset", "mirror_x", "width", "height"});
     Reader reader;
     reader.tolerance = arc_tolerance(request);
     const double tolerance = setting(request, "tolerance", 0.01, "Joining tolerance", 0.000001, 1, "0.000001", "1");
-    const Point offset = offset_of(request);
+    const Placement place = placement_of(request);
     double width = 0, height = 0;
     const bool fit = work_area(request, width, height);
     reader.read(text);
@@ -1375,7 +1375,7 @@ json gerber_outline(const json &request) {
     for (const Loop &loop : loops) {
         json path = json::array();
         for (const Point &p : loop.points) {
-            const Point moved{p.x + offset.x, p.y + offset.y};
+            const Point moved = place(p);
             bounds[0] = any ? std::min(bounds[0], moved.x) : moved.x;
             bounds[1] = any ? std::min(bounds[1], moved.y) : moved.y;
             bounds[2] = any ? std::max(bounds[2], moved.x) : moved.x;

@@ -22,8 +22,9 @@ namespace kerfkite {
 Json excellon_import(const Json &request);
 
 // The holes of a drill file as drilling operations for studio.cam.generate, grouped by drill diameter.
-// Request: as excellon_import, with optionally "offset":[dx,dy] added to every hole, and "width" and
-// "height" of the work area to have the fit checked.
+// Request: as excellon_import, with optionally "offset":[dx,dy] added to every hole, "mirror_x": X to turn
+// the result over about that line afterwards (holes drilled from the underside), and "width" and "height" of
+// the work area to have the fit checked.
 // Answer: {"operations":[{"operation":"drill","tool_shape":"drill","tool_diameter","paths":[[[x,y],[x,y]],...]}],
 // "groups":[{"tool_diameter","holes","tools":[numbers]}], "slots":[...] (not drilled), "bounds",
 // "interpretation", "warnings"}. Operations of one diameter may share an ordered job; each diameter is a

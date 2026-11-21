@@ -627,7 +627,7 @@ class Drill {
 Drill drill_from(const json &request, bool placed) {
     const std::string &text =
         placed ? file_text(request, "drill", MAX_TEXT,
-                           {"units", "integer", "decimal", "omitted_zeros", "offset", "width", "height"})
+                           {"units", "integer", "decimal", "omitted_zeros", "offset", "mirror_x", "width", "height"})
                : file_text(request, "drill", MAX_TEXT, {"units", "integer", "decimal", "omitted_zeros"});
     Drill drill;
     drill.overrides(request);
@@ -635,13 +635,13 @@ Drill drill_from(const json &request, bool placed) {
     return drill;
 }
 
-json path_json(const std::vector<Point> &points, const Point &offset) {
+json path_json(const std::vector<Point> &points, const Placement &place) {
     json out = json::array();
-    for (const Point &p : points) out.push_back(xy(Point{p.x + offset.x, p.y + offset.y}));
+    for (const Point &p : points) out.push_back(xy(place(p)));
     return out;
 }
 
-// The extent of the hole and slot edges, moved by the offset.
+// The extent of the hole and slot edges, where the placement puts them.
 struct Extent {
     bool any = false;
     double box[4] = {0, 0, 0, 0};
@@ -657,13 +657,13 @@ struct Extent {
     }
 };
 
-json slots_json(const Drill &drill, const Point &offset, Extent &extent) {
+json slots_json(const Drill &drill, const Placement &place, Extent &extent) {
     json out = json::array();
     for (const Slot &slot : drill.slots) {
         const double diameter = drill.tool(slot.tool)->raw * drill.scale();
-        for (const Point &p : slot.points) extent.cover(Point{p.x + offset.x, p.y + offset.y}, diameter / 2);
+        for (const Point &p : slot.points) extent.cover(place(p), diameter / 2);
         out.push_back(
-            {{"tool", slot.tool}, {"diameter", round6(diameter)}, {"points", path_json(slot.points, offset)}});
+            {{"tool", slot.tool}, {"diameter", round6(diameter)}, {"points", path_json(slot.points, place)}});
     }
     return out;
 }
@@ -678,9 +678,9 @@ json excellon_import(const json &request) {
         const double diameter = tool.raw * drill.scale();
         for (const Point &p : tool.hits) extent.cover(p, diameter / 2);
         tools.push_back(
-            {{"number", tool.number}, {"diameter", round6(diameter)}, {"hits", path_json(tool.hits, Point{})}});
+            {{"number", tool.number}, {"diameter", round6(diameter)}, {"hits", path_json(tool.hits, Placement())}});
     }
-    const json slots = slots_json(drill, Point{}, extent);
+    const json slots = slots_json(drill, Placement(), extent);
     return json{
         {"format", "excellon"},
         {"units", drill.units == 2 ? "inch" : "mm"},
@@ -697,7 +697,7 @@ json excellon_import(const json &request) {
 
 json excellon_drills(const json &request) {
     Drill drill = drill_from(request, true);
-    const Point offset = offset_of(request);
+    const Placement place = placement_of(request);
     double width = 0, height = 0;
     const bool fit = work_area(request, width, height);
     if (!drill.hit_count) throw ValueError("The drill file holds no holes");
@@ -718,7 +718,7 @@ json excellon_drills(const json &request) {
         Group &group = groups[diameter];
         group.tools.push_back(tool.number);
         for (const Point &p : tool.hits) {
-            const Point moved{p.x + offset.x, p.y + offset.y};
+            const Point moved = place(p);
             extent.cover(moved, diameter / 2);
             group.holes.push_back(moved);
         }
@@ -742,7 +742,7 @@ json excellon_drills(const json &request) {
         }
     }
     Extent unused;  // the bounds are those of the holes these operations drill
-    const json slots = slots_json(drill, offset, unused);
+    const json slots = slots_json(drill, place, unused);
     if (!drill.slots.empty())
         drill.warnings.add(std::to_string(drill.slots.size()) + (drill.slots.size() == 1 ? " slot is" : " slots are") +
                            " not drilled; each is listed with its centre line and width, to be cut as a line");

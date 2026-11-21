@@ -1,7 +1,10 @@
 // A small check that needs no Python: number text and one complete program. The full comparison with the
 // reference is validation/native_core_parity.py.
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <initializer_list>
 #include <string>
 
 #include "kerfkite/cam.hpp"
@@ -37,6 +40,9 @@ template <typename Thrown> static std::string message(const char *project) {
     }
     return "(nothing thrown)";
 }
+
+// FNV-1a of one isolation answer as JSON text, recorded from x86-64 GCC. See circuit_boards().
+static const std::uint64_t ISOLATION_DIGEST = 14393510534754887855ULL;
 
 // What a circuit board command answers, or the message it refuses with.
 static json board(const char *command, const std::string &text, json request = json::object()) {
@@ -135,6 +141,43 @@ static void circuit_boards() {
                {"operation":"drill","tool_shape":"drill","tool_diameter":0.4,"paths":[[[2.0,1.0],[2.0,1.0]]]},
                {"operation":"drill","tool_shape":"drill","tool_diameter":0.8,"paths":[[[1.0,1.0],[1.0,1.0]],[[3.0,1.0],[3.0,1.0]]]}])"),
            "holes become drilling operations grouped by diameter");
+
+    // Isolation: three round pads with gaps of 0.15 and 0.85 mm, and a tool that cuts 0.2 mm wide. The first
+    // two stay joined, which is reported with the place and the gap; the contours are closed and lie half a
+    // tool width outside the copper.
+    const std::string pads = head + "%ADD10C,1.0*%\nD10*\nX0Y0D03*\nX1150000Y0D03*\nX3000000Y0D03*\nM02*\n";
+    const json isolation = board("gerber-isolation", pads, json{{"tool_width", 0.2}});
+    expect(isolation.is_object() && isolation["islands"] == 3 && isolation["path_count"] == 2 &&
+               isolation["unreachable_count"] == 1 && isolation["unreachable"][0]["gap"] == 0.15 &&
+               isolation["unreachable"][0]["islands"] == json::parse("[0,1]") && isolation["smallest_gap"] == 0.15 &&
+               isolation["separating_tool_width"] == 0.147 && isolation["bounds"] == json::parse("[-0.6,-0.6,3.6,0.6]") &&
+               isolation["warnings"].size() == 1,
+           "isolation contours, and the place the tool cannot reach");
+    if (isolation.is_object()) {
+        bool closed = true, apart = true;
+        for (const json &path : isolation["operations"][0]["paths"]) {
+            closed = closed && path[0] == path[path.size() - 1];
+            for (const json &point : path) {
+                // No nearer than half the tool width to any pad, and no further than the round-corner allowance.
+                double nearest = 1e9;
+                for (const double centre : {0.0, 1.15, 3.0})
+                    nearest = std::min(nearest, std::hypot(point[0].get<double>() - centre, point[1].get<double>()) - 0.5);
+                apart = apart && nearest > 0.1 - 1e-9 && nearest < 0.1 + 0.005 + 0.001 + 1e-6;
+            }
+        }
+        expect(closed && apart, "every contour point is half a tool width from the copper");
+    }
+    const json narrow = board("gerber-isolation", pads, json{{"tool_width", 0.147}, {"passes", 2}, {"mirror_x", 2}});
+    expect(narrow.is_object() && narrow["unreachable_count"] == 0 && narrow["path_count"] == 5 && narrow["warnings"].empty() &&
+               narrow["copper_bounds"] == json::parse("[0.5,-0.5,4.5,0.5]") &&
+               narrow["cut"] == json::parse(R"([{"distance":0.1911,"pass":2,"paths":2},{"distance":0.0735,"pass":1,"paths":3}])"),
+           "a tool narrow enough separates every pad; mirrored about X2, outer pass first");
+    // The whole answer, to the last digit: the kernel works in whole nanometres, so every platform agrees.
+    std::uint64_t digest = 1469598103934665603ULL;
+    for (const unsigned char c : narrow.dump()) digest = (digest ^ c) * 1099511628211ULL;
+    expect(digest == ISOLATION_DIGEST, "the isolation answer is the recorded one: digest " + std::to_string(digest));
+    expect(board("gerber-isolation", pads) == "Give \"tool_width\": the width of cut at the engraving depth, in millimetres",
+           "isolation needs the tool width");
 }
 
 int main() {

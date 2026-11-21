@@ -188,6 +188,10 @@ For design printing, choose **Fit on A4 landscape** or **1:1 tiled A4 landscape*
 
 Keep a portable copy before restarting or clearing any browser data. Record the application revision, operating system/browser, server mode, selected head/protocol, operation settings and exact error. Include a minimal project that reproduces the issue and distinguish simulator behavior from physical hardware behavior. Redact passwords, upload/pairing tokens and private keys. Use the symptom-specific [fault-finding guide](TROUBLESHOOTING.md).
 
+## Circuit boards
+
+Under Projects, Circuit board imports a board's Gerber copper layer, its outline and its Excellon drill file. Review shows what was read from each file, every warning and, in red on the canvas, each place where two pieces of copper are too close for the cutter to pass between them. Add to design makes one layer for each tool with Output off: the isolation contours, each drill diameter, slots and the cut-out. Choose a stage under Board stages to make it the job, preview it, fit its tool and set work Z; use Probe levelling for the engraving. The underside is imported mirrored so that both sides register. [Circuit boards](PCB.md) is the full guide, with what has and has not been tested.
+
 ## Manual tool changes
 
 In CAM, open Manual tool changes. Set the cutter diameter, operation, depth and feeds; select an object, assign a tool number/name/shape and its current settings. Repeat for every active object. Generate separate stage files, then download each G-code file and the plan JSON. Consecutive operations using the same tool geometry/number share a stage. Returning to a previous tool creates another stage.

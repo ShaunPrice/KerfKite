@@ -1039,13 +1039,18 @@ REFUSALS = (
 
 def prepared(operations, project, paths, backend):
     """studio.operations.prepare on the kernel or on the Shapely fallback: (tool paths, None) or (None, message)."""
+    before = os.environ.get('KERFKITE_POLYGON_BACKEND')
     os.environ['KERFKITE_POLYGON_BACKEND'] = backend
     try:
         return operations.prepare(project, paths)[0], None
     except ValueError as error:
         return None, str(error)
     finally:
-        del os.environ['KERFKITE_POLYGON_BACKEND']
+        # Whoever ran this check may have chosen a backend of their own: leave it as it was found.
+        if before is None:
+            del os.environ['KERFKITE_POLYGON_BACKEND']
+        else:
+            os.environ['KERFKITE_POLYGON_BACKEND'] = before
 
 
 def cam_requests(operations, cases):

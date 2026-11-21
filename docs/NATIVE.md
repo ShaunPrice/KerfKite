@@ -67,7 +67,7 @@ On Windows x64 (MSVC 2022 Build Tools, Python 3.10 and 3.12) the extension build
 
 Probe levelling (`native/core/src/leveling.cpp`) is the first part of the application written only in the core: it has no Python version. The extension compiles that file and exposes it as `core_call`, which `studio/leveling.py` wraps; the extension is therefore built as C++17 and compiles the core's JSON reader and writer with it. See [Probe levelling](PROBE-LEVELING.md).
 
-Circuit board import (`gerber.cpp`, `excellon.cpp`, `pcb.cpp`) is written the same way, compiled into the extension and wrapped by `studio/pcb_import.py`. See [Circuit boards](PCB.md).
+Circuit board import (`gerber.cpp`, `excellon.cpp`, `pcb.cpp`) is written the same way, compiled into the extension and wrapped by `studio/pcb_import.py`. So are isolation toolpaths (`isolation.cpp`), for which the extension also compiles the polygon kernel (`polygon/`). See [Circuit boards](PCB.md).
 
 Offsets, pockets and hatch fills are computed by the core's own polygon kernel (`native/core/src/polygon/`, `native/core/src/operations.cpp`; see [The polygon kernel](POLYGON-KERNEL.md)). This is the third part with a single implementation: the extension compiles the kernel and the operations, and `studio/operations.py` calls them through `core_call` after checking the job's settings in Python, so Studio and `kerfkite-cam` cut the same paths by construction. GEOS, which the core built for these operations at first, has been removed from the native build with its options.
 

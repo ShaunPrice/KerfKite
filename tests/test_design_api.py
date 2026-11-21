@@ -140,6 +140,7 @@ class DesignApiTests(unittest.TestCase):
             '/api/extrude',
             '/api/artwork-relief',
             '/api/relief',
+            '/api/pcb-import',
         ]
         for path in routes:
             for data in ([], 'text', 5):

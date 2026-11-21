@@ -7,9 +7,9 @@ from .relief import prepare_relief
 
 
 def register_design_routes(app):
-    from . import assembly, cad_exchange, fixture_collision, program_import, import_bundle
+    from . import assembly, cad_exchange, fixture_collision, program_import, import_bundle, pcb_api
 
-    for module in (assembly, cad_exchange, fixture_collision, program_import, import_bundle):
+    for module in (assembly, cad_exchange, fixture_collision, program_import, import_bundle, pcb_api):
         module.register(app)
 
     def body(message):

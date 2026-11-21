@@ -12,3 +12,5 @@ aside.tabbed-tools{padding:0;display:flex;flex-direction:column;min-height:0;ove
 @media(max-width:700px){aside.tabbed-tools{height:65vh;min-height:300px}.tool-tablist{position:sticky;top:0}.tool-panel{padding:16px}main{min-height:0}.workspace{overflow:visible}}
 
 header{background:linear-gradient(90deg,rgba(17,35,43,.45),rgba(17,35,43,.15)),url('./header-wood.png') center 52%/cover;min-height:94px;text-shadow:0 1px 3px #000}.brand .app-mark{width:50px;height:50px;border-radius:10px;float:left;margin-right:14px;box-shadow:0 2px 10px #0008}.connection{background:#183340e6;padding:8px;border-radius:8px}.connection button{text-shadow:none}header small{color:#e3d8c4}
+/* Circuit board import panel */
+.pcb-list{padding-left:18px;margin:6px 0}#pcb-panel input[type=checkbox]{width:auto}#pcb-panel h4{font-size:13px;margin:10px 0 4px}

@@ -1,5 +1,5 @@
 // The circuit board commands by name, each taking and returning JSON: "gerber", "gerber-outline",
-// "excellon" and "excellon-drills". This is what the command-line tool and the Python extension call.
+// "gerber-isolation", "excellon" and "excellon-drills". This is what the command-line tool and the Python extension call.
 #ifndef KERFKITE_PCB_HPP
 #define KERFKITE_PCB_HPP
 
@@ -7,6 +7,7 @@
 
 #include "kerfkite/excellon.hpp"
 #include "kerfkite/gerber.hpp"
+#include "kerfkite/isolation.hpp"
 
 namespace kerfkite {
 

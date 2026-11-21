@@ -20,6 +20,8 @@ add_library(kerfkite_core STATIC core/src/api.cpp core/src/cam.cpp core/src/dril
 target_sources(kerfkite_core PRIVATE core/src/json.cpp)
 # Circuit board import: Gerber layers and Excellon drill files.
 target_sources(kerfkite_core PRIVATE core/src/excellon.cpp core/src/gerber.cpp core/src/pcb.cpp)
+# Isolation toolpaths from a copper layer, on the polygon kernel below.
+target_sources(kerfkite_core PRIVATE core/src/isolation.cpp)
 # KerfKite's own solid modelling kernel (docs/SOLID-KERNEL.md): the C++ standard library only. solid_command.cpp is its JSON front.
 target_sources(kerfkite_core PRIVATE core/src/solid/arrangement.cpp core/src/solid/boolean.cpp core/src/solid/exact.cpp core/src/solid/hull.cpp
   core/src/solid/mesh.cpp core/src/solid/planar.cpp core/src/solid/primitives.cpp core/src/solid/profile.cpp core/src/solid/query.cpp
