@@ -92,11 +92,32 @@ runs the same code for a whole project.
 | Shapely's `LineString.is_simple` and `.length`, which both features ask of each contour (`core/src/simple_line.cpp`) | Done by GEOS's own rules, including its double-double orientation test. A contour whose answer depends on rounding inside GEOS is declined. |
 | Inside and outside offsets (router: tool radius; laser: half the kerf), concentric pockets, hatch and cross-hatch fills (`core/src/operations.cpp`) | Done, on the core's own polygon kernel. This is the only implementation: Studio calls it through its extension (`studio/operations.py`), and keeps Shapely only as the fallback where the extension is not installed. |
 | The core's own polygon kernel (`core/src/polygon/`, `core/include/kerfkite/polygon.hpp`) | Done. See [The polygon kernel](#the-polygon-kernel). |
+| 3D solid modelling (`core/include/kerfkite/solid.hpp`, `core/src/solid/`) | Done as a kernel and a `solid` command. New in the core: Studio's Python still uses a third-party library and is not switched over. See `docs/SOLID-KERNEL.md`. |
 | V-carving | Not yet. Declined with exit status 3. |
 | Rotary output, relief, stock simulation, importers, sender, pendant, editors | Not yet. |
 
 A request the core cannot fully reproduce is declined at the point where the Python code would enter the
 missing branch. The core never writes a program for a case it does not reproduce.
+
+## Solid kernel
+
+`core/include/kerfkite/solid.hpp` and `core/src/solid/` are KerfKite's own 3D solid modelling kernel: closed
+triangle meshes on a 1 nm grid, primitives, extrusion and revolution, affine maps, union, difference and
+intersection with exact arithmetic, sections on any plane, ray casting and height maps for machining, and
+STL. It uses the C++ standard library only.
+
+    kerfkite-cam solid REQUEST.json
+    kerfkite-cam solid-batch REQUESTS.jsonl
+
+build a solid from a tree of shapes and operations and answer with its measures and, on request, its mesh,
+sections, projection, height map, ray hits or STL. `ctest` runs `kerfkite_solid_selftest`, which checks the
+kernel by invariants that need no reference;
+
+    python validation/solid_kernel_check.py --tool build/native/kerfkite-cam
+
+compares it with the third-party library Studio uses today, which is needed for that comparison only.
+Studio's Python does not call the kernel yet. See `docs/SOLID-KERNEL.md` for the representation, the rounding
+rule, the limits, the measurements and what is ready for 3D engraving and multi-axis work.
 
 ## The polygon kernel
 

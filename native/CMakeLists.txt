@@ -22,6 +22,10 @@ target_sources(kerfkite_core PRIVATE core/src/json.cpp)
 target_sources(kerfkite_core PRIVATE core/src/excellon.cpp core/src/gerber.cpp core/src/pcb.cpp)
 # Isolation toolpaths from a copper layer, on the polygon kernel below.
 target_sources(kerfkite_core PRIVATE core/src/isolation.cpp)
+# KerfKite's own solid modelling kernel (docs/SOLID-KERNEL.md): the C++ standard library only. solid_command.cpp is its JSON front.
+target_sources(kerfkite_core PRIVATE core/src/solid/arrangement.cpp core/src/solid/boolean.cpp core/src/solid/exact.cpp core/src/solid/hull.cpp
+  core/src/solid/mesh.cpp core/src/solid/planar.cpp core/src/solid/primitives.cpp core/src/solid/profile.cpp core/src/solid/query.cpp
+  core/src/solid/section.cpp core/src/solid/simplify.cpp core/src/solid/stl.cpp core/src/solid_command.cpp)
 target_include_directories(kerfkite_core PUBLIC core/include PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 if(MSVC)
   # Sources are UTF-8. Floating point stays strict so results match the reference on every platform.
@@ -45,6 +49,13 @@ add_test(NAME selftest COMMAND kerfkite_selftest)
 add_executable(kerfkite_json_selftest tests/json_selftest.cpp)
 target_link_libraries(kerfkite_json_selftest PRIVATE kerfkite_core)
 add_test(NAME json COMMAND kerfkite_json_selftest)
+add_executable(kerfkite_solid_selftest tests/solid_selftest.cpp)
+target_link_libraries(kerfkite_solid_selftest PRIVATE kerfkite_core)
+add_test(NAME solid COMMAND kerfkite_solid_selftest)
+# Generated Boolean cases, with a digest of every result. The digest is recorded, so each platform and
+# compiler the checks run on has to produce the same solids to the last vertex.
+add_test(NAME solid_same_everywhere COMMAND kerfkite_solid_selftest --digest 150 2026)
+set_tests_properties(solid_same_everywhere PROPERTIES PASS_REGULAR_EXPRESSION "0 failed.*digest d606943f815a575d")
 add_executable(kerfkite_polygon_selftest tests/polygon_selftest.cpp)
 target_link_libraries(kerfkite_polygon_selftest PRIVATE kerfkite_core)
 add_test(NAME polygon COMMAND kerfkite_polygon_selftest)

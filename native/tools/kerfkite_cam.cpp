@@ -13,6 +13,8 @@
 //   kerfkite-cam polygon-batch CASES.jsonl   one polygon request a line (or, with "command": "operation", one
 //                                            operation request), each answered {"ok": ...} or {"error": ...}
 //   kerfkite-cam operation REQUEST.json      an offset, pocket or fill: see kerfkite/operation_command.hpp
+//   kerfkite-cam solid REQUEST.json          a solid built from primitives and Boolean operations: measures, mesh, sections
+//   kerfkite-cam solid-batch REQUESTS.jsonl  the same, one request a line, each answered {"ok": ...} or {"error": message}
 //   kerfkite-cam batch CASES.jsonl
 //   kerfkite-cam numbers
 //   kerfkite-cam arithmetic
@@ -44,7 +46,8 @@ namespace {
 
 int usage() {
     std::cerr << "usage: kerfkite-cam generate PROJECT.json [-o PROGRAM.nc] [--json]\n"
-                 "       kerfkite-cam probe-plan|height-map|level REQUEST.json\n"
+                 "       kerfkite-cam probe-plan|height-map|level|solid REQUEST.json\n"
+                 "       kerfkite-cam solid-batch REQUESTS.jsonl\n"
                  "       kerfkite-cam gerber|gerber-outline|gerber-isolation|excellon|excellon-drills FILE [--option VALUE ...]\n"
                  "       kerfkite-cam polygon REQUEST.json | polygon-batch CASES.jsonl\n"
                  "       kerfkite-cam operation REQUEST.json\n"
@@ -189,8 +192,9 @@ int batch(const std::string &path) {
     return 0;
 }
 
-// Requests to the polygon kernel, one a line, for validation/polygon_kernel_check.py.
-int polygon_batch(const std::string &path) {
+// Requests to one of the kernels' commands, one a line: the differential checks
+// (validation/polygon_kernel_check.py, validation/solid_kernel_check.py) send thousands.
+int kernel_batch(const std::string &command, const std::string &path) {
     std::ifstream cases(path, std::ios::binary);
     if (!cases) {
         std::cerr << "kerfkite-cam: cannot read " << path << "\n";
@@ -202,9 +206,9 @@ int polygon_batch(const std::string &path) {
         json answer;
         try {
             const json request = json::parse(line);
-            // A line is a polygon request unless it names the other geometry command: "command": "operation".
-            const bool operation = request.is_object() && request.value("command", "") == "operation";
-            answer = json{{"ok", kerfkite::call(operation ? "operation" : "polygon", request)}};
+            // A polygon batch line may name the other geometry command instead: "command": "operation".
+            const bool operation = command == "polygon" && request.is_object() && request.value("command", "") == "operation";
+            answer = json{{"ok", kerfkite::call(operation ? "operation" : command, request)}};
         } catch (const kerfkite::ValueError &error) {
             answer = json{{"error", error.what()}};
         } catch (const std::exception &error) {
@@ -267,9 +271,12 @@ int main(int argc, char **argv) {
     const std::string command = argv[1];
     if (command == "generate") return generate(argc, argv);
     if (command == "batch" && argc == 3) return batch(argv[2]);
-    if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "polygon" || command == "operation") && argc == 3)
+    if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "polygon" || command == "operation" ||
+         command == "solid") &&
+        argc == 3)
         return request(command, argv[2]);
-    if (command == "polygon-batch" && argc == 3) return polygon_batch(argv[2]);
+    if ((command == "polygon-batch" || command == "solid-batch") && argc == 3)
+        return kernel_batch(command.substr(0, command.size() - 6), argv[2]);
     if ((command == "gerber" || command == "gerber-outline" || command == "gerber-isolation" || command == "excellon" ||
          command == "excellon-drills") &&
         argc >= 3)

@@ -13,12 +13,9 @@
 
 #include "kerfkite/json.hpp"
 
-namespace kerfkite {
+#include "kerfkite/errors.hpp"  // ValueError
 
-// An input the reference rejects. what() is the reference's message.
-struct ValueError : std::runtime_error {
-    using std::runtime_error::runtime_error;
-};
+namespace kerfkite {
 
 // A valid request for a feature this library does not yet reproduce. what() names the feature.
 struct NotPorted : std::runtime_error {
