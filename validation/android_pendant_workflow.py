@@ -20,6 +20,7 @@ from werkzeug.serving import make_server
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from studio.device import DeviceController
+from pocket_app import PACKAGE, component
 from studio.monitor import create_monitor_app
 from studio.phone_jobs import PhoneJobs
 
@@ -112,8 +113,8 @@ def exercise(phone, apk, route):
         else:
             # Android Emulator routes 10.0.2.2 to the host's loopback interface.
             address = f'10.0.2.2:{server.server_port}'
-        phone.run('shell', 'am', 'force-stop', 'au.cncstudio.pocket')
-        phone.run('shell', 'am', 'start', '-W', '-n', 'au.cncstudio.pocket/.WorkshopActivity')
+        phone.run('shell', 'am', 'force-stop', PACKAGE)
+        phone.run('shell', 'am', 'start', '-W', '-n', component())
         phone.tap('CNC pendant', button=True)
         phone.tap('Monitor pairing link')
         phone.run('shell', 'input', 'text', f'http://{address}/#token={token}')

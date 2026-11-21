@@ -36,7 +36,13 @@ def main():
 
         def java(name, *args):
             command = ['java', '-cp', classes, 'au.cncstudio.pocket.' + name, *args]
-            return subprocess.run(command, capture_output=True, text=True, timeout=60).stdout.strip()
+            done = subprocess.run(command, capture_output=True, text=True, timeout=60)
+            if done.returncode:
+                # A JVM that could not run the class says nothing useful on stdout: stop with what it reported.
+                raise SystemExit(
+                    f'{name} exited with status {done.returncode}:\n{done.stderr.strip() or done.stdout.strip()}'
+                )
+            return done.stdout.strip()
 
         print(java('PinnedTlsCheck'))
         try:

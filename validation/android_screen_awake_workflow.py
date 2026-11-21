@@ -9,8 +9,8 @@ from xml.etree import ElementTree
 
 from android_pendant_workflow import Phone, wait_until
 from android_projects_workflow import replace_text
+from pocket_app import PACKAGE, component
 
-PACKAGE = "au.cncstudio.pocket"
 EDITOR = "WorkshopActivity"
 PENDANT = "PendantActivity"
 LABEL = "Keep screen awake"
@@ -20,7 +20,7 @@ def flags(phone, activity):
     windows = phone.run("shell", "dumpsys", "window", "windows")
     blocks = re.split(r"(?m)^\s*Window #\d+ ", windows)[1:]
     for block in blocks:
-        if f'{PACKAGE}/{PACKAGE}.{activity}' in block.splitlines()[0]:
+        if component(activity) in block.splitlines()[0]:
             found = re.search(r"(?m)^\s*fl=(.*)$", block)
             if found:
                 return set(found.group(1).split())
@@ -46,7 +46,7 @@ def check_switch(phone, checked):
 def launch(phone):
     phone.run("shell", "input", "keyevent", "KEYCODE_WAKEUP")
     phone.run("shell", "wm", "dismiss-keyguard")
-    phone.run("shell", "am", "start", "-W", "-n", f"{PACKAGE}/.{EDITOR}")
+    phone.run("shell", "am", "start", "-W", "-n", component(EDITOR))
 
 
 def awake(phone):

@@ -31,10 +31,10 @@ from werkzeug.serving import make_server
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from studio.device import DeviceController
+from pocket_app import PACKAGE, component
 from studio.monitor import create_monitor_app
 from studio.phone_jobs import PhoneJobs
 
-PACKAGE = 'au.cncstudio.pocket'
 # The launcher's own intent: returning with a different intent starts a second editor on top of the pendant.
 LAUNCH = (
     'shell',
@@ -46,7 +46,7 @@ LAUNCH = (
     '-c',
     'android.intent.category.LAUNCHER',
     '-n',
-    PACKAGE + '/.WorkshopActivity',
+    component(),
 )
 
 

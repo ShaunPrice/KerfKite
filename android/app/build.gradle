@@ -11,4 +11,16 @@ android {
         versionCode 6
         versionName '0.5.0'
     }
+    buildTypes {
+        // A debug build installs beside the release app under its own id and name, so testing one never
+        // replaces the other or its saved projects.
+        debug {
+            applicationIdSuffix '.debug'
+            versionNameSuffix '-debug'
+            resValue 'string', 'app_label', 'Pocket debug'
+        }
+        release {
+            resValue 'string', 'app_label', 'KerfKite Pocket'
+        }
+    }
 }
