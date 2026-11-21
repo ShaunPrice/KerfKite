@@ -331,6 +331,12 @@ class Report:
         self.compared = self.refused = self.oracle_failed = self.fragile = 0
         self.worst = {'volume': 0.0, 'box': 0.0, 'section': 0.0}
         self.failures, self.body_notes, self.sliver_notes = [], [], []
+        self.flake_bodies = 0
+        self.records = []  # (kind, whole tree, detail), for --write-notes
+
+    def note(self, kind, dual, where, detail, into):
+        into.append(f'{where}\n    {detail}')
+        self.records.append({'kind': kind, 'detail': detail, 'tree': dual.tree})
 
     def compare(self, duals, label):
         """Evaluate each dual in the kernel and compare it with its oracle solid."""
@@ -364,7 +370,7 @@ class Report:
                 elif dual.oracle.is_empty() and ('no volume' in message or 'no triangles' in message):
                     self.compared += 1
                 else:
-                    self.failures.append(f'{where}\n    the kernel refused: {message}')
+                    self.note('failure', dual, where, f'the kernel refused: {message}', self.failures)
                 continue
             mine = answer['ok']
             self.compared += 1
@@ -373,9 +379,8 @@ class Report:
             error = abs(mine['volume'] - dual.oracle.volume())
             self.worst['volume'] = max(self.worst['volume'], error / tolerance)
             if error > tolerance:
-                self.failures.append(
-                    f'{where}\n    volume {mine["volume"]!r} against {dual.oracle.volume()!r} (tolerance {tolerance:.3g})'
-                )
+                detail = f'volume {mine["volume"]!r} against {dual.oracle.volume()!r} (tolerance {tolerance:.3g})'
+                self.note('failure', dual, where, detail, self.failures)
                 continue
             if dual.oracle.is_empty() or mine['empty']:
                 continue  # both empty, or one a sliver within the volume tolerance
@@ -384,25 +389,32 @@ class Report:
             if error > BOX_MM:
                 # Where the volumes agree this closely, the difference is a body thinner than the layer that
                 # one of the two has kept and the other has not. It is listed, not failed.
+                detail = f'bounds {mine["bounds"]} against {list(box)}; volumes {mine["volume"]!r} and {dual.oracle.volume()!r}'
                 if abs(mine['volume'] - dual.oracle.volume()) > 0.1 * tolerance:
-                    self.failures.append(f'{where}\n    bounds {mine["bounds"]} against {list(box)}')
+                    self.note('failure', dual, where, detail, self.failures)
                 else:
-                    self.sliver_notes.append(
-                        f'{where}\n    bounds {mine["bounds"]} against {list(box)}; volumes {mine["volume"]!r} and {dual.oracle.volume()!r}'
-                    )
+                    self.note('sliver', dual, where, detail, self.sliver_notes)
                 continue
             self.worst['box'] = max(self.worst['box'], error / BOX_MM)
             if mine['bodies'] != bodies_of(dual.oracle):
-                self.body_notes.append(f'{where}\n    bodies {mine["bodies"]} against {bodies_of(dual.oracle)}')
+                # The oracle keeps flakes without volume as bodies of their own; the kernel has none. Where the
+                # counts agree once those are left out, that is the whole difference.
+                solid_bodies = sum(1 for part in dual.oracle.decompose() if abs(part.volume()) > tolerance)
+                if mine['bodies'] == solid_bodies:
+                    self.flake_bodies += 1
+                else:
+                    detail = f'bodies {mine["bodies"]} against {bodies_of(dual.oracle)} ({solid_bodies} with a volume)'
+                    self.note('bodies', dual, where, detail, self.body_notes)
             length = 1 + math.sqrt(dual.area)
             for height, section in zip(heights, mine['sections']):
                 tolerance = 25 * LAYER_MM * length * operations + 1e-9
                 error = abs(section['area'] - dual.oracle.slice(height).area())
                 self.worst['section'] = max(self.worst['section'], error / tolerance)
                 if error > tolerance:
-                    self.failures.append(
-                        f'{where}\n    section at {height!r}: area {section["area"]!r} against {dual.oracle.slice(height).area()!r}'
+                    detail = (
+                        f'section at {height!r}: area {section["area"]!r} against {dual.oracle.slice(height).area()!r}'
                     )
+                    self.note('failure', dual, where, detail, self.failures)
                     break
 
 
@@ -623,6 +635,7 @@ def main():
     parser.add_argument('--trees', type=int, default=2000)
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--skip-application', action='store_true')
+    parser.add_argument('--write-notes', help='write every failure and note, with its whole tree, to this file')
     arguments = parser.parse_args()
     TOOL = arguments.tool
     if not Path(TOOL).exists():
@@ -647,10 +660,10 @@ def main():
         'worst difference as a share of its tolerance: '
         + ', '.join(f'{name} {value:.3g}' for name, value in report.worst.items())
     )
+    if report.flake_bodies:
+        print(f'{report.flake_bodies} solids where the oracle counts flakes without volume as bodies; otherwise equal')
     if report.body_notes:
-        print(
-            f'{len(report.body_notes)} solids with a different number of bodies (see the documentation: bodies that only touch); the first:'
-        )
+        print(f'{len(report.body_notes)} solids with a different number of bodies that have a volume; the first:')
         print('  ' + report.body_notes[0])
     if report.sliver_notes:
         print(
@@ -660,6 +673,10 @@ def main():
     for failure in report.failures[:20]:
         print('FAIL ' + failure)
     print(f'{len(report.failures)} failures')
+    if arguments.write_notes:
+        with open(arguments.write_notes, 'w', encoding='utf-8') as handle:
+            for record in report.records:
+                handle.write(json.dumps(record) + '\n')
     return 1 if report.failures else 0
 
 

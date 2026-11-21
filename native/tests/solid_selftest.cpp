@@ -300,6 +300,7 @@ static void profiles() {
     const Solid hull = convex_hull(std::vector<Solid>{box({2, 3, 4}), box({1, 1, 1}).translated({0.5, 0.5, 0.5})});
     expect(hull.volume() == 24 && hull.num_vertices() == 8 && hull.num_triangles() == 12, "the hull of a box and points inside it is the box");
     const Solid tent = convex_hull(std::vector<Vec3>{{0, 0, 0}, {2, 0, 0}, {2, 2, 0}, {0, 2, 0}, {1, 1, 0}, {1, 1, 3}, {1, 0, 0}});
+    expect(convex_hull(std::vector<Solid>{Solid(), Solid()}).empty(), "the hull of empty solids is empty");
     expect(tent.volume() == 4 && tent.num_vertices() == 5 && refuses([] { convex_hull(std::vector<Vec3>{{0, 0, 0}, {1, 0, 0}, {0, 1, 0}, {1, 1, 0}}); }), "a hull drops points on its faces and edges; flat input is refused");
 }
 
@@ -351,11 +352,25 @@ static void sections_and_queries() {
 
 // ---- generated cases ----------------------------------------------------------------------------
 
+// The order in which a compiler evaluates the arguments of a call is its own choice, so every random
+// draw below is a statement of its own (or an element of a braced list, which is ordered): otherwise
+// two compilers would generate different cases and their digests could not be compared.
+static Solid turned(const Solid &s, double range) {
+    const double x = uni(-range, range), y = uni(-range, range), z = uni(-range, range);
+    return s.rotated(x, y, z);
+}
+
 static Solid base() {
     switch (pick(3)) {
         case 0: return box({1.0 + pick(5), 1.0 + pick(5), 1.0 + pick(5)});
-        case 1: return cylinder(1 + pick(5), 1 + pick(3), pick(4) ? 1 + pick(3) : 0, 8 + 4 * pick(3));
-        default: return sphere(1 + pick(3), 8 + 4 * pick(2));
+        case 1: {
+            const int height = 1 + pick(5), low = 1 + pick(3), high = pick(4) ? 1 + pick(3) : 0, segments = 8 + 4 * pick(3);
+            return cylinder(height, low, high, segments);
+        }
+        default: {
+            const int radius = 1 + pick(3), segments = 8 + 4 * pick(2);
+            return sphere(radius, segments);
+        }
     }
 }
 
@@ -364,12 +379,20 @@ static Solid placed() {
     switch (pick(6)) {
         case 0: return s.translated({static_cast<double>(pick(9) - 4), static_cast<double>(pick(9) - 4), static_cast<double>(pick(9) - 4)});
         case 1: return s.translated({uni(-4, 4), uni(-4, 4), uni(-4, 4)});
-        case 2: return s.rotated(90.0 * pick(4), 90.0 * pick(4), 45.0 * pick(8));
-        case 3: return s.rotated(uni(-180, 180), uni(-180, 180), uni(-180, 180)).translated({static_cast<double>(pick(5) - 2), 0, 0});
+        case 2: {
+            const double x = 90.0 * pick(4), y = 90.0 * pick(4), z = 45.0 * pick(8);
+            return s.rotated(x, y, z);
+        }
+        case 3: {
+            const Solid t = turned(s, 180);
+            return t.translated({static_cast<double>(pick(5) - 2), 0, 0});
+        }
         case 4: return s.scaled({pick(2) ? 2 : uni(0.3, 2), 1, pick(2) ? -1.0 : 1.0});
         default: return s;
     }
 }
+
+static size_t refusals = 0, refused_kind[6] = {0, 0, 0, 0, 0, 0};
 
 static bool valid(const Solid &s, bool verify) { return s.empty() || !verify || (count_self_intersections(s) == 0 && verify_exact(s)); }
 
@@ -388,7 +411,8 @@ static bool generated(int kind, bool verify) {
                 a = placed();
                 b = placed();
                 if (pick(3) == 0) {
-                    const Solid c = boolean(a, placed(), pick(2) ? Op::Union : Op::Difference);
+                    const Solid other = placed();
+                    const Solid c = boolean(a, other, pick(2) ? Op::Union : Op::Difference);
                     if (!c.empty()) a = c;
                 }
             } else if (kind == 1) {  // sharing faces, then turned together, so that they nearly coincide
@@ -400,8 +424,13 @@ static bool generated(int kind, bool verify) {
                 a = a.rotated(rx, ry, rz);
                 b = b.rotated(rx, ry, rz);
             } else {  // a solid and a copy turned by a millionth of a degree or moved a few nanometres
-                a = base().rotated(uni(-180, 180), uni(-180, 180), uni(-180, 180));
-                b = pick(2) ? a.rotated(uni(-1e-6, 1e-6), uni(-1e-6, 1e-6), uni(-1e-5, 1e-5)) : a.translated({(pick(7) - 3) * 1e-6, (pick(7) - 3) * 1e-6, (pick(7) - 3) * 1e-6});
+                a = turned(base(), 180);
+                if (pick(2)) {
+                    const double x = uni(-1e-6, 1e-6), y = uni(-1e-6, 1e-6), z = uni(-1e-5, 1e-5);
+                    b = a.rotated(x, y, z);
+                } else {
+                    b = a.translated({(pick(7) - 3) * 1e-6, (pick(7) - 3) * 1e-6, (pick(7) - 3) * 1e-6});
+                }
             }
             const Solid u = a + b, i = a ^ b, d = a - b, u2 = b + a, i2 = b ^ a;
             mix(u);
@@ -417,7 +446,9 @@ static bool generated(int kind, bool verify) {
         } else if (kind == 3) {  // a chain of operations
             Solid acc = base();
             for (int k = 0; k < 5; ++k) {
-                const Solid t = base().rotated(pick(2) ? 90.0 * pick(4) : uni(-90, 90), 0, pick(2) ? 45.0 * pick(8) : uni(-90, 90)).translated({static_cast<double>(pick(5) - 2), static_cast<double>(pick(5) - 2), static_cast<double>(pick(5) - 2)});
+                const Solid shape = base();
+                const double x = pick(2) ? 90.0 * pick(4) : uni(-90, 90), z = pick(2) ? 45.0 * pick(8) : uni(-90, 90);
+                const Solid t = shape.rotated(x, 0, z).translated({static_cast<double>(pick(5) - 2), static_cast<double>(pick(5) - 2), static_cast<double>(pick(5) - 2)});
                 const int op = pick(3);
                 Solid next = boolean(acc, t, op == 0 ? Op::Union : op == 1 ? Op::Difference : Op::Intersection);
                 if (next.empty()) next = t;
@@ -431,7 +462,9 @@ static bool generated(int kind, bool verify) {
             Solid folded, rest;
             double area = 0;
             for (int k = 0; k < n; ++k) {
-                const Solid t = base().rotated(0, 0, pick(2) ? 30.0 * pick(12) : uni(0, 360)).translated({(pick(7) - 3) * 0.5, (pick(7) - 3) * 0.5, static_cast<double>(pick(3) - 1)});
+                const Solid shape = base();
+                const double z = pick(2) ? 30.0 * pick(12) : uni(0, 360);
+                const Solid t = shape.rotated(0, 0, z).translated({(pick(7) - 3) * 0.5, (pick(7) - 3) * 0.5, static_cast<double>(pick(3) - 1)});
                 parts.push_back(t);
                 folded = folded + t;
                 if (k) rest = rest + t;
@@ -445,7 +478,8 @@ static bool generated(int kind, bool verify) {
             if (!close_to(cut.volume(), (parts[0] - rest).volume(), tolerance)) fail("a batch difference equals the fold");
             if (!valid(all, verify) || !valid(cut, verify)) fail("a batch result is not a valid solid");
         } else {  // idempotence and absorption
-            const Solid a = base().rotated(uni(-180, 180), uni(-180, 180), uni(-180, 180)), b = base().translated({uni(-1, 1), uni(-1, 1), uni(-1, 1)});
+            const Solid a = turned(base(), 180);
+            const Solid b = base().translated({uni(-1, 1), uni(-1, 1), uni(-1, 1)});
             const Solid u = a + b, i = a ^ b, p = a + i, q = a ^ u;
             mix(p);
             mix(q);
@@ -456,7 +490,11 @@ static bool generated(int kind, bool verify) {
         }
     } catch (const ValueError &error) {
         // The one refusal allowed: a result whose features cannot be represented on the grid. It is counted.
-        if (std::strstr(error.what(), "too fine")) return true;
+        if (std::strstr(error.what(), "too fine")) {
+            ++refusals;
+            ++refused_kind[kind];
+            return true;
+        }
         fail(error.what());
     } catch (const std::exception &error) {
         fail(error.what());
@@ -464,14 +502,11 @@ static bool generated(int kind, bool verify) {
     return ok;
 }
 
-static size_t refusals = 0;
 
 static void generate(int cases, bool verify) {
     for (int c = 0; c < cases; ++c)
         for (int kind = 0; kind < 6; ++kind) {
-            const uint64_t before = digest;
             if (!generated(kind, verify)) ++failures;
-            if (digest == before) ++refusals;  // nothing was mixed in: the operation was refused (or empty)
         }
 }
 
@@ -479,14 +514,26 @@ static double seconds() { return std::chrono::duration<double>(std::chrono::stea
 
 static void bench() {
     double t = seconds();
-    const Solid a = sphere(20, 200), b = sphere(20, 200).translated({13.1, 4.3, 2.7});
-    std::printf("two spheres of %zu triangles each, built in %.3f s\n", a.num_triangles(), seconds() - t);
-    for (const Op op : {Op::Union, Op::Difference, Op::Intersection}) {
+    for (const int segments : {144, 200, 320}) {
+        // The second sphere is turned by an arbitrary angle, so that its vertices are in no special position.
         t = seconds();
-        const Solid r = boolean(a, b, op);
-        const double took = seconds() - t;
-        std::printf("  %s: %.3f s, %zu triangles, %zu intersecting pairs, %zu rounded vertices\n", op == Op::Union ? "union" : op == Op::Difference ? "difference" : "intersection", took,
-                    r.num_triangles(), last_boolean_stats().intersecting_pairs, last_boolean_stats().rounded_vertices);
+        const Solid a = sphere(20, segments), b = sphere(20, segments).rotated(17, 29, 41).translated({13.1, 4.3, 2.7});
+        std::printf("two spheres of %zu triangles each, built in %.3f s\n", a.num_triangles(), seconds() - t);
+        for (const Op op : {Op::Union, Op::Difference, Op::Intersection}) {
+            t = seconds();
+            const Solid r = boolean(a, b, op);
+            const double took = seconds() - t;
+            std::printf("  %s: %.3f s, %zu triangles, %zu intersecting pairs, %zu rounded vertices\n", op == Op::Union ? "union" : op == Op::Difference ? "difference" : "intersection", took,
+                        r.num_triangles(), last_boolean_stats().intersecting_pairs, last_boolean_stats().rounded_vertices);
+        }
+    }
+    {
+        // The hard case: the same sphere turned about its centre, so that every triangle crosses several others.
+        const Solid a = sphere(20, 144), b = a.rotated(17, 29, 41);
+        t = seconds();
+        const Solid r = a + b;
+        std::printf("union of a sphere of %zu triangles with itself turned: %.3f s, %zu triangles, %zu intersecting pairs\n", a.num_triangles(), seconds() - t, r.num_triangles(),
+                    last_boolean_stats().intersecting_pairs);
     }
     std::vector<Solid> parts;
     for (int k = 0; k < 200; ++k) parts.push_back(cylinder(5, 2, 2, 48).translated({(k % 20) * 1.5, (k / 20) * 1.5, 0}));
@@ -526,7 +573,8 @@ int main(int argc, char **argv) {
         const int cases = argc > 2 ? std::atoi(argv[2]) : 100;
         if (argc > 3) state = std::strtoull(argv[3], nullptr, 10);
         generate(cases, mode == "--stress");
-        std::printf("%d cases of each of 6 kinds, %d failed, %zu refused or empty, digest %016llx\n", cases, failures, refusals, static_cast<unsigned long long>(digest));
+        std::printf("%d cases of each of 6 kinds, %d failed, %zu refused as too fine (by kind: %zu %zu %zu %zu %zu %zu), digest %016llx\n", cases, failures, refusals, refused_kind[0], refused_kind[1],
+                    refused_kind[2], refused_kind[3], refused_kind[4], refused_kind[5], static_cast<unsigned long long>(digest));
         return failures ? 1 : 0;
     }
     arithmetic();

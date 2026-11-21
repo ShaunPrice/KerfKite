@@ -119,6 +119,9 @@ Solid convex_hull(const std::vector<Vec3> &points) {
 Solid convex_hull(const std::vector<Solid> &solids) {
     std::vector<GridPoint> grid;
     for (const Solid &s : solids) grid.insert(grid.end(), s.grid_vertices().begin(), s.grid_vertices().end());
+    // The hull of nothing is nothing: a model whose parts all cancelled is
+    // not an error.  Points without a volume, given directly, still are.
+    if (grid.empty()) return Solid();
     return hull_of(std::move(grid));
 }
 

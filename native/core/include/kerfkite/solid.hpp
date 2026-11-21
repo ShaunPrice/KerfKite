@@ -6,7 +6,7 @@
 // algorithm, the rounding rule and the limits.
 //
 // Lengths are millimetres and angles degrees unless a name says otherwise. Invalid input is refused
-// with kerfkite::ValueError (cam.hpp is included for that type only; the kernel does not use JSON).
+// with kerfkite::ValueError.
 #ifndef KERFKITE_SOLID_HPP
 #define KERFKITE_SOLID_HPP
 
@@ -17,7 +17,7 @@
 #include <string>
 #include <vector>
 
-#include "kerfkite/cam.hpp"
+#include "kerfkite/errors.hpp"
 
 namespace kerfkite {
 namespace solid {
