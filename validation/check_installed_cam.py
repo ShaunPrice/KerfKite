@@ -74,3 +74,20 @@ for head in ('router', 'laser'):
     legacy = wrap_job(generate(project), options)['lines']
     packed = generate_rotary(project, options)['lines']
     assert sha256('\n'.join(legacy).encode()).digest() == sha256('\n'.join(packed).encode()).digest(), head
+
+# The C++ move loops must reproduce the Python reference byte for byte on the installed build.
+for backend_project in (project, dict(project, path_depths=None, path_powers=None, mode='router', step=0.5)):
+    backend_project = {key: value for key, value in backend_project.items() if value is not None}
+    backend_project.pop('path_powers' if backend_project['mode'] == 'router' else 'path_depths', None)
+    for form in ({}, {'packed_segments': True}):
+        reference = generate(backend_project, backend='python', **form)
+        accelerated = generate(backend_project, backend='native', **form)
+        assert reference['lines'] == accelerated['lines'], backend_project['mode']
+        assert list(reference['segments']) == list(accelerated['segments']), backend_project['mode']
+    assert (
+        generate_rotary(backend_project, options, backend='python')['lines']
+        == generate_rotary(backend_project, options, backend='native')['lines']
+    ), backend_project['mode']
+for value in (0.0625, 2.5, -0.0004, 1234.56789, 0.1 + 0.2):
+    for decimals in (0, 1, 3, 6, 9):
+        assert _relief_native.fixed_text(value, decimals) == format(value, f'.{decimals}f'), (value, decimals)

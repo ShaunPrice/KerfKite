@@ -1646,7 +1646,7 @@ python -m studio.mcp_server --help
 <p>For protocol testing from a source checkout run <code>python validation/mcp_smoke.py</code> in the activated MCP environment with the repository root on the Python path. The smoke test starts a temporary stdio server and calls it using the MCP client SDK. The standalone editor simulation runs with <code>python validation/simulate_solid_workspace.py</code>. A passing local protocol test, a successfully authenticated cloud chat and a physical machine test are separate checks. Record each client connection and actual tool response before reporting that it works in a given deployment. <a href="#developer">Developer handoff</a></p>
 </section><section id="native"><h1>Optional C++ relief backend</h1>
 <p><code>studio/_relief_native.cpp</code> is an in-process CPython extension. It accelerates conservative flat/ball cutter contact; Python retains input validation, work caps, path construction, metadata and the reference implementation. There are no runtime compiler or subprocess calls. The kernel releases the GIL during its bounded numerical loop.</p>
-<p>Install with a compiler and Python headers, then <code>python -m pip install .</code>. Developers can use <code>python setup.py build_ext --inplace</code>. Windows uses MSVC <code>/O2</code>; other builds use <code>-O3 -std=c++11</code>, without fast-math. The extension is optional, so inspect the backend rather than assuming compilation succeeded.</p>
+<p>Install with a compiler and Python headers, then <code>python -m pip install .</code>. Developers can use <code>python -m pip install -e .</code>, which builds the extension in place with the setuptools release the project requires, or <code>python setup.py build_ext --inplace</code> where setuptools 77 or later is already installed (the release bundled with a new Python 3.10 environment is older and rejects the licence field). Windows uses MSVC <code>/O2</code>; other builds use <code>-O3 -std=c++11</code>, without fast-math. The extension is optional, so inspect the backend rather than assuming compilation succeeded.</p>
 <pre><code class="language-python">from studio.relief import prepare_relief
 result = prepare_relief(data)  # auto: native if importable, otherwise Python
 print(result['surface']['backend'])  # cpp or python
@@ -1657,6 +1657,58 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <p>Native and Python parity tests cover planes, ramps, domes, peaks, random fields, both cutter shapes, allowances, malformed input and the fallback path. The installed Pi wheel passed ten relief/native tests; six complete benchmark jobs produced the same G-code hash. The original standalone C++ executable remains only as a historical benchmark fixture.</p>
 <p>Installed Pi medians: 1.142 s Python relief versus 0.086 s C++; 2.864 s total versus 1.818 s. About 37% less total calculation time for that fixture. C++ was chosen because its implementation was directly measured; no Rust performance comparison was performed. Stock preview is the largest remaining stage.</p>
 <p>Evidence: <code>validation/native-installed-pi5-2026-09-11.json</code> and <code>validation/native-installed-mac-2026-09-11.json</code>. The Mac evidence exercises the local compiled module; the Pi evidence imports from the temporary environment's installed site-packages. No persistent Pi service was deployed.</p>
+<h2>G-code and rotary loops</h2>
+<p><code>studio/_gcode_native.cpp</code> is compiled into the same extension. It ports the per-move loops that were the largest remaining Python stages:</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Replaces</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>plain_points</code>, <code>plain_depths</code></td>
+<td>the per-point input checks, for designs made only of plain in-range numbers</td>
+</tr>
+<tr>
+<td><code>gcode_moves</code></td>
+<td>the loop that writes each cutting move, its preview segment and the cut length</td>
+</tr>
+<tr>
+<td><code>rotary_run</code></td>
+<td>the translation of each generated cutting run to rotary blocks</td>
+</tr>
+<tr>
+<td><code>segment_rows</code></td>
+<td>unpacking packed segments at the JSON boundary</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Python stays the reference.</strong> Each function handles only the plain case. When it meets anything else (an unexpected type, a non-finite number, a fixture or travel limit) it returns <code>None</code> and changes nothing, and the caller runs the Python loop from the same state. Every error message, and every unusual input, is therefore handled by the reference by construction.</p>
+<p><strong>The output is identical, not merely close.</strong> Three choices make that hold on every platform:</p>
+<ul>
+<li>Fixed-point text is produced with exact integer arithmetic, rounding half to even on the exact binary value as Python does. The C library is not used, because its rounding has differed between platforms.</li>
+<li>Squares use the same <code>pow</code> call that Python's <code>**</code> operator makes.</li>
+<li>The rotary cut length is computed by the Python function itself, called from C++, because Python's <code>hypot</code> and <code>asinh</code> are its own implementations. Laser path preparation stays in Python for the same reason (<code>math.dist</code>).</li>
+</ul>
+<pre><code class="language-python">from studio.cam import generate
+from studio.rotary import generate_rotary
+job = generate(project)                      # auto: C++ loops if importable, otherwise Python
+reference = generate(project, backend='python')
+accelerated = generate(project, backend='native')  # explicit error if the extension is absent
+rotary = generate_rotary(project, options, backend='python')
+</code></pre>
+<p>Set <code>KERFKITE_GCODE_BACKEND=python</code> in the server's environment to make <code>auto</code> use the Python loops without reinstalling. The functions hold the GIL.</p>
+<p>Verification on Linux x86-64 (GCC, Python 3.13):</p>
+<ul>
+<li>10.4 million formatted and rounded values, including decimal ties, binary fractions and random bit patterns, matched Python with no difference.</li>
+<li><code>tests/test_native_gcode.py</code> compares both backends for router, relief, laser, perforated and bridged jobs, in list, packed and rotary forms, with number types included; 96 rotary option combinations; and the limit conditions that make the translator hand a run back.</li>
+<li>Every generator call made by the regression suite (578 calls, 174 of which must fail) returns the same result or error as the Python-only baseline. The suite also passes with the Python loops forced and with the extension removed.</li>
+<li>The extension was rebuilt with the address and undefined-behaviour sanitizers and the CAM tests and benchmark jobs were run under them without a report.</li>
+</ul>
+<p>On Windows x64 (MSVC 2022 Build Tools, Python 3.10 and 3.12) the extension builds without compiler warnings, the parity tests and the installed-wheel check pass, and the five benchmark programs have the same hashes as on Linux. macOS and ARM builds have not been run.</p>
+<p><code>validation/benchmark_gcode.py</code> times both backends and fails if their program hashes differ; <code>validation/check_installed_cam.py</code> repeats the parity check on an installed wheel.</p>
 </section><section id="performance"><h1>Native CAM and editor verification</h1>
 <p>The Studio 0.6.1 simulator benchmark uses a 256 × 256 height map, a ball end mill and a cylindrical router setup. Three fresh processes per backend generated the same 135,886 planar instructions and the same 136,691 rotary instructions. The largest difference between corresponding stock-preview cells was 2.7 × 10⁻¹⁴ mm. These timings were measured on an Apple Silicon Mac during integration testing.</p>
 <table>
@@ -1693,6 +1745,96 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <p>Run <code>python -m validation.benchmark_native result.json</code> from the checkout with the extension installed. The benchmark requires matching G-code hashes and a maximum stock-cell difference below 1 × 10⁻¹⁰ mm. For the viewport, <code>python validation/benchmark_viewport.py --browser PATH</code> compares the same camera orbit through WebGL2 and Canvas. On Apple M4 using Metal, median frame intervals for an 18,432-triangle mesh were 16.7 ms and 50.0 ms respectively.</p>
 <p>The indexed artwork catalog retained all 1,768 original entries and all 1,358,040 coordinate pairs in a value-for-value comparison. An isolated Mac process searching metadata and loading one template peaked at 32.6 MiB with the index. The earlier eager loader peaked at 432.8 MiB. The compressed catalog payload decreased from 18.89 MiB to 15.11 MiB.</p>
 <p>Pocket's signed Android app was exercised on an ARM64 Android API 37 emulator configured with 2,048 MiB of RAM. The editor passed file import, reference-preserving export, resizing, SVG conversion, recovery, and library persistence after a cold restart. The paired pendant passed jog, home, zero, start, pause, resume and stop against the Studio simulator over virtual LAN and ADB reverse. The APK minimum is API 26. On a physical Galaxy S23 Ultra running Android 17, the published Pocket 0.4.1 APK started cold in 273 ms and 499 ms, used 41 to 97 MiB proportional memory while editing, and rendered 648 frames with a 5 ms median and a 13 ms 90th percentile. Pi 4/5 performance for this revision and material-cutting tests require their respective devices.</p>
+<h2>G-code and rotary generation after 0.6.1</h2>
+<p>The relief and stock-preview kernels are native, which left G-code and rotary generation in Python as the largest stages. Their per-move loops were tightened without changing the output: plain in-range numbers skip the general validator, per-block sets are built once per job, and packed rows are written through a bound function. <code>validation/benchmark_gcode.py</code> gives best-of-nine times and a hash of each generated program on the 256 × 256 relief fixture.</p>
+<table>
+<thead>
+<tr>
+<th>Stage (Linux x86-64, Python 3.13)</th>
+<th style="text-align:right">Before</th>
+<th style="text-align:right">After</th>
+<th>Program hash, unchanged</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Relief job, 135,886 lines</td>
+<td style="text-align:right">291 ms</td>
+<td style="text-align:right">200 ms</td>
+<td><code>08c0811b116f</code></td>
+</tr>
+<tr>
+<td>Flat six-level job, 135,886 lines</td>
+<td style="text-align:right">201 ms</td>
+<td style="text-align:right">143 ms</td>
+<td><code>31c8a9794b61</code></td>
+</tr>
+<tr>
+<td>Laser job, 67,945 lines</td>
+<td style="text-align:right">269 ms</td>
+<td style="text-align:right">213 ms</td>
+<td><code>6636b83bda44</code></td>
+</tr>
+<tr>
+<td>Rotary job, 136,691 lines</td>
+<td style="text-align:right">1,060 ms</td>
+<td style="text-align:right">773 ms</td>
+<td><code>cfe252049e5c</code></td>
+</tr>
+</tbody>
+</table>
+<p>Every generator, relief and stock-preview call made by the regression suite (578 calls, including 174 that must fail) returned the same result or the same error before and after. Start-up was measured and left alone: importing the server takes about 0.2 s warm and 48 MiB, with the geometry, PDF, DXF and STEP libraries already loaded on first use.</p>
+<h3>C++ move loops</h3>
+<p>The same jobs with the per-move loops ported to C++ (<code>studio/_gcode_native.cpp</code>; see <a href="#native">Native</a>). Best of nine, Linux x86-64, Python 3.13. Both backends produce the program hash shown.</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th style="text-align:right">Python loops</th>
+<th style="text-align:right">C++ loops</th>
+<th style="text-align:right">Gain</th>
+<th>Program hash</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Relief job, packed segments</td>
+<td style="text-align:right">209 ms</td>
+<td style="text-align:right">47 ms</td>
+<td style="text-align:right">4.5×</td>
+<td><code>08c0811b116f</code></td>
+</tr>
+<tr>
+<td>Relief job, list rows</td>
+<td style="text-align:right">194 ms</td>
+<td style="text-align:right">71 ms</td>
+<td style="text-align:right">2.7×</td>
+<td><code>08c0811b116f</code></td>
+</tr>
+<tr>
+<td>Flat six-level job</td>
+<td style="text-align:right">146 ms</td>
+<td style="text-align:right">31 ms</td>
+<td style="text-align:right">4.7×</td>
+<td><code>31c8a9794b61</code></td>
+</tr>
+<tr>
+<td>Laser job</td>
+<td style="text-align:right">202 ms</td>
+<td style="text-align:right">128 ms</td>
+<td style="text-align:right">1.6×</td>
+<td><code>6636b83bda44</code></td>
+</tr>
+<tr>
+<td>Rotary job</td>
+<td style="text-align:right">729 ms</td>
+<td style="text-align:right">167 ms</td>
+<td style="text-align:right">4.4×</td>
+<td><code>cfe252049e5c</code></td>
+</tr>
+</tbody>
+</table>
+<p>Against the 0.6.1 figures above, the relief job is 6.3 times faster and the rotary job 6.4 times. The laser job gains least because preparing laser paths remains in Python, as does the rotary cut-length calculation; both depend on Python's own <code>hypot</code> and <code>dist</code>, and porting them would change the last digits of some values.</p>
 </section><section id="phone-connections"><h1>Connect an Android phone to the Studio pendant</h1>
 <p>KerfKite Pocket sends pendant commands to the <strong>Studio machine server</strong>. The server owns the CNC controller connection, machining preview and job. The phone needs an IP route to the server's <strong>phone monitor</strong> port, which defaults to 8766. The same native pendant works over Wi-Fi, a USB tether network or a Bluetooth Personal Area Network (PAN). Your phone, server operating system and network drivers determine which links are available.</p>
 <h2>Choose the network</h2>

@@ -1,6 +1,7 @@
 """Conservative centreline engraving CAM, dimensions in millimetres."""
 
 import math
+import os
 from bisect import bisect_right
 from .cam_moves import CutRun, PackedSegments, block_count
 from .laser import cut_options, prepare
@@ -8,6 +9,48 @@ from .drilling import generate_drill
 from .router_entry import generate_entry
 from .protocols import postprocess, get_protocol
 from .operations import prepare as prepare_operation, router_tool_shape
+
+try:  # The C++ loops are optional: see docs/NATIVE.md.
+    from ._relief_native import gcode_moves as _native_moves
+    from ._relief_native import plain_depths as _native_depths
+    from ._relief_native import plain_points as _native_points
+except ImportError:
+    _native_moves = _native_depths = _native_points = None
+
+
+def _moves_backend(backend):
+    """The C++ move loop to try, or None for the Python reference loop."""
+    if backend not in ('auto', 'python', 'native'):
+        raise ValueError('G-code backend must be auto, python or native')
+    if backend == 'native' and _native_moves is None:
+        raise ValueError('Native G-code backend is not installed')
+    if backend == 'python' or (backend == 'auto' and os.environ.get('KERFKITE_GCODE_BACKEND') == 'python'):
+        return None
+    return _native_moves
+
+
+def _bounds(paths):
+    """[min x, min y, max x, max y] over every vertex."""
+    # One path at a time, so the working copy is the longest path and not every coordinate of the job.
+    # min(a, b) and max(a, b) keep a on a tie, so the first vertex with the extreme value is still the one returned.
+    low_x = low_y = high_x = high_y = None
+    for path in paths:
+        if not path:
+            continue
+        xs = [p[0] for p in path]
+        ys = [p[1] for p in path]
+        if low_x is None:
+            low_x, low_y, high_x, high_y = min(xs), min(ys), max(xs), max(ys)
+        else:
+            low_x, low_y = min(low_x, min(xs)), min(low_y, min(ys))
+            high_x, high_y = max(high_x, max(xs)), max(high_y, max(ys))
+    if low_x is None:
+        raise ValueError('min() arg is an empty sequence')
+    return [low_x, low_y, high_x, high_y]
+
+
+# Exact float and int only: bool, strings and other numeric types go through number().
+_PLAIN = (float, int)
 
 
 def number(value, name, low, high):
@@ -122,7 +165,7 @@ def _holding_tabs(project, paths, depth):
     return result, depths, warnings
 
 
-def generate(project, *, packed_segments=False, _rotary_blocks=False):
+def generate(project, *, packed_segments=False, _rotary_blocks=False, backend='auto'):
     if not isinstance(project, dict):
         raise ValueError('Project must be an object')
     if 'operations' in project:
@@ -155,7 +198,9 @@ def generate(project, *, packed_segments=False, _rotary_blocks=False):
                         'Tool identity or geometry differs between operations; export separate jobs and change tools explicitly'
                     )
                 tool_signature = signature
-            jobs.append(generate(merged, packed_segments=packed_segments, _rotary_blocks=_rotary_blocks))
+            jobs.append(
+                generate(merged, packed_segments=packed_segments, _rotary_blocks=_rotary_blocks, backend=backend)
+            )
             lines = jobs[-1]['lines']
             combined_lines += block_count(lines) if _rotary_blocks else len(lines)
             if combined_lines > 200000:
@@ -187,10 +232,63 @@ def generate(project, *, packed_segments=False, _rotary_blocks=False):
             'operations': len(jobs),
             **drill_data,
         }
-    return _generate_single(project, packed_segments, _rotary_blocks)
+    return _generate_single(project, packed_segments, _rotary_blocks, backend)
 
 
-def _generate_single(project, packed_segments, rotary_blocks):
+def _python_moves(lines, clean, laser_paths, depths, levels, laser, rotary_blocks, packed, safe, plunge, cut_feed):
+    """The reference move loop: append each operation's moves to lines; return (segments, cut length)."""
+    segments = PackedSegments() if packed else []
+    # The loop below runs once per cutting move (up to 200,000): keep its lookups local.
+    add = segments.appender() if packed else segments.append
+    emit = lines.append
+    sqrt = math.sqrt
+    safe_line = f'G0 Z{safe:.3f}'
+    feed_word = f' F{cut_feed:.1f}'
+    length = 0
+    for z in levels:
+        for path_index, original in enumerate(clean):
+            path = laser_paths[path_index] if laser else original
+            x, y = path[0][:2]
+            row_depths = depths[path_index] if depths is not None else None
+            current_z = max(z, row_depths[0]) if row_depths is not None else z
+            if not laser:
+                lines += [safe_line, f'G0 X{x:.3f} Y{y:.3f}', f'G1 Z{current_z:.3f} F{plunge:.1f}']
+            else:
+                lines += ['M5', f'G0 X{x:.3f} Y{y:.3f}', f'M4 S{path[0][2]:.0f}']
+            run_start = len(segments)
+            start_z = 0 if current_z is None else current_z
+            for vertex_index in range(1, len(path)):
+                vertex = path[vertex_index]
+                nx, ny = vertex[0], vertex[1]
+                segment_power = vertex[2] if laser else None
+                next_z = max(z, row_depths[vertex_index]) if row_depths is not None else current_z
+                end_z = 0 if next_z is None else next_z
+                if not rotary_blocks:
+                    if laser:
+                        emit(f'G1 X{nx:.3f} Y{ny:.3f}{feed_word} S{segment_power:.0f}')
+                    elif row_depths is not None:
+                        emit(f'G1 X{nx:.3f} Y{ny:.3f}{feed_word} Z{next_z:.3f}')
+                    else:
+                        emit(f'G1 X{nx:.3f} Y{ny:.3f}{feed_word}')
+                if packed:
+                    add(x, y, nx, ny, end_z, segment_power, start_z)
+                else:
+                    add([x, y, nx, ny, end_z, segment_power, start_z])
+                length += sqrt((nx - x) ** 2 + (ny - y) ** 2 + (end_z - start_z) ** 2)
+                current_z = next_z
+                start_z = end_z
+                x, y = nx, ny
+            if rotary_blocks:
+                emit(CutRun(segments, run_start, len(segments), cut_feed, depths is not None, laser))
+            if laser:
+                emit('M5')
+            else:
+                emit(safe_line)
+    return segments, length
+
+
+def _generate_single(project, packed_segments, rotary_blocks, backend='auto'):
+    native_moves = _moves_backend(backend)
     mode = project.get('mode')
     if mode not in ('router', 'laser', 'knife'):
         raise ValueError('Choose router, laser or knife')
@@ -216,20 +314,28 @@ def _generate_single(project, packed_segments, rotary_blocks):
     paths = project.get('paths')
     if not isinstance(paths, list) or not 1 <= len(paths) <= 3000:
         raise ValueError('Add between 1 and 3000 paths')
-    clean = []
-    count = 0
-    for path in paths:
-        if not isinstance(path, list) or len(path) < 2:
-            raise ValueError('Each path needs at least two points')
-        points = []
-        for point in path:
-            if not isinstance(point, list) or len(point) != 2:
-                raise ValueError('Invalid XY point')
-            points.append([number(point[0], 'X', 0, width), number(point[1], 'Y', 0, height)])
-        count += len(points)
-        if count > 100000:
-            raise ValueError('Too many vertices; simplify the design')
-        clean.append(points)
+    # The C++ check copies a wholly plain design and returns None for anything else, which the loop below reports.
+    clean = _native_points(paths, width, height, 100000) if native_moves is not None else None
+    if clean is None:
+        clean = []
+        count = 0
+        for path in paths:
+            if not isinstance(path, list) or len(path) < 2:
+                raise ValueError('Each path needs at least two points')
+            points = []
+            for point in path:
+                if not isinstance(point, list) or len(point) != 2:
+                    raise ValueError('Invalid XY point')
+                px, py = point
+                # Plain in-range numbers need no further checks; anything else takes the full validation.
+                if type(px) in _PLAIN and type(py) in _PLAIN and 0 <= px <= width and 0 <= py <= height:
+                    points.append([float(px), float(py)])
+                else:
+                    points.append([number(px, 'X', 0, width), number(py, 'Y', 0, height)])
+            count += len(points)
+            if count > 100000:
+                raise ValueError('Too many vertices; simplify the design')
+            clean.append(points)
     entry = project.get('router_entry', 'plunge')
     if mode == 'router' and entry != 'plunge' and project.get('operation') == 'drill':
         raise ValueError('Use the drill peck setting for drilling; select plunge as the router entry')
@@ -239,25 +345,34 @@ def _generate_single(project, packed_segments, rotary_blocks):
         raise ValueError('Choose a milling cutter for a contour or pocket; a drill bit is for drilling')
     source = clean
     clean, prepared_depths, operation_warnings = prepare_operation(project, clean)
-    for path in clean:
-        for point in path:
-            number(point[0], 'Compensated X', 0, width)
-            number(point[1], 'Compensated Y', 0, height)
+    if clean is not source:
+        # The line operation returns the validated input unchanged; only compensated geometry needs rechecking.
+        for path in clean:
+            for point in path:
+                px, py = point[0], point[1]
+                if not (type(px) in _PLAIN and type(py) in _PLAIN and 0 <= px <= width and 0 <= py <= height):
+                    number(px, 'Compensated X', 0, width)
+                    number(py, 'Compensated Y', 0, height)
     if tabs_enabled:
         clean, prepared_depths, tab_warnings = _holding_tabs(project, clean, depth)
         operation_warnings += tab_warnings
     count = sum(map(len, clean))
     depths = prepared_depths if prepared_depths is not None else project.get('path_depths')
     if depths is not None:
-        if mode == 'laser' or not isinstance(depths, list) or len(depths) != len(clean):
-            raise ValueError('Depth paths must match router XY paths')
-        for path, values in zip(clean, depths):
-            if not isinstance(values, list) or len(values) != len(path):
-                raise ValueError('Each vertex must have a matching depth')
-            for value in values:
-                number(value, 'Vertex Z', -50, 0)
-        depths = [[float(v) for v in path] for path in depths]
-        depth = max(-v for path in depths for v in path)
+        plain = _native_depths(depths, clean) if native_moves is not None and mode != 'laser' else None
+        if plain is not None:
+            depths = plain
+        else:
+            if mode == 'laser' or not isinstance(depths, list) or len(depths) != len(clean):
+                raise ValueError('Depth paths must match router XY paths')
+            for path, values in zip(clean, depths):
+                if not isinstance(values, list) or len(values) != len(path):
+                    raise ValueError('Each vertex must have a matching depth')
+                for value in values:
+                    if not (type(value) in _PLAIN and -50 <= value <= 0):
+                        number(value, 'Vertex Z', -50, 0)
+            depths = [[float(v) for v in path] for path in depths]
+        depth = max(-min(path) for path in depths)
         if depth <= 0:
             raise ValueError('No contour cuts below the stock surface')
     if mode == 'router' and entry != 'plunge':
@@ -322,46 +437,26 @@ def _generate_single(project, packed_segments, rotary_blocks):
         lines += [f'G0 Z{safe:.3f}']
         if mode == 'router':
             lines += [f'M3 S{power:.0f}', 'G4 P2']
-    segments = PackedSegments() if packed_segments or rotary_blocks else []
-    length = 0
-    for z in levels:
-        for path_index, original in enumerate(clean):
-            path = laser_paths[path_index] if mode == 'laser' else [(x, y, None) for x, y in original]
-            x, y = path[0][:2]
-            current_z = max(z, depths[path_index][0]) if depths is not None else z
-            if mode != 'laser':
-                lines += [f'G0 Z{safe:.3f}', f'G0 X{x:.3f} Y{y:.3f}', f'G1 Z{current_z:.3f} F{plunge:.1f}']
-            else:
-                lines += ['M5', f'G0 X{x:.3f} Y{y:.3f}', f'M4 S{path[0][2]:.0f}']
-            run_start = len(segments)
-            cut_feed = min(feed, plunge) if depths is not None else feed
-            for vertex_index, (nx, ny, segment_power) in enumerate(path[1:], 1):
-                next_z = max(z, depths[path_index][vertex_index]) if depths is not None else current_z
-                if not rotary_blocks:
-                    suffix = f' S{segment_power:.0f}' if mode == 'laser' else ''
-                    if depths is not None:
-                        suffix += f' Z{next_z:.3f}'
-                    lines.append(f'G1 X{nx:.3f} Y{ny:.3f} F{cut_feed:.1f}' + suffix)
-                segments.append(
-                    [
-                        x,
-                        y,
-                        nx,
-                        ny,
-                        0 if next_z is None else next_z,
-                        segment_power,
-                        0 if current_z is None else current_z,
-                    ]
-                )
-                length += math.sqrt((nx - x) ** 2 + (ny - y) ** 2 + ((next_z or 0) - (current_z or 0)) ** 2)
-                current_z = next_z
-                x, y = nx, ny
-            if rotary_blocks:
-                lines.append(CutRun(segments, run_start, len(segments), cut_feed, depths is not None, mode == 'laser'))
-            if mode == 'laser':
-                lines.append('M5')
-            else:
-                lines.append(f'G0 Z{safe:.3f}')
+    packed = packed_segments or rotary_blocks
+    laser = mode == 'laser'
+    cut_feed = min(feed, plunge) if depths is not None else feed
+    emitted = None
+    if native_moves is not None:
+        # None means the C++ loop declined this job; the Python loop below then produces it.
+        emitted = native_moves(
+            laser_paths if laser else clean, depths, levels, laser, rotary_blocks, packed, safe, plunge, cut_feed
+        )
+    if emitted is not None:
+        text, rows, length, runs = emitted
+        segments = PackedSegments.from_native(rows) if packed else rows
+        moves = text.split('\n')
+        for index, start, stop in runs:
+            moves[index] = CutRun(segments, start, stop, cut_feed, depths is not None, laser)
+        lines += moves
+    else:
+        segments, length = _python_moves(
+            lines, clean, laser_paths, depths, levels, laser, rotary_blocks, packed, safe, plunge, cut_feed
+        )
     lines.append('M5')
     envelope = laser_paths if mode == 'laser' else clean
     warnings = (
@@ -386,12 +481,7 @@ def _generate_single(project, packed_segments, rotary_blocks):
         'cut_length': round(length, 2),
         'cut_minutes': round(length / (min(feed, plunge) if depths is not None else feed), 2),
         'mode': mode,
-        'bounds': [
-            min(p[0] for path in envelope for p in path),
-            min(p[1] for path in envelope for p in path),
-            max(p[0] for path in envelope for p in path),
-            max(p[1] for path in envelope for p in path),
-        ],
+        'bounds': _bounds(envelope),
         'warnings': warnings,
         'prepared_paths': clean,
         'prepared_depths': depths,

@@ -1,8 +1,14 @@
 """Cylindrical 4-axis CAM. Input to the postprocessor is generated planar CAM."""
 
 import math
+import os
 import re
 from .cam_moves import CutRun, PackedSegments, block_count
+
+try:  # The C++ run translator is optional: see docs/NATIVE.md.
+    from ._relief_native import rotary_run as _native_run
+except ImportError:
+    _native_run = None
 
 _WORD = re.compile(r'([A-Z])([+-]?(?:\d+(?:\.\d*)?|\.\d+))')
 # Conventional machine axis about which the stock spins, then radial tool axis.
@@ -51,7 +57,7 @@ def _fixture(options, radius):
     return {'axial_min': low, 'axial_max': high, 'min_radius': core}
 
 
-def generate_rotary(project, options):
+def generate_rotary(project, options, backend='auto'):
     from .cam import generate
 
     if not isinstance(project, dict) or not isinstance(options, dict):
@@ -63,13 +69,28 @@ def generate_rotary(project, options):
     # changes in the rotary post; incoming files or raw lines are never executed.
     if protocol == 'linuxcnc' and options.get('postprocessor') in STREAM_POSTS:
         raise ValueError('Choose a GRBL-family source for this rotary postprocessor')
-    return _wrap_job(generate(project, _rotary_blocks=True), options, generated=True)
+    native = _run_backend(backend)
+    job = generate(project, _rotary_blocks=True, backend=backend)
+    return _wrap_job(job, options, generated=True, native_run=native)
 
 
-def _blocks(source, generated):
+def _run_backend(backend):
+    """The C++ run translator to try, or None for the Python reference loop."""
+    if backend not in ('auto', 'python', 'native'):
+        raise ValueError('Rotary backend must be auto, python or native')
+    if backend == 'native' and _native_run is None:
+        raise ValueError('Native rotary backend is not installed')
+    if backend == 'python' or (backend == 'auto' and os.environ.get('KERFKITE_GCODE_BACKEND') == 'python'):
+        return None
+    return _native_run
+
+
+def _blocks(source, generated, translate=None):
     for item in source:
         if generated and isinstance(item, CutRun):
-            yield from item.blocks()
+            # translate() handles a whole run in C++ and returns False when the reference loop must take it.
+            if translate is None or not translate(item):
+                yield from item.blocks()
             continue
         if not isinstance(item, str) or len(item) > 256:
             raise ValueError('Invalid or oversized source G-code line')
@@ -90,7 +111,7 @@ def wrap_job(job, options):
     return _wrap_job(job, options, generated=False)
 
 
-def _wrap_job(job, options, *, generated):
+def _wrap_job(job, options, *, generated, native_run=None):
     if not isinstance(job, dict) or not isinstance(options, dict):
         raise ValueError('Rotary job and options must be objects')
     post, mode = options.get('postprocessor'), job.get('mode')
@@ -133,7 +154,40 @@ def _wrap_job(job, options, *, generated):
     max_angle = max_axial = max_z = -math.inf
     units = absolute = feed_mode = inverse_active = emitting = False
     last_feed, minutes = None, 0.0
-    for command, words, raw in _blocks(source, generated):
+    # Word sets are fixed for the job: build them once, not for each of up to 200,000 blocks.
+    spindle = 'M4' if mode == 'laser' else 'M3'
+    laser = mode == 'laser'
+    rapid_words = frozenset('GXY' if laser else 'GXYZ')
+    linear_words = rapid_words | ({'F', 'S'} if laser else {'F'})
+    f_low, f_high, f_core = (
+        (fixture['axial_min'], fixture['axial_max'], fixture['min_radius']) if fixture else (0.0, 0.0, 0.0)
+    )
+    letters = drive + along + radial
+
+    def translate(run):
+        """Translate one generated run in C++. The call changes nothing unless it succeeds."""
+        nonlocal min_z, max_z, min_axial, max_axial, min_angle, max_angle, last_feed, minutes, inverse_active
+        if not (units and absolute and feed_mode) or run.laser != laser or run.stop <= run.start:
+            return False
+        feed = round(run.feed, 1)
+        if type(feed) is not float:
+            return False
+        result = native_run(
+            run.segments.buffer(), run.start, run.stop, feed, run.variable_z, run.laser, wrapped == 'X',
+            circumference, offset, direction, radius, fixture is not None, f_low, f_high, f_core, letters,
+            state['X'], state['Y'], state['Z'], inverse_active, emitting, minutes,
+            min_z, max_z, min_axial, max_axial, min_angle, max_angle, _cut_length, radius, reference,
+        )  # fmt: skip
+        if result is None:
+            return False
+        (text, state['X'], state['Y'], state['Z'], inverse_active, minutes,
+         min_z, max_z, min_axial, max_axial, min_angle, max_angle) = result  # fmt: skip
+        if text:
+            output.extend(text.split('\n'))
+        last_feed = feed
+        return True
+
+    for command, words, raw in _blocks(source, generated, translate if native_run is not None else None):
         if command in ('G21', 'G90', 'G17', 'G54', 'G94', 'M5', 'G40', 'G49', 'G80', 'G61') and len(words) == 1:
             if post in STREAM_POSTS and command in ('G40', 'G49', 'G80', 'G61'):
                 raise ValueError('Source contains a LinuxCNC-only setup command')
@@ -149,7 +203,6 @@ def _wrap_job(job, options, *, generated):
                 command = 'G93' if inverse_active else 'G94'
             output.append(command)
             continue
-        spindle = 'M4' if mode == 'laser' else 'M3'
         if command == spindle and set(words) == {'M', 'S'}:
             _number(words['S'], 'Spindle power', 0 if mode == 'laser' else 0.001, 100000)
             emitting = True
@@ -163,17 +216,16 @@ def _wrap_job(job, options, *, generated):
         if not (units and absolute and feed_mode):
             raise ValueError('Rotary source must establish G21 G90 G94 before motion')
         linear = command == 'G1'
-        allowed = set('GXYZ') | ({'F'} if linear else set())
-        if mode == 'laser':
-            allowed.discard('Z')
+        if laser:
             if linear:
-                allowed.add('S')
                 if not emitting:
                     raise ValueError('Laser cutting requires M4')
                 _number(words.get('S'), 'Laser segment power', 0, 100000)
             elif emitting:
                 raise ValueError('Laser rapids require M5')
-        if set(words) - allowed or not set(words).intersection('XYZ'):
+        if not words.keys() <= (linear_words if linear else rapid_words) or not (
+            'X' in words or 'Y' in words or 'Z' in words
+        ):
             raise ValueError('Unsupported words in rotary motion')
         coords = {k: words[k] for k in 'XYZ' if k in words}
         z = coords.get('Z', state['Z'])
@@ -195,11 +247,20 @@ def _wrap_job(job, options, *, generated):
             if x > max_axial:
                 max_axial = x
         if linear:
-            last_feed = _number(words.get('F'), 'Source linear feed', 0.001, 100000)
-            if any(state[k] is None for k in coords):
-                raise ValueError('Cutting move starts from an unknown position; establish rapid coordinates first')
-            delta = {k: coords[k] - state[k] if k in coords else 0 for k in 'XYZ'}
-            length = _cut_length(delta[wrapped], delta[axial], delta['Z'], radius, state['Z'] or 0, reference)
+            last_feed = words.get('F')
+            if not (type(last_feed) is float and 0.001 <= last_feed <= 100000):
+                last_feed = _number(last_feed, 'Source linear feed', 0.001, 100000)
+            for k in coords:
+                if state[k] is None:
+                    raise ValueError('Cutting move starts from an unknown position; establish rapid coordinates first')
+            length = _cut_length(
+                coords[wrapped] - state[wrapped] if wrapped in coords else 0,
+                coords[axial] - state[axial] if axial in coords else 0,
+                coords['Z'] - state['Z'] if 'Z' in coords else 0,
+                radius,
+                state['Z'] or 0,
+                reference,
+            )
         transformed = []
         for k, destination in coords.items():
             if k == wrapped:
@@ -219,7 +280,9 @@ def _wrap_job(job, options, *, generated):
         if linear:
             if length <= 1e-12:
                 continue
-            inverse = _number(last_feed / length, 'Inverse-time feed', 1e-9, 1e9)
+            inverse = last_feed / length
+            if not 1e-9 <= inverse <= 1e9:
+                inverse = _number(inverse, 'Inverse-time feed', 1e-9, 1e9)
             if not inverse_active:
                 output.append('G93')
                 inverse_active = True
@@ -265,7 +328,7 @@ def _wrap_job(job, options, *, generated):
         warnings.append('LinuxCNC rotary output is file export only.')
     result = {**job, 'lines': output, 'warnings': warnings, 'rotary': meta}
     if isinstance(result.get('segments'), PackedSegments):
-        result['segments'] = list(result['segments'])
+        result['segments'] = result['segments'].to_list()
     return result
 
 

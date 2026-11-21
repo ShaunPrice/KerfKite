@@ -100,6 +100,15 @@ class WebTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_destination({'url': 'http://pi:8443', 'token': 'x' * 43})
 
+    def test_rejected_extension_message_lists_every_accepted_extension(self):
+        accepted = ('.nc', '.gcode', '.svg', '.cncstudio.json', '.templates.json', '.paths3d.json')
+        for extension in accepted:
+            validate_upload({'name': 'part' + extension, 'content': 'M5'})
+        with self.assertRaises(ValueError) as rejected:
+            validate_upload({'name': 'part.exe', 'content': 'M5'})
+        for extension in accepted:
+            self.assertIn(extension, str(rejected.exception))
+
 
 if __name__ == '__main__':
     unittest.main()

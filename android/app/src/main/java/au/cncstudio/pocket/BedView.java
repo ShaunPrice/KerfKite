@@ -10,6 +10,7 @@ final class BedView extends View {
     Design model;
     final IntConsumer select;
     final Paint pen = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Path outline = new Path(); // Reused for every shape: nothing is allocated while drawing.
     float left, bottom, scale;
 
     BedView(Context c, Design model, IntConsumer select) {
@@ -46,7 +47,8 @@ final class BedView extends View {
         for(int k=0;k<=model.parts.size();k++){
             int i=k<model.parts.size()?k:model.selected;
             if(i<0 || i>=model.parts.size() || (k<model.parts.size() && i==model.selected))continue;
-            Path path=new Path();
+            Path path=outline;
+            path.rewind();
             for(double[][] points:model.parts.get(i).paths()){
             for(int j=0;j<points.length;j++){
                 float x=left+(float)points[j][0]*scale, y=bottom-(float)points[j][1]*scale;
