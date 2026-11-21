@@ -11,6 +11,8 @@ Three comparisons, all against values computed by Python in this run:
 2. Recorded jobs: every studio.cam.generate call the test suite makes, replayed through the native core.
 3. Generated edge cases: projects with one to three settings replaced by unusual values, so that the
    reference's error messages are compared as well as its programs.
+   Ramp, helix and holding-tab jobs have their own generator (entry_tab_cases), with contours that cross,
+   touch, fold back or nearly close, and are counted separately.
 
 For each job the native core must either reproduce the reference exactly (program lines, preview segments,
 length, time, bounds and warnings, or the same error message) or decline it as not ported yet. A different
@@ -284,6 +286,176 @@ def generated_cases(count, seed):
         yield project
 
 
+def entry_tab_cases(count, seed):
+    """Router line jobs with ramp or helix entries and holding tabs, on contours chosen to reach each check.
+
+    About half are tidy: closed, simple contours and settings the reference accepts, including ties, numeric
+    text and limits, so that programs are compared. The rest add crossings, touching vertices, spikes,
+    repeated points, seams that almost close, cutters at the edge of the work area and settings of the wrong
+    size or type, so that each rejection is compared in the reference's order.
+    """
+    rng = random.Random(seed)
+
+    def contour(tidy):
+        kind = rng.choice([0, 0, 1, 1, 5, 6]) if tidy else rng.randrange(12)
+        if kind < 2:  # a rectangle, sometimes with vertices along its sides
+            x, y = rng.choice([10, 12.5, 20.25, 3]), rng.choice([8, 10, 5.5, 3])
+            w, h = rng.choice([40, 30.5, 12, 0.5] if not tidy else [40, 30.5, 12]), rng.choice([20, 15.25, 6])
+            points = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
+            if rng.random() < 0.3:
+                points.insert(1, [x + w / 2, y])
+            if not tidy and rng.random() < 0.2:
+                points.insert(rng.randrange(1, len(points)), [x + w / 4, y + h / 4])
+        elif kind == 5:  # a regular polygon; many sides give short edges
+            n = rng.choice([3, 4, 5, 6, 8, 12, 36, 90])
+            cx, cy, r = rng.uniform(25, 75), rng.uniform(15, 35), rng.choice([10, 5.5, 2, 0.05])
+            turn = rng.uniform(0, 6.3)
+            points = [
+                [cx + r * math.cos(turn + 2 * math.pi * i / n), cy + r * math.sin(turn + 2 * math.pi * i / n)]
+                for i in range(n)
+            ]
+            if rng.random() < 0.5:
+                points = [[round(px, 3), round(py, 3)] for px, py in points]
+        elif kind == 6:  # a cutter that just fits, or just does not fit, in the work area
+            edge = rng.choice(
+                [1.5875, 1.5875 - 5e-9, 1.5875 - 2e-8, 1.5, 0, 3] if not tidy else [1.5875, 1.5875 - 5e-9, 3]
+            )
+            far = rng.choice(
+                [100 - 1.5875, 100 - 1.5875 + 5e-9, 100 - 1.5875 + 2e-8, 60] if not tidy else [98.4125, 60]
+            )
+            points = [[edge, edge], [far, edge], [far, 30], [edge, 30]]
+        elif kind == 7:  # a very small contour, around the lengths the reference refuses
+            size = rng.choice([1e-5, 3e-6, 4e-6, 2.5e-6, 3e-7, 1e-7, 4e-10, 1e-3])
+            x, y = rng.choice([20, 20.5, 10]), rng.choice([20, 7.25])
+            points = [[x, y], [x + size, y], [x + size, y + size], [x, y + size]][: rng.choice([3, 4, 4])]
+        elif kind == 8:  # a triangle with a point on, or just off, one side
+            points = [[10, 10], [50, 10], [30, 40]]
+            points.insert(1, rng.choice([[30, 10], [30, 10 + 1e-12], [20, 10], [30, 9.999999]]))
+        else:  # points on a coarse grid: crossings, shared vertices, overlaps and spikes are common
+            scale = rng.choice([1, 5, 2.5, 0.1])
+            points = [
+                [10 + scale * rng.randrange(0, 5), 10 + scale * rng.randrange(0, 5)] for _ in range(rng.randrange(2, 8))
+            ]
+        if rng.random() < 0.1:
+            points.reverse()
+        if rng.random() < 0.15:  # a repeated or nearly repeated vertex
+            i = rng.randrange(len(points))
+            points.insert(i, [points[i][0] + rng.choice([0, 0, 5e-10, 2e-9, 1e-7]), points[i][1]])
+        seam = rng.random() * (0.85 if tidy else 1)
+        if seam < 0.75:
+            points.append(list(points[0]))
+        elif seam < 0.8:  # closed twice
+            points += [list(points[0]), list(points[0])]
+        elif seam < 0.94:  # almost closed: inside and outside each tolerance the reference uses
+            points.append(
+                [points[0][0] + rng.choice([5e-10, 2e-9, 5e-7] if tidy else [5e-10, 5e-7, 2e-6, 1e-3]), points[0][1]]
+            )
+        return points
+
+    for _ in range(count):
+        tidy = rng.random() < 0.55
+
+        def pick(good, bad):
+            return rng.choice(good if tidy or rng.random() < 0.7 else bad)
+
+        depth = rng.choice([1, 1, 2, 3, 0.3, 2.55, 6, 1.1])
+        project = dict(
+            mode='router', protocol=rng.choice(['grbl', 'grbl', 'grbl', 'marlin', 'linuxcnc', 'mach3', 'fluidnc']),
+            width=100, height=50, feed=rng.choice([600, 1200.5, 90, 100]), power=rng.choice([12000, 800.4]),
+            depth=depth, step=rng.choice([0.5, 1, 0.07, 3, 0.3, 0.1]),
+            paths=[contour(tidy) for _ in range(rng.choice([1, 1, 1, 2, 3]))],
+        )  # fmt: skip
+        if project['protocol'] == 'mach3':
+            project['dwell_units'] = pick(['seconds', 'milliseconds'], [''])
+        if rng.random() < 0.3:
+            project['plunge'] = rng.choice([30, 250.25, 1000, 600, 90])
+        if rng.random() < 0.2:
+            project['safe'] = rng.choice([0.1, 3, 12.345])
+        if rng.random() < 0.25:
+            project['tool_diameter'] = pick([3.175, 3, 1, 0.01, 2, '2'], [6, 12, 100, 0, None, True, 'wide'])
+        if rng.random() < 0.12:
+            project['tool_shape'] = pick(['flat'], ['ball', 'v', 'drill', None])
+        if rng.random() < 0.1:
+            project['operation'] = pick(['line'], ['inside', 'outside', 'pocket', 'drill', None, 'spiral'])
+        want_entry, want_tabs = rng.random() < 0.65, rng.random() < 0.6
+        if want_entry:
+            project['router_entry'] = pick(['ramp'], ['helix', 'helix', 'helix', 'plunge', 'spiral', None, 1, True, []])
+            if rng.random() < 0.5:
+                project['entry_angle'] = pick(
+                    [3, 0.25, 15, 1, 7.5, 10, '2.5', ' 5 ', 3.0], [0.2, 15.5, None, True, 'steep', []]
+                )
+            if rng.random() < 0.15:
+                project['entry_radius'] = rng.choice([1, 0.05, 0.5, 50, 0.01, 51, '1', None, True])
+        # The stock thickness that suits tabs (no more than the depth) also suits an entry only at the depth.
+        fits = [depth, depth, str(depth)]
+        if not want_tabs:
+            fits.append(depth + 1e-9)
+        elif not want_entry:
+            fits += [depth - 0.1, depth - 0.05]
+        thickness = pick(
+            fits, [depth - 0.1, depth + 0.5, depth + 1e-7, 50, 50.5, 200, 201, None, True, 'thick', [], 0, 0.01]
+        )
+        if want_entry and not want_tabs and rng.random() < 0.4:
+            project['stock_thickness'] = thickness
+        if want_tabs:
+            tabs = {}
+            if tidy or rng.random() < 0.9:
+                tabs['width'] = pick([4, 4, 2, 0.5, 0.01, 6.5, '3'], [10, 30, 100, 0, 101, None, True, 'w'])
+            if tidy or rng.random() < 0.9:
+                tabs['height'] = pick(
+                    [0.1, 0.1, 0.15, 0.01, '0.12'], [0.5, 1, depth, depth - 0.01, 50, 0, None, False, 'h']
+                )
+            which = rng.random() if not tidy else rng.choice([0.2, 0.7])
+            if which < 0.5:
+                tabs['count'] = pick([1, 2, 2, 3, 4, 4, 6, 2.0, '3'], [9, 40, 100, 2.5, 0, 101, None, True, 'two'])
+            if 0.45 < which < 0.95:
+                tabs['positions'] = pick(
+                    [
+                        [0], [0.5], [0.25, 0.75], [0.75, 0.25], [0, 0.5], [0.999], [0.125, 0.375, 0.625, 0.875],
+                        ['0.3', 0.8], [-0.0, 0.5], [round(rng.random(), 2) for _ in range(rng.randrange(1, 4))],
+                        [rng.random() for _ in range(rng.randrange(1, 3))],
+                    ],
+                    [
+                        [0.99, 0.01], [1], [0.5, 1.0], [0.5, 0.5], [0.1, 0.1000001], [0.0, -0.0], [0.2, None], [0.2, True],
+                        [1.5], [-0.1], [], 'half', None, 0.5, [i / 101 for i in range(101)],
+                        [rng.random() for _ in range(rng.randrange(3, 8))],
+                    ],
+                )  # fmt: skip
+            if not tidy and rng.random() < 0.04:
+                tabs[rng.choice(['depth', 'Width', 'spacing'])] = 1
+            project['tabs'] = pick([tabs], [tabs, tabs, tabs, True, False, None, 0, 1, [], {}, 'tabs', [tabs]])
+            if tidy or rng.random() < 0.9:
+                project['stock_thickness'] = thickness
+        if not tidy and rng.random() < 0.06:
+            project['path_depths'] = [[rng.choice([0, -0.25, -1]) for _ in path] for path in project['paths']]
+        if rng.random() < 0.06:
+            # An ordered job: the entry or the tabs may be set on one operation only.
+            operations = [dict(paths=project.pop('paths')), dict(paths=[contour(tidy)])]
+            for key in ('router_entry', 'tabs', 'entry_angle', 'stock_thickness'):
+                if key in project and rng.random() < 0.5:
+                    operations[rng.randrange(2)][key] = project.pop(key)
+            project.pop('path_depths', None)
+            project['operations'] = operations
+        if not tidy and rng.random() < 0.1:
+            project[rng.choice(KEYS)] = rng.choice(WEIRD)
+        yield project
+
+    def ring(n, r):
+        points = [[50 + r * math.cos(2 * math.pi * i / n), 25 + r * math.sin(2 * math.pi * i / n)] for i in range(n)]
+        return points + [list(points[0])]
+
+    if count:
+        # Large jobs, for the limits on lines and vertices: a ramp of 2222 turns that the closing lap takes
+        # past the line limit, with its neighbours either side; tabs that take a contour past the vertex
+        # limit; and a long contour with both, which is cut.
+        base = dict(mode='router', width=100, height=50, feed=600, power=12000)
+        for r in (0.0492, 0.04927, 0.0494):
+            yield dict(base, depth=6, step=3, router_entry='ramp', entry_angle=0.25, paths=[ring(90, r)])
+        tabs = dict(width=4, height=0.5, count=4)
+        yield dict(base, depth=2, step=2, stock_thickness=2, tabs=tabs, paths=[ring(99996, 20)])
+        yield dict(base, depth=2, step=1, stock_thickness=2, tabs=tabs, router_entry='ramp', paths=[ring(6000, 20)])
+
+
 def strict_equal(a, b):
     """Equality that tells 0 from 0.0 and True from 1, and compares floats by value and sign."""
     if type(a) is not type(b):
@@ -302,6 +474,7 @@ def main():
     parser.add_argument('--cli', required=True, type=Path, help='the kerfkite-cam executable')
     parser.add_argument('--numbers', type=int, default=300000, help='number-text comparisons')
     parser.add_argument('--generated', type=int, default=12000, help='generated edge cases')
+    parser.add_argument('--entries', type=int, default=6000, help='generated ramp, helix and holding-tab cases')
     parser.add_argument('--skip-suite', action='store_true', help='do not replay the calls made by the test suite')
     args = parser.parse_args()
     if not args.cli.is_file():
@@ -347,6 +520,10 @@ def main():
             line, _ = reference(generate, project)
             if line is not None:
                 lines.setdefault(line, 'generated')
+        for project in entry_tab_cases(args.entries, 89):
+            line, _ = reference(generate, project)
+            if line is not None:
+                lines.setdefault(line, 'entry/tabs')
         cases.write_text(''.join(line + '\n' for line in lines), encoding='utf-8')
         answers = subprocess.run(
             [str(args.cli), 'batch', str(cases)], capture_output=True, text=True, encoding='utf-8', check=True
@@ -371,13 +548,13 @@ def main():
             tally[origin, 'program' if 'ok' in got else 'rejection'] += 1
         else:
             failures.append((case['project'], expect, got))
-    for origin in ('suite', 'generated'):
+    for origin in ('suite', 'generated', 'entry/tabs'):
         total = sum(n for (o, _), n in tally.items() if o == origin)
         if not total:
             continue
         same = tally[origin, 'program'] + tally[origin, 'rejection']
         print(
-            f'{origin:9s} {total:5d} cases: {tally[origin, "program"]} programs and {tally[origin, "rejection"]} rejections'
+            f'{origin:10s} {total:5d} cases: {tally[origin, "program"]} programs and {tally[origin, "rejection"]} rejections'
             f' reproduced ({same * 100 / total:.1f}%), {tally[origin, "declined"]} declined as not ported'
         )
     if declined:
