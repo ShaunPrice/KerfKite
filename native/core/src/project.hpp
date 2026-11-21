@@ -3,6 +3,7 @@
 #ifndef KERFKITE_PROJECT_HPP
 #define KERFKITE_PROJECT_HPP
 
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <limits>

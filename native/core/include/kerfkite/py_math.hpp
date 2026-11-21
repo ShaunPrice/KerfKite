@@ -73,7 +73,8 @@ inline double dist(double ax, double ay, double bx, double by) {
 template <typename Iterator> double sum(Iterator begin, Iterator end) {
     if (begin == end) return 0.0;
     double result = *begin, c = 0.0;
-    for (Iterator it = begin + 1; it != end; ++it) {
+    Iterator it = begin;
+    for (++it; it != end; ++it) {
         const double x = *it, t = result + x;
         if (std::fabs(result) >= std::fabs(x)) c += (result - t) + x;
         else c += (x - t) + result;
