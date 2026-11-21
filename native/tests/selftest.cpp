@@ -45,6 +45,9 @@ int main() {
     expect(fixed(0.1 + 0.2, 9) == "0.300000000", "0.1 + 0.2 to nine places");
     double r = 0;
     expect(text::rounded(2.675, 2, r) && r == 2.67, "round(2.675, 2)");
+    std::string untouched = "x";
+    expect(!text::fixed(untouched, 1.0, 10) && !text::fixed(untouched, 1.0, -1) && untouched == "x" && !text::rounded(1.0, 4, r),
+           "places outside the supported range are refused");
     expect(text::repr(680.0) == "680.0" && text::repr(0.1) == "0.1" && text::repr(1e16) == "1e+16" &&
                text::repr(0.00001) == "1e-05" && text::repr(-2.5) == "-2.5" && text::repr(123456789.125) == "123456789.125",
            "repr");

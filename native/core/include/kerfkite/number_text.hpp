@@ -83,10 +83,11 @@ inline uint32_t scale_of(int decimals) {
     return SCALE[decimals];
 }
 
-// Append value as Python's f'{value:.{decimals}f}' would write it. decimals is 0..9.
+// Append value as Python's f'{value:.{decimals}f}' would write it. False, with nothing appended, when
+// decimals is outside 0..9 or the value is outside the exact range.
 inline bool fixed(std::string &out, double value, int decimals) {
     uint64_t q;
-    if (!scaled_round(value, scale_of(decimals), q)) return false;
+    if (decimals < 0 || decimals > 9 || !scaled_round(value, scale_of(decimals), q)) return false;
     char digits[24];
     int n = 0;
     do {
@@ -105,7 +106,7 @@ inline bool fixed(std::string &out, double value, int decimals) {
 // Python's round(value, decimals) for decimals 0..3: the double nearest the correctly rounded decimal.
 inline bool rounded(double value, int decimals, double &result) {
     uint64_t q;
-    if (!scaled_round(value, scale_of(decimals), q) || q > (1ULL << 53)) return false;
+    if (decimals < 0 || decimals > 3 || !scaled_round(value, scale_of(decimals), q) || q > (1ULL << 53)) return false;
     result = std::copysign(static_cast<double>(q) / scale_of(decimals), value);
     return true;
 }

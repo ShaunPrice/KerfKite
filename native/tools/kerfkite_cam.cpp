@@ -127,7 +127,7 @@ int numbers() {
         if (!kerfkite::text::fixed(fixed, value, decimals)) fixed = "-";
         double rounded;
         char round_text[40] = "-";
-        if (decimals <= 3 && kerfkite::text::rounded(value, decimals, rounded))
+        if (kerfkite::text::rounded(value, decimals, rounded))
             std::snprintf(round_text, sizeof round_text, "%a", rounded);
         std::cout << fixed << '\t' << round_text << '\t' << kerfkite::text::repr(value) << '\n';
     }

@@ -212,7 +212,9 @@ def main():
                 cwd=ROOT, env=environment, capture_output=True, text=True,
             )  # fmt: skip
             if run.returncode and not recorded.is_file():
-                raise SystemExit('The test suite could not be run for recording:\n' + run.stdout[-2000:])
+                raise SystemExit(
+                    'The test suite could not be run for recording:\n' + run.stdout[-2000:] + run.stderr[-2000:]
+                )
             if run.returncode:
                 # A failing test is another check's concern; the calls it made before failing are still valid cases.
                 print('NOTE some tests failed while recording:', run.stdout.strip().splitlines()[-1])
