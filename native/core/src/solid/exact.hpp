@@ -12,7 +12,6 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <set>
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
@@ -376,12 +375,10 @@ private:
             return static_cast<size_t>(h);
         }
     };
-    struct RatLess {
-        const Pool *pool;
-        bool operator()(int a, int b) const { return pool->compare_lex(a, b) < 0; }
-    };
     std::unordered_map<Key, int, Hash> grid_index_;  // looked up, never iterated
-    std::set<int, RatLess> rat_index_;
+    // Rational points by the unit cells their coordinate intervals touch (one cell, rarely two an axis):
+    // two forms of one point always share a cell, so a new point is compared only with points there.
+    std::unordered_multimap<Key, int, Hash> rat_index_;  // looked up, never iterated
 };
 
 // The interval of num / den for den > 0, and the nearest integer to it (ties towards +infinity) with

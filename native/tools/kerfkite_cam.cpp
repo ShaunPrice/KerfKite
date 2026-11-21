@@ -8,6 +8,8 @@
 //   kerfkite-cam gerber-outline FILE [--tolerance MM] [--offset [X,Y]]   a profile layer as closed paths
 //   kerfkite-cam excellon FILE [--units mm|inch] [--integer N --decimal N] [--omitted-zeros leading|trailing]
 //   kerfkite-cam excellon-drills FILE [--offset [X,Y]]       the holes as drilling operations, by diameter
+//   kerfkite-cam solid REQUEST.json          a solid built from primitives and Boolean operations: measures, mesh, sections
+//   kerfkite-cam solid-batch REQUESTS.jsonl  the same, one request a line, each answered {"ok": ...} or {"error": message}
 //   kerfkite-cam batch CASES.jsonl
 //   kerfkite-cam numbers
 //   kerfkite-cam arithmetic
@@ -39,7 +41,8 @@ namespace {
 
 int usage() {
     std::cerr << "usage: kerfkite-cam generate PROJECT.json [-o PROGRAM.nc] [--json]\n"
-                 "       kerfkite-cam probe-plan|height-map|level REQUEST.json\n"
+                 "       kerfkite-cam probe-plan|height-map|level|solid REQUEST.json\n"
+                 "       kerfkite-cam solid-batch REQUESTS.jsonl\n"
                  "       kerfkite-cam gerber|gerber-outline|excellon|excellon-drills FILE [--option VALUE ...]\n"
                  "       kerfkite-cam batch CASES.jsonl\n"
                  "       kerfkite-cam numbers < VALUES\n";
@@ -182,6 +185,29 @@ int batch(const std::string &path) {
     return 0;
 }
 
+// Solid requests, one a line: the differential check (validation/solid_kernel_check.py) sends thousands.
+int solid_batch(const std::string &path) {
+    std::ifstream cases(path, std::ios::binary);
+    if (!cases) {
+        std::cerr << "kerfkite-cam: cannot read " << path << "\n";
+        return 1;
+    }
+    std::string line;
+    while (std::getline(cases, line)) {
+        if (line.empty()) continue;
+        json answer;
+        try {
+            answer = json{{"ok", kerfkite::call("solid", json::parse(line))}};
+        } catch (const kerfkite::ValueError &error) {
+            answer = json{{"error", error.what()}};
+        } catch (const std::exception &error) {
+            answer = json{{"invalid", error.what()}};
+        }
+        std::cout << answer.dump() << "\n";
+    }
+    return 0;
+}
+
 int numbers() {
     std::string hex;
     int decimals;
@@ -234,7 +260,8 @@ int main(int argc, char **argv) {
     const std::string command = argv[1];
     if (command == "generate") return generate(argc, argv);
     if (command == "batch" && argc == 3) return batch(argv[2]);
-    if ((command == "probe-plan" || command == "height-map" || command == "level") && argc == 3) return request(command, argv[2]);
+    if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "solid") && argc == 3) return request(command, argv[2]);
+    if (command == "solid-batch" && argc == 3) return solid_batch(argv[2]);
     if ((command == "gerber" || command == "gerber-outline" || command == "excellon" || command == "excellon-drills") && argc >= 3)
         return board(command, argc, argv);
     if (command == "numbers" && argc == 2) return numbers();

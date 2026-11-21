@@ -18,6 +18,10 @@ add_library(kerfkite_core STATIC core/src/api.cpp core/src/cam.cpp core/src/dril
   core/src/leveling.cpp core/src/protocols.cpp core/src/router_entry.cpp core/src/simple_line.cpp core/src/tabs.cpp)
 # Circuit board import: Gerber layers and Excellon drill files.
 target_sources(kerfkite_core PRIVATE core/src/excellon.cpp core/src/gerber.cpp core/src/pcb.cpp)
+# KerfKite's own solid modelling kernel (docs/SOLID-KERNEL.md): the C++ standard library only. solid_command.cpp is its JSON front.
+target_sources(kerfkite_core PRIVATE core/src/solid/arrangement.cpp core/src/solid/boolean.cpp core/src/solid/exact.cpp core/src/solid/hull.cpp
+  core/src/solid/mesh.cpp core/src/solid/planar.cpp core/src/solid/primitives.cpp core/src/solid/profile.cpp core/src/solid/query.cpp
+  core/src/solid/section.cpp core/src/solid/simplify.cpp core/src/solid/stl.cpp core/src/solid_command.cpp)
 target_include_directories(kerfkite_core PUBLIC core/include third_party PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 if(MSVC)
   # Sources are UTF-8. Floating point stays strict so results match the reference on every platform.
@@ -44,3 +48,6 @@ add_test(NAME selftest COMMAND kerfkite_selftest)
 add_executable(kerfkite_geometry_selftest tests/geometry_selftest.cpp)
 target_link_libraries(kerfkite_geometry_selftest PRIVATE kerfkite_core)
 add_test(NAME geometry COMMAND kerfkite_geometry_selftest)
+add_executable(kerfkite_solid_selftest tests/solid_selftest.cpp)
+target_link_libraries(kerfkite_solid_selftest PRIVATE kerfkite_core)
+add_test(NAME solid COMMAND kerfkite_solid_selftest)

@@ -30,8 +30,7 @@ struct Access {
 int64_t to_grid(double mm);
 inline double to_mm(int64_t units) { return static_cast<double>(units) / kUnitsPerMm; }
 
-// Why the mesh is not a valid solid, or an empty string. `trusted_geometry` skips nothing: it exists so
-// a caller can tell the checks apart in a message.
+// Why the mesh is not a valid solid, or an empty string.
 std::string check_mesh(const std::vector<GridPoint> &v, const std::vector<Triangle> &t);
 
 // A Solid from grid data: unused vertices dropped, canonical order, and (unless trusted) the validity

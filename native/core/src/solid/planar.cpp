@@ -10,8 +10,6 @@
 #include <cmath>
 #include <deque>
 #include <stdexcept>
-#include <cstdio>
-#include <cstdlib>
 
 namespace kerfkite {
 namespace solid {
@@ -503,9 +501,7 @@ void Planar::triangulate(int r0, int r1, int r2) {
     std::sort(wanted.begin(), wanted.end());
     wanted.erase(std::unique(wanted.begin(), wanted.end()), wanted.end());
     for (const std::pair<int, int> &edge : wanted) enforce(edge.first, edge.second);
-    if (getenv("KKDEBUG")) for (const std::pair<int, int> &edge : wanted) { int t, i; if (!find_edge(edge.first, edge.second, t, i) && !find_edge(edge.second, edge.first, t, i)) fprintf(stderr, "MISSING before improve %d-%d\n", pid_[edge.first], pid_[edge.second]); }
-    if (!getenv("KKNOIMPROVE")) improve(wanted);
-    if (getenv("KKDEBUG")) for (const std::pair<int, int> &edge : wanted) { int t, i; if (!find_edge(edge.first, edge.second, t, i) && !find_edge(edge.second, edge.first, t, i)) fprintf(stderr, "MISSING after improve %d-%d\n", pid_[edge.first], pid_[edge.second]); }
+    improve(wanted);
     triangles.resize(tris_.size());
     neighbours.resize(tris_.size());
     for (size_t k = 0; k < tris_.size(); ++k) {

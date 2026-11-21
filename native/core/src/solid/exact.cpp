@@ -116,7 +116,7 @@ Homogeneous homogeneous(const Pool &pool, int p) {
 
 }  // namespace
 
-Pool::Pool() : rat_index_(RatLess{this}) {}
+Pool::Pool() {}
 
 int Pool::find_grid(int64_t x, int64_t y, int64_t z) const {
     const auto it = grid_index_.find(Key{x, y, z});
@@ -153,18 +153,33 @@ int Pool::add_rat(const Rat &source) {
     Pt pt;
     pt.i[0] = pt.i[1] = pt.i[2] = 0;
     pt.rat = static_cast<int>(rats.size());
-    pt.c[0] = ratio_interval(r.x, r.w);
-    pt.c[1] = ratio_interval(r.y, r.w);
-    pt.c[2] = ratio_interval(r.z, r.w);
+    // A coordinate that is a whole number is kept exactly: points in an axis plane (a cap, the face of a
+    // box) then give exact zeros in the interval predicates, with no need for the integers.
+    pt.c[0] = ex ? Interval(static_cast<double>(qx)) : ratio_interval(r.x, r.w);
+    pt.c[1] = ey ? Interval(static_cast<double>(qy)) : ratio_interval(r.y, r.w);
+    pt.c[2] = ez ? Interval(static_cast<double>(qz)) : ratio_interval(r.z, r.w);
     const int id = static_cast<int>(pts.size());
     pts.push_back(pt);
     rats.push_back(r);
-    const auto inserted = rat_index_.insert(id);
-    if (!inserted.second) {
-        pts.pop_back();
-        rats.pop_back();
-        return *inserted.first;
+    int64_t lo[3], hi[3];
+    for (int k = 0; k < 3; ++k) {
+        lo[k] = static_cast<int64_t>(std::floor(pt.c[k].lo));
+        hi[k] = static_cast<int64_t>(std::floor(pt.c[k].hi));
     }
+    for (int64_t x = lo[0]; x <= hi[0]; ++x)
+        for (int64_t y = lo[1]; y <= hi[1]; ++y)
+            for (int64_t z = lo[2]; z <= hi[2]; ++z) {
+                const auto range = rat_index_.equal_range(Key{x, y, z});
+                for (auto it = range.first; it != range.second; ++it)
+                    if (compare(it->second, id, 0) == 0 && compare(it->second, id, 1) == 0 && compare(it->second, id, 2) == 0) {
+                        pts.pop_back();
+                        rats.pop_back();
+                        return it->second;
+                    }
+            }
+    for (int64_t x = lo[0]; x <= hi[0]; ++x)
+        for (int64_t y = lo[1]; y <= hi[1]; ++y)
+            for (int64_t z = lo[2]; z <= hi[2]; ++z) rat_index_.emplace(Key{x, y, z}, id);
     return id;
 }
 
@@ -205,6 +220,31 @@ int Pool::orient3d(int a, int b, int c, int d) const {
     const int s = det.sign();
     if (s != 2) return s;
     ++const_cast<Pool *>(this)->exact_fallbacks;
+    // With a grid point among them, take it as the origin: the rows are then differences (scaled by the
+    // positive w of a rational point), and the determinant is 3x3 with small entries. The determinant
+    // changes sign with each exchange of two points, so moving point k to the front costs (-1)^k.
+    const int id[4] = {a, b, c, d};
+    for (int k = 0; k < 4; ++k) {
+        const Pt &origin = pts[static_cast<size_t>(id[k])];
+        if (origin.rat >= 0) continue;
+        BigInt row[3][3];
+        int filled = 0;
+        for (int m = 0; m < 4; ++m) {
+            if (m == k) continue;
+            const Pt &q = pts[static_cast<size_t>(id[m])];
+            for (int axis = 0; axis < 3; ++axis) {
+                if (q.rat < 0) {
+                    row[filled][axis] = BigInt(q.i[axis] - origin.i[axis]);
+                } else {
+                    const Rat &r = rats[static_cast<size_t>(q.rat)];
+                    row[filled][axis] = (axis == 0 ? r.x : axis == 1 ? r.y : r.z) - BigInt(origin.i[axis]) * r.w;
+                }
+            }
+            ++filled;
+        }
+        const int sign = det3(row[0][0], row[0][1], row[0][2], row[1][0], row[1][1], row[1][2], row[2][0], row[2][1], row[2][2]).sign();
+        return k % 2 ? -sign : sign;
+    }
     // det[b-a; c-a; d-a] is minus the 4x4 determinant of the homogeneous rows, and every w is positive.
     const Homogeneous h[4] = {homogeneous(*this, a), homogeneous(*this, b), homogeneous(*this, c), homogeneous(*this, d)};
     BigInt total;
@@ -224,6 +264,25 @@ int Pool::orient2d(int a, int b, int c, int u, int v) const {
     const int s = det.sign();
     if (s != 2) return s;
     ++const_cast<Pool *>(this)->exact_fallbacks;
+    // With a grid point among them, turn it to the front (which keeps the sign) and use differences.
+    const int id[3] = {a, b, c};
+    for (int k = 0; k < 3; ++k) {
+        const Pt &origin = pts[static_cast<size_t>(id[k])];
+        if (origin.rat >= 0) continue;
+        BigInt row[2][2];
+        for (int m = 0; m < 2; ++m) {
+            const Pt &q = pts[static_cast<size_t>(id[(k + 1 + m) % 3])];
+            if (q.rat < 0) {
+                row[m][0] = BigInt(q.i[u] - origin.i[u]);
+                row[m][1] = BigInt(q.i[v] - origin.i[v]);
+            } else {
+                const Rat &r = rats[static_cast<size_t>(q.rat)];
+                row[m][0] = (u == 0 ? r.x : u == 1 ? r.y : r.z) - BigInt(origin.i[u]) * r.w;
+                row[m][1] = (v == 0 ? r.x : v == 1 ? r.y : r.z) - BigInt(origin.i[v]) * r.w;
+            }
+        }
+        return (row[0][0] * row[1][1] - row[0][1] * row[1][0]).sign();
+    }
     const Homogeneous ha = homogeneous(*this, a), hb = homogeneous(*this, b), hc = homogeneous(*this, c);
     return det3(ha.c[u], ha.c[v], ha.c[3], hb.c[u], hb.c[v], hb.c[3], hc.c[u], hc.c[v], hc.c[3]).sign();
 }
@@ -235,8 +294,15 @@ int Pool::compare(int a, int b, int axis) const {
     if (pa.c[axis].hi < pb.c[axis].lo) return -1;
     if (pa.c[axis].lo > pb.c[axis].hi) return 1;
     ++const_cast<Pool *>(this)->exact_fallbacks;
-    const Homogeneous ha = homogeneous(*this, a), hb = homogeneous(*this, b);
-    return BigInt::cmp(ha.c[axis] * hb.c[3], hb.c[axis] * ha.c[3]);
+    if (pa.rat < 0) {
+        const Rat &rb = rats[static_cast<size_t>(pb.rat)];
+        return BigInt::cmp(BigInt(pa.i[axis]) * rb.w, axis == 0 ? rb.x : axis == 1 ? rb.y : rb.z);
+    }
+    const Rat &ra = rats[static_cast<size_t>(pa.rat)];
+    const BigInt &xa = axis == 0 ? ra.x : axis == 1 ? ra.y : ra.z;
+    if (pb.rat < 0) return BigInt::cmp(xa, BigInt(pb.i[axis]) * ra.w);
+    const Rat &rb = rats[static_cast<size_t>(pb.rat)];
+    return BigInt::cmp(xa * rb.w, (axis == 0 ? rb.x : axis == 1 ? rb.y : rb.z) * ra.w);
 }
 
 int Pool::compare_lex(int a, int b) const {

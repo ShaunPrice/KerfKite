@@ -21,8 +21,6 @@
 #include <cmath>
 #include <numeric>
 #include <stdexcept>
-#include <cstdio>
-#include <cstdlib>
 
 #include "planar.hpp"
 #include "radial.hpp"
@@ -128,15 +126,7 @@ std::size_t Arrangement::intersect(const std::vector<char> *flagged, bool stop_a
             if (a.label == 2 || b.label == 2) continue;  // ribbons are not part of any solid
             ++hits;
             if (b.operand == a.operand) operand_hit_[static_cast<size_t>(a.operand)] = 1;
-            if (stop_at_first) {
-                if (getenv("KKDEBUG")) for (int tt : {i, j}) {
-                    const SoupTriangle &q = tris_[static_cast<size_t>(tt)];
-                    fprintf(stderr, " tri %d:", tt);
-                    for (int k = 0; k < 3; ++k) fprintf(stderr, " %d(%lld,%lld,%lld)", q.v[k], (long long)pool.pts[q.v[k]].i[0], (long long)pool.pts[q.v[k]].i[1], (long long)pool.pts[q.v[k]].i[2]);
-                    fprintf(stderr, "\n");
-                }
-                return true;
-            }
+            if (stop_at_first) return true;
         }
         return false;
     };
@@ -365,9 +355,17 @@ bool Arrangement::pair(int i, int j) {
         return report_point(i, j, p);
     }
     // Both meet the common line in a segment: the overlap of the two, by position along the line.
+    // The coordinate in which the common line of the two planes runs fastest, from the cross product of
+    // the normals in doubles: any coordinate in which the line runs at all would do, and the largest of
+    // three estimates accurate to a part in 10^15 is certainly not zero.
     int axis = 0;
-    while (axis < 3 && pool.compare(ej[0], ej[1], axis) == 0) ++axis;
-    if (axis == 3) defect("a segment without length");
+    {
+        const Plane &pi = planes_[static_cast<size_t>(i)], &pj = planes_[static_cast<size_t>(j)];
+        const double a[3] = {pi.n[0].to_double(), pi.n[1].to_double(), pi.n[2].to_double()}, b[3] = {pj.n[0].to_double(), pj.n[1].to_double(), pj.n[2].to_double()};
+        const double line[3] = {std::fabs(a[1] * b[2] - a[2] * b[1]), std::fabs(a[2] * b[0] - a[0] * b[2]), std::fabs(a[0] * b[1] - a[1] * b[0])};
+        if (line[1] > line[axis]) axis = 1;
+        if (line[2] > line[axis]) axis = 2;
+    }
     if (pool.compare(ej[0], ej[1], axis) > 0) std::swap(ej[0], ej[1]);
     if (pool.compare(ei[0], ei[1], axis) > 0) std::swap(ei[0], ei[1]);
     const int lo = pool.compare(ei[0], ej[0], axis) >= 0 ? ei[0] : ej[0];
@@ -413,11 +411,12 @@ void Arrangement::subdivide_cluster(const std::vector<int> &members, const std::
     }
     std::sort(edges.begin(), edges.end());
     edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
-    for (const std::pair<int, int> &e : edges) {
+    for (size_t k = 0; k < edges.size(); ++k) {
+        const std::pair<int, int> &e = edges[k];
         planar.points.push_back(e.first);
         planar.points.push_back(e.second);
         planar.supports.push_back(plane_through_edge(pool.pts[static_cast<size_t>(e.first)].i, pool.pts[static_cast<size_t>(e.second)].i, axis));
-        planar.segments.push_back(PlanarSegment{e.first, e.second, static_cast<int>(planar.supports.size()) - 1, -1});
+        planar.segments.push_back(PlanarSegment{e.first, e.second, static_cast<int>(planar.supports.size()) - 1, static_cast<int>(k)});
     }
     for (const int m : members) {
         for (size_t r = ranges[static_cast<size_t>(m)].first; r < ranges[static_cast<size_t>(m)].second; ++r) {
@@ -432,56 +431,74 @@ void Arrangement::subdivide_cluster(const std::vector<int> &members, const std::
     planar.split();
     planar.triangulate_around();
     // Each piece lies wholly inside or wholly outside each member, because the members' edges are edges
-    // of the triangulation: it is inside when its three corners are.
-    struct Member {
-        int tri, c[3], turn;
-        double ulo, uhi, vlo, vhi;
+    // of the triangulation. Which members it is inside changes exactly when an edge of a member is crossed,
+    // so the answer spreads from the outside (inside none) with no further geometry.
+    struct EdgeOwner {
+        int a, b, member;  // a < b; member indexes `members`
     };
-    std::vector<Member> list;
-    list.reserve(members.size());
-    for (const int m : members) {
-        const SoupTriangle &t = tris_[static_cast<size_t>(m)];
-        Member member;
-        member.tri = m;
-        member.turn = planar.orient(t.v[0], t.v[1], t.v[2]);
-        member.ulo = member.vlo = 1e300;
-        member.uhi = member.vhi = -1e300;
-        for (int k = 0; k < 3; ++k) {
-            member.c[k] = t.v[k];
-            const Pt &p = pool.pts[static_cast<size_t>(t.v[k])];
-            member.ulo = std::min(member.ulo, p.c[au].lo);
-            member.uhi = std::max(member.uhi, p.c[au].hi);
-            member.vlo = std::min(member.vlo, p.c[av].lo);
-            member.vhi = std::max(member.vhi, p.c[av].hi);
+    std::vector<EdgeOwner> owners;
+    for (const PlanarSegment &piece : planar.pieces) {
+        if (piece.source < 0) continue;
+        // The members that have the edge this piece is part of.
+        const std::pair<int, int> &e = edges[static_cast<size_t>(piece.source)];
+        for (size_t m = 0; m < members.size(); ++m) {
+            const SoupTriangle &t = tris_[static_cast<size_t>(members[m])];
+            for (int k = 0; k < 3; ++k)
+                if (std::min(t.v[k], t.v[(k + 1) % 3]) == e.first && std::max(t.v[k], t.v[(k + 1) % 3]) == e.second)
+                    owners.push_back(EdgeOwner{std::min(piece.a, piece.b), std::max(piece.a, piece.b), static_cast<int>(m)});
         }
-        list.push_back(member);
     }
-    std::sort(list.begin(), list.end(), [](const Member &x, const Member &y) { return x.ulo != y.ulo ? x.ulo < y.ulo : x.tri < y.tri; });
-    for (const std::array<int, 3> &f : planar.triangles) {
+    std::sort(owners.begin(), owners.end(), [](const EdgeOwner &x, const EdgeOwner &y) { return x.a != y.a ? x.a < y.a : x.b != y.b ? x.b < y.b : x.member < y.member; });
+    owners.erase(std::unique(owners.begin(), owners.end(), [](const EdgeOwner &x, const EdgeOwner &y) { return x.a == y.a && x.b == y.b && x.member == y.member; }), owners.end());
+    std::vector<int> turn(members.size());
+    for (size_t m = 0; m < members.size(); ++m) {
+        const SoupTriangle &t = tris_[static_cast<size_t>(members[m])];
+        turn[m] = planar.orient(t.v[0], t.v[1], t.v[2]);
+    }
+    const size_t count = planar.triangles.size();
+    std::vector<std::vector<int>> inside(count);
+    std::vector<char> seen(count, 0);
+    std::vector<int> queue, toggled;
+    for (size_t f = 0; f < count; ++f) {
+        const std::array<int, 3> &tri = planar.triangles[f];
         bool outer = false;
-        double ulo = 1e300, uhi = -1e300, vlo = 1e300, vhi = -1e300;
-        for (int k = 0; k < 3; ++k) {
-            outer = outer || f[k] == planar.root[0] || f[k] == planar.root[1] || f[k] == planar.root[2];
-            const Pt &p = pool.pts[static_cast<size_t>(f[k])];
-            ulo = std::min(ulo, p.c[au].lo);
-            uhi = std::max(uhi, p.c[au].hi);
-            vlo = std::min(vlo, p.c[av].lo);
-            vhi = std::max(vhi, p.c[av].hi);
+        for (int k = 0; k < 3; ++k) outer = outer || tri[static_cast<size_t>(k)] == planar.root[0] || tri[static_cast<size_t>(k)] == planar.root[1] || tri[static_cast<size_t>(k)] == planar.root[2];
+        if (outer) {
+            seen[f] = 1;
+            queue.push_back(static_cast<int>(f));
         }
-        if (outer) continue;
-        for (const Member &member : list) {
-            if (member.ulo > uhi) break;
-            if (member.uhi < ulo || member.vlo > vhi || member.vhi < vlo) continue;
-            bool inside = true;
-            for (int k = 0; k < 3 && inside; ++k) {
-                const int p = f[k];
-                if (p == member.c[0] || p == member.c[1] || p == member.c[2]) continue;
-                inside = member.turn * planar.orient(member.c[0], member.c[1], p) >= 0 && member.turn * planar.orient(member.c[1], member.c[2], p) >= 0 &&
-                         member.turn * planar.orient(member.c[2], member.c[0], p) >= 0;
+    }
+    for (size_t head = 0; head < queue.size(); ++head) {
+        const size_t f = static_cast<size_t>(queue[head]);
+        for (size_t k = 0; k < 3; ++k) {
+            const int next = planar.neighbours[f][k];
+            if (next < 0 || seen[static_cast<size_t>(next)]) continue;
+            const int a = std::min(planar.triangles[f][k], planar.triangles[f][(k + 1) % 3]), b = std::max(planar.triangles[f][k], planar.triangles[f][(k + 1) % 3]);
+            toggled.clear();
+            auto it = std::lower_bound(owners.begin(), owners.end(), EdgeOwner{a, b, -1},
+                                       [](const EdgeOwner &x, const EdgeOwner &y) { return x.a != y.a ? x.a < y.a : x.b != y.b ? x.b < y.b : x.member < y.member; });
+            for (; it != owners.end() && it->a == a && it->b == b; ++it) toggled.push_back(it->member);
+            // The symmetric difference of two ascending lists.
+            std::vector<int> &out = inside[static_cast<size_t>(next)];
+            const std::vector<int> &from = inside[f];
+            size_t x = 0, y = 0;
+            while (x < from.size() || y < toggled.size()) {
+                if (y == toggled.size() || (x < from.size() && from[x] < toggled[y])) out.push_back(from[x++]);
+                else if (x == from.size() || toggled[y] < from[x]) out.push_back(toggled[y++]);
+                else {
+                    ++x;
+                    ++y;
+                }
             }
-            if (!inside) continue;
-            if (member.turn > 0) instances_.push_back(Instance{{f[0], f[1], f[2]}, member.tri});
-            else instances_.push_back(Instance{{f[0], f[2], f[1]}, member.tri});
+            seen[static_cast<size_t>(next)] = 1;
+            queue.push_back(next);
+        }
+    }
+    for (size_t f = 0; f < count; ++f) {
+        const std::array<int, 3> &tri = planar.triangles[f];
+        for (const int m : inside[f]) {
+            if (turn[static_cast<size_t>(m)] > 0) instances_.push_back(Instance{{tri[0], tri[1], tri[2]}, members[static_cast<size_t>(m)]});
+            else instances_.push_back(Instance{{tri[0], tri[2], tri[1]}, members[static_cast<size_t>(m)]});
         }
     }
     ++stats.coplanar_groups;
@@ -1041,17 +1058,6 @@ void Arrangement::extract(Rule rule, ExactMesh &out) {
 
 void Arrangement::resolve(Rule rule, ExactMesh &out) {
     subdivide();
-    if (getenv("KKDEBUG")) {
-        for (const Instance &in : instances_) {
-            int z = 0;
-            for (int k = 0; k < 3; ++k) z += pool.orient2d(in.v[0], in.v[1], in.v[2], (k + 1) % 3, (k + 2) % 3) == 0;
-            if (z == 3) {
-                fprintf(stderr, "FLAT instance tri %d: %d %d %d rat %d %d %d clustered %d\n", in.tri, in.v[0], in.v[1], in.v[2], pool.pts[in.v[0]].rat, pool.pts[in.v[1]].rat, pool.pts[in.v[2]].rat,
-                        cluster_.empty() ? -1 : cluster_[in.tri]);
-                for (int k = 0; k < 3; ++k) fprintf(stderr, "   %.17g %.17g %.17g\n", pool.pts[in.v[k]].c[0].lo, pool.pts[in.v[k]].c[1].lo, pool.pts[in.v[k]].c[2].lo);
-            }
-        }
-    }
     build_faces();
     build_cells();
     wind();

@@ -17,8 +17,6 @@
 #include <algorithm>
 #include <numeric>
 #include <unordered_map>
-#include <cstdio>
-#include <cstdlib>
 
 #include "arrangement.hpp"
 
@@ -71,12 +69,12 @@ bool damaged(const std::vector<GridPoint> &v, const std::vector<Triangle> &t, co
         if (!at[tri[0]] && !at[tri[1]] && !at[tri[2]]) continue;
         flagged[i] = 1;
         const Plane pl = plane_of(v[tri[0]].data(), v[tri[1]].data(), v[tri[2]].data());
-        if (pl.n[0].zero() && pl.n[1].zero() && pl.n[2].zero()) { if (getenv("KKDEBUG")) fprintf(stderr, "  damaged: flat %zu\n", i); return true; }
+        if (pl.n[0].zero() && pl.n[1].zero() && pl.n[2].zero()) return true;
     }
     Arrangement check;
     std::vector<Operand> operands(1, Operand{&v, &t, 0, false, nullptr});
     check.load(operands);
-    if (check.intersect(&flagged, true) > 0) { if (getenv("KKDEBUG")) fprintf(stderr, "  damaged: pair\n"); return true; }
+    if (check.intersect(&flagged, true) > 0) return true;
     // One triangle of each shell that was touched: the space in front of it must be empty.
     std::vector<uint32_t> parent(v.size());
     std::iota(parent.begin(), parent.end(), 0u);
@@ -99,7 +97,7 @@ bool damaged(const std::vector<GridPoint> &v, const std::vector<Triangle> &t, co
         const uint32_t root = find(t[i][0]);
         if (!shell_touched[root] || shell_done[root]) continue;
         shell_done[root] = 1;
-        if (check.winding_in_front(static_cast<int>(i)) != 0) { if (getenv("KKDEBUG")) fprintf(stderr, "  damaged: shell\n"); return true; }
+        if (check.winding_in_front(static_cast<int>(i)) != 0) return true;
     }
     return false;
 }
@@ -181,7 +179,7 @@ void flip_caps(const std::vector<GridPoint> &v, std::vector<Triangle> &t, std::v
 
 Solid finish(Arrangement &arrangement, ExactMesh &exact, const char *context, int depth) {
     if (exact.tri.empty()) return Solid();
-    if (!getenv("KKNOSIMPLIFY")) simplify(arrangement.pool, exact);
+    simplify(arrangement.pool, exact);
     const size_t nv = exact.vertex.size();
     std::vector<GridPoint> v(nv);
     std::vector<char> moved(nv, 0);
@@ -253,17 +251,6 @@ Solid finish(Arrangement &arrangement, ExactMesh &exact, const char *context, in
     std::sort(touched.begin(), touched.end());
     touched.erase(std::unique(touched.begin(), touched.end()), touched.end());
 
-    if (getenv("KKDEBUG")) fprintf(stderr, "finish depth %d nv %zu nt %zu rounded %zu merging %d touched %zu\n", depth, nv, t.size(), rounded, (int)merging, touched.size());
-    if (getenv("KKDUMP")) {
-        char path[200];
-        static int serial = 0;
-        snprintf(path, sizeof path, "%s_%d_d%d.txt", getenv("KKDUMP"), serial++, depth);
-        FILE *f = fopen(path, "w");
-        fprintf(f, "%zu %zu\n", v.size(), t.size());
-        for (size_t i = 0; i < v.size(); ++i) { const Pt &q = arrangement.pool.pts[exact.vertex[i]]; fprintf(f, "%lld %lld %lld %d %.17g %.17g %.17g\n", (long long)v[i][0], (long long)v[i][1], (long long)v[i][2], (int)moved[i], (q.c[0].lo+q.c[0].hi)/2, (q.c[1].lo+q.c[1].hi)/2, (q.c[2].lo+q.c[2].hi)/2); }
-        for (const Triangle &tr : t) fprintf(f, "%u %u %u\n", tr[0], tr[1], tr[2]);
-        fclose(f);
-    }
     bool sound = true;
     bool collapsed = false;
     for (const Triangle &tri : t) collapsed = collapsed || v[tri[0]] == v[tri[1]] || v[tri[1]] == v[tri[2]] || v[tri[0]] == v[tri[2]];
@@ -271,8 +258,7 @@ Solid finish(Arrangement &arrangement, ExactMesh &exact, const char *context, in
         // Triangles have closed up: join what is left by position.
         try {
             weld_and_pair(v, t, context);
-        } catch (const ValueError &e) {
-            if (getenv("KKDEBUG")) fprintf(stderr, "  weld failed: %s\n", e.what());
+        } catch (const ValueError &) {
             sound = false;
         }
         if (sound && t.empty()) return Solid();
@@ -363,34 +349,47 @@ Solid boolean(const Solid &a, const Solid &b, Op op) {
     }
 }
 
+namespace {
+
+// One operation of a batch, with the counts of the batch so far carried along.
+Solid step(const Solid &a, const Solid &b, Op op) {
+    const BooleanStats so_far = g_stats;
+    const Solid result = boolean(a, b, op);
+    add_stats(so_far);
+    g_stats.rounded_vertices += so_far.rounded_vertices;
+    g_stats.repair_passes += so_far.repair_passes;
+    g_stats.coarser_retries += so_far.coarser_retries;
+    return result;
+}
+
+// The union of many, by joining neighbours in the list pair by pair until one is left. Each solid then
+// takes part in about log2(n) operations, and material that ends up inside is dropped early. (One
+// arrangement of all of them at once is possible with this engine but much slower where many overlap:
+// every pair of surfaces is then intersected, including the parts deep inside the result.)
+Solid union_of(std::vector<Solid> solids) {
+    while (solids.size() > 1) {
+        std::vector<Solid> next;
+        next.reserve(solids.size() / 2 + 1);
+        for (size_t i = 0; i + 1 < solids.size(); i += 2) next.push_back(step(solids[i], solids[i + 1], Op::Union));
+        if (solids.size() % 2) next.push_back(solids.back());
+        solids.swap(next);
+    }
+    return solids.empty() ? Solid() : solids[0];
+}
+
+}  // namespace
+
 Solid batch_boolean(const std::vector<Solid> &solids, Op op) {
     g_stats = BooleanStats();
     if (solids.empty()) return Solid();
     if (op == Op::Intersection) {
         Solid result = solids[0];
-        for (size_t i = 1; i < solids.size() && !result.empty(); ++i) {
-            const BooleanStats so_far = g_stats;
-            result = boolean(result, solids[i], Op::Intersection);
-            add_stats(so_far);
-        }
+        for (size_t i = 1; i < solids.size() && !result.empty(); ++i) result = step(result, solids[i], Op::Intersection);
         return result;
     }
-    // One arrangement of all of them: the union counts every operand together; the difference counts the
-    // first apart from the rest.
-    std::vector<detail::Operand> operands;
-    size_t only = 0;
-    for (size_t i = 0; i < solids.size(); ++i) {
-        const Mesh &m = Access::mesh(solids[i]);
-        if (m.t.empty()) {
-            if (i == 0 && op == Op::Difference) return Solid();
-            continue;
-        }
-        only = i;
-        operands.push_back(operand(m, op == Op::Difference && i > 0 ? 1 : 0));
-    }
-    if (operands.empty()) return Solid();
-    if (operands.size() == 1) return solids[only];
-    return op == Op::Union ? run(operands, detail::Rule::Positive, "union") : run(operands, detail::Rule::Difference, "difference");
+    if (op == Op::Union) return union_of(solids);
+    if (solids[0].empty()) return Solid();
+    return step(solids[0], union_of(std::vector<Solid>(solids.begin() + 1, solids.end())), Op::Difference);
 }
 
 std::size_t count_self_intersections(const Solid &solid) {
