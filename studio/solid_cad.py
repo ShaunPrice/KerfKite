@@ -1,4 +1,8 @@
-"""Parametric solid history. Dimensions are millimetres and rotations are degrees."""
+"""Parametric solid history. Dimensions are millimetres and rotations are degrees.
+
+The solids are built by KerfKite's own solid kernel when the compiled extension is installed and by
+manifold3d otherwise; studio/solid_kernel.py chooses and gives both the one interface used here.
+"""
 
 import ast
 import operator
@@ -6,6 +10,7 @@ import re
 import struct
 
 from .sketch_profile import crossing_axis, profile_geometry
+from .solid_kernel import modelling
 
 _MAX_VALUE = 100_000
 _MAX_FACES = 75_000
@@ -181,10 +186,7 @@ def _instances(solid, pattern, dimensions, kernel):
 
 def _build(model):
     """Recompute enabled features in order without modifying the input document."""
-    try:
-        import manifold3d as kernel
-    except ImportError as exc:
-        raise ValueError('Install manifold3d>=3.5,<4 in the Studio Python environment to rebuild solids') from exc
+    kernel = modelling()
     if not isinstance(model, dict) or type(model.get('version')) is not int or model['version'] != 1:
         raise ValueError('Expected a version 1 solid model')
     dimensions = Dimensions(model.get('parameters', {}))

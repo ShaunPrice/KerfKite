@@ -265,6 +265,31 @@ bool is_valid(const PolygonSet &region, std::string *reason) {
     return true;
 }
 
+Ring convex_hull(const std::vector<Point> &points) {
+    std::vector<Point> sorted = points;
+    for (const Point &p : sorted) check_range(p);
+    std::sort(sorted.begin(), sorted.end());
+    sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
+    const std::size_t n = sorted.size();
+    if (n < 3) return {};
+    // Along the lower side from the smallest point to the largest and back along the upper side, dropping
+    // every point that does not turn the chain strictly to the left.
+    Ring hull(2 * n);
+    std::size_t k = 0;
+    for (std::size_t i = 0; i < n; ++i) {
+        while (k >= 2 && orient(hull[k - 2], hull[k - 1], sorted[i]) <= 0) --k;
+        hull[k++] = sorted[i];
+    }
+    const std::size_t lower = k + 1;
+    for (std::size_t i = n - 1; i-- > 0;) {
+        while (k >= lower && orient(hull[k - 2], hull[k - 1], sorted[i]) <= 0) --k;
+        hull[k++] = sorted[i];
+    }
+    hull.resize(k - 1);  // the first point came round again
+    if (hull.size() < 3) return {};
+    return hull;
+}
+
 std::vector<PathMm> outlines(const PolygonSet &region) {
     std::vector<std::size_t> order(region.size());
     std::vector<Int128> areas(region.size());

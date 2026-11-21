@@ -18,6 +18,10 @@
 // result again does not add vertices to its arcs. Directions come from rotating by a fixed step, from
 // halving an angle with square roots and from the series for the step's sine and cosine: no library
 // trigonometry, so the vertices are the same on every platform.
+//
+// A drawing may ask for other corners (JoinOptions in polygon.hpp): an arc whose vertices lie on the true
+// arc, a miter, or a bevel. Only the corner's points differ. They are joined to the vertex in the same
+// checked fan, so the result is exact in the same way.
 #include <cmath>
 
 #include "kernel.hpp"
@@ -89,6 +93,83 @@ void round_join(const Point &v, double ax, double ay, double bx, double by, doub
     corner(tx, ty, bx, by);
 }
 
+// The part of JoinOptions a corner needs, worked out once for an offset.
+struct Joined {
+    Join join;
+    double cosine, sine;  // of one step of a round join
+    double cos_one;       // of 1.0625 steps: a wider turn is divided
+    double cos_two;       // of 2.125 steps
+    bool two;             // 2.125 steps is less than half a turn
+    int guard;            // more steps than any arc has
+    double miter_floor;   // 1 + the cosine of the turn, below which a miter is cut square
+};
+
+Joined joined_for(const JoinOptions &options) {
+    if (options.segments < 3 || options.segments > 4096) reject("A round join needs 3 to 4096 segments in a turn");
+    if (!(options.miter_limit >= 1 && options.miter_limit <= 1000)) reject("A miter limit must be from 1 to 1000");
+    Joined joined{};
+    joined.join = options.join;
+    // The series holds its accuracy to beyond the 127.5 degrees the widest step asks of it: the first
+    // term left out is below 1e-21 there.
+    const double step = 2 * kPi / options.segments;
+    double unused;
+    series_cos_sin(step, joined.cosine, joined.sine);
+    series_cos_sin(1.0625 * step, joined.cos_one, unused);
+    joined.two = 2.125 * step < kPi;
+    if (joined.two) series_cos_sin(2.125 * step, joined.cos_two, unused);
+    joined.guard = options.segments + 8;
+    // A miter reaches distance / cos(turn / 2) from the vertex, and 1 + cos(turn) = 2 cos(turn / 2)^2.
+    joined.miter_floor = 2 / (options.miter_limit * options.miter_limit);
+    return joined;
+}
+
+// The points of a drawing's join at v, between the same two tangents as round_join. The first lies on the
+// offset of the edge before and the last on the offset of the edge after.
+void drawn_join(const Point &v, double ax, double ay, double bx, double by, double distance, const Joined &joined, std::vector<Point> &out) {
+    const auto at = [&](double x, double y) {
+        const Point p{v.x + nearest(distance * x), v.y + nearest(distance * y)};
+        check_range(p);
+        out.push_back(p);
+    };
+    const double c = std::max(-1.0, std::min(1.0, ax * bx + ay * by));  // cosine of the turn
+    if (joined.join == Join::Bevel) {
+        at(ax, ay);
+        at(bx, by);
+        return;
+    }
+    if (joined.join == Join::Miter) {
+        if (1 + c >= joined.miter_floor) {
+            const double k = 1 / (1 + c);
+            at(k * (ax + bx), k * (ay + by));
+            return;
+        }
+        // Cut square: the line across the corner at the distance from v meets each offset edge
+        // distance * tan(turn / 4) beyond the end of the edge. An edge with normal (x, y) runs along (-y, x).
+        const double ch = std::sqrt((1 + c) / 2), sh = std::sqrt((1 - c) / 2), t = (1 - ch) / sh;
+        at(ax - t * ay, ay + t * ax);
+        at(bx + t * by, by - t * bx);
+        return;
+    }
+    double tx = ax, ty = ay;
+    at(tx, ty);
+    for (int guard = joined.guard; guard > 0; --guard) {
+        const double rest = std::max(-1.0, std::min(1.0, tx * bx + ty * by));
+        if (joined.two && rest < joined.cos_two) {
+            const double nx = tx * joined.cosine - ty * joined.sine, ny = ty * joined.cosine + tx * joined.sine;
+            tx = nx, ty = ny;
+            at(tx, ty);
+            continue;
+        }
+        if (rest < joined.cos_one) {  // between one and two steps: two equal parts, by the half-angle formulas
+            const double ch = std::sqrt((1 + rest) / 2), sh = std::sqrt((1 - rest) / 2);
+            const double mx = tx * ch - ty * sh, my = ty * ch + tx * sh;
+            at(mx, my);
+        }
+        break;
+    }
+    at(bx, by);
+}
+
 Ring without_repeats(const Ring &ring) {
     Ring out;
     out.reserve(ring.size());
@@ -147,8 +228,11 @@ void series_cos_sin(double angle, double &cosine, double &sine) {
     sine = angle * s;
 }
 
-void offset_curve(const Ring &ring, double distance, const ArcOptions &arcs, Ring &out) {
-    const Steps steps = steps_for(distance, arcs);
+namespace {
+
+// offset_curve, with the corners of a drawing when `joined` is given and the circumscribed arcs otherwise.
+void curve_round(const Ring &ring, double distance, const ArcOptions &arcs, const Joined *joined, Ring &out) {
+    const Steps steps = joined ? Steps{} : steps_for(distance, arcs);
     const std::size_t n = ring.size();
     struct Side {
         Coord ex, ey;   // the edge from this vertex to the next
@@ -168,15 +252,17 @@ void offset_curve(const Ring &ring, double distance, const ArcOptions &arcs, Rin
         // The swept edge must lie to the right of the edge; rounding a very small distance can lose that.
         if (!(cross(side.shift.x, side.shift.y, side.ex, side.ey) > Int128(0))) side.shift = {0, 0};
     }
-    // Round joins where the curve turns to the left, away from the offset side, or doubles back.
+    // Joins where the curve turns to the left, away from the offset side, or doubles back.
     std::vector<Point> joins;
     std::vector<std::size_t> first(n + 1);
     for (std::size_t i = 0; i < n; ++i) {
         const Side &before = sides[i == 0 ? n - 1 : i - 1], &after = sides[i];
         first[i] = joins.size();
         const Int128 turn = cross(before.ex, before.ey, after.ex, after.ey);
-        if (turn > Int128(0) || (turn == Int128(0) && dot(before.ex, before.ey, after.ex, after.ey) < Int128(0)))
-            round_join(ring[i], before.nx, before.ny, after.nx, after.ny, distance, steps, joins);
+        if (turn > Int128(0) || (turn == Int128(0) && dot(before.ex, before.ey, after.ex, after.ey) < Int128(0))) {
+            if (joined) drawn_join(ring[i], before.nx, before.ny, after.nx, after.ny, distance, *joined, joins);
+            else round_join(ring[i], before.nx, before.ny, after.nx, after.ny, distance, steps, joins);
+        }
     }
     first[n] = joins.size();
     // Each offset edge runs from the last corner of the join before it to the first corner of the join
@@ -215,6 +301,10 @@ void offset_curve(const Ring &ring, double distance, const ArcOptions &arcs, Rin
     while (out.size() > 1 && out.back() == out.front()) out.pop_back();
 }
 
+}  // namespace
+
+void offset_curve(const Ring &ring, double distance, const ArcOptions &arcs, Ring &out) { curve_round(ring, distance, arcs, nullptr, out); }
+
 Ring stroke_curve(const PathMm &points, double width, const ArcOptions &arcs) {
     const double radius = size_in_units(width, "A stroke width is outside the range of the polygon kernel") / 2;
     Ring path;
@@ -236,7 +326,9 @@ Ring stroke_curve(const PathMm &points, double width, const ArcOptions &arcs) {
 
 using namespace detail;
 
-PolygonSet offset(const PolygonSet &region, double distance, const ArcOptions &arcs) {
+namespace {
+
+PolygonSet offset_region(const PolygonSet &region, double distance, const ArcOptions &arcs, const Joined *joined) {
     const double units = distance * kUnitsPerMm;
     if (!(std::fabs(units) <= static_cast<double>(kMaxDistance))) reject("An offset distance is not finite or is beyond the range of the polygon kernel");
     if (std::fabs(units) < 1) return region;
@@ -247,10 +339,10 @@ PolygonSet offset(const PolygonSet &region, double distance, const ArcOptions &a
         if (ring.size() < 3 || orientation(ring) != (outer ? 1 : -1)) reject("An offset needs a region in the polygon kernel's own form");
         for (const Point &p : ring) check_range(p);
         if (units > 0) {
-            offset_curve(ring, units, arcs, curve);
+            curve_round(ring, units, arcs, joined, curve);
         } else {
             std::reverse(ring.begin(), ring.end());
-            offset_curve(ring, -units, arcs, curve);
+            curve_round(ring, -units, arcs, joined, curve);
             std::reverse(curve.begin(), curve.end());
         }
         arrangement.add(curve, 0);
@@ -262,6 +354,15 @@ PolygonSet offset(const PolygonSet &region, double distance, const ArcOptions &a
     arrangement.resolve();
     arrangement.wind();
     return arrangement.region([](std::int32_t w, std::int32_t) { return w > 0; });
+}
+
+}  // namespace
+
+PolygonSet offset(const PolygonSet &region, double distance, const ArcOptions &arcs) { return offset_region(region, distance, arcs, nullptr); }
+
+PolygonSet offset(const PolygonSet &region, double distance, const JoinOptions &joins) {
+    const Joined joined = joined_for(joins);
+    return offset_region(region, distance, ArcOptions(), &joined);
 }
 
 Ring disc(double centre_x, double centre_y, double diameter, const ArcOptions &arcs) {

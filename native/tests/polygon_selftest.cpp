@@ -251,6 +251,117 @@ static void booleans() {
     expect(r.size() == 2 && area(r) == 100 + 100 - 25 + 100 - 9 + 1, "the union of several regions at once");
 }
 
+// The corners a drawing asks for: an arc with its vertices on the true arc, a miter, a bevel.
+static void joined_offsets() {
+    const PolygonSet box = region(square(0, 0, 10));
+    JoinOptions join;
+    join.join = Join::Miter;
+    PolygonSet r = offset(box, 2, join);
+    expect(r.size() == 1 && same(r[0].shell, square(-2, -2, 14)), "a square grown with miters is a square");
+    r = offset(box, -2, join);
+    expect(r.size() == 1 && same(r[0].shell, square(2, 2, 6)), "a square shrunk with miters is a square");
+    join.join = Join::Bevel;
+    r = offset(box, 2, join);
+    expect(r.size() == 1 && r[0].shell.size() == 8 && area(r) == 196 - 8 && r[0].shell[0] == to_grid(PointMm{-2, 0}) && r[0].shell[1] == to_grid(PointMm{0, -2}),
+           "a square grown with bevels loses a triangle at each corner");
+    // A round join: vertices on the arc, so the area is less than the true one, by less than the slivers of 12 parts.
+    join.join = Join::Round;
+    join.segments = 48;
+    r = offset(box, 2, join);
+    const double exact = 100 + 4 * 20 + 3.141592653589793 * 4, step = 2 * 3.141592653589793 / 48;
+    expect(r.size() == 1 && r[0].shell.size() == 4 * 13 && area(r) < exact && area(r) > exact - 4 * 12 * 2 * (step - std::sin(step)) - 1e-5, "a square grown with inscribed arcs");
+    Bounds b{};
+    expect(bounds(r, b) && b.min_x == -2 && b.max_x == 12 && b.min_y == -2 && b.max_y == 12, "bounds of a square grown with inscribed arcs");
+    for (const Point &p : r[0].shell) {
+        // Every vertex is on a straight side or at the distance from a corner, to the rounding of the grid.
+        const double dx = std::max(0.0, std::max(-to_mm(p.x), to_mm(p.x) - 10)), dy = std::max(0.0, std::max(-to_mm(p.y), to_mm(p.y) - 10));
+        expect(close_to(std::sqrt(dx * dx + dy * dy), 2, 1e-6), "a vertex of an inscribed arc lies on the arc");
+    }
+    // Seven edges a turn: a quarter turn is 1.75 steps, between one and two, so it is halved.
+    join.segments = 7;
+    r = offset(box, 2, join);
+    expect(r.size() == 1 && r[0].shell.size() == 4 * 3, "an arc between one and two steps is halved");
+    join.segments = 3;
+    r = offset(box, 2, join);
+    expect(r.size() == 1 && r[0].shell.size() == 8, "three edges a turn leave a quarter turn whole");
+    // A sharp corner. Within the limit the miter is one point; beyond it the corner is cut square at the distance.
+    const PolygonSet wedge = region(ring({{0, 0}, {10, 0}, {0, 1}}));
+    join.join = Join::Miter;
+    join.miter_limit = 30;
+    r = offset(wedge, 1, join);
+    Bounds sharp{}, cut{};
+    expect(r.size() == 1 && r[0].shell.size() == 3 && bounds(r, sharp) && sharp.max_x > 29 && sharp.max_x < 31, "a miter within its limit is a point");
+    join.miter_limit = 2;
+    r = offset(wedge, 1, join);
+    expect(r.size() == 1 && r[0].shell.size() == 4 && bounds(r, cut) && cut.max_x > 11 && cut.max_x < 11.05, "a miter beyond its limit is cut square at the distance");
+    // The cut is square to the bisector: its two ends are equally far from the corner.
+    std::vector<double> reach;
+    for (const Point &p : r[0].shell)
+        if (to_mm(p.x) > 10.5) reach.push_back(std::sqrt((to_mm(p.x) - 10) * (to_mm(p.x) - 10) + to_mm(p.y) * to_mm(p.y)));
+    expect(reach.size() == 2 && close_to(reach[0], reach[1], 2e-6) && reach[0] > 1, "the square cut is symmetric about the corner");
+    // Shrinking joins the corners that point into the material: those of a hole, and a notch.
+    const PolygonSet frame = compose({square(0, 0, 10), square(3, 3, 4)});
+    join.join = Join::Bevel;
+    r = offset(frame, -1, join);
+    expect(r.size() == 1 && r[0].holes.size() == 1 && r[0].holes[0].size() == 8 && same(r[0].shell, square(1, 1, 8)) && area(r) == 64 - (36 - 2), "a hole grows with bevels as its region shrinks");
+    join.join = Join::Miter;
+    r = offset(frame, 2, join);
+    expect(r.size() == 1 && r[0].holes.empty() && same(r[0].shell, square(-2, -2, 14)), "a hole of 4 closes when grown by 2 with miters");
+    expect(offset(box, -5, join).empty() && offset(box, 0, join) == box, "shrunk away, and no offset");
+    // Whatever the join, the result is a valid region.
+    Random random(77);
+    for (int k = 0; k < 40; ++k) {
+        const PolygonSet shape = normalise({blob(random, 0, 0, 20000000, 9 + k % 7), blob(random, 9000000, 4000000, 12000000, 5 + k % 4)}, FillRule::NonZero);
+        for (const double distance : {1.5, -0.8}) {
+            JoinOptions options;
+            options.miter_limit = 1000;
+            options.join = Join::Miter;
+            const PolygonSet mitred = offset(shape, distance, options);
+            options.join = Join::Bevel;
+            const PolygonSet bevelled = offset(shape, distance, options);
+            options.join = Join::Round;
+            options.segments = 5 + k;
+            const PolygonSet round = offset(shape, distance, options);
+            std::string why;
+            expect(is_valid(mitred, &why) && is_valid(bevelled, &why) && is_valid(round, &why), "offsets with joins are valid regions");
+            // The join is added when growing and taken away when shrinking, so the order turns round.
+            const PolygonSet &least = distance > 0 ? bevelled : mitred, &most = distance > 0 ? mitred : bevelled;
+            expect(area(subtract(least, round)) < 1e-4 && area(subtract(round, most)) < 1e-4, "a bevel adds least, a miter most and an arc lies between");
+            expect(distance > 0 ? area(subtract(shape, bevelled)) == 0 : area(subtract(mitred, shape)) == 0, "growing contains the region and shrinking is contained in it");
+        }
+    }
+    JoinOptions bad;
+    bad.segments = 2;
+    expect(rejects([&] { offset(box, 1, bad); }), "fewer than three segments a turn are refused");
+    bad.segments = 48, bad.miter_limit = 0.5;
+    expect(rejects([&] { offset(box, 1, bad); }), "a miter limit below one is refused");
+}
+
+static void hulls() {
+    const Ring hull = convex_hull({{0, 0}, {4, 0}, {4, 4}, {0, 4}, {2, 2}, {2, 0}, {4, 2}, {0, 0}, {1, 3}});
+    expect(same(hull, Ring{{0, 0}, {4, 0}, {4, 4}, {0, 4}}) && orientation(hull) == 1, "a hull drops points inside it and on its sides");
+    expect(convex_hull({{0, 0}, {1, 1}, {2, 2}, {5, 5}}).empty() && convex_hull({{0, 0}, {1, 1}}).empty() && convex_hull({}).empty(), "points on one line have no hull");
+    // Far apart, where the products need more than 64 bits.
+    const Coord far = Coord(1) << 36;
+    const Ring wide = convex_hull({{-far, -far}, {far, -far + 1}, {far, far}, {-far + 1, far}, {0, 0}, {far - 1, 0}});
+    expect(wide.size() == 4 && wide[0] == Point{-far, -far} && wide[2] == Point{far, far}, "a hull at the limits of the grid");
+    Random random(5);
+    for (int k = 0; k < 50; ++k) {
+        std::vector<Point> points;
+        for (int i = 0; i < 40; ++i) {
+            const Coord x = static_cast<Coord>(random.next() % 2000001) - 1000000;
+            const Coord y = static_cast<Coord>(random.next() % 2000001) - 1000000;
+            points.push_back({x, y});
+        }
+        const Ring ring = convex_hull(points);
+        bool convex = ring.size() >= 3 && orientation(ring) == 1, holds = true;
+        for (std::size_t i = 0; convex && i < ring.size(); ++i)
+            convex = detail::orient(ring[i], ring[(i + 1) % ring.size()], ring[(i + 2) % ring.size()]) > 0;
+        for (const Point &p : points) holds = holds && locate(ring, p) != Location::Outside;
+        expect(convex && holds, "a hull is strictly convex and holds every point");
+    }
+}
+
 static void offsets() {
     const PolygonSet box = region(square(0, 0, 10));
     ArcOptions coarse;
@@ -620,6 +731,8 @@ int main(int argc, char **argv) {
         measures();
         booleans();
         offsets();
+        joined_offsets();
+        hulls();
         lines();
         order();
         limits();

@@ -1,5 +1,7 @@
-// The polygon kernel as a command taking and returning JSON, for testing it from outside the core:
-// "polygon". kerfkite/polygon.hpp is the interface the core itself uses.
+// The polygon kernel as a command taking and returning JSON: "polygon". It is how the kernel is tested from
+// outside the core, and how Studio's script engine draws: studio/solid_kernel.py keeps a 2D drawing as the
+// rings of a region and asks for each operation here. kerfkite/polygon.hpp is the interface the core itself
+// uses.
 //
 // A request is {"op": ...} with rings as lists of [x, y] in millimetres. "fill" names how rings that
 // overlap are read: "evenodd" (the default), "nonzero" or "positive".
@@ -9,6 +11,12 @@
 //                                                         contours combined by even-odd, or its message
 //   union, intersection, difference, xor   {"a", "b"}     two sets of rings, each read with "fill"
 //   offset        {"rings", "distance"}                   grown or shrunk by a distance, round joins
+//                 with "join": "round", "miter" or "bevel"  the corners of a drawing instead (polygon::JoinOptions),
+//                                                         with "turn_segments" and "miter_limit"
+//   hull          {"rings"}                               the convex hull of every point of the rings
+//   circle        {"radius", "segments"}                  a regular polygon inscribed in the circle, a vertex on +X
+//   transform     {"rings", "matrix": [[a, b, c], [d, e, f]]}   the region moved by an affine map
+//   rotate        {"rings", "degrees"}                    the region turned about the origin, counter-clockwise
 //   pocket        {"rings", "first", "step"}              shrunk by first, then by step until nothing is left
 //   clip-lines    {"rings", "lines": [[[x, y], [x, y]]]}  each line cut to the region
 //   artwork       {"shapes": [...], "offsets": [...]}     dark and clear shapes in order, then contours

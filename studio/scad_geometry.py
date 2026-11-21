@@ -1,15 +1,32 @@
-"""Build millimetre-scale OpenSCAD-style regions and solids with Manifold."""
+"""Build millimetre-scale OpenSCAD-style regions and solids.
+
+The geometry is computed by KerfKite's own solid and polygon kernels when the compiled extension is
+installed, and by manifold3d otherwise: studio/solid_kernel.py chooses, and presents both through the one
+interface this module calls as `kernel`.
+"""
 
 import math
 
-import manifold3d as kernel
 import numpy as np
 from shapely.geometry import LinearRing
+
+from .solid_kernel import modelling, solid_backend
+
+
+class _Kernel:
+    """The modelling backend in use, looked up when it is called so that the choice can be made late."""
+
+    def __getattr__(self, name):
+        return getattr(modelling(), name)
+
+
+kernel = _Kernel()
 
 _MAX_COORD = 100_000
 _MAX_VERTICES = 8_000
 _MAX_TRIANGLES = 75_000
 _MAX_WORK = 400_000
+_MAX_OVERLAP = 32_000_000
 _MAX_SEGMENTS = 256
 _DEFAULT_SEGMENTS = 48
 _MISSING = object()
@@ -111,7 +128,7 @@ def _polyhedron(fields):
     tolerance = max(1e-9, np.ptp(points, axis=0).max() * 1e-9)
     triangles = []
     for face in faces:
-        # Manifold uses CCW exterior winding; OpenSCAD's external faces are CW.
+        # The kernels use CCW exterior winding; OpenSCAD's external faces are CW.
         indices = [_integer(i, 0, len(points) - 1, 'Vertex index') for i in reversed(face)]
         if len(set(indices)) != len(indices):
             raise ValueError('A face cannot repeat a vertex')
@@ -285,6 +302,11 @@ class ScriptGeometryBudget:
             return shapes_type.batch_hull(shapes)
         # Bound pairwise intersection work for overlapping operands; disjoint arrays
         # cost only their input size. The post-operation limit still checks the result.
+        # KerfKite's kernel facets a sphere with about twice the triangles the library uses for the same
+        # $fn, so the same two shapes are up to four times the product there. Its allowance is four times
+        # as large, so that a script within the budget on one is within it on the other; the kernel also
+        # refuses by the pairs of triangles it actually has to examine.
+        allowed = _MAX_OVERLAP * (4 if solid_backend() == 'kernel' else 1)
         box = [s.bounds() if dim == 2 else s.bounding_box() for s in shapes]
         overlap = 0
         for i, a in enumerate(box):
@@ -292,7 +314,7 @@ class ScriptGeometryBudget:
                 b = box[j]
                 if all(a[axis] <= b[dim + axis] and b[axis] <= a[dim + axis] for axis in range(dim)):
                     overlap += sizes[i] * sizes[j]
-                    if overlap > 32_000_000:
+                    if overlap > allowed:
                         raise ValueError('Overlapping geometry exceeds the intersection work budget; reduce $fn')
         operation = {
             'union': kernel.OpType.Add,

@@ -2,7 +2,7 @@
 
 KerfKite has its own 3D solid modelling kernel in the native core: `native/core/include/kerfkite/solid.hpp`, implemented in `native/core/src/solid/`. It depends on the C++17 standard library and nothing else. It was written to replace the third-party library behind Studio's 3D CAD (see [Third-party components](SUPPLY-CHAIN.md)) and to carry 3D engraving and, later, multi-axis machining.
 
-**Studio does not use it yet.** Studio's Python modules still call the third-party library; switching them over is a separate step, and the section [Moving Studio over](#moving-studio-over) lists what each of their calls becomes. Until then the kernel is reached from C++ and through the `kerfkite-cam solid` command.
+**Studio uses it.** Wherever the compiled extension is installed, Studio's 3D CAD (parametric parts, CAD scripts, lofts, STEP tessellations, assemblies) is modelled by this kernel, and the 2D drawings of the script engine by the [polygon kernel](POLYGON-KERNEL.md). The third-party library remains in two roles only: the fallback for an installation without the extension, and the oracle the kernel is tested against. The section [How Studio uses the kernel](#how-studio-uses-the-kernel) describes the switch, what each of Studio's calls became, and what Studio does when the kernel refuses a result. The kernel is also reached from C++ and through the `kerfkite-cam solid` command.
 
 ## What a solid is
 
@@ -98,7 +98,7 @@ Consequences to know:
 
 ## Sections and projection
 
-`section(solid, z)` gives the material at the horizontal plane as closed rings, counter-clockwise around material and clockwise around holes. A vertex exactly in the plane counts as below it, so a face lying in the plane is included when the material is above it and excluded when it is below ("lower faces inclusive, upper faces exclusive"). Each triangle with vertices on both sides gives one directed segment, and the segments are joined through the triangles' shared edges, not by comparing coordinates, so the rings are closed for any input. Rings carry one point for each mesh edge crossed, so a straight side cut through several triangles has points along it.
+`section(solid, z)` gives the material at the horizontal plane as closed rings, counter-clockwise around material and clockwise around holes. A vertex exactly in the plane counts as below it, so a face lying in the plane is included when the material is above it and excluded when it is below ("lower faces inclusive, upper faces exclusive"). Each triangle with vertices on both sides gives one directed segment, and the segments are joined through the triangles' shared edges, not by comparing coordinates, so the rings are closed for any input. A ring has a point where it passes from one triangle to the next, except where the two triangles are parts of one flat face (an exact test): the section of a box is four points however its faces are triangulated. A face that has been turned by an arbitrary angle is no longer exactly flat on the grid, and a section keeps a point where it crosses the crease between its triangles; Studio drops such points (within 2 nm of the line between their neighbours) before it shows or cuts an outline.
 
 `section(solid, plane)` does the same for any plane, and returns the rings both in the plane's own (u, v) coordinates and in space. This is the section needed for tilted tool axes.
 
@@ -168,10 +168,13 @@ The request is `{"shape": NODE, ...}`. A node is one of:
 | `{"hull": [NODE, …]}` | The convex hull. |
 | `{"union": […]}`, `{"difference": […]}`, `{"intersection": […]}` | Boolean operations on a list. |
 | `{"translate": [x, y, z], "of": NODE}`, and likewise `rotate`, `scale`, `mirror`, `rotate_about` (`{"axis", "degrees"}`), `matrix` (three rows of four) | Maps. |
+| `{"kept": i}` | A solid the caller kept from an earlier request (see below). Not available from the command line. |
 
-The answer always has `volume`, `area`, `bounds`, `centroid`, `vertices`, `triangles`, `bodies`, `empty` and the counts of the last operation. On request it adds: `"mesh": true` and `"grid_mesh": true` (the arrays), `"check": true` (the exact self-intersection count and the complete check), `"sections": [z, …]`, `"plane_sections": [{"origin", "normal"}, …]`, `"projection": true`, `"height_map": {"x0", "y0", "dx", "dy", "columns", "rows", "empty"}`, `"rays": [{"origin", "direction"}, …]` and `"stl": "ascii"`. `solid-batch` answers each line with `{"ok": …}` or `{"error": message}`.
+The answer always has `volume`, `area`, `bounds`, `centroid`, `vertices`, `triangles`, `bodies`, `empty` and the counts of the last operation. On request it adds: `"mesh": true` and `"grid_mesh": true` (the arrays), `"check": true` (the exact self-intersection count and the complete check), `"sections": [z, …]`, `"plane_sections": [{"origin", "normal"}, …]`, `"projection": true`, `"height_map": {"x0", "y0", "dx", "dy", "columns", "rows", "empty"}`, `"rays": [{"origin", "direction"}, …]`, `"min_gap": {"to": NODE, "search_length"}` (the distance to another shape) and `"stl": "ascii"`. `solid-batch` answers each line with `{"ok": …}` or `{"error": message}`.
 
 JSON appears only in this command (`native/core/src/solid_command.cpp`); the kernel's own interface has none.
+
+**Kept solids.** Studio builds a model one operation at a time and asks about each intermediate solid (its triangle count, its bounds). So that a mesh does not cross as text at every step, the compiled extension has a second entry beside `core_call("solid", request)`: `solid_call(request, kept)` answers with the same JSON and with the solid itself, as an opaque object that Python holds and hands back in the `kept` list of a later request, where the node `{"kept": i}` stands for it. A kept solid shares its mesh, never changes, and remembers what the kernel has established about it (that it has no self-intersection), which a mesh sent back as text would lose. The object is released when Python drops it.
 
 ## Testing
 
@@ -208,7 +211,7 @@ Results measured on this code (GCC 13.3 and Clang 18.1 on x86-64 Linux):
 | Bodies and bounds that differ only by oracle flakes | 16 solids where the oracle counts flakes as bodies, 34 where its bounds include them; equal when they are left out. |
 | Bounds that differ with equal volumes | 21. In every one the oracle's bounds extend beyond the kernel's (by 0.17 to 3.3 mm) and the kernel's never beyond the oracle's by more than 0.6 nm, while the volumes agree within 6·10^-6 mm³: the oracle has a fin without thickness on a body. |
 | Different number of bodies with equal volumes | 83. In the cases examined, either bodies touch along an edge or at a point (the kernel keeps them apart, the oracle may join them), or faces lie closer than the grid (they coincide in the kernel and it has one body; the oracle has two). Not all 83 were examined one by one. |
-| Studio's tests on the kernel's solids | 30 tests in four modules; 28 pass; 2 compare a volume to seven decimal places (see [Moving Studio over](#moving-studio-over)). 368 solids made, 146 distinct ones compared, all within tolerance. |
+| Studio's tests on the kernel's solids | 30 tests in four modules, all passing. 370 solids made, 148 distinct ones compared, all within tolerance. |
 
 The commands, from the repository root with the core built in `build/native`:
 
@@ -237,33 +240,85 @@ Measured with `kerfkite_solid_selftest --bench` (GCC 13.3, `-O3`, one thread) on
 
 Time is spent where surfaces cross: an operation costs little for the triangles that stay whole and most for those that are cut. The two slow rows are the ones where nearly every triangle is cut. The batch union is slower than its size suggests because every cylinder overlaps its neighbours and the intermediate results are cut again at each level.
 
-## Moving Studio over
+## How Studio uses the kernel
 
-What each call Studio makes on the third-party library becomes. Lengths are millimetres on both sides.
+### Which code runs
 
-| Studio calls | Kernel | Differences to expect |
+`studio.solid_kernel.solid_backend()` answers `kernel` when the compiled extension is installed and `manifold` when it is not (the portable wheel, or a source checkout that was never built). `KERFKITE_SOLID_BACKEND=manifold` selects the third-party library where the extension is installed; `=kernel` refuses to run without the extension; `auto` is the default. With neither the extension nor the library, modelling fails with a message that names both.
+
+```python
+from studio import solid_kernel
+solid_kernel.solid_backend()   # 'kernel' with the extension, 'manifold' without it
+```
+
+`studio/solid_kernel.py` gives the two kernels the part of the library's interface that Studio calls, so the modelling code (`solid_cad.py`, `scad_geometry.py`, `solid_loft.py`, the STEP tessellation in `cad_exchange.py`, `assembly.py`) is the same on both. Nothing in Studio's modelling stays on the library when the kernel is in use, and the library is not imported then. Reading STEP itself is still the optional Open Cascade add-on; the kernel takes its triangles.
+
+| Studio calls | Now runs on | Notes |
 | --- | --- | --- |
-| `Manifold.cube(size, center)` | `box(size, center)` | None beyond the grid. |
-| `Manifold.cylinder(h, r_low, r_high, segments, center)` | `cylinder(h, r_low, r_high, segments, center)` | Same polygon; vertices rounded to 1 nm. |
-| `Manifold.sphere(r, segments)` | `sphere(r, segments)` | Other faceting (bands, not a subdivided octahedron): other triangle count (9024 for 96 segments against 4608), volume a little different. |
-| `Manifold(Mesh64(vertices, triangles))` | `from_mesh(vertices, triangles)` | Refused with a reason (`ValueError`) where the library returns a status. |
-| `mesh64.merge()` then `Manifold(mesh64)` (STEP tessellations) | `from_mesh(vertices, triangles, true)` | Welds on the 1 nm grid; accepts solids touching along edges. Reading STEP itself stays with the optional Open Cascade add-on; the kernel takes its triangles. |
-| `CrossSection(contours, fill)` then `.extrude(height, n_divisions, twist, scale)` | `extrude(rings, height, {slices = n_divisions + 1, twist_degrees = twist, scale_x, scale_y, fill})` | Same twist sense and order (twist, then scale). |
-| `.revolve(segments, degrees)` | `revolve(rings, segments, degrees, fill)` | Same steps and start. |
-| `.rotate([x, y, z])`, `.translate(v)`, `.scale(v)`, `.mirror(n)`, `.transform(3×4)` | `rotated(x, y, z)`, `translated(v)`, `scaled(v)`, `mirrored(n)`, `transformed(matrix)` | Results rounded to 1 nm; a 2-vector for a 3D shape must be padded by the caller as now. |
-| `a + b`, `a - b`, `a ^ b` | the same operators, or `boolean(a, b, op)` | See [Rounding](#rounding-and-why-the-result-stays-valid). |
-| `Manifold.batch_boolean(list, op)` | `batch_boolean(list, op)` | |
-| `Manifold.batch_hull(list)` | `convex_hull(list)` | The hull of empty solids is empty. Points that all lie in one plane are refused. |
-| `.status() != NoError`, `.is_empty()` | a `ValueError` at the point of failure; `.empty()` | Every `Solid` that exists is valid; there is no status to test. |
-| `.volume()`, `.bounding_box()`, `.num_tri()`, `.num_vert()` | `.volume()`, `.bounds()`, `.num_triangles()`, `.num_vertices()` | Bounds are a `Box3`, not a tuple of six. |
-| `.to_mesh64()`: `vert_properties`, `tri_verts` | `.vertices()`, `.triangles()` | Vertex and triangle order differ; see the order above. |
-| `.slice(z)` then `.to_polygons()` | `section(solid, z)` | Same convention at faces in the plane. More points on straight sides. |
-| `.project()` then `CrossSection(…, Positive).to_polygons()` | `projection(solid)` | Already resolved by the positive rule. |
-| `.min_gap(other, length)` | `min_gap(a, b, length)` | |
-| `kernel.triangulate(polygons)` | not offered | Used by Studio only to build polyhedron faces; `from_mesh` with any triangulation of each face will do. |
-| 2D `CrossSection` operations: `square`, `circle`, `offset`, Boolean operations, `hull`, transforms, `bounds`, `num_vert`, `num_contour` | not in this kernel | These belong to the 2D polygon kernel (`polygon.hpp`). This kernel takes rings and gives rings. |
+| `Manifold.cube`, `.cylinder`, `.sphere` | `box`, `cylinder`, `sphere` | The sphere is faceted differently; see below. |
+| `Manifold(Mesh64(vertices, triangles))` (lofts, polyhedra) | `from_mesh` | A mesh that is not a closed solid gives a status the callers test, as the library does. |
+| `mesh64.merge()` then `Manifold(mesh64)` (STEP tessellations) | `from_mesh` with `weld` | Welds on the 1 nm grid. |
+| `.rotate`, `.translate`, `.scale`, `.mirror`, `.transform` | `rotated`, `translated`, `scaled`, `mirrored`, `transformed` | Rounded to 1 nm; quarter turns, axis mirrors and whole-number scales are exact. |
+| `a + b`, `a - b`, `a ^ b`, `Manifold.batch_boolean` | `batch_boolean` | |
+| `Manifold.batch_hull` | `convex_hull` | Points all in one plane are refused. |
+| `.volume()`, `.surface_area()`, `.bounding_box()`, `.num_tri()`, `.num_vert()`, `.is_empty()`, `.status()` | the measures in every answer | |
+| `.to_mesh64()` | the `mesh` of the answer | Vertex and triangle order are the kernel's. |
+| `.slice(z)` | `section(solid, z)` | Then cleared of points on straight sides, as described under Sections. |
+| `.project()` | `projection(solid)` | |
+| `.min_gap(other, length)` (assembly contact) | `min_gap` | |
+| `triangulate(polygon)` (polyhedron faces) | a small routine in `solid_kernel.py` | Cuts off one corner at a time and uses every vertex of the face. |
+| `CrossSection`: polygons by a fill rule, `square`, `circle`, Boolean operations, `hull`, `offset`, transforms, `bounds`, `area` | the polygon kernel, through its `polygon` command | A circle has exactly the vertices of the solid kernel's cylinder. Offsets are described in [The polygon kernel](POLYGON-KERNEL.md#offsets). |
+| `CrossSection.extrude`, `.revolve` | `extrude`, `revolve` | Same twist sense and order (twist, then scale); same steps and start. |
 
-Two of Studio's tests compare a volume with its exact value to seven decimal places (`test_frustum_and_sphere`, `test_parametric_module_array_can_be_drilled_and_extruded` in `tests/test_scad_geometry.py`). On the 1 nm grid those volumes differ from the exact ones by 4·10^-6 and 1.3·10^-5 mm³, so the two tests need a tolerance when Studio moves over. The other 28 tests in the four modules pass on the kernel's solids as they are.
+### When the kernel refuses
+
+The kernel refuses a result it cannot represent validly on its grid ("the result has features too fine for the 1 nm grid"; see [Rounding](#rounding-and-why-the-result-stays-valid)). Studio then reports an error that names the feature or the script line and says what to do: two faces almost coincide there, usually after a turn, and moving, turning or resizing one shape by a small amount removes the cause.
+
+**Studio never hands the model to the other library**, whether the backend was chosen explicitly or by `auto`. The two facet differently, so a part that silently changed kernel between two rebuilds would change shape, triangle count and section outlines without the user having changed anything. A user who needs the model as it stood can set `KERFKITE_SOLID_BACKEND=manifold` for the whole installation. The refusal was not met in any model of Studio's tests or documents, nor in 5000 random scripts run on both backends (below).
+
+### What differs for a user
+
+- **Spheres.** Both kernels put `$fn` vertices round the equator. The kernel's sphere is bands of latitude and has about twice the triangles of the library's (9024 against 4608 at 96 segments), so its volume is a little nearer the true sphere and models with many spheres reach Studio's triangle limits at about half the number of spheres. The script engine's limit on overlapping triangle pairs is four times as large on the kernel, so that two overlapping spheres within the limit before are within it now.
+- **Round offsets** (`offset(r=…)`). Both draw each round corner with vertices on the true arc. The kernel divides a corner into equal parts of at most 1.0625 steps of 360° / `$fn`; the library takes whole steps from one end. The outlines differ by slivers far inside the facet error either has against the true arc.
+- **Twisted extrusions.** The side of a twisted extrusion is made of quadrilaterals that are not flat, and the two kernels may split them along different diagonals. The outlines at each layer are the same; the volume between layers is not, and with few slices the difference is large (a 4.5 by 5.7 mm outline turned 30° and tapered in a single slice: 15% above the true volume on the kernel, 24% below it on the library). More slices bring both to the true shape.
+- **Coordinates** are whole nanometres. A value such as `14.649999998509884` is now `14.65`.
+- **Section outlines** have a point at each corner and none along straight sides. The library's sections carry points along straight sides too: a turned box cut through five of its faces gave 10 points there and gives 5 here.
+- **Speed.** The exact checks cost time: the kernel is slower than the library, by a factor of about 5 to 25 on the parts measured below. Parts whose cuts have vertical walls stay fast; tapered or turned tools cost more, because every vertex made by the cut has to be rounded and the result checked.
+
+Time for one rebuild through Studio, on the two-core sandbox this was developed in (best of three; the machine was shared with another build):
+
+| Model | Library | Kernel |
+| --- | --- | --- |
+| A plate with one bore | 2 ms | 11 ms |
+| The scripting guide's mounting plate (four holes) | 6 ms | 23 ms |
+| The scripting guide's tapered dial (eight radial holes) | 15 ms | 117 ms |
+| The pinned bracket of the installed check: seven features, a sphere, tapered bores, a turned rib, a revolved groove, a scripted post | 50 ms | 1.3 s |
+| A plate with a row of eight overlapping spheres | 69 ms | 1.7 s |
+| A plate with 64 overlapping bores in one pattern | 0.39 s | 4.4 s |
+
+### How the switch is tested
+
+- `tests/test_solid_backends.py` builds every model of Studio's tests and every program of the scripting guide on both backends, through the same Studio code, and compares them: 22 drawings and 33 solids by volume, surface area, bounds, three sections and the projection; 6 solids with spheres, a twisted extrusion and 2 assemblies by what their faceting leaves comparable. The tolerances are stated at the head of that file and follow from the grid: a 1 nm shift of each surface for each of the two results, so a volume within 2 nm times the surface area. The largest difference found is 0.12 of its tolerance (volume 5.6·10^-5 mm³, surface area 2.9·10^-5 mm², section area 2.5·10^-5 mm², bounds within 1 nm).
+- The same file tests the choice of backend, modelling with the library absent, modelling with the extension absent, and that a refusal is an error and never another backend.
+- Three tests in `tests/test_scad_geometry.py` compared an area or a volume with its exact value to six or seven decimal places. They now allow the rounding of a circle's vertices to the grid: the perimeter of the circles times half a grid diagonal (2.7·10^-5 mm² for the drawing, 4.0·10^-5 and 3.6·10^-5 mm³ for the two solids).
+- `validation/check_installed_cam.py` models a part and a drawing through Studio's entry points with the installed extension and compares every vertex, triangle and outline with a recorded digest (`6c12e0b4dd788bbb`). That is the proof, on every platform a wheel or installer is built for, that the package carries the kernel and that the kernel gives the same bytes there. The digest is the same from GCC 13.3, from Clang 18.1, and with the portable 128-bit integers that a compiler without a 128-bit type (MSVC) uses, all on x86-64 Linux.
+- `validation/solid_kernel_check.py` runs Studio's four solid test modules on a stand-in that builds every solid in both: 30 tests, all passing, 148 distinct solids compared, 0 failures.
+- `validation/simulate_solid_workspace.py`, the browser exercise of the solid workspace, passes on the kernel.
+- `validation/solid_backend_check.py` builds random CAD scripts through Studio on both backends: drawings (polygons with holes, Boolean operations, offsets with each kind of corner) and solids (every primitive, extrusions, revolutions, polyhedra, transforms, Boolean operations and hulls, nested up to three deep). It is run by hand, not by the test suite. Measured with seeds 1 to 5, 600 drawings and 400 solids each:
+
+| | Drawings | Solids |
+| --- | --- | --- |
+| Built | 3000 | 2000 |
+| Agree within the grid's tolerance | 2954 (largest difference 0.35 of its tolerance) | 1421 (largest 0.083) |
+| Refused by both (an empty result, a budget) | 46 | 187 |
+| Not compared: a twisted extrusion in the script | | 390 |
+| Refused by the kernel as too fine | 0 | 0 |
+| The oracle wrong by a rule | 0 | 2 |
+| Differences | **0** | **0** |
+
+The two cases set aside are of the kinds already listed under [Testing](#testing). In one the library's result has a fin without thickness: the volumes agree, and the library's surface area and bounds are the larger. In the other the library's hull is not convex and leaves the vertices of its own operands 6.5 mm outside it, while the kernel's hull holds them. One further thing the runs showed is a property of the grid and not a fault: a Boolean operation can leave an edge shorter than a micrometre, rounding its ends to the grid turns it slightly, and a mitred offset of 2.8 mm from that edge then lay 24 nm from the library's. The check allows an offset that much (1.5 nm over the edge's length, times the distance).
+
+    python validation/solid_backend_check.py --drawings 600 --solids 400 --seed 1
 
 ## Known limitations
 
@@ -271,7 +326,9 @@ Two of Studio's tests compare a volume with its exact value to seven decimal pla
 - **The validity of a result rests on the code of the exact checks** listed under Rounding, and on the exact predicates under them. The tests found no invalid result, with every result re-checked by `count_self_intersections` and `verify_exact`; a test cannot prove there is none.
 - **Which sub-resolution features are removed is decided with doubles** (thin cells, ribbons, merged vertices, flipped caps). Those decisions choose between valid results, so they cannot make a result invalid, and they are deterministic; but they are thresholds, and a feature a few nanometres thick is kept or dropped by them.
 - **`from_mesh` checks that a mesh is closed, oriented and without zero-area triangles; it does not look for self-intersections.** They are found, and resolved, the first time the solid takes part in a Boolean operation; `count_self_intersections` reports them on request.
-- **Sections keep one point for each mesh edge crossed**, so straight sides carry collinear points. They are not removed.
+- **A section of a face that is not exactly flat keeps a point at each crease.** Points inside an exactly flat face are left out; a face turned by an arbitrary angle is flat only to the grid's rounding, and the kernel does not remove points by a tolerance. Studio does, within 2 nm, for the outlines it shows and cuts.
+- **The sphere has about twice the triangles of the third-party library's** for the same segment count, with thin triangles at the poles. A sphere with triangles of even size would be cheaper for the same accuracy.
+- **Speed against the third-party library**: slower by a factor of about 5 to 25 through Studio; see [What differs for a user](#what-differs-for-a-user).
 - **No simplification beyond exact removal of unneeded vertices.** Triangles are not merged or re-meshed for quality; long thin triangles remain.
 - **Results near the resolution are valid but may be untidy**: where faces nearly coincide, the result can carry small steps and extra vertices a few nanometres in size.
 - **Convex hull** tests every point against every face: adequate for the sizes Studio allows, quadratic in the worst case.
