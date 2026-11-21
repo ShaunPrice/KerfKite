@@ -81,12 +81,15 @@ GEOS is LGPL 2.1; `docs/LICENSING.md` says what that asks of anyone who distribu
 it, and `third_party/geos/` holds the licence text.
 
 Measured on Linux x86-64 with two processor cores: building GEOS adds about three and a half minutes to
-the first build (19 seconds without it), nothing to later builds, and takes `kerfkite-cam` from 0.5 MB to
-4.6 MB (0.4 MB to 3.6 MB with symbols stripped).
+the first build (about 20 seconds without it), nothing to later builds, and takes `kerfkite-cam` from
+0.5 MB to 4.6 MB (0.4 MB to 3.6 MB with symbols stripped). Built as shared libraries, GEOS is 5.5 MB
+beside a 0.6 MB program.
 
-What has been shown and what has not. On Linux x86-64 the core's GEOS, compiled here with GCC 13, gave
-the same vertices as the wheel's GEOS, compiled by its maintainers with GCC 14, on every case compared.
-That is evidence that the compiler version does not matter on that platform, not proof for the others. On
+What has been shown and what has not. On Linux x86-64 the core's GEOS, compiled here with GCC 13 and again
+with Clang 18, gave the same vertices as the wheel's GEOS, compiled by its maintainers with GCC 14, on
+every case compared: beyond the 4,000 contour jobs the comparison runs each time, about 70,000 more with
+the GCC build and 11,000 with the Clang build.
+That is evidence that the compiler does not matter on that platform, not proof for the others. On
 macOS, Windows and Linux ARM64 the wheel's GEOS and the core's are again built by different compilers and
 possibly different C++ standard libraries. Both use the system's mathematics library, and both are built
 without floating-point contraction, so the same results are expected, but only the comparison run on each

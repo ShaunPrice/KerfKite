@@ -62,6 +62,10 @@ endif()
 FetchContent_Declare(kerfkite_geos URL ${kerfkite_geos_urls} URL_HASH SHA256=${KERFKITE_GEOS_SHA256})
 FetchContent_GetProperties(kerfkite_geos)
 if(NOT kerfkite_geos_POPULATED)
+  if(NOT EXISTS ${FETCHCONTENT_BASE_DIR}/kerfkite_geos-src/CMakeLists.txt)
+    message(STATUS "KerfKite: fetching GEOS ${KERFKITE_GEOS_VERSION}. Without a network, pass "
+                   "-DKERFKITE_GEOS_URL=<path to geos-${KERFKITE_GEOS_VERSION}.tar.bz2> or -DKERFKITE_WITH_GEOS=OFF")
+  endif()
   FetchContent_Populate(kerfkite_geos)
 endif()
 
@@ -94,9 +98,7 @@ function(kerfkite_add_geos)
 endfunction()
 kerfkite_add_geos()
 
-if(NOT "${GEOS_VERSION}" STREQUAL "" AND NOT "${GEOS_VERSION}" VERSION_EQUAL "${KERFKITE_GEOS_VERSION}")
-  message(FATAL_ERROR "KerfKite: the fetched GEOS is ${GEOS_VERSION}, not ${KERFKITE_GEOS_VERSION}")
-endif()
+# The checksum fixes the content; the geometry self-test also checks the version compiled in.
 set(KERFKITE_GEOS_TARGET geos_c)
 if(KERFKITE_GEOS_SHARED)
   message(STATUS "KerfKite: building GEOS ${KERFKITE_GEOS_VERSION} as shared libraries beside the program")

@@ -123,7 +123,7 @@ class Context {
     Geometry read_wkt(const std::string &text);
     // GeometryCollection(): the empty collection, read from text as Shapely does.
     Geometry empty_collection();
-    // Point(x, y): GEOSGeom_createPointFromXY_r.
+    // A point, as Point(x, y) is in Shapely: GEOSGeom_createPointFromXY_r.
     Geometry point(double x, double y);
     // LineString(points): GEOSGeom_createLineString_r. At least two points.
     Geometry line(const Ring &points);
