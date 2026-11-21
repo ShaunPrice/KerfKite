@@ -49,9 +49,9 @@ Each of these goes when the part that uses it is ported, under rule 5.
 | Flask, with Werkzeug, Jinja2, Click, itsdangerous, MarkupSafe, blinker | The local web server behind the editor | Replace on porting the server: a small local HTTP server of our own. |
 | ezdxf, with pyparsing, fonttools, typing-extensions | DXF import and export | Replace on porting: a reader and writer for the DXF entities Studio handles. |
 | pypdf | Vector import from PDF | Replace on porting. A sizeable piece: objects, compressed streams and drawing operators. |
-| manifold3d | Solid modelling: unions, differences and intersections of 3D shapes | **Decision needed.** A robust 3D solid kernel is a much larger undertaking than the 2D one. Keep until the 2D kernel has proved the approach, then decide. |
+| manifold3d | Solid modelling: unions, differences and intersections of 3D shapes | **Replace** (owner's decision, 21 November 2026). An in-house 3D solid kernel is being written, because engravings can be three-dimensional and multi-axis machines are to follow. It also provides what those need: sections on any plane, ray casting with surface normals, and height maps. |
 | Pillow | Used only by packaging and guide-building scripts, not by Studio when it runs | **Quick win:** move it from the installed dependencies to a build-time requirement, after confirming the installers still build. |
-| cadquery-ocp (Open Cascade, LGPL), optional | STEP import and export | **Decision needed.** Writing a STEP and B-rep kernel is not realistic. Keep it optional, as now, or drop STEP. |
+| cadquery-ocp (Open Cascade, LGPL 2.1 with exception), optional | STEP import and export | **Keep, optional** (owner's decision, 21 November 2026). Writing a STEP and B-rep kernel is not realistic. It stays a separately installed part, so the main product does not carry it. |
 | cheroot and cryptography, optional | The hosted editor, and the encrypted pendant link | Keep cryptography: rule 2. In a native application the operating system's own TLS can take its place. |
 | fastmcp, pydantic, playwright, optional | The MCP service | Replace on porting the service; the browser driver goes when the editor no longer needs driving. |
 | Python and setuptools | The runtime and packaging | Retired when the port is complete. |
@@ -74,7 +74,26 @@ Each of these goes when the part that uses it is ported, under rule 5.
 
 ## The editor in the C++ application
 
-The plan for the port had left open whether the C++ application would use Qt 6 for its editor. Under this rule Qt would become the largest third-party component in the product. The alternative that fits the rule is to keep the existing editor, which is already KerfKite's own code, and serve it from the core's own local HTTP server. This is a decision for the owner and is not yet made.
+**Qt 6 is kept** for the editor of the C++ application (owner's decision, 21 November 2026). It is a deliberate exception to rule 1: a user interface toolkit for three desktop platforms is not within reach to write. Qt is used through dynamic linking, and only the modules Qt offers under the LGPL are used; some Qt modules are offered to open-source users under the GPL only and are avoided.
+
+## Licences by part
+
+Where a component cannot be replaced, its licence comes with it. The way to keep that contained is to keep each such component inside one part of the product, behind a clear boundary, and to let each part carry only the licences of what it contains. The core never links a component that belongs to another part.
+
+| Part | What it contains | Third-party inside | Licence position |
+| --- | --- | --- | --- |
+| Core and `kerfkite-cam`: CAM, the geometry and solid kernels, file formats, levelling | KerfKite's own code | None, once GEOS and the JSON library are replaced | MIT, with no third-party obligations |
+| Editor application | KerfKite's own code, linked dynamically to Qt | Qt 6 (LGPL 3) | The code stays MIT. A distributed package must meet the LGPL for Qt: the notice and licence text, Qt's source or an offer of it, and the means to replace the Qt libraries. A commercial Qt licence is the alternative. |
+| STEP add-on, optional | A thin wrapper | Open Cascade (LGPL 2.1 with its exception) | Installed separately. Its package meets the LGPL for Open Cascade; nothing else in the product is affected. |
+| Encrypted links | The pendant listener and hosted editor | A cryptography library, or the operating system's own TLS | The library's permissive licence; notices only |
+| KerfKite Pocket | KerfKite's own Java | ZXing (Apache 2.0) until replaced | Notices only |
+
+Two questions are open for the owner and should have legal review before anything changes:
+
+1. **Whether KerfKite's own code should stay under one licence.** MIT throughout is the simplest position and is compatible with every component above. A different licence for a part is possible for future versions of code the owner holds the copyright in; versions already released under MIT stay under MIT.
+2. **App stores and locked devices.** The LGPL's requirement that a user can replace the library needs particular care where a platform does not allow it.
+
+This register describes what is done and what the licences ask; it is not legal advice.
 
 ## Order of work
 

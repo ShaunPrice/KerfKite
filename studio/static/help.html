@@ -3478,7 +3478,7 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 <tr>
 <td>manifold3d</td>
 <td>Solid modelling: unions, differences and intersections of 3D shapes</td>
-<td><strong>Decision needed.</strong> A robust 3D solid kernel is a much larger undertaking than the 2D one. Keep until the 2D kernel has proved the approach, then decide.</td>
+<td><strong>Replace</strong> (owner's decision, 21 November 2026). An in-house 3D solid kernel is being written, because engravings can be three-dimensional and multi-axis machines are to follow. It also provides what those need: sections on any plane, ray casting with surface normals, and height maps.</td>
 </tr>
 <tr>
 <td>Pillow</td>
@@ -3486,9 +3486,9 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 <td><strong>Quick win:</strong> move it from the installed dependencies to a build-time requirement, after confirming the installers still build.</td>
 </tr>
 <tr>
-<td>cadquery-ocp (Open Cascade, LGPL), optional</td>
+<td>cadquery-ocp (Open Cascade, LGPL 2.1 with exception), optional</td>
 <td>STEP import and export</td>
-<td><strong>Decision needed.</strong> Writing a STEP and B-rep kernel is not realistic. Keep it optional, as now, or drop STEP.</td>
+<td><strong>Keep, optional</strong> (owner's decision, 21 November 2026). Writing a STEP and B-rep kernel is not realistic. It stays a separately installed part, so the main product does not carry it.</td>
 </tr>
 <tr>
 <td>cheroot and cryptography, optional</td>
@@ -3562,7 +3562,57 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 </tbody>
 </table>
 <h2>The editor in the C++ application</h2>
-<p>The plan for the port had left open whether the C++ application would use Qt 6 for its editor. Under this rule Qt would become the largest third-party component in the product. The alternative that fits the rule is to keep the existing editor, which is already KerfKite's own code, and serve it from the core's own local HTTP server. This is a decision for the owner and is not yet made.</p>
+<p><strong>Qt 6 is kept</strong> for the editor of the C++ application (owner's decision, 21 November 2026). It is a deliberate exception to rule 1: a user interface toolkit for three desktop platforms is not within reach to write. Qt is used through dynamic linking, and only the modules Qt offers under the LGPL are used; some Qt modules are offered to open-source users under the GPL only and are avoided.</p>
+<h2>Licences by part</h2>
+<p>Where a component cannot be replaced, its licence comes with it. The way to keep that contained is to keep each such component inside one part of the product, behind a clear boundary, and to let each part carry only the licences of what it contains. The core never links a component that belongs to another part.</p>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>What it contains</th>
+<th>Third-party inside</th>
+<th>Licence position</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Core and <code>kerfkite-cam</code>: CAM, the geometry and solid kernels, file formats, levelling</td>
+<td>KerfKite's own code</td>
+<td>None, once GEOS and the JSON library are replaced</td>
+<td>MIT, with no third-party obligations</td>
+</tr>
+<tr>
+<td>Editor application</td>
+<td>KerfKite's own code, linked dynamically to Qt</td>
+<td>Qt 6 (LGPL 3)</td>
+<td>The code stays MIT. A distributed package must meet the LGPL for Qt: the notice and licence text, Qt's source or an offer of it, and the means to replace the Qt libraries. A commercial Qt licence is the alternative.</td>
+</tr>
+<tr>
+<td>STEP add-on, optional</td>
+<td>A thin wrapper</td>
+<td>Open Cascade (LGPL 2.1 with its exception)</td>
+<td>Installed separately. Its package meets the LGPL for Open Cascade; nothing else in the product is affected.</td>
+</tr>
+<tr>
+<td>Encrypted links</td>
+<td>The pendant listener and hosted editor</td>
+<td>A cryptography library, or the operating system's own TLS</td>
+<td>The library's permissive licence; notices only</td>
+</tr>
+<tr>
+<td>KerfKite Pocket</td>
+<td>KerfKite's own Java</td>
+<td>ZXing (Apache 2.0) until replaced</td>
+<td>Notices only</td>
+</tr>
+</tbody>
+</table>
+<p>Two questions are open for the owner and should have legal review before anything changes:</p>
+<ol>
+<li><strong>Whether KerfKite's own code should stay under one licence.</strong> MIT throughout is the simplest position and is compatible with every component above. A different licence for a part is possible for future versions of code the owner holds the copyright in; versions already released under MIT stay under MIT.</li>
+<li><strong>App stores and locked devices.</strong> The LGPL's requirement that a user can replace the library needs particular care where a platform does not allow it.</li>
+</ol>
+<p>This register describes what is done and what the licences ask; it is not legal advice.</p>
 <h2>Order of work</h2>
 <ol>
 <li>The polygon kernel, replacing GEOS in the core and Shapely in the CAM operations.</li>
