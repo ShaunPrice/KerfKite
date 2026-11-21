@@ -80,7 +80,7 @@ On 21 November 2026 the published Pocket 0.4.1 APK was exercised on a Samsung Ga
 | Plain pendant | The same sequence over a plain link, on the shrunk build |
 | QR pairing | The scanner asked for camera access, opened the rear camera at 1280 × 720 and released it on Cancel, Back and in the background. A code shown on a workstation screen was scanned by hand and Pocket paired and showed live status |
 
-The signed 0.5.0 release APK has the same contents, entry for entry, as the unsigned build of that source. An in-place upgrade of the released 0.4.1 app on a phone was not part of this check.
+The signed 0.5.0 release APK has the same contents, entry for entry, as the unsigned build of that source. It was then installed over the released 0.4.1 on the same handset: the existing project and its two shapes were kept, the first-install date was unchanged, and the app started cold in 251 ms without a crash.
 
 Not exercised on the handset: the **Keep screen awake** switch, the pendant in landscape, the panel's full-resolution display mode, USB and Bluetooth tethering, the HTTPS monitor, and any physical controller.
 
