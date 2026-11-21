@@ -82,8 +82,20 @@ def excellon(text, units=None, integer=None, decimal=None, omitted_zeros=None):
     )
 
 
+_isolation_asked = None  # (the extension's entry point, its answer)
+
+
 def isolation_available():
     """Whether the compiled extension carries isolation toolpaths (an older build may have only the importers)."""
+    global _isolation_asked
+    # The session asks this on every request, and an extension does not change while it is loaded: the core
+    # is asked once for each entry point, not once a request.
+    if _isolation_asked is None or _isolation_asked[0] is not _core_call:
+        _isolation_asked = (_core_call, _asks_isolation())
+    return _isolation_asked[1]
+
+
+def _asks_isolation():
     if _core_call is None:
         return False
     try:
