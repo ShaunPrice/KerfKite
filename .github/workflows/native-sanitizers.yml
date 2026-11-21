@@ -18,7 +18,9 @@ jobs:
       matrix:
         include:
           - { name: linux-arm64-gcc, runner: ubuntu-24.04-arm, compiler: g++ }
-          - { name: linux-arm64-clang, runner: ubuntu-24.04-arm, compiler: clang++ }
+          # The overflow check on a 128-bit product calls a routine that Clang's own runtime library has and
+          # GCC's, which Clang links on Linux by default, has not: on ARM64 the checked build asks for Clang's.
+          - { name: linux-arm64-clang, runner: ubuntu-24.04-arm, compiler: clang++, link: "-rtlib=compiler-rt -unwindlib=libgcc" }
           - { name: linux-x64-clang, runner: ubuntu-24.04, compiler: clang++ }
           - { name: macos-arm64-apple-clang, runner: macos-15, compiler: clang++ }
           - { name: macos-x64-apple-clang, runner: macos-15-intel, compiler: clang++ }
@@ -38,6 +40,7 @@ jobs:
       - name: Build and self-test under the address and undefined-behaviour sanitizers
         run: |
           cmake -S native -B build/sanitizers -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer"
+            "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer" \
+            "-DCMAKE_EXE_LINKER_FLAGS=${{ matrix.link }}"
           cmake --build build/sanitizers --parallel 4
           ctest --test-dir build/sanitizers --output-on-failure --timeout 3000
