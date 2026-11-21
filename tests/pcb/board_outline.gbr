@@ -1,0 +1,33 @@
+G04 KerfKite test fixture: the outline of the board of board_top.gbr, 40 mm by 30 mm with 2 mm corners*
+G04 and one round mounting cut-out, drawn in order as a design program exports it.*
+G04 Written by hand for the test suite. Synthetic data, free to redistribute.*
+%TF.GenerationSoftware,KerfKite,fixture,1*%
+%TF.FileFunction,Profile,NP*%
+%FSLAX46Y46*%
+%MOMM*%
+%LPD*%
+%ADD10C,0.100000*%
+D10*
+G75*
+G01*
+X102000000Y-110000000D02*
+X138000000Y-110000000D01*
+G03*
+X140000000Y-108000000I0J2000000D01*
+G01*
+X140000000Y-82000000D01*
+G03*
+X138000000Y-80000000I-2000000J0D01*
+G01*
+X102000000Y-80000000D01*
+G03*
+X100000000Y-82000000I0J-2000000D01*
+G01*
+X100000000Y-108000000D01*
+G03*
+X102000000Y-110000000I2000000J0D01*
+G01*
+X113600000Y-100000000D02*
+G03*
+X113600000Y-100000000I-1600000J0D01*
+M02*

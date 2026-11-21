@@ -64,6 +64,7 @@ For sketch constraints, start with `studio/sketch_constraints.py` and `studio/sk
 | --- | --- | --- |
 | Curved parametric sketches and two-section lofts | `studio/sketch_curves.py`, `studio/solid_loft.py`, `studio/solid_cad.py`, `studio/cad_exchange.py` | `validation/sketch_join_workflow.py` and `validation/loft_workflow.py` |
 | Vector SVG and PDF input | `studio/static/svg-import.js`, `studio/pdf_import.py` | `validation/svg_import_workflow.py` and `validation/pdf_import_workflow.py` |
+| Circuit boards: Gerber and Excellon import, isolation toolpaths, the board panel | `native/core/src/gerber.cpp`, `excellon.cpp`, `isolation.cpp`, `studio/pcb_import.py`, `studio/pcb_api.py`, `studio/static/pcb-board.js`, `pcb-import.js` | `validation/pcb_workflow.py` |
 | Router entry, drilling and tab placement | `studio/router_entry.py`, `studio/drilling.py`, `studio/static/tab-placement.js` | `validation/router_entry_workflow.py`, `validation/drilling_workflow.py`, `validation/placement_workflow.py` |
 | Labels, grouping, machine profiles and calibrated quotes | `studio/static/production-labels.js`, `placement.js`, `machine-library.js`, `cycle-time.js` | `validation/production_label_workflow.py` |
 | Native Android project storage and interchange | `DraftLibrary.java`, `ProjectFile.java` in `android/app/src/main/java/au/cncstudio/pocket/` | `validation/android_projects_workflow.py` |

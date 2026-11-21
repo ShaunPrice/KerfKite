@@ -1,0 +1,23 @@
+M48
+; KerfKite test fixture: the holes of the board of board_top.gbr.
+; The header gives the units and the zeros but not the digits, as many drill files do.
+; Written by hand for the test suite. Synthetic data, free to redistribute.
+FMAT,2
+METRIC,TZ
+T1C0.400
+T2C0.800
+T3C1.000
+%
+G90
+G05
+T1
+X105000Y-085000
+X110500Y-085250
+T2
+X120000Y-090000
+X122540Y-090000
+X125080Y-090000
+X104000Y-106000
+T3
+X133000Y-105500
+M30

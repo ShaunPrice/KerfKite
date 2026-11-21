@@ -1060,7 +1060,7 @@ class DamagedFileTests(Base):
         rng = random.Random(20261121)
         gerbers = [path.read_text() for path in sorted(FIXTURES.glob('*.gbr'))]
         drills = [path.read_text() for path in sorted(FIXTURES.glob('*.drl'))]
-        self.assertEqual((len(gerbers), len(drills)), (10, 4))
+        self.assertEqual((len(gerbers), len(drills)), (11, 5))
         outcomes = {'read': 0, 'refused': 0}
         for _ in range(400):
             for texts, calls in (

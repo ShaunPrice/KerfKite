@@ -67,7 +67,7 @@ On Windows x64 (MSVC 2022 Build Tools, Python 3.10 and 3.12) the extension build
 
 Probe levelling (`native/core/src/leveling.cpp`) is the first part of the application written only in the core: it has no Python version. The extension compiles that file and exposes it as `core_call`, which `studio/leveling.py` wraps; the extension is therefore built as C++17 and compiles the core's JSON reader and writer with it. See [Probe levelling](PROBE-LEVELING.md).
 
-Circuit board import (`gerber.cpp`, `excellon.cpp`, `pcb.cpp`) is written the same way, compiled into the extension and wrapped by `studio/pcb_import.py`. See [Circuit boards](PCB.md).
+Circuit board import (`gerber.cpp`, `excellon.cpp`, `pcb.cpp`) is written the same way, compiled into the extension and wrapped by `studio/pcb_import.py`. So are isolation toolpaths (`isolation.cpp`), for which the extension also compiles the polygon kernel (`polygon/`). See [Circuit boards](PCB.md).
 
 Offsets, pockets and hatch fills are computed with GEOS 3.14.1, the release inside the Shapely 2.2.0 wheels that the Python code uses, through the same calls with the same arguments (`native/core/src/geometry.hpp`, `native/core/src/operations.cpp`). The build fetches the pinned GEOS release and checks its SHA-256; `native/README.md` gives the options, the build cost and the limits of what has been measured, and [Licences](LICENSING.md) covers GEOS's LGPL terms. On Linux x86-64 the generated comparison adds 4,000 contour jobs, of which about 2,400 produce programs (offsets, pockets and fills) and the rest rejections; all are reproduced or declined, none differs.
 

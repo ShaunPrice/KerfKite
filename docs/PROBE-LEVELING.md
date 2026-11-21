@@ -83,4 +83,4 @@ Levelling is tested against the simulator and by calculation. It has not yet bee
 
 ## Circuit boards
 
-Probe levelling is the first part of circuit board engraving. Gerber layers and Excellon drill files can be read, and a board outline and its holes turned into cut-out paths and drilling operations: see [Circuit boards](PCB.md). Isolation toolpaths from a copper layer are not yet generated. Until then, traces drawn or imported as vectors can be engraved and levelled as any router line job.
+Probe levelling is what circuit board engraving rests on. A board's Gerber layers and Excellon drill file are imported under **Projects**, **Circuit board**, which adds the isolation contours, the holes and the cut-out to the design as stages, one for each tool; the isolation stage is then previewed, probed and run as described above. See [Circuit boards](PCB.md).

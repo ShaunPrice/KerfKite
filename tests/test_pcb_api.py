@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from shapely.geometry import Point, Polygon
+
 from studio import pcb_api, pcb_import
 from studio.cam import generate
 from studio.controller import Controller
@@ -92,6 +94,22 @@ class BoardRouteTests(unittest.TestCase):
             self.assertTrue(generate({**SETTINGS, 'depth': 1.8, **operation})['drill_holes'])
         cut_out = generate({**SETTINGS, 'depth': 1.8, 'operation': 'line', 'paths': answer['outline']['paths']})
         self.assertGreater(cut_out['cut_length'], 100)
+
+    def test_the_layers_of_one_board_register(self):
+        # The outline, both copper layers and the holes of the fixture board: every hole has its pad on each side.
+        board = {'outline': fixture('board_outline.gbr'), 'drill': fixture('board_drill.drl'), 'tool_width': 0.2}
+        top = self.post({**board, 'copper': fixture('board_top.gbr'), 'width': 60, 'height': 40}).json
+        under = self.post({**board, 'copper': fixture('board_bottom.gbr'), 'side': 'bottom'}).json
+        self.assertEqual((top['warnings'], top['copper']['unreachable']), ([], []))
+        self.assertEqual(top['outline']['bounds'], [5.0, 5.0, 45.0, 35.0])
+        self.assertTrue(any('does not state its number format' in w for w in top['drill']['warnings']))
+        self.assertEqual(top['drill']['interpretation']['digits_from'], 'default')
+        for answer, expected in ((top, 7), (under, 6)):
+            holes = [path[0] for operation in answer['drill']['operations'] for path in operation['paths']]
+            self.assertEqual(len(holes), 7)
+            pads = [Polygon(island['shell'], island['holes']) for island in answer['copper']['copper']]
+            self.assertEqual(sum(any(pad.contains(Point(hole)) for pad in pads) for hole in holes), expected)
+        self.assertEqual(under['mirror_x'], 25.0)
 
     def test_warnings_of_each_file_are_returned(self):
         tight = self.ok(tool_width=0.3)['copper']

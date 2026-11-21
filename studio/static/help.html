@@ -119,6 +119,7 @@
 <h2>Workshop tools</h2>
 <ul>
 <li><strong>Router.</strong> Create a single hole or drilling pattern, choose a peck depth, place holding tabs directly on a compensated contour, and use ramp or helical entry on eligible toolpaths. For thin engraving such as circuit boards, probe the stock on a Grbl-family controller and run the job following the measured surface. <a href="#drilling">Drilling</a> · <a href="#router-entry">Router entry</a> · <a href="#probe-leveling">Probe levelling</a></li>
+<li><strong>Circuit boards.</strong> Import a board's Gerber copper layers, outline and Excellon drill file; engrave isolation contours round the copper with a V-bit, with a warning and a mark wherever the cutter cannot pass between two pieces of copper; drill each diameter and cut the board out as separate tool stages; mirror the underside so that both sides register. Tested on the simulator and on hand-written fixtures, not yet on a machine. <a href="#pcb">Circuit boards</a></li>
 <li><strong>Laser and layout.</strong> Place perforations or holding bridges, choose straight or curved leads, move layout groups and snap to a grid or visible vertices. <a href="#laser-patterns">Laser patterns</a> · <a href="#geometry">Layout tools</a></li>
 <li><strong>Lettering and labels.</strong> Engrave centreline lettering with Workshop Mono, select installed fonts where supported, and create numbered text, Code 39 or QR labels with a live proof. <a href="#labels">Production labels</a></li>
 <li><strong>CAD, import and camera.</strong> Edit dimension-driven Bézier sketches, loft between two sections, inspect vector PDF pages, import compound SVG paths at physical scale and fit radial lens correction to measured targets. <a href="#solid-cad">Solid CAD</a> · <a href="#sketch">Sketches</a> · <a href="#program-import">Import guide</a> · <a href="#camera-register">Camera setup</a></li>
@@ -830,6 +831,11 @@ bash scripts/ci-local.sh --list
 <td>Vector SVG and PDF input</td>
 <td><code>studio/static/svg-import.js</code>, <code>studio/pdf_import.py</code></td>
 <td><code>validation/svg_import_workflow.py</code> and <code>validation/pdf_import_workflow.py</code></td>
+</tr>
+<tr>
+<td>Circuit boards: Gerber and Excellon import, isolation toolpaths, the board panel</td>
+<td><code>native/core/src/gerber.cpp</code>, <code>excellon.cpp</code>, <code>isolation.cpp</code>, <code>studio/pcb_import.py</code>, <code>studio/pcb_api.py</code>, <code>studio/static/pcb-board.js</code>, <code>pcb-import.js</code></td>
+<td><code>validation/pcb_workflow.py</code></td>
 </tr>
 <tr>
 <td>Router entry, drilling and tab placement</td>
@@ -1789,7 +1795,7 @@ rotary = generate_rotary(project, options, backend='python')
 <h2>Python-free core</h2>
 <p><code>native/</code> holds the start of the application's move to C++: a C++17 library and the <code>kerfkite-cam</code> command-line tool, which write G-code from a project file with no Python installed. It currently reproduces router line jobs, laser line jobs (leads, power ramps, perforation, holding bridges and raster powers), drilling, drag-knife paths, ordered multi-operation jobs and controller post-processing; everything else is declined, never approximated. <code>native/README.md</code> lists what is ported and how to build it.</p>
 <p>Probe levelling (<code>native/core/src/leveling.cpp</code>) is the first part of the application written only in the core: it has no Python version. The extension compiles that file and exposes it as <code>core_call</code>, which <code>studio/leveling.py</code> wraps; the extension is therefore built as C++17 and compiles the core's JSON reader and writer with it. See <a href="#probe-leveling">Probe levelling</a>.</p>
-<p>Circuit board import (<code>gerber.cpp</code>, <code>excellon.cpp</code>, <code>pcb.cpp</code>) is written the same way, compiled into the extension and wrapped by <code>studio/pcb_import.py</code>. See <a href="#pcb">Circuit boards</a>.</p>
+<p>Circuit board import (<code>gerber.cpp</code>, <code>excellon.cpp</code>, <code>pcb.cpp</code>) is written the same way, compiled into the extension and wrapped by <code>studio/pcb_import.py</code>. So are isolation toolpaths (<code>isolation.cpp</code>), for which the extension also compiles the polygon kernel (<code>polygon/</code>). See <a href="#pcb">Circuit boards</a>.</p>
 <p>Offsets, pockets and hatch fills are computed with GEOS 3.14.1, the release inside the Shapely 2.2.0 wheels that the Python code uses, through the same calls with the same arguments (<code>native/core/src/geometry.hpp</code>, <code>native/core/src/operations.cpp</code>). The build fetches the pinned GEOS release and checks its SHA-256; <code>native/README.md</code> gives the options, the build cost and the limits of what has been measured, and <a href="#licensing">Licences</a> covers GEOS's LGPL terms. On Linux x86-64 the generated comparison adds 4,000 contour jobs, of which about 2,400 produce programs (offsets, pockets and fills) and the rest rejections; all are reproduced or declined, none differs.</p>
 <p>The exact number formatting described above now lives in one header, <code>native/core/include/kerfkite/number_text.hpp</code>, used by both the Python extension and the core.</p>
 <p>The core reads and writes JSON with its own code (<code>native/core/include/kerfkite/json.hpp</code>, <code>native/core/src/json.cpp</code>), which replaced the vendored JSON for Modern C++ header; apart from GEOS, which is being replaced separately, the core now has no third-party source. It supports what the core uses: all of RFC 8259 on input, with every escape and surrogate pairs; numbers that keep their kind, so that <code>1</code> stays a whole number and <code>1.0</code> a float as the Python reference requires; objects with their names in byte order, the last value standing where a name repeats; and one-line output. Its limits: arrays and objects nest at most 200 deep in text that is read, text must be well-formed UTF-8 in both directions, a literal beyond the range of a double is refused, and there is no indented output, comment syntax or binary format. A float is read as the nearest double and written as the shortest text that reads back as the same double, by exact integer arithmetic in <code>native/core/include/kerfkite/decimal.hpp</code>; the C library's conversions and the C locale are not involved, and <code>repr</code> in <code>number_text.hpp</code> and <code>float()</code> of text in a project use the same code. Floats are therefore written as Python writes them. The old library wrote two things differently: a float from 1e15 up to 1e16 in exponent form (<code>1e+15</code>, now <code>1000000000000000.0</code>), and, for roughly one double in a thousand, digits that were not the shortest (<code>23.343139999999998</code>, now <code>23.34314</code>). Both forms read back as the same double.</p>
@@ -1797,20 +1803,169 @@ rotary = generate_rotary(project, options, backend='python')
 <p><code>python validation/native_core_parity.py --cli &lt;kerfkite-cam&gt;</code> compares the core with the Python reference: number text, every generator call the test suite makes, and thousands of generated edge cases. A case must be reproduced exactly or declined; a different answer fails. With laser jobs ported, the measurement on Linux x86-64 is: 300,000 numbers and 360,000 distances and sums identical; 124 of 202 recorded suite calls reproduced (61%); 11,225 of 12,000 generated cases reproduced (94%), among them 1,137 laser programs; and no differences. The three benchmark programs written by <code>kerfkite-cam</code> have the same hashes as Python's.</p>
 <p>Drilling (<code>native/core/src/drilling.cpp</code>) and drag-knife paths (<code>native/core/src/knife.cpp</code>) are ported as well. The generated cases gained 4,000 drilling and knife projects. On Linux x86-64, with those two parts: 160 of 205 recorded suite calls reproduced (78%, from 62%); 15,562 of 16,000 generated cases reproduced (97%), among them 1,290 drilling and 1,634 drag-knife programs; and no differences. The one knife case declined is a path that returns to a point through steps too short to keep, where the Python divides by zero. Knife swivels use the platform's <code>atan2</code>, <code>sin</code> and <code>cos</code>, as Python does, so they are compared on each platform against the Python there.</p>
 <p>Ramp entries and holding tabs on router line jobs are reproduced too (<code>native/core/src/router_entry.cpp</code>, <code>tabs.cpp</code>). Before either, the reference asks Shapely whether each contour crosses itself; <code>simple_line.cpp</code> answers by the rules GEOS applies, including its double-double orientation test, and declines the rare contour for which that test and exact arithmetic disagree. A helix entry needs a pocket, so on a line job it is rejected as the reference rejects it. The ramp slope is <code>math.tan</code> of the entry angle, one C library call on each side. With these ported, the measurement on Linux x86-64 is: 161 of 205 recorded suite calls reproduced (79%); 11,432 of the same 12,000 generated cases (95%); and 5,951 of 6,005 ramp, helix and tab cases, among them 3,254 programs, the rest of those declined because they also ask for an offset, a pocket or drilling; no differences.</p>
-</section><section id="pcb"><h1>Circuit boards: Gerber and Excellon import</h1>
-<p>KerfKite reads the two files a board design program exports for manufacture: <strong>Gerber</strong> layers (RS-274X and X2) and <strong>Excellon</strong> drill files. This is the second part of circuit board engraving, after <a href="#probe-leveling">probe levelling</a>.</p>
-<p><strong>Isolation toolpaths are not generated yet.</strong> A copper layer is read into the list of objects it draws, in millimetres, and stops there. Turning that list into copper outlines and offsetting a cutter around them needs polygon union and offsetting, which is the next step. What works today from an imported board:</p>
+</section><section id="pcb"><h1>Circuit boards</h1>
+<p>KerfKite makes a printed circuit board from the files a board design program exports for manufacture: it engraves round the copper so that each track and pad is cut free of the rest of the blank (isolation routing), drills the holes and cuts the board out. It reads <strong>Gerber</strong> layers (RS-274X and X2) and <strong>Excellon</strong> drill files, and follows the surface of the board with <a href="#probe-leveling">probe levelling</a>, which thin engraving needs.</p>
+<p><strong>None of this has yet been run on a physical machine.</strong> It has been run on the simulator. The board files it has been tested with are fixtures written by hand in the style of common design programs' output (<code>tests/pcb/</code>), not exports from those programs. Check an imported board's size, hole positions and warnings against the design, rehearse on the simulator, and cut a scrap board first.</p>
+<p>The first part of this document is the guide to making a board in Studio. The rest is the reference: the commands, the Python functions, what is read from each format and what is declined.</p>
+<h2>Making a board in Studio</h2>
+<h3>What is needed</h3>
 <ul>
-<li>a <strong>board outline</strong> layer becomes closed paths for a cut-out line job;</li>
-<li>a <strong>drill file</strong> becomes drilling operations, one group for each drill diameter;</li>
-<li>any layer can be inspected as data: apertures, objects, bounds and warnings.</li>
+<li>From the design program: one Gerber file for each <strong>copper layer</strong>, the <strong>board outline</strong> (KiCad's <code>Edge.Cuts</code>, a profile layer) and the <strong>drill file</strong>. A board can be made from the copper alone; the outline is needed to place both sides of a two-sided board alike.</li>
+<li>An engraving tool. A V-bit is usual: 20° to 60° with a tip of about 0.1 mm. Its width of cut depends on its depth, which is why the board is levelled.</li>
+<li>Drills for each hole diameter, and an end mill to cut the board out.</li>
+<li>A Grbl-family controller with a probe input, for levelling. Without one the board can still be imported, previewed and exported.</li>
+<li>The compiled KerfKite extension. Board import is part of the native core and has no Python fallback; the <strong>Circuit board</strong> panel is hidden when the extension is absent, and in the editor opened from a file. The hosted editor has the panel too: it can import, preview and export, but has no machine.</li>
 </ul>
-<p>There is no panel for this in Studio yet. The importers are reached from the <code>kerfkite-cam</code> tool and from Python (<code>studio.pcb_import</code>). Importing only reads a file: nothing here writes to a controller or starts a job.</p>
-<p>The importers are written once, in the native core (<code>native/core/src/gerber.cpp</code>, <code>excellon.cpp</code>), and have no Python version. From Python they need the compiled KerfKite extension.</p>
+<h3>Import</h3>
+<ol>
+<li>Set the work area and the controller under <strong>CAM</strong> as for any job.</li>
+<li>Open <strong>Projects</strong>, <strong>Circuit board</strong>. Choose the copper layer, the board outline and the drill file. Any of the three may be left out.</li>
+<li>Choose the <strong>side</strong>. <strong>Top</strong> is cut as the files draw it. <strong>Underside, mirrored</strong> is for the bottom copper: see <a href="#both-sides">Both sides</a>.</li>
+<li>The board is placed with the lowest corner of its outline at the <strong>margin</strong> from the work origin. Leave room for the cut-out cutter.</li>
+<li>Set the engraving tool and choose <strong>Review board</strong>.</li>
+</ol>
+<p>The review lists what was read from each file and every warning, and draws the copper, the outline and the holes on the canvas. Nothing has been added to the design yet. Change a setting and review again as often as needed. <strong>Add to design</strong> then adds the board as ordinary objects: one layer for each tool, with Output off.</p>
+<p>Importing reads files. It writes nothing to the controller and starts no job.</p>
+<h3>The engraving tool</h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tool</td>
+<td><strong>V-bit</strong>: give the tip width and the included angle, and the width of cut follows from the engraving depth: tip + 2 × depth × tan(angle / 2). A 30° bit with a 0.1 mm tip cuts 0.154 mm wide at 0.1 mm deep. <strong>Width of cut stated</strong>: for an engraving end mill, or a width measured from a test cut.</td>
+</tr>
+<tr>
+<td>Engraving depth</td>
+<td>How far below the surface the tool cuts. The copper of a common board is 0.035 mm thick; 0.05 to 0.1 mm clears it when the board is levelled.</td>
+</tr>
+<tr>
+<td>Passes</td>
+<td>The number of contours cut round every piece of copper. One pass isolates. More passes widen the gap, which makes soldering easier.</td>
+</tr>
+<tr>
+<td>Overlap</td>
+<td>How much of its width each pass shares with the one before, 20% unless changed. Contour <em>k</em> (from 0) lies half the width of cut plus <em>k</em> × width × (1 − overlap) outside the copper.</td>
+</tr>
+<tr>
+<td>Direction</td>
+<td><strong>Climb</strong> (the default) or <strong>conventional</strong>, for a spindle turning clockwise seen from above. In climb milling the copper that is kept is on the right of the tool's travel: clockwise round a pad, anticlockwise round the inside of a clearance. Conventional runs every contour the other way.</td>
+</tr>
+<tr>
+<td>Arc tolerance</td>
+<td>How far a round shape or an arc may lie from its true curve, 0.005 mm unless changed. A larger value gives fewer points.</td>
+</tr>
+<tr>
+<td>Cut the isolation off at the board outline</td>
+<td>Leaves out what lies outside the outline, such as the contour round a pour that runs to the board's edge. See <a href="#clipping-to-the-outline">Clipping</a>.</td>
+</tr>
+</tbody>
+</table>
+<p>When there are several passes the <strong>outermost is cut first and the one next to the copper last</strong>, so that the cut that forms the edge of a track removes little and is not pushed aside by a full-width slot. Within a pass, each contour is cut after the one that starts nearest to where the last ended.</p>
+<p>The width of cut is what decides whether the board works. Too narrow a setting leaves thin copper between passes; too wide a setting moves the contours away from where the tool really cuts, and hides gaps the tool cannot pass. Measure a test cut if the tip width is not known.</p>
+<h3>Warnings, and the places the cutter cannot reach</h3>
+<p>Every warning of every file is listed under the review. Three kinds need action.</p>
+<p><strong>The cutter cannot pass between separate copper features.</strong> Where two pieces of copper are nearer to each other than the tool is wide, no contour can run between them: the copper of the blank stays between them and they are left joined, which is a short circuit if they belong to different nets. KerfKite never leaves this unsaid. The warning gives the number of such places, the width the tool cuts and the smallest gap, for example:</p>
+<pre><code>The cutter cannot pass between separate copper features in 2 places: the paths leave them joined.
+The tool cuts 0.300 mm wide and the smallest gap is 0.295 mm. A tool that cuts no wider than
+0.292 mm would separate everything.
+</code></pre>
+<p>Each place is marked with a red ring on the canvas, and stays marked after the board is added (<strong>Forget board marks</strong> removes the marks). The remedy is a narrower cut: a finer tip, a smaller angle or less depth. Or change the design's clearances. A gap exactly as wide as the tool counts as one the cutter cannot pass; a gap has to exceed the width of cut by 0.002 mm to be relied on.</p>
+<p>Two pieces of copper that touch at a single point are reported in the same way, with a gap of zero.</p>
+<p><strong>The drill file's number format.</strong> See <a href="#drilling-by-diameter">Drilling</a>.</p>
+<p><strong>Layers that do not lie on one board.</strong> <code>Holes lie outside the board outline</code> and <code>The copper reaches beyond the board outline</code> mean that the files do not share an origin or a scale: a drill file read with the wrong units or digits, or a layer of another board.</p>
+<p>Other warnings are for information: deprecated codes that were read, the outline's loops, slots that are not drilled, and specks. A <em>speck</em> is a sliver of copper thinner than twice the arc tolerance, which arises where a design ends a clear shape exactly on a round one (the bars of a thermal pad reach exactly to its rim). Specks are left out and counted.</p>
+<h3>The stages of a board</h3>
+<p><strong>Add to design</strong> makes one layer for each tool, in cutting order, and gives the objects of each layer a tool number and name:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Object</th>
+<th>Operation and tool</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PCB top · isolation</td>
+<td>Isolation contours</td>
+<td>Line at the engraving depth, with the V-bit or engraver</td>
+</tr>
+<tr>
+<td>PCB top · drill 0.8 mm (one for each diameter)</td>
+<td>The holes of that diameter, as circles</td>
+<td>Drill, with a drill of that diameter, to the drill depth</td>
+</tr>
+<tr>
+<td>PCB top · slots 1 mm (one for each width)</td>
+<td>The centre lines of the slots</td>
+<td>Line, with an end mill of the slot's width</td>
+</tr>
+<tr>
+<td>PCB top · cut-out</td>
+<td>The board outline</td>
+<td>Outside contour, with the cut-out cutter. A loop inside the board is cut on its inner side.</td>
+</tr>
+</tbody>
+</table>
+<p>These are ordinary objects and layers. They can be moved, hidden, deleted and saved with the project, and the preview, the 3D view, holding tabs, probe levelling and the run controls treat them as any other. Feed, plunge feed, spindle speed and clearance come from <strong>CAM</strong> and apply to whichever stage is the job.</p>
+<p>Every layer starts with <strong>Output off</strong>, as every import does, so that nothing is cut before it has been reviewed. A job has one tool: Studio refuses to preview or run operations with different tools as one job. There are two ways to work through the stages.</p>
+<ul>
+<li><strong>A stage at a time, with levelling.</strong> Under <strong>Board stages</strong> in the panel, choose a stage: its Output is turned on and that of the other board stages off. Generate the preview, fit that stage's tool, set work Z on the board, probe if the stage is an engraving, and run. Then choose the next stage.</li>
+<li><strong>A file for each tool.</strong> Choose <strong>Output every stage</strong>, then <strong>Manual tool changes</strong> under CAM and <strong>Generate separate stage files</strong>. Each stage is a separate G-code file that ends retracted with the spindle stopped. See <em>Manual tool changes</em> in the <a href="#user-guide">user guide</a>. These files are not levelled.</li>
+</ul>
+<p>Set work Z again after every tool change. Keep the XY origin: every stage is in the same coordinates.</p>
+<h3>Engraving with levelling</h3>
+<ol>
+<li>Choose the isolation stage and <strong>Generate preview</strong>. The G-code plunges to the engraving depth and nowhere deeper.</li>
+<li>Under <strong>Control</strong>, connect, and set work zero with the tool just above the board.</li>
+<li>Open <strong>Probe levelling</strong>, connect the probe (one lead on the tool, the other on the copper), and <strong>Probe surface</strong>.</li>
+<li>Run the job with <strong>Follow the probed surface</strong> ticked, or export the levelled G-code.</li>
+</ol>
+<p><a href="#probe-leveling">Probe levelling</a> describes each step and its limits.</p>
+<h3>Drilling by diameter</h3>
+<p>Each drill diameter is its own stage, because each needs its own drill. Two tools of the same diameter in the file drill together. Slots are not drilled: they are added as lines to be cut with an end mill of the slot's width.</p>
+<p>Many drill files leave out part of their number format, and a wrong reading moves every hole by a factor of ten or more. <strong>Drill number format</strong> shows how the file was read and where each part came from: the file's header, a format comment, a default, or what was entered. The section opens by itself when a default was used. Units are never assumed: a file that does not state them is refused until they are given. To correct a reading, state the units, the integer and decimal digits, or the zeros that are omitted, and review again. The holes are drawn on the canvas over the copper, so a wrong reading is seen at once: pads without holes, or a refusal because the holes do not fit the work area.</p>
+<p>Drill depth is measured to the tip. Add the length of the drill's point to the thickness of the board, and protect the spoilboard.</p>
+<h3>The cut-out</h3>
+<p>The outline is cut on its outer side, so that the board keeps its size, with the cutter, depth and step down set under <strong>Drilling and cut-out</strong>. Add holding tabs to the outline object (<strong>Holding tabs</strong> under CAM) to keep the board in place as it comes free, or hold it with tape.</p>
+<h3>Both sides</h3>
+<p>A two-sided board is turned over to cut its underside, and the two sides have to register. KerfKite's rule is simple: <strong>the board is turned over left to right, about a vertical line through the middle of its outline, and everything cut with the board face down is mirrored about that line.</strong> The outline is symmetrical about its own middle only if it is a rectangle, but the <em>line</em> is the same for both sides whatever the shape, so the turned board occupies the mirror image of where it lay and the holes of one side meet the pads of the other.</p>
+<ol>
+<li>Import the top with its outline and drill file, and cut it: engrave, drill, and leave the cut-out for last.</li>
+<li>Turn the board over left to right, so that its left edge becomes its right edge, and fix it so that the middle line of the outline is where it was. Two pins through drilled holes that are mirror images of each other, or a fence along the left and right edges, do this.</li>
+<li>In the panel, choose the bottom copper, choose <strong>Underside, mirrored</strong>, and leave <strong>Register with the board already in this design</strong> ticked. The underside is then placed with the same offset as the top and mirrored about the middle of the same outline, even if the outline is not chosen again.</li>
+<li>Engrave the underside, then cut the board out. The outline and the holes do not need to be imported again for the underside. If they are, they are mirrored with the copper, for holes drilled or an outline cut with the board face down.</li>
+</ol>
+<p>Gerber files draw every layer as seen from the top of the board, the bottom layer included, which is why the underside has to be mirrored and the top does not. Do not mirror the files in the design program as well.</p>
+<p>What has to be treated alike: the outline, both copper layers and the drill file of one board take the <strong>same offset</strong>, and whatever is cut face down takes the <strong>same mirror line</strong>. From Python and the command line this is the caller's to do (<code>offset</code> and <code>mirror_x</code>); the panel does it.</p>
+<h3>Clipping to the outline</h3>
+<p>With <strong>Cut the isolation off at the board outline</strong>, contours and parts of contours outside the outline are left out. A contour that is cut short no longer closes, and the copper beside it is then isolated only once the board is cut out along that outline: a warning says how many contours were cut short. Do not use this option for a board that will stay in a larger panel.</p>
+<h3>What is not supported</h3>
+<ul>
+<li>Running on a real machine has not been tested, as said above.</li>
+<li>Removing all the copper between the tracks (a rub-out). More passes widen the isolation; they do not clear a region.</li>
+<li>Choosing the engraving width for each gap, or a second, finer tool for the tight places.</li>
+<li>Solder mask, silk screen and paste layers as toolpaths. Any layer can be inspected as data.</li>
+<li>Negative layers (<code>.FilePolarity,Negative</code>, old plane layers): refused for isolation.</li>
+<li>Nets. KerfKite knows pieces of copper, not which pieces belong to one net, so it reports every place where two separate pieces are too close, including pieces that a wire or a via would join anyway.</li>
+<li>Automatic alignment of the second side by camera or probe. Registration is by the mirror line and the fixture.</li>
+<li>Tool-length measurement and automatic tool changes. Work Z is set by hand after each change.</li>
+<li>Holes larger than the drills to hand as milled circles: drill them, or draw the circle and use a pocket or an inside contour.</li>
+<li>What the importers decline, listed in the reference below.</li>
+</ul>
+<h2>Reference</h2>
+<p>The importers and the isolation are written once, in the native core (<code>native/core/src/gerber.cpp</code>, <code>excellon.cpp</code>, <code>isolation.cpp</code>), and have no Python version. The isolation is built on KerfKite's own <a href="#polygon-kernel">polygon kernel</a>. From Python they need the compiled KerfKite extension. Studio reaches them through one design route, <code>POST /api/pcb-import</code> (<code>studio/pcb_api.py</code>), which the local and the hosted service both register; it has no access to the controller.</p>
 <h2>Commands</h2>
 <pre><code>kerfkite-cam gerber board-F_Cu.gbr                       the layer as JSON
 kerfkite-cam gerber board-F_Cu.gbr --arc-tolerance 0.01
 kerfkite-cam gerber-outline board-Edge_Cuts.gbr --offset [-95,115] --width 300 --height 200
+kerfkite-cam gerber-isolation board-F_Cu.gbr --tool-width 0.2 --passes 2 --offset [-95,115]
+kerfkite-cam gerber-isolation board-B_Cu.gbr --tool-width 0.2 --offset [-95,115] --mirror-x 25
 kerfkite-cam excellon board.drl
 kerfkite-cam excellon board.drl --units inch --integer 2 --decimal 4 --omitted-zeros leading
 kerfkite-cam excellon-drills board.drl --offset [-95,115]
@@ -1823,16 +1978,19 @@ from studio.cam import generate
 outline = pcb_import.outline_paths(pcb_import.read('board-Edge_Cuts.gbr'))
 offset = pcb_import.placement([outline['bounds']], margin=5)      # one offset for every layer
 outline = pcb_import.outline_paths(pcb_import.read('board-Edge_Cuts.gbr'), offset=offset)
+width = pcb_import.v_bit_width(0.1, 30, 0.1)                      # tip, angle, depth: 0.15359 mm
+copper = pcb_import.isolation(pcb_import.read('board-F_Cu.gbr'), width, offset=offset)
+job = generate({**settings, 'depth': 0.1, 'step': 0.1, 'operations': copper['operations']})
 drills = pcb_import.drill_operations(pcb_import.read('board.drl'), offset=offset)
 for operation in drills['operations']:
     job = generate({**settings, **operation})                     # one job for each drill diameter
-copper = pcb_import.gerber(pcb_import.read('board-F_Cu.gbr'))     # objects only, for now
+layer = pcb_import.gerber(pcb_import.read('board-F_Cu.gbr'))      # any layer as the objects it draws
 </code></pre>
 <p>Every length in an answer is in millimetres, rounded to the nanometre, whatever the units of the file.</p>
 <h2>Placing a board</h2>
-<p>Design programs export a board where it sits on their page, often with negative Y. KerfKite's work area starts at zero. The two conversions take an <code>offset</code> of <code>[X, Y]</code> that is added to every coordinate, and <code>placement</code> gives the offset that brings the lowest corner of one or more <code>bounds</code> to a margin. Use the same offset for every layer of a board, so that the holes stay registered with the outline.</p>
+<p>Design programs export a board where it sits on their page, often with negative Y. KerfKite's work area starts at zero. The three conversions (<code>gerber-outline</code>, <code>gerber-isolation</code>, <code>excellon-drills</code>) take an <code>offset</code> of <code>[X, Y]</code> that is added to every coordinate, and <code>placement</code> gives the offset that brings the lowest corner of one or more <code>bounds</code> to a margin. Use the same offset for every layer of a board, so that the holes stay registered with the outline.</p>
 <p>Given <code>width</code> and <code>height</code>, a conversion checks that the result fits the work area and refuses it otherwise, with the extent it would have.</p>
-<p>Mirroring a layer for the underside of a board is not provided yet.</p>
+<p><code>mirror_x</code> turns a conversion's result over about the vertical line at that X, after the offset: X becomes 2 × <code>mirror_x</code> − X. It is for what is cut with the board face down. Give the same value, the middle of the placed outline, to every conversion of that side: see <a href="#both-sides">Both sides</a>.</p>
 <h2>Gerber layers</h2>
 <h3>What is read</h3>
 <table>
@@ -2037,7 +2195,7 @@ copper = pcb_import.gerber(pcb_import.read('board-F_Cu.gbr'))     # objects only
 <p>A step-and-repeat is checked against the object and point limits before any copy is made.</p>
 <h2>Board outline</h2>
 <p><code>gerber-outline</code> (<code>pcb_import.outline_paths</code>) reads a profile layer, such as KiCad's <code>Edge.Cuts</code>, and joins its lines and arcs into closed paths.</p>
-<p>Request fields: <code>text</code>, and optionally <code>tolerance</code> (0.01 mm; 0.000001 to 1), <code>arc_tolerance</code>, <code>offset</code>, <code>width</code> and <code>height</code>.</p>
+<p>Request fields: <code>text</code>, and optionally <code>tolerance</code> (0.01 mm; 0.000001 to 1), <code>arc_tolerance</code>, <code>offset</code>, <code>mirror_x</code>, <code>width</code> and <code>height</code>.</p>
 <pre><code>{
   &quot;paths&quot;: [[[8.0, 5.0], [42.0, 5.0], ..., [8.0, 5.0]], ...],   each closed, the largest first
   &quot;line_width&quot;: 0.1,                    the widest line of the outline; the paths are its centre line
@@ -2232,7 +2390,7 @@ copper = pcb_import.gerber(pcb_import.read('board-F_Cu.gbr'))     # objects only
 </tbody>
 </table>
 <h2>Drilling operations</h2>
-<p><code>excellon-drills</code> (<code>pcb_import.drill_operations</code>) turns the holes into operations for the ordinary <a href="#drilling">drilling</a> generator. Request fields: those of <code>excellon</code>, and optionally <code>offset</code>, <code>width</code> and <code>height</code>.</p>
+<p><code>excellon-drills</code> (<code>pcb_import.drill_operations</code>) turns the holes into operations for the ordinary <a href="#drilling">drilling</a> generator. Request fields: those of <code>excellon</code>, and optionally <code>offset</code>, <code>mirror_x</code>, <code>width</code> and <code>height</code>.</p>
 <pre><code>{
   &quot;operations&quot;: [
     {&quot;operation&quot;: &quot;drill&quot;, &quot;tool_shape&quot;: &quot;drill&quot;, &quot;tool_diameter&quot;: 0.4,
@@ -2254,9 +2412,203 @@ copper = pcb_import.gerber(pcb_import.read('board-F_Cu.gbr'))     # objects only
 <li>Slots are not drilled. They are listed with their centre line and width, to be cut as lines with a cutter of that width or smaller.</li>
 <li>Drills finer than 0.01 mm are refused, as the generator would refuse them.</li>
 </ul>
+<h2>Isolation toolpaths</h2>
+<p><code>gerber-isolation</code> (<code>pcb_import.isolation</code>) reads a copper layer and returns the contours a cutter follows to isolate its copper.</p>
+<p>Request fields: <code>text</code> and <code>tool_width</code>, and optionally <code>passes</code>, <code>overlap</code>, <code>direction</code>, <code>order</code>, <code>offset</code>, <code>mirror_x</code>, <code>clip</code>, <code>width</code>, <code>height</code> and <code>arc_tolerance</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Default</th>
+<th>Range</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tool_width</code></td>
+<td>required</td>
+<td>0.01 to 10 mm</td>
+<td>The width of cut at the engraving depth. <code>pcb_import.v_bit_width(tip, angle, depth)</code> gives it for a V-bit.</td>
+</tr>
+<tr>
+<td><code>passes</code></td>
+<td>1</td>
+<td>1 to 50</td>
+<td>Contours round every piece of copper.</td>
+</tr>
+<tr>
+<td><code>overlap</code></td>
+<td>0.2</td>
+<td>0 to 0.9</td>
+<td>The part of the tool width a pass shares with the one before. The step between passes is <code>tool_width × (1 − overlap)</code>.</td>
+</tr>
+<tr>
+<td><code>direction</code></td>
+<td><code>&quot;climb&quot;</code></td>
+<td>or <code>&quot;conventional&quot;</code></td>
+<td>Climb keeps the copper on the right of travel, for a clockwise spindle.</td>
+</tr>
+<tr>
+<td><code>order</code></td>
+<td><code>&quot;outer_first&quot;</code></td>
+<td>or <code>&quot;inner_first&quot;</code></td>
+<td>Which pass is cut first.</td>
+</tr>
+<tr>
+<td><code>offset</code></td>
+<td><code>[0, 0]</code></td>
+<td>±10,000 mm</td>
+<td>Added to every coordinate.</td>
+</tr>
+<tr>
+<td><code>mirror_x</code></td>
+<td>none</td>
+<td>±10,000 mm</td>
+<td>Turns the placed layer over about that X.</td>
+</tr>
+<tr>
+<td><code>clip</code></td>
+<td>none</td>
+<td>1 to 3,000 closed paths, 100,000 points</td>
+<td>Paths in placed coordinates (a board outline) outside which nothing is cut. A path inside another is a cut-out.</td>
+</tr>
+<tr>
+<td><code>width</code>, <code>height</code></td>
+<td>none</td>
+<td>1 to 2,000 mm</td>
+<td>The work area; the contours have to fit it.</td>
+</tr>
+<tr>
+<td><code>arc_tolerance</code></td>
+<td>0.005</td>
+<td>0.0005 to 0.1 mm</td>
+<td>For arcs and round shapes.</td>
+</tr>
+</tbody>
+</table>
+<h3>How the copper image is built</h3>
+<p>Every object of the layer becomes a polygon on the kernel's grid of one nanometre, and the objects are combined in file order: a dark object is added to the image and a clear object is cut from what has been drawn before it.</p>
+<table>
+<thead>
+<tr>
+<th>Object</th>
+<th>Shape</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Flash of a circle, rectangle, obround or regular polygon</td>
+<td>The aperture at the flash point, less its round hole if it has one. The hole is part of the aperture: it does not remove copper drawn earlier.</td>
+</tr>
+<tr>
+<td>Flash of a macro aperture</td>
+<td>The macro's parts in order, exposure on adding and exposure off cutting from what the earlier parts built.</td>
+</tr>
+<tr>
+<td>Line with a circle aperture</td>
+<td>The line with round ends.</td>
+</tr>
+<tr>
+<td>Line with a rectangle aperture</td>
+<td>The rectangle swept without turning: a hexagon, or a rectangle when the line runs along an axis.</td>
+</tr>
+<tr>
+<td>Arc</td>
+<td>The flattened arc with round ends and round joins.</td>
+</tr>
+<tr>
+<td>Region</td>
+<td>The inside of its contour under the non-zero rule, which reads a contour that touches itself and a cut-in that runs along itself.</td>
+</tr>
+<tr>
+<td>A line with no length</td>
+<td>A flash of its aperture.</td>
+</tr>
+<tr>
+<td>Anything drawn with an aperture of no size</td>
+<td>Nothing; a warning counts them.</td>
+</tr>
+</tbody>
+</table>
+<p>Round shapes are many-sided. A round shape is drawn just outside its true curve, by no more than the arc tolerance; an arc is drawn as chords just inside it, by no more than the arc tolerance. The image is therefore within the arc tolerance of the design everywhere, on either side. Because a round <em>clear</em> shape is also drawn just outside its curve, copper beside a clearance can be up to the arc tolerance short.</p>
+<p>Islands that vanish when shrunk by the arc tolerance are specks, left out and counted (<code>specks</code>).</p>
+<h3>The contours</h3>
+<p>Contour <em>k</em> is the boundary of the copper grown by <code>tool_width / 2 + k × step</code>, each grown from the copper itself so that no error builds up from pass to pass. Its straight parts lie at exactly that distance; its round corners lie outside the true curve by at most 0.001 mm. A contour is never nearer the copper image than its distance, to a few nanometres.</p>
+<p>A contour is a closed path, the first point repeated at the end, unless <code>clip</code> cut it. An outer contour runs clockwise and a contour inside a clearance anticlockwise, which is climb milling; <code>&quot;conventional&quot;</code> reverses every path.</p>
+<h3>The places the cutter cannot reach</h3>
+<p>The first contour is the boundary of the copper grown by half the tool width. Two pieces of copper are separated by it exactly when they lie in different pieces of that grown region. KerfKite finds which grown piece each island of copper lies in, with exact arithmetic, and reports every pair of islands that share one and are near enough to be the cause: no further apart than the tool width plus 0.002 mm (twice the corner allowance, and a margin). Every island that shares a contour with another is accounted for by at least one reported place.</p>
+<p>Each place gives the two islands (their positions in <code>copper</code>), the gap between them, the nearest points of the two and the point midway. <code>separating_tool_width</code> is the widest tool, to the micrometre below, that leaves a contour in every gap of the board: the smallest gap less 0.002 mm. It is null when no tool of 0.01 mm or more would do, as when two pieces touch.</p>
+<p>The gaps are measured on the image, whose round shapes are many-sided, so the gap between two round pads can differ from the design's by up to the arc tolerance on each side.</p>
+<h3>The answer</h3>
+<pre><code>{
+  &quot;format&quot;: &quot;isolation&quot;,
+  &quot;tool_width&quot;: 0.2, &quot;passes&quot;: 2, &quot;overlap&quot;: 0.2, &quot;step&quot;: 0.16,
+  &quot;direction&quot;: &quot;climb&quot;, &quot;order&quot;: &quot;outer_first&quot;,
+  &quot;offset&quot;: [-95.0, 115.0], &quot;mirror_x&quot;: null, &quot;arc_tolerance&quot;: 0.005,
+  &quot;layer&quot;: {&quot;units&quot;: &quot;mm&quot;, &quot;file_function&quot;: &quot;Copper,L1,Top&quot;, &quot;counts&quot;: {...}, &quot;bounds&quot;: [...]},
+  &quot;operations&quot;: [{&quot;operation&quot;: &quot;line&quot;, &quot;paths&quot;: [[[x, y], ...], ...]}],   in cutting order
+  &quot;cut&quot;: [{&quot;pass&quot;: 2, &quot;distance&quot;: 0.26, &quot;paths&quot;: 5}, {&quot;pass&quot;: 1, &quot;distance&quot;: 0.1, &quot;paths&quot;: 7}],
+  &quot;path_count&quot;: 12, &quot;point_count&quot;: 730,
+  &quot;clipped&quot;: {&quot;cut&quot;: 0, &quot;dropped&quot;: 0},        contours cut short by the clip, and left out whole
+  &quot;bounds&quot;: [4.74, 4.74, 45.1, 35.2],         of the contours: the tool's centre
+  &quot;copper&quot;: [{&quot;shell&quot;: [[x, y], ...], &quot;holes&quot;: [[[x, y], ...]]}, ...],    the image, for preview
+  &quot;islands&quot;: 6, &quot;specks&quot;: 0,
+  &quot;copper_bounds&quot;: [5.0, 5.0, 44.9, 35.0],
+  &quot;unreachable&quot;: [{&quot;at&quot;: [26.0, 25.0], &quot;gap&quot;: 0.295, &quot;between&quot;: [[25.85, 25.0], [26.145, 25.0]],
+                   &quot;islands&quot;: [3, 4]}],
+  &quot;unreachable_count&quot;: 1,                      all of them; at most 1,000 are listed
+  &quot;smallest_gap&quot;: 0.295, &quot;separating_tool_width&quot;: 0.292,
+  &quot;warnings&quot;: [ ... ]                          the layer's own, then those of the isolation
+}
+</code></pre>
+<p>Each entry of <code>operations</code> is a project fragment for a router line job: merge it over the job's settings with the engraving depth as <code>depth</code> and <code>step</code>, and generate. The operations of one answer use one tool and may share an ordered job. Contours are divided among operations of at most 3,000 paths and 100,000 points, which is what the generator takes in one operation.</p>
+<h3>Limits</h3>
+<table>
+<thead>
+<tr>
+<th>Limit</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>File size</td>
+<td>16 MiB. Through Studio's route, 4 MiB for each file, and the panel sends at most 7 MiB in all.</td>
+</tr>
+<tr>
+<td>Points of the copper image</td>
+<td>2,000,000</td>
+</tr>
+<tr>
+<td>Contours in one pass; in the answer</td>
+<td>20,000; 100,000</td>
+</tr>
+<tr>
+<td>Points of all contours</td>
+<td>1,000,000</td>
+</tr>
+<tr>
+<td>Points of one contour</td>
+<td>100,000</td>
+</tr>
+<tr>
+<td>Unreachable places listed</td>
+<td>1,000</td>
+</tr>
+</tbody>
+</table>
+<p>A Studio project holds 3,000 paths and 100,000 points in all, which is the limit a board added to a design meets first. Fewer passes or a larger arc tolerance bring a large board within it.</p>
+<h3>The same on every platform</h3>
+<p>The polygon kernel works in whole nanometres with exact integer arithmetic, and the isolation calls no function of the platform's mathematics library: the vertices of a regular polygon aperture come from the kernel's own series for sine and cosine. One isolation job is pinned in <code>validation/check_installed_cam.py</code> and one in the core's self-test, so that a platform giving different bytes fails its build. The Gerber importer itself uses the platform's library in two places, flattening arcs and rotating macro primitives, and rounds what it computes to the nanometre; a difference there would need a result within a few parts in 10¹⁰ of half a nanometre. The pinned jobs have no arcs and no rotated macros, so they do not depend on it.</p>
+<h2>Studio's route</h2>
+<p><code>POST /api/pcb-import</code> takes the files of one side of a board as text and answers with all of the above, placed. Fields: <code>copper</code>, <code>outline</code>, <code>drill</code> (any may be absent); <code>side</code> (<code>&quot;top&quot;</code> or <code>&quot;bottom&quot;</code>); <code>offset</code>, or <code>margin</code> (5) to place the outline's lowest corner; <code>mirror_x</code> (the bottom side only; by default the middle of the placed outline); <code>width</code> and <code>height</code>; <code>tool_width</code>, or <code>v_bit</code> as <code>{&quot;tip_width&quot;, &quot;angle&quot;, &quot;depth&quot;}</code>; <code>passes</code>, <code>overlap</code>, <code>direction</code>, <code>order</code>, <code>arc_tolerance</code>; <code>clip</code> (true to clip to the outline); and <code>drill_format</code> as <code>{&quot;units&quot;, &quot;integer&quot;, &quot;decimal&quot;, &quot;omitted_zeros&quot;}</code>. Each file may be up to 4 MiB. A field that is not known is refused.</p>
+<p>The answer has <code>side</code>, <code>offset</code>, <code>mirror_x</code>, <code>bounds</code>, <code>copper</code> (the isolation answer), <code>outline</code> (the outline answer), <code>drill</code> (the drilling answer with <code>plated</code>, <code>file_function</code> and <code>counts</code> added) and <code>warnings</code> about the files together. The underside needs the outline, or the <code>mirror_x</code> and <code>offset</code> of the first import, and is refused without. <code>/api/session</code> has <code>pcb_import: true</code> when the route can answer.</p>
 <h2>How it is checked</h2>
-<p><code>tests/test_pcb_import.py</code> reads small Gerber and Excellon files written by hand for the purpose (<code>tests/pcb/</code>), and compares the answers with coordinates, arcs, macro shapes and areas worked out separately in the test. It covers each feature above, each refusal, the limits, and several hundred randomly damaged copies of the fixtures, every one of which has to be read or refused with a reason. <code>native/tests/selftest.cpp</code> repeats a short form of the checks without Python.</p>
-<p>The importers have been run on the project's own fixtures and on files written to follow the formats that KiCad, Altium, EasyEDA and Eagle export. They have not yet been run on a large collection of boards from those programs. Check an imported board's bounds, hole counts and warnings against the design before cutting.</p>
+<p><code>tests/test_pcb_import.py</code> reads small Gerber and Excellon files written by hand for the purpose (<code>tests/pcb/</code>), and compares the answers with coordinates, arcs, macro shapes and areas worked out separately in the test. It covers each feature above, each refusal, the limits, and several hundred randomly damaged copies of the fixtures, every one of which has to be read, isolated or refused with a reason. <code>native/tests/selftest.cpp</code> repeats a short form of the checks without Python.</p>
+<p><code>tests/test_pcb_isolation.py</code> checks the isolation against Shapely as an independent oracle. The copper image is rebuilt in the test from the importer's list of objects, shape by shape, and compared with the core's: neither may reach beyond the other by more than the arc tolerance. Every contour is then measured against the copper: every point and every mid-edge point within the corner allowance of its pass's distance, and no part of any contour nearer. Which islands the first contour separates is worked out from the contours alone and has to be exactly the grouping the reported places give; every reported gap has to be the distance Shapely measures; and every pair of islands that the oracle finds clearly nearer than the tool has to be reported. The fixtures are pads and tracks at known spacings, a ground pour with clearances, thermal reliefs by spokes and by a thermal macro, clear cut-outs, a region with a cut-in, a step-and-repeat panel and a small two-sided board, with offset, mirror, clip, direction and order each checked for what it states.</p>
+<p><code>tests/test_pcb_api.py</code> checks the route: placement, the underside's mirror line, the warnings of each file, every refusal as a JSON <code>400</code>, the hosted service, and that an import calls no method of the controller. <code>tests/js/pcb-board.test.cjs</code> checks the panel's own logic. <code>validation/pcb_workflow.py</code> drives the editor in a browser against the simulator: it imports the fixture board, reads the warnings and the marks, corrects the drill format, adds the board, previews the isolation at its depth, probes and runs it levelled, drills a diameter as its own stage, exports the tool stages and registers the underside.</p>
+<p>The importers have been run on the project's own fixtures and on files written to follow the formats that KiCad, Altium, EasyEDA and Eagle export. They have not yet been run on a large collection of boards from those programs, and no board has been cut on a machine. Check an imported board's bounds, hole counts and warnings against the design before cutting.</p>
 </section><section id="performance"><h1>Native CAM and editor verification</h1>
 <p>The Studio 0.6.1 simulator benchmark uses a 256 × 256 height map, a ball end mill and a cylindrical router setup. Three fresh processes per backend generated the same 135,886 planar instructions and the same 136,691 rotary instructions. The largest difference between corresponding stock-preview cells was 2.7 × 10⁻¹⁴ mm. These timings were measured on an Apple Silicon Mac during integration testing.</p>
 <table>
@@ -3134,7 +3486,7 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 <h2>Not yet verified on a machine</h2>
 <p>Levelling is tested against the simulator and by calculation. It has not yet been run on a physical controller. The first run on a machine should be supervised, with a probe that has been tested, a low probe feed and a hand on the reset.</p>
 <h2>Circuit boards</h2>
-<p>Probe levelling is the first part of circuit board engraving. Gerber layers and Excellon drill files can be read, and a board outline and its holes turned into cut-out paths and drilling operations: see <a href="#pcb">Circuit boards</a>. Isolation toolpaths from a copper layer are not yet generated. Until then, traces drawn or imported as vectors can be engraved and levelled as any router line job.</p>
+<p>Probe levelling is what circuit board engraving rests on. A board's Gerber layers and Excellon drill file are imported under <strong>Projects</strong>, <strong>Circuit board</strong>, which adds the isolation contours, the holes and the cut-out to the design as stages, one for each tool; the isolation stage is then previewed, probed and run as described above. See <a href="#pcb">Circuit boards</a>.</p>
 </section><section id="product"><h1>Feature and acceptance matrix</h1>
 <p>This matrix describes the software workflows covered by the feature guides and simulator. The per-feature guides record accepted inputs and tests. Hardware measurements and tests with vendor controllers are tracked separately.</p>
 <table>
@@ -5290,6 +5642,8 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 <p>For design printing, choose <strong>Fit on A4 landscape</strong> or <strong>1:1 tiled A4 landscape</strong>. Allow the print popup. For 1:1 output, use A4 landscape and 100%/actual-size scaling in the browser/printer dialog; turn off any additional fit-to-page scaling. Measure the printed <strong>50 mm reference</strong> with a physical ruler before using the print as a machining template. Printer margins, drivers and PDF viewers can change scale even when the on-screen dimensions are correct.</p>
 <h2>Reporting a problem</h2>
 <p>Keep a portable copy before restarting or clearing any browser data. Record the application revision, operating system/browser, server mode, selected head/protocol, operation settings and exact error. Include a minimal project that reproduces the issue and distinguish simulator behavior from physical hardware behavior. Redact passwords, upload/pairing tokens and private keys. Use the symptom-specific <a href="#troubleshooting">fault-finding guide</a>.</p>
+<h2>Circuit boards</h2>
+<p>Under Projects, Circuit board imports a board's Gerber copper layer, its outline and its Excellon drill file. Review shows what was read from each file, every warning and, in red on the canvas, each place where two pieces of copper are too close for the cutter to pass between them. Add to design makes one layer for each tool with Output off: the isolation contours, each drill diameter, slots and the cut-out. Choose a stage under Board stages to make it the job, preview it, fit its tool and set work Z; use Probe levelling for the engraving. The underside is imported mirrored so that both sides register. <a href="#pcb">Circuit boards</a> is the full guide, with what has and has not been tested.</p>
 <h2>Manual tool changes</h2>
 <p>In CAM, open Manual tool changes. Set the cutter diameter, operation, depth and feeds; select an object, assign a tool number/name/shape and its current settings. Repeat for every active object. Generate separate stage files, then download each G-code file and the plan JSON. Consecutive operations using the same tool geometry/number share a stage. Returning to a previous tool creates another stage.</p>
 <p>Each stage ends retracted with the spindle off. Wait for motion and spindle to cease, install the next tool, re-establish Z zero or verified tool length, check XY origin/clearance and review the next stage before starting it manually. Do not concatenate stage files. Automatic tool changers, probing and automatic continuation are not implemented. Ordinary Run rejects differing tool numbers even if their diameters match. Tool-change generation requires the app server.</p>
