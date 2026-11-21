@@ -10,6 +10,8 @@
 #include <cmath>
 #include <deque>
 #include <stdexcept>
+#include <cstdio>
+#include <cstdlib>
 
 namespace kerfkite {
 namespace solid {
@@ -114,7 +116,7 @@ void Planar::split() {
         const int direction = pool_.compare(s.a, s.b, axis);
         std::sort(list.begin(), list.end(), [&](int x, int y) {
             if (x == y) return false;
-            return pool_.compare(x, y, axis) * direction < 0;
+            return pool_.compare(x, y, axis) == direction;  // in the order from a to b
         });
         list.erase(std::unique(list.begin(), list.end()), list.end());
         int previous = s.a;
@@ -401,6 +403,59 @@ void Planar::enforce(int first, int second) {
     }
 }
 
+// Flips edges that are not required until no triangle pair would be better shaped the other way (the
+// Delaunay rule: the two angles facing an edge sum to at most a half turn). Any triangulation is
+// correct; this one avoids the needless slivers that rounding to the grid would later flatten or turn
+// over. The rule is evaluated in doubles, in a fixed order of correctly rounded operations, so every
+// platform makes the same flips; whether a flip is possible at all is still decided exactly.
+void Planar::improve(const std::vector<std::pair<int, int>> &required) {
+    std::vector<std::array<double, 2>> at(pid_.size());
+    for (size_t k = 0; k < pid_.size(); ++k) {
+        const Pt &p = pool_.pts[static_cast<size_t>(pid_[k])];
+        at[k][0] = (p.c[au_].lo + p.c[au_].hi) / 2;
+        at[k][1] = (p.c[av_].lo + p.c[av_].hi) / 2;
+    }
+    // The cotangent of the angle at c facing the edge x-y.
+    const auto cotangent = [&](int x, int y, int c) {
+        const double ax = at[static_cast<size_t>(x)][0] - at[static_cast<size_t>(c)][0], ay = at[static_cast<size_t>(x)][1] - at[static_cast<size_t>(c)][1];
+        const double bx = at[static_cast<size_t>(y)][0] - at[static_cast<size_t>(c)][0], by = at[static_cast<size_t>(y)][1] - at[static_cast<size_t>(c)][1];
+        const double dot = ax * bx + ay * by, cross = std::fabs(ax * by - ay * bx);
+        const double scale = std::fabs(ax * bx) + std::fabs(ay * by) + cross;
+        if (!(scale > 0)) return 0.0;
+        return dot / (cross > 1e-12 * scale ? cross : 1e-12 * scale);
+    };
+    std::vector<std::pair<int, int>> stack;
+    for (size_t t = 0; t < tris_.size(); ++t)
+        for (int k = 0; k < 3; ++k)
+            if (tris_[t].n[k] > static_cast<int>(t)) stack.emplace_back(tris_[t].v[k], tris_[t].v[(k + 1) % 3]);
+    size_t flips = 0;
+    const size_t limit = 32 * tris_.size() + 64;
+    while (!stack.empty() && flips < limit) {
+        const std::pair<int, int> edge = stack.back();
+        stack.pop_back();
+        int t, i;
+        if (!find_edge(edge.first, edge.second, t, i)) continue;  // flipped away meanwhile
+        const Tri &tri = tris_[static_cast<size_t>(t)];
+        const int u = tri.n[i];
+        if (u < 0) continue;
+        const int x = tri.v[i], y = tri.v[(i + 1) % 3], c = tri.v[(i + 2) % 3];
+        if (std::binary_search(required.begin(), required.end(), std::make_pair(std::min(x, y), std::max(x, y)))) continue;
+        const Tri &other = tris_[static_cast<size_t>(u)];
+        int j = 0;
+        while (j < 3 && other.n[j] != t) ++j;
+        if (j == 3) defect("broken adjacency");
+        const int d = other.v[(j + 2) % 3];
+        if (!(cotangent(x, y, c) + cotangent(x, y, d) < -1e-9)) continue;
+        if (!(o(x, d, c) > 0 && o(d, y, c) > 0)) continue;
+        flip(t, i);
+        ++flips;
+        stack.emplace_back(x, d);
+        stack.emplace_back(d, y);
+        stack.emplace_back(y, c);
+        stack.emplace_back(c, x);
+    }
+}
+
 void Planar::triangulate(int r0, int r1, int r2) {
     std::sort(points.begin(), points.end());
     points.erase(std::unique(points.begin(), points.end()), points.end());
@@ -448,6 +503,9 @@ void Planar::triangulate(int r0, int r1, int r2) {
     std::sort(wanted.begin(), wanted.end());
     wanted.erase(std::unique(wanted.begin(), wanted.end()), wanted.end());
     for (const std::pair<int, int> &edge : wanted) enforce(edge.first, edge.second);
+    if (getenv("KKDEBUG")) for (const std::pair<int, int> &edge : wanted) { int t, i; if (!find_edge(edge.first, edge.second, t, i) && !find_edge(edge.second, edge.first, t, i)) fprintf(stderr, "MISSING before improve %d-%d\n", pid_[edge.first], pid_[edge.second]); }
+    if (!getenv("KKNOIMPROVE")) improve(wanted);
+    if (getenv("KKDEBUG")) for (const std::pair<int, int> &edge : wanted) { int t, i; if (!find_edge(edge.first, edge.second, t, i) && !find_edge(edge.second, edge.first, t, i)) fprintf(stderr, "MISSING after improve %d-%d\n", pid_[edge.first], pid_[edge.second]); }
     triangles.resize(tris_.size());
     neighbours.resize(tris_.size());
     for (size_t k = 0; k < tris_.size(); ++k) {

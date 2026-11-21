@@ -7,6 +7,7 @@
 #define KERFKITE_SOLID_PLANAR_HPP
 
 #include <array>
+#include <utility>
 #include <vector>
 
 #include "exact.hpp"
@@ -68,6 +69,7 @@ private:
     bool find_edge(int x, int y, int &t, int &i) const;
     void around(int x, std::vector<int> &out) const;
     void enforce(int a, int b);
+    void improve(const std::vector<std::pair<int, int>> &required);
 };
 
 }  // namespace detail

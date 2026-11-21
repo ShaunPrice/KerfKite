@@ -545,7 +545,19 @@ void Arrangement::build_cells() {
         while (e < uses_.size() && uses_[e].a == uses_[i].a && uses_[e].b == uses_[i].b) ++e;
         const size_t count = e - i;
         Group group{i, count, -1};
-        if (count == 1) throw ValueError("The surface is not closed: an edge has a triangle on one side only");
+        if (count == 1) {
+            if (getenv("KKDEBUG")) {
+                const EdgeUse &u = uses_[i];
+                const Face &fc = faces_[u.face];
+                fprintf(stderr, "open edge %d-%d face %d (%d %d %d) parent %d jump %d %d\n", u.a, u.b, u.face, fc.v[0], fc.v[1], fc.v[2], fc.parent, fc.jump[0], fc.jump[1]);
+                for (int id : {u.a, u.b, u.third}) fprintf(stderr, "   p%d rat %d: %.17g %.17g %.17g\n", id, pool.pts[id].rat, pool.pts[id].c[0].lo, pool.pts[id].c[1].lo, pool.pts[id].c[2].lo);
+                for (size_t t = 0; t < tris_.size(); ++t) { fprintf(stderr, " soup %zu op %d: %d %d %d cluster %d\n", t, tris_[t].operand, tris_[t].v[0], tris_[t].v[1], tris_[t].v[2], cluster_.empty() ? -1 : cluster_[t]); }
+                for (const Record &r : records_) fprintf(stderr, " rec tri %d a %d b %d other %d\n", r.tri, r.a, r.b, r.other);
+                for (const Instance &in : instances_) fprintf(stderr, " inst tri %d: %d %d %d\n", in.tri, in.v[0], in.v[1], in.v[2]);
+                for (size_t q = 0; q < pool.pts.size(); ++q) fprintf(stderr, " pt %zu rat %d: %.17g %.17g %.17g\n", q, pool.pts[q].rat, pool.pts[q].c[0].lo, pool.pts[q].c[1].lo, pool.pts[q].c[2].lo);
+            }
+            throw ValueError("The surface is not closed: an edge has a triangle on one side only");
+        }
         if (count == 2) {
             unite(ahead(uses_[i]), behind(uses_[i + 1]));
             unite(ahead(uses_[i + 1]), behind(uses_[i]));
@@ -769,7 +781,6 @@ void Arrangement::extract(Rule rule, ExactMesh &out) {
         front_solid[f] = front;
     }
     std::vector<uint32_t> parent(static_cast<size_t>(kept) * 3);
-    std::iota(parent.begin(), parent.end(), 0u);
     const auto find = [&](uint32_t x) {
         while (parent[x] != x) {
             parent[x] = parent[parent[x]];
@@ -785,6 +796,16 @@ void Arrangement::extract(Rule rule, ExactMesh &out) {
         q = find(fy + y.corner_b);
         if (p != q) parent[std::max(p, q)] = std::min(p, q);
     };
+    // Where exactly two result faces meet at an edge they are joined. Where more meet (the solid touches
+    // itself along the edge) they are in counter-clockwise order, alternately entering and leaving the
+    // solid, and can be joined in two ways: across each solid wedge, or across each empty wedge. One of
+    // the two always gives a proper mesh: see below.
+    struct Touching {
+        std::vector<int> ring;  // uses, counter-clockwise, starting with a face that has solid after it
+        bool across_empty, switched;
+    };
+    std::vector<std::pair<int, int>> plain;
+    std::vector<Touching> touching;
     std::vector<int> ring;
     for (const Group &group : groups_) {
         ring.clear();
@@ -795,21 +816,62 @@ void Arrangement::extract(Rule rule, ExactMesh &out) {
         if (ring.empty()) continue;
         if (ring.size() % 2) defect("an odd number of result faces at an edge");
         if (ring.size() == 2) {
-            join(uses_[static_cast<size_t>(ring[0])], uses_[static_cast<size_t>(ring[1])]);
+            plain.emplace_back(ring[0], ring[1]);
             continue;
         }
         if (group.sorted < 0) defect("unordered faces at an edge");
-        // Pair each face with the next one counter-clockwise when the wedge between them is solid.
-        size_t joined = 0;
+        const auto solid_after = [&](int use) {
+            const EdgeUse &x = uses_[static_cast<size_t>(use)];
+            return x.forward ? front_solid[static_cast<size_t>(x.face)] != 0 : front_solid[static_cast<size_t>(x.face)] == 0;
+        };
+        size_t first = 0;
+        while (first < ring.size() && !solid_after(ring[first])) ++first;
+        if (first == ring.size()) defect("no solid wedge at an edge");
+        Touching touch;
+        touch.across_empty = touch.switched = false;
         for (size_t k = 0; k < ring.size(); ++k) {
-            const EdgeUse &x = uses_[static_cast<size_t>(ring[k])], &y = uses_[static_cast<size_t>(ring[(k + 1) % ring.size()])];
-            const bool ahead_is_front = x.forward != 0;
-            const bool wedge_solid = ahead_is_front ? front_solid[static_cast<size_t>(x.face)] != 0 : front_solid[static_cast<size_t>(x.face)] == 0;
-            if (!wedge_solid) continue;
-            join(x, y);
-            ++joined;
+            const int use = ring[(first + k) % ring.size()];
+            if (solid_after(use) != (k % 2 == 0)) defect("result faces do not alternate at an edge");
+            touch.ring.push_back(use);
         }
-        if (joined * 2 != ring.size()) defect("result faces do not pair up at an edge");
+        touching.push_back(touch);
+    }
+    // Joining across the solid wedges keeps bodies that only touch apart. It fails where both ends of the
+    // edge are surrounded by one connected fan of faces (a slit): the edge would then be used twice by the
+    // same two vertices. Such an edge is joined across the empty wedges instead, which separates the fans.
+    std::vector<std::pair<uint32_t, uint32_t>> keys;
+    for (int pass = 0;; ++pass) {
+        std::iota(parent.begin(), parent.end(), 0u);
+        for (const std::pair<int, int> &p : plain) join(uses_[static_cast<size_t>(p.first)], uses_[static_cast<size_t>(p.second)]);
+        for (const Touching &touch : touching) {
+            const size_t n = touch.ring.size();
+            for (size_t k = touch.across_empty ? 1 : 0; k < n + (touch.across_empty ? 1 : 0); k += 2)
+                join(uses_[static_cast<size_t>(touch.ring[k % n])], uses_[static_cast<size_t>(touch.ring[(k + 1) % n])]);
+        }
+        bool changed = false, stuck = false;
+        for (Touching &touch : touching) {
+            const size_t n = touch.ring.size();
+            keys.clear();
+            for (size_t k = touch.across_empty ? 1 : 0; k < n + (touch.across_empty ? 1 : 0); k += 2) {
+                const EdgeUse &x = uses_[static_cast<size_t>(touch.ring[k % n])];
+                const uint32_t fx = static_cast<uint32_t>(chosen[static_cast<size_t>(x.face)]) * 3;
+                keys.emplace_back(find(fx + x.corner_a), find(fx + x.corner_b));
+            }
+            std::sort(keys.begin(), keys.end());
+            if (std::adjacent_find(keys.begin(), keys.end()) == keys.end()) continue;
+            if (touch.switched) {
+                stuck = true;
+            } else {
+                touch.across_empty = !touch.across_empty;
+                touch.switched = true;
+                changed = true;
+            }
+        }
+        if (!changed) {
+            if (stuck) defect("faces touching along an edge could not be separated");
+            break;
+        }
+        if (pass > 64) defect("pairing of touching faces did not settle");
     }
     out.vertex.clear();
     out.tri.assign(static_cast<size_t>(kept), Triangle{{0, 0, 0}});

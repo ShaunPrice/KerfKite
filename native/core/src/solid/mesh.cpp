@@ -230,15 +230,16 @@ void weld_and_pair(std::vector<GridPoint> &v, std::vector<Triangle> &t, const ch
         if (x.face != y.face) return x.face < y.face;
         return x.corner < y.corner;
     });
-    UnionFind corners(faces.size() * 3);
     const GridPredicates predicates{&points};
-    const auto join = [&](const Use &x, const Use &y) {
-        // Corner indices of lo and hi in each face.
-        const uint32_t x_lo = x.face * 3 + (x.forward ? x.corner : (x.corner + 1) % 3), x_hi = x.face * 3 + (x.forward ? (x.corner + 1) % 3 : x.corner);
-        const uint32_t y_lo = y.face * 3 + (y.forward ? y.corner : (y.corner + 1) % 3), y_hi = y.face * 3 + (y.forward ? (y.corner + 1) % 3 : y.corner);
-        corners.unite(x_lo, y_lo);
-        corners.unite(x_hi, y_hi);
+    // Corner indices of lo and hi of an edge use in its face.
+    const auto corner_lo = [](const Use &x) { return x.face * 3 + (x.forward ? x.corner : (x.corner + 1) % 3); };
+    const auto corner_hi = [](const Use &x) { return x.face * 3 + (x.forward ? (x.corner + 1) % 3 : x.corner); };
+    struct Touching {
+        std::vector<size_t> ring;  // counter-clockwise about lo -> hi, starting with a triangle that has material after it
+        bool across_empty, switched;
     };
+    std::vector<std::pair<size_t, size_t>> plain;
+    std::vector<Touching> touching;
     std::vector<int> third, ring;
     for (size_t i = 0; i < uses.size();) {
         size_t j = i;
@@ -247,7 +248,7 @@ void weld_and_pair(std::vector<GridPoint> &v, std::vector<Triangle> &t, const ch
         const size_t count = j - i;
         if (forward * 2 != count) throw ValueError(where + ": the surface is not closed (an edge has unmatched triangles)");
         if (count == 2) {
-            join(uses[i], uses[i + 1]);
+            plain.emplace_back(i, i + 1);
         } else {
             third.assign(count, 0);
             ring.resize(count);
@@ -260,16 +261,55 @@ void weld_and_pair(std::vector<GridPoint> &v, std::vector<Triangle> &t, const ch
                 throw ValueError(where + ": triangles overlap one another at an edge");
             // Counter-clockwise about lo -> hi, material lies after a triangle that runs hi -> lo and
             // before one that runs lo -> hi.
-            size_t start = 0;
-            while (start < count && uses[i + static_cast<size_t>(ring[start])].forward) ++start;
-            for (size_t k = 0; k < count; k += 2) {
-                const Use &open = uses[i + static_cast<size_t>(ring[(start + k) % count])];
-                const Use &close = uses[i + static_cast<size_t>(ring[(start + k + 1) % count])];
-                if (open.forward || !close.forward) throw ValueError(where + ": surfaces cross one another at an edge");
-                join(open, close);
+            size_t first = 0;
+            while (first < count && uses[i + static_cast<size_t>(ring[first])].forward) ++first;
+            Touching touch;
+            touch.across_empty = touch.switched = false;
+            for (size_t k = 0; k < count; ++k) {
+                const size_t use = i + static_cast<size_t>(ring[(first + k) % count]);
+                if ((uses[use].forward != 0) != (k % 2 == 1)) throw ValueError(where + ": surfaces cross one another at an edge");
+                touch.ring.push_back(use);
             }
+            touching.push_back(touch);
         }
         i = j;
+    }
+    // Join across the material where triangles touch along an edge, or across the gaps where that would
+    // use the edge twice between the same two vertices (see Arrangement::extract).
+    UnionFind corners(faces.size() * 3);
+    std::vector<std::pair<uint32_t, uint32_t>> keys;
+    for (int pass = 0;; ++pass) {
+        std::iota(corners.parent.begin(), corners.parent.end(), 0u);
+        const auto join = [&](const Use &x, const Use &y) {
+            corners.unite(corner_lo(x), corner_lo(y));
+            corners.unite(corner_hi(x), corner_hi(y));
+        };
+        for (const std::pair<size_t, size_t> &p : plain) join(uses[p.first], uses[p.second]);
+        for (const Touching &touch : touching) {
+            const size_t n = touch.ring.size();
+            for (size_t k = touch.across_empty ? 1 : 0; k < n + (touch.across_empty ? 1 : 0); k += 2) join(uses[touch.ring[k % n]], uses[touch.ring[(k + 1) % n]]);
+        }
+        bool changed = false, stuck = false;
+        for (Touching &touch : touching) {
+            const size_t n = touch.ring.size();
+            keys.clear();
+            for (size_t k = touch.across_empty ? 1 : 0; k < n + (touch.across_empty ? 1 : 0); k += 2)
+                keys.emplace_back(corners.find(corner_lo(uses[touch.ring[k % n]])), corners.find(corner_hi(uses[touch.ring[k % n]])));
+            std::sort(keys.begin(), keys.end());
+            if (std::adjacent_find(keys.begin(), keys.end()) == keys.end()) continue;
+            if (touch.switched) {
+                stuck = true;
+            } else {
+                touch.across_empty = !touch.across_empty;
+                touch.switched = true;
+                changed = true;
+            }
+        }
+        if (!changed) {
+            if (stuck) throw ValueError(where + ": triangles that touch along an edge could not be separated into a closed surface");
+            break;
+        }
+        if (pass > 64) throw ValueError(where + ": triangles that touch along an edge could not be separated into a closed surface");
     }
     // One vertex for each fan of corners.
     std::vector<uint32_t> index(faces.size() * 3, UINT32_MAX);
