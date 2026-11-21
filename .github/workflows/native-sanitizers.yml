@@ -1,7 +1,7 @@
 name: Native core with a second compiler and under sanitizers
 # The core's main check (native-core.yml) builds with each platform's default compiler. This one adds what
 # that leaves out: Clang on Linux, on both processor families, and every build again with the address and
-# undefined-behaviour sanitizers, on ARM hardware and on macOS as well as on x86-64. The core's recorded
+# undefined-behaviour sanitizers, with GCC and Clang, on ARM hardware and on macOS as well as on x86-64. The core's recorded
 # digests are part of its tests, so each of these compilers has to produce the same results to the last bit.
 on:
   workflow_dispatch:
@@ -17,7 +17,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: linux-arm64-gcc, runner: ubuntu-24.04-arm, compiler: g++ }
+          - { name: linux-x64-gcc, runner: ubuntu-24.04, compiler: g++ }
+          # GCC's check for the use of a stack frame after its function has returned makes the solid kernel's
+          # tests take hours on ARM64 (minutes without it; x86-64 is not affected). It is left to the other
+          # four jobs, Clang on this same hardware among them; every other check stays on here.
+          - { name: linux-arm64-gcc, runner: ubuntu-24.04-arm, compiler: g++, asan: "detect_stack_use_after_return=0" }
           # The overflow check on a 128-bit product calls a routine that Clang's own runtime library has and
           # GCC's, which Clang links on Linux by default, has not: on ARM64 the checked build asks for Clang's.
           - { name: linux-arm64-clang, runner: ubuntu-24.04-arm, compiler: clang++, link: "-rtlib=compiler-rt -unwindlib=libgcc" }
@@ -25,6 +29,7 @@ jobs:
           - { name: macos-arm64-apple-clang, runner: macos-15, compiler: clang++ }
           - { name: macos-x64-apple-clang, runner: macos-15-intel, compiler: clang++ }
     name: ${{ matrix.name }}
+    timeout-minutes: 45
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -43,4 +48,6 @@ jobs:
             "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer" \
             "-DCMAKE_EXE_LINKER_FLAGS=${{ matrix.link }}"
           cmake --build build/sanitizers --parallel 4
-          ctest --test-dir build/sanitizers --output-on-failure --timeout 3000
+          ctest --test-dir build/sanitizers --output-on-failure --timeout 1500
+        env:
+          ASAN_OPTIONS: ${{ matrix.asan }}
