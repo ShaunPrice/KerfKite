@@ -68,7 +68,7 @@ Each of these goes when the part that uses it is ported, under rule 5.
 
 | Component | Use | Plan |
 | --- | --- | --- |
-| GitHub Actions: checkout, setup-python, upload-artifact, cache | The checks | Keep, and pin each by commit hash; they are pinned by version tag today. |
+| GitHub Actions: checkout, setup-python, upload-artifact, cache | The checks | Keep. Each is pinned by commit hash, with its version beside it. |
 | ruff, pytest, pytest-cov | Development only | Keep: they do not ship. |
 | CMake and the platform compilers | Building | Keep: build tools. |
 
@@ -80,5 +80,5 @@ The plan for the port had left open whether the C++ application would use Qt 6 f
 
 1. The polygon kernel, replacing GEOS in the core and Shapely in the CAM operations.
 2. The JSON reader and writer in the core.
-3. Pillow out of the installed dependencies; GitHub Actions pinned by hash.
+3. Pillow out of the installed dependencies.
 4. The remaining items as their parts are ported.
