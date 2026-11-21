@@ -12,6 +12,12 @@ android {
         versionName '0.5.0'
     }
     buildTypes {
+        // Both builds drop the code they never reach, which is most of the QR library: only its QR reader is used.
+        // The debug build is shrunk the same way, so what is tried on a phone is what a release contains.
+        configureEach {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
         // A debug build installs beside the release app under its own id and name, so testing one never
         // replaces the other or its saved projects.
         debug {
