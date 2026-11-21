@@ -1255,11 +1255,9 @@ python packaging/desktop/build_browser.py &quot;dist/browser/kerfkite_studio-${s
 <li><strong>Numerics, image, serial and web services.</strong> NumPy's distribution carries component-specific notices alongside its BSD and other permissive licences. Pillow uses MIT-CMU and its binary wheel contains separately licensed image codecs and font/text libraries. Preserve the actual wheel's complete licence bundle, including any attribution required by the included FreeType and JPEG components. pySerial uses BSD terms. Flask and its supporting libraries retain their upstream notices. Cheroot and cryptography carry separate terms, and a cryptography wheel can include OpenSSL. <a href="https://github.com/numpy/numpy/blob/main/LICENSE.txt">NumPy licences</a> · <a href="https://pillow.readthedocs.io/en/stable/about.html#license">Pillow licence</a> · <a href="https://pyserial.readthedocs.io/en/latest/appendix.html#license">pySerial licence</a> · <a href="https://cryptography.io/en/latest/installation/">cryptography installation</a></li>
 <li><strong>MCP.</strong> The resolved FastMCP and FastMCP Slim advertise Apache 2.0. The MCP SDK advertises MIT. The dependency set includes certifi's Mozilla trust bundle under MPL 2.0. Preserve the MPL notice and comply with its source-availability provisions if distributing the covered material. Other transitive licences are listed in the inventory. The optional service is installed independently of the Studio wheel. <a href="https://pypi.org/project/fastmcp/3.4.11/">FastMCP release</a> · <a href="https://github.com/certifi/python-certifi">certifi</a> · <a href="https://www.mozilla.org/en-US/MPL/2.0/">MPL 2.0</a></li>
 </ul>
-<p>The native core has no third-party source of its own. Its JSON reader and writer (<code>native/core/include/kerfkite/json.hpp</code>, <code>native/core/src/json.cpp</code>) and the decimal conversions under them (<code>native/core/include/kerfkite/decimal.hpp</code>) are first-party code under the project's MIT licence, written from RFC 8259 and from the published methods named in those files. They replace JSON for Modern C++ 3.11.3 (MIT), which the source tree used to vendor as <code>native/third_party/nlohmann/json.hpp</code>. A <code>kerfkite-cam</code> binary or compiled extension built from a revision that still has that header contains it and must keep its licence file. The one third-party library the core still builds with is GEOS, described next; replacing it is separate work.</p>
-<p><strong>GEOS in the native core.</strong> With the default build options <code>kerfkite-cam</code> contains GEOS 3.14.1, the same release the Shapely 2.2.0 wheels carry, so that the core and the Python reference compute polygons with the same library. GEOS is licensed under the GNU LGPL, version 2.1. Its source is not in this repository: the build downloads the upstream release tarball, checks its SHA-256 and compiles it unmodified (<code>native/cmake/geos.cmake</code>). The licence text is kept at <code>native/third_party/geos/COPYING</code>. The Python wheels, the compiled extension and the Pocket APK do not contain this copy of GEOS. <a href="https://github.com/libgeos/geos/releases/tag/3.14.1">GEOS 3.14.1 release</a></p>
-<p>By default GEOS is linked statically into the program. LGPL 2.1 allows a program under another licence to be distributed linked with the library, on conditions (section 6): the recipient is told that the program uses GEOS and that GEOS is under the LGPL, receives the licence text and GEOS's source or a written offer of it, and is able to modify GEOS and relink the program with the modified library. For a statically linked program the last condition means supplying what is needed to relink: the program's own source or object files for exactly that build. KerfKite's source is public under MIT, which permits modification and rebuilding, so a recipient who has the source of the released version and the pinned GEOS tarball can rebuild <code>kerfkite-cam</code> against a changed GEOS. The licence's terms must also not forbid modification for the recipient's own use or reverse engineering to debug such modifications; MIT forbids neither.</p>
-<p>Two build options change how GEOS is combined with the program. <code>-DKERFKITE_GEOS_SHARED=ON</code> builds GEOS as shared libraries placed beside <code>kerfkite-cam</code>, which a recipient can replace with a compatible build without relinking (the arrangement section 6b describes). <code>-DKERFKITE_SYSTEM_GEOS=ON</code> links a GEOS 3.14.1 already installed on the system. <code>-DKERFKITE_WITH_GEOS=OFF</code> leaves GEOS out; the polygon operations are then declined.</p>
-<p><strong>Open decision for the project owner.</strong> No binary containing GEOS has been published by this project yet. Before one is (a release of <code>kerfkite-cam</code>, an installer or an app that embeds the core), the owner needs to choose between static linking and the shared-library build, and each distributed package then needs: a notice that it contains GEOS under LGPL 2.1, the licence text, GEOS's copyright notices where the program shows its own, the GEOS 3.14.1 source or a written offer of it, and, for a static build, the KerfKite source of exactly that release kept available. This paragraph describes what the build does and what the licence asks; it is not legal advice, and the choice has not been reviewed by a lawyer. Platforms that do not let a user replace a library inside an installed application, such as phone app stores, need particular care with either arrangement.</p>
+<p>The native core has no third-party source of its own. Its JSON reader and writer (<code>native/core/include/kerfkite/json.hpp</code>, <code>native/core/src/json.cpp</code>) and the decimal conversions under them (<code>native/core/include/kerfkite/decimal.hpp</code>) are first-party code under the project's MIT licence, written from RFC 8259 and from the published methods named in those files. They replace JSON for Modern C++ 3.11.3 (MIT), which the source tree used to vendor as <code>native/third_party/nlohmann/json.hpp</code>. A <code>kerfkite-cam</code> binary or compiled extension built from a revision that still has that header contains it and must keep its licence file. The core no longer builds with GEOS either, as described next.</p>
+<p><strong>GEOS is no longer in the native core.</strong> Offsets, pockets and hatch fills are computed by KerfKite's own polygon kernel (<code>native/core/src/polygon/</code>, first-party code under the project's MIT licence; see <a href="#polygon-kernel">The polygon kernel</a>). The build no longer downloads or compiles GEOS, its build options are gone, and <code>kerfkite-cam</code> and the compiled extension contain no third-party code. Earlier revisions of the source built <code>kerfkite-cam</code> with GEOS 3.14.1 (GNU LGPL 2.1) by default: a binary built from such a revision contains GEOS and can only be distributed on the LGPL's terms (a notice, the licence text, GEOS's source or an offer of it, and the means to relink). This project published no such binary, so the choice between static and shared linking that was recorded here as open no longer arises.</p>
+<p>Shapely, whose wheels carry GEOS, remains a dependency of Studio's Python code (the bullet on 2D and solid geometry above) and the reference the kernel is compared with in the validation scripts. Its terms apply to a distribution that includes those wheels, as before.</p>
 <p>To refresh the inventory in a build environment, run <code>python -m pip install --dry-run --ignore-installed --report resolved.json &quot;.[web,step,mcp]&quot;</code>. Use the target OS, architecture and Python for each build, inspect the actual archives, and retain licence files even when a package's metadata reports a single permissive identifier. The recorded resolver output describes a specific platform and date.</p>
 <h2>Branding, audio and video</h2>
 <ul>
@@ -1793,12 +1791,17 @@ rotary = generate_rotary(project, options, backend='python')
 <p>On Windows x64 (MSVC 2022 Build Tools, Python 3.10 and 3.12) the extension builds without compiler warnings, the parity tests and the installed-wheel check pass, and the five benchmark programs have the same hashes as on Linux. macOS and ARM builds have not been run.</p>
 <p><code>validation/benchmark_gcode.py</code> times both backends and fails if their program hashes differ; <code>validation/check_installed_cam.py</code> repeats the parity check on an installed wheel.</p>
 <h2>Python-free core</h2>
-<p><code>native/</code> holds the start of the application's move to C++: a C++17 library and the <code>kerfkite-cam</code> command-line tool, which write G-code from a project file with no Python installed. It currently reproduces router line jobs, laser line jobs (leads, power ramps, perforation, holding bridges and raster powers), drilling, drag-knife paths, ordered multi-operation jobs and controller post-processing; everything else is declined, never approximated. <code>native/README.md</code> lists what is ported and how to build it.</p>
+<p><code>native/</code> holds the start of the application's move to C++: a C++17 library and the <code>kerfkite-cam</code> command-line tool, which write G-code from a project file with no Python installed. It currently reproduces router line jobs, laser line jobs (leads, power ramps, perforation, holding bridges and raster powers), drilling, drag-knife paths, inside and outside offsets, pockets, hatch fills, ordered multi-operation jobs and controller post-processing; everything else is declined, never approximated. It contains no third-party code and its build downloads nothing. <code>native/README.md</code> lists what is ported and how to build it.</p>
 <p>Probe levelling (<code>native/core/src/leveling.cpp</code>) is the first part of the application written only in the core: it has no Python version. The extension compiles that file and exposes it as <code>core_call</code>, which <code>studio/leveling.py</code> wraps; the extension is therefore built as C++17 and compiles the core's JSON reader and writer with it. See <a href="#probe-leveling">Probe levelling</a>.</p>
 <p>Circuit board import (<code>gerber.cpp</code>, <code>excellon.cpp</code>, <code>pcb.cpp</code>) is written the same way, compiled into the extension and wrapped by <code>studio/pcb_import.py</code>. So are isolation toolpaths (<code>isolation.cpp</code>), for which the extension also compiles the polygon kernel (<code>polygon/</code>). See <a href="#pcb">Circuit boards</a>.</p>
-<p>Offsets, pockets and hatch fills are computed with GEOS 3.14.1, the release inside the Shapely 2.2.0 wheels that the Python code uses, through the same calls with the same arguments (<code>native/core/src/geometry.hpp</code>, <code>native/core/src/operations.cpp</code>). The build fetches the pinned GEOS release and checks its SHA-256; <code>native/README.md</code> gives the options, the build cost and the limits of what has been measured, and <a href="#licensing">Licences</a> covers GEOS's LGPL terms. On Linux x86-64 the generated comparison adds 4,000 contour jobs, of which about 2,400 produce programs (offsets, pockets and fills) and the rest rejections; all are reproduced or declined, none differs.</p>
+<p>Offsets, pockets and hatch fills are computed by the core's own polygon kernel (<code>native/core/src/polygon/</code>, <code>native/core/src/operations.cpp</code>; see <a href="#polygon-kernel">The polygon kernel</a>). This is the third part with a single implementation: the extension compiles the kernel and the operations, and <code>studio/operations.py</code> calls them through <code>core_call</code> after checking the job's settings in Python, so Studio and <code>kerfkite-cam</code> cut the same paths by construction. GEOS, which the core built for these operations at first, has been removed from the native build with its options.</p>
+<pre><code class="language-python">from studio import operations
+operations.polygon_backend()   # 'kernel' with the extension, 'shapely' without it
+</code></pre>
+<p>Without the extension (the portable wheel) the same operations run on Shapely, as they did before the kernel. The fallback cuts the same regions, but its vertices are not the kernel's: arcs are approximated from inside the true arc and not from outside, rings start elsewhere, pockets have many more vertices, and a contour that closes only to within the tolerance is usually refused. <code>KERFKITE_POLYGON_BACKEND=shapely</code> selects the fallback where the extension is installed, and <code>=kernel</code> refuses to run without the extension. Kernel coordinates are whole millionths of a millimetre; each crosses the JSON boundary as the shortest text of the double <code>n / 1e6</code> and is read back as exactly that double, which <code>tests/test_polygon_operations.py</code> checks.</p>
+<p><code>validation/check_installed_cam.py</code> pins these operations on every platform a wheel is built for: an inside offset, an outside offset, a pocket and a cross-hatch fill at 33.3 degrees, generated through the installed extension, must give the recorded digest. On Linux x86-64 the extension (GCC 13) and <code>kerfkite-cam</code> built with GCC 13, with Clang 18 and with the address and undefined-behaviour sanitizers wrote the same four programs.</p>
 <p>The exact number formatting described above now lives in one header, <code>native/core/include/kerfkite/number_text.hpp</code>, used by both the Python extension and the core.</p>
-<p>The core reads and writes JSON with its own code (<code>native/core/include/kerfkite/json.hpp</code>, <code>native/core/src/json.cpp</code>), which replaced the vendored JSON for Modern C++ header; apart from GEOS, which is being replaced separately, the core now has no third-party source. It supports what the core uses: all of RFC 8259 on input, with every escape and surrogate pairs; numbers that keep their kind, so that <code>1</code> stays a whole number and <code>1.0</code> a float as the Python reference requires; objects with their names in byte order, the last value standing where a name repeats; and one-line output. Its limits: arrays and objects nest at most 200 deep in text that is read, text must be well-formed UTF-8 in both directions, a literal beyond the range of a double is refused, and there is no indented output, comment syntax or binary format. A float is read as the nearest double and written as the shortest text that reads back as the same double, by exact integer arithmetic in <code>native/core/include/kerfkite/decimal.hpp</code>; the C library's conversions and the C locale are not involved, and <code>repr</code> in <code>number_text.hpp</code> and <code>float()</code> of text in a project use the same code. Floats are therefore written as Python writes them. The old library wrote two things differently: a float from 1e15 up to 1e16 in exponent form (<code>1e+15</code>, now <code>1000000000000000.0</code>), and, for roughly one double in a thousand, digits that were not the shortest (<code>23.343139999999998</code>, now <code>23.34314</code>). Both forms read back as the same double.</p>
+<p>The core reads and writes JSON with its own code (<code>native/core/include/kerfkite/json.hpp</code>, <code>native/core/src/json.cpp</code>), which replaced the vendored JSON for Modern C++ header; the core has no third-party source. It supports what the core uses: all of RFC 8259 on input, with every escape and surrogate pairs; numbers that keep their kind, so that <code>1</code> stays a whole number and <code>1.0</code> a float as the Python reference requires; objects with their names in byte order, the last value standing where a name repeats; and one-line output. Its limits: arrays and objects nest at most 200 deep in text that is read, text must be well-formed UTF-8 in both directions, a literal beyond the range of a double is refused, and there is no indented output, comment syntax or binary format. A float is read as the nearest double and written as the shortest text that reads back as the same double, by exact integer arithmetic in <code>native/core/include/kerfkite/decimal.hpp</code>; the C library's conversions and the C locale are not involved, and <code>repr</code> in <code>number_text.hpp</code> and <code>float()</code> of text in a project use the same code. Floats are therefore written as Python writes them. The old library wrote two things differently: a float from 1e15 up to 1e16 in exponent form (<code>1e+15</code>, now <code>1000000000000000.0</code>), and, for roughly one double in a thousand, digits that were not the shortest (<code>23.343139999999998</code>, now <code>23.34314</code>). Both forms read back as the same double.</p>
 <p>It was checked on Linux x86-64 (GCC 13 and Clang 18) in four ways. <code>native/tests/json_selftest.cpp</code>, which CTest runs on every platform, covers each construct, the number kinds, the limits and malformed input, holds tables of doubles computed by Python, and compares every short cut in the number conversions with the exact arithmetic behind it on some 300,000 doubles and the decimals written from them. Against Python, 5 million decimal texts (ties between doubles, decimals one digit either side of a tie hundreds of places along, subnormals, exponents far outside the range) gave the double <code>float()</code> gives, and 5 million doubles gave the text <code>repr()</code> gives, with the short cuts and without them. Against the library it replaced, while that was still in the tree, 440,000 documents (generated, damaged at random, and real: fixtures, projects recorded from the test suite and the answers to them) were read by both: the same were accepted and refused, with the same values, kinds and order; equality between 87,000 pairs of values agreed; and the 26,215 jobs of the parity comparison below gave answers equal in every value and type, 97.7% of them byte for byte, the rest differing only as described above. The one deliberate difference in what is accepted, apart from the depth limit, is that text after a NUL byte is refused, where the old library stopped reading at the NUL. Under the address and undefined-behaviour sanitizers, the self-tests, 500,000 mutated documents, the comparison corpus and 2,500 jobs through <code>kerfkite-cam</code> ran without a report. Windows (MSVC), macOS and ARM64 builds have not been run; the self-test is the check for them.</p>
 <p><code>python validation/native_core_parity.py --cli &lt;kerfkite-cam&gt;</code> compares the core with the Python reference: number text, every generator call the test suite makes, and thousands of generated edge cases. A case must be reproduced exactly or declined; a different answer fails. With laser jobs ported, the measurement on Linux x86-64 is: 300,000 numbers and 360,000 distances and sums identical; 124 of 202 recorded suite calls reproduced (61%); 11,225 of 12,000 generated cases reproduced (94%), among them 1,137 laser programs; and no differences. The three benchmark programs written by <code>kerfkite-cam</code> have the same hashes as Python's.</p>
 <p>Drilling (<code>native/core/src/drilling.cpp</code>) and drag-knife paths (<code>native/core/src/knife.cpp</code>) are ported as well. The generated cases gained 4,000 drilling and knife projects. On Linux x86-64, with those two parts: 160 of 205 recorded suite calls reproduced (78%, from 62%); 15,562 of 16,000 generated cases reproduced (97%), among them 1,290 drilling and 1,634 drag-knife programs; and no differences. The one knife case declined is a path that returns to a point through steps too short to keep, where the Python divides by zero. Knife swivels use the platform's <code>atan2</code>, <code>sin</code> and <code>cos</code>, as Python does, so they are compared on each platform against the Python there.</p>
@@ -2868,10 +2871,14 @@ clipping and the union of very many shapes. It is part of the native core (<code
 interface in <code>native/core/include/kerfkite/polygon.hpp</code>) and depends on nothing but the C++17 standard
 library. It was written for KerfKite from the published methods named under <a href="#sources">Sources</a>, not taken
 or translated from another library.</p>
-<p><strong>It is not yet what the application uses.</strong> Inside and outside offsets, pockets and hatch fills still go
-through GEOS (<code>native/core/src/operations.cpp</code>) and, in Studio, through Shapely. The kernel is built and
-tested beside them, with or without GEOS in the build, and can be tried through <code>kerfkite-cam polygon</code>.
-<a href="#switching-the-operations-over">Switching the operations over</a> lists what replaces what.</p>
+<p><strong>It is what the application uses</strong> for inside and outside offsets, pockets and hatch fills.
+<code>native/core/src/operations.cpp</code> builds those operations on the kernel; <code>kerfkite-cam</code> runs that code, and
+Studio's Python calls the same code through its compiled extension (<code>studio/operations.py</code>), so the two cut
+the same paths. GEOS is no longer part of the native build, which now contains no third-party code and
+downloads nothing. Shapely, which carries GEOS, remains in Studio for three things: as the fallback for
+these operations where the extension is not installed, in the modules that have not been moved yet, and as
+the oracle the kernel is tested against. <a href="#the-operations">The operations</a> describes how they are built
+and how the paths differ from the ones GEOS gave.</p>
 <h2>What it does</h2>
 <table>
 <thead>
@@ -3025,8 +3032,8 @@ and the interior of each polygon is connected.</li>
 </ul>
 <p><code>outlines</code> re-orders a region for the application, as <code>studio.operations.outlines</code> does: polygons by area,
 smallest first, and for each its holes and then its outer ring, every ring closed by repeating its first
-vertex. It gives outer rings clockwise and holes counter-clockwise, the directions GEOS has given until now,
-so the direction of cut does not change.</p>
+vertex. It gives outer rings clockwise and holes counter-clockwise, the directions the Shapely code has
+always given, so the direction of cut does not change.</p>
 <h2>Limits</h2>
 <table>
 <thead>
@@ -3084,6 +3091,10 @@ same digest, which shows that the test's cases do not turn on it, not that none 
 been compiled or run: the kernel is written to the standard and the portable integer is exercised here, but
 the first build on each is the test. The continuous build (<code>.github/workflows/native-core.yml</code>) runs CTest
 on them, and a different result would fail the digest there.</p>
+<p>The operations are pinned in the same way. <code>validation/check_installed_cam.py</code>, which every wheel build
+runs on the installed wheel, generates an inside offset, an outside offset, a pocket and a cross-hatch fill
+at 33.3 degrees through the extension and compares the four programs with a recorded digest. <code>kerfkite-cam</code>
+built with GCC 13 and with Clang 18 writes the same four programs as the extension does.</p>
 <h2>How it is tested</h2>
 <p><code>native/tests/polygon_selftest.cpp</code>, run by CTest twice (<code>polygon</code>, and <code>polygon_portable_int128</code> with the
 kernel's own 128-bit integer), needs no Python and no other library:</p>
@@ -3196,24 +3207,6 @@ script settles with exact rational arithmetic on the input.</p>
 <td>49; 150</td>
 <td></td>
 </tr>
-<tr>
-<td>Application: outside and inside offsets (regions, then rings in order and direction)</td>
-<td>900 and 914</td>
-<td>153 and 188</td>
-<td>87 and 156</td>
-</tr>
-<tr>
-<td>Application: pockets, pass by pass</td>
-<td>896 pockets, 4,456 passes</td>
-<td>526 passes, 9 pockets</td>
-<td>186</td>
-</tr>
-<tr>
-<td>Application: hatch fills</td>
-<td>890</td>
-<td>291</td>
-<td>100</td>
-</tr>
 </tbody>
 </table>
 <p><code>Thin</code> cases are accepted and counted, not hidden. For Boolean results they are slivers no wider than the
@@ -3222,8 +3215,9 @@ same set moved by a few nanometres, which is nothing but slivers). For offsets a
 lay between the two swept offsets in every case; <code>thin</code> there means it was further from GEOS's polygon
 buffer than the tolerance, at a sharp corner or where that buffer is itself off. For hatch fills it means
 that some row ran along an edge or grazed a corner, so that the two did not cut the same parts, while the
-kernel's rows lay in the region and covered what its width allows. For application pockets, 9 are pockets
-the reference refuses for exceeding 100,000 vertices and the kernel completes within the limit.</p>
+kernel's rows lay in the region and covered what its width allows. (That run also made the four
+operations from kernel calls and compared them with <code>studio.operations</code>, which was then Shapely alone; the
+comparison of the operations as they now are is under <a href="#the-operations">The operations</a>.)</p>
 <p>Measured without any oracle in that run: no point of an offset boundary was nearer the source than the
 distance by more than 1.3 nm, and none further than the arc allowance and 4 nm. Resolving took at most 4
 rounds.</p>
@@ -3270,116 +3264,292 @@ every other: a polygon of 343 sides shrunk by exactly its radius, so that all it
 through the centre (59,000 crossings), took 0.25 s.</li>
 <li>A shape with a neck or sliver thinner than a nanometre can come apart or lose the sliver, and an offset of
 it then lacks what the sliver would have added.</li>
-<li>The limit of 100,000 vertices on a pocket in <code>studio/operations.py</code> was set for GEOS, which draws every
-arc again at every pass. The kernel's passes have far fewer vertices (4,057 against 156,384 for one
-generated pocket of 29 passes), so some pockets the reference refuses will be accepted.</li>
+<li>The limit of 100,000 vertices on a pocket was set for GEOS, which draws every arc again at every pass.
+The limit and its message are kept, but the kernel's passes have far fewer vertices (4,057 against
+156,384 for one generated pocket of 29 passes), so it now takes a very large pocket to reach it, and
+some pockets the Shapely code refuses are cut.</li>
 <li>Only x86-64 with GCC and Clang has been run. See <a href="#results-are-the-same-everywhere">above</a>.</li>
 <li><code>is_valid</code> does not check that the interior of a polygon is connected. (Results of the kernel are; the
 comparison with GEOS, whose validity test does check it, found none that was not.)</li>
 </ul>
-<h2>Switching the operations over</h2>
-<p>Each call <code>studio/operations.py</code> makes to Shapely, and <code>native/core/src/operations.cpp</code> makes to the GEOS
-layer, and what replaces it:</p>
+<h2>The operations</h2>
+<p><code>native/core/src/operations.cpp</code> is the one implementation of inside and outside offsets, pockets and hatch
+fills. <code>kerfkite-cam generate</code> reaches it directly. Studio's <code>studio/operations.py</code> checks the settings of
+a job in Python, with the messages and in the order they always had, and then asks the compiled extension
+for the geometry (the core's <code>operation</code> command, <code>kerfkite/operation_command.hpp</code>); the extension is built
+from the same source files. What each step of the Shapely code became:</p>
 <table>
 <thead>
 <tr>
-<th>Reference (Shapely)</th>
-<th>Core today (<code>geometry::</code>)</th>
+<th>Shapely code (now the fallback)</th>
 <th>Kernel (<code>polygon::</code>)</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>Polygon(path)</code></td>
-<td><code>context.polygon(path)</code></td>
-<td><code>ring_from_mm(path)</code></td>
+<td><code>ring_from_mm(path)</code> without the path's last point</td>
 </tr>
 <tr>
 <td><code>p.is_valid</code></td>
-<td><code>polygon.valid()</code></td>
 <td><code>is_simple(ring)</code></td>
 </tr>
 <tr>
 <td><code>p.area &lt; 1e-9</code></td>
-<td><code>polygon.area() &lt; 1e-9</code></td>
 <td><code>std::fabs(signed_area(ring)) &lt; 1e-9</code></td>
 </tr>
 <tr>
 <td><code>GeometryCollection()</code>, then <code>result.symmetric_difference(p)</code> for each contour</td>
-<td><code>empty_collection()</code>, <code>symmetric_difference</code></td>
 <td><code>compose(rings)</code> once, for all contours</td>
 </tr>
 <tr>
 <td><code>result.is_empty</code></td>
-<td><code>result.empty()</code></td>
 <td><code>region.empty()</code></td>
 </tr>
 <tr>
 <td><code>g.buffer(d, quad_segs=32)</code></td>
-<td><code>context.buffer(g, d, style)</code></td>
 <td><code>offset(region, d)</code></td>
 </tr>
 <tr>
 <td><code>inset.buffer(-step, quad_segs=32)</code> until empty</td>
-<td>the same</td>
 <td><code>offset(inset, -step)</code> until <code>empty()</code></td>
 </tr>
 <tr>
 <td><code>outlines(result)</code></td>
-<td><code>geometry::outlines(result)</code></td>
 <td><code>outlines(region)</code></td>
 </tr>
 <tr>
 <td><code>affinity.rotate(g, -angle).bounds</code></td>
-<td><code>rotate</code>, <code>bounds()</code></td>
-<td>turn the vertices of the region (<code>ring_to_mm</code>) by <code>-angle</code> and take their extremes; the kernel does not turn regions</td>
+<td>the extremes of the region's vertices turned by <code>-angle</code>; the region itself is not turned</td>
 </tr>
 <tr>
 <td><code>rotated.intersection(LineString(row))</code>, <code>lines(...)</code>, <code>affinity.rotate(line, angle)</code></td>
-<td><code>intersection</code>, <code>lines</code>, <code>rotate</code></td>
-<td>turn the two ends of the row by <code>+angle</code>, <code>to_grid</code> them, and <code>LineClipper(region).clip(a, b)</code>: the parts are already in the region's frame, in order along the row</td>
+<td>the two ends of the row turned by <code>+angle</code> and put on the grid, then <code>LineClipper(region).clip(a, b)</code>: the parts are already in the region's frame, in order along the row</td>
 </tr>
 <tr>
 <td><code>line.length &gt; 1e-6</code></td>
-<td><code>line.length()</code></td>
-<td>the length of the part</td>
+<td>the part is at least 0.001 mm long</td>
 </tr>
 <tr>
 <td><code>shapely.errors.GEOSException</code></td>
-<td><code>geometry::Error</code>, declined</td>
-<td>does not arise; <code>ValueError</code> only for input beyond the limits</td>
+<td>does not arise; <code>ValueError</code> only for input beyond the kernel's limits</td>
 </tr>
 </tbody>
 </table>
-<p><code>kerfkite-cam polygon</code> with <code>&quot;op&quot;: &quot;compose&quot;</code> is <code>studio.operations.region</code> with its three messages, and the
-<code>cam</code> group of the validation script makes inside, outside, pocket and fill jobs from kernel calls in exactly
-this way and compares them with <code>studio.operations</code>.</p>
-<p>Where the kernel's tool paths will differ from GEOS's, and why that is acceptable:</p>
+<p>Four things are fixed in that file and are worth knowing:</p>
 <ul>
-<li><strong>Coordinates</strong> are whole nanometres. The G-code is written to at most a few decimal places.</li>
-<li><strong>Where a ring starts</strong>: at its smallest vertex, where GEOS starts wherever its algorithm happens to.
-Direction is unchanged (outer rings clockwise, holes counter-clockwise from <code>outlines</code>).</li>
-<li><strong>Arc vertices</strong>: the same number for a square corner (32 a quarter turn), in different places, just
-outside the true arc instead of just inside. The tool path is the documented allowance further from the
-work at round corners, never nearer.</li>
-<li><strong>The order of the holes of one polygon</strong> and of polygons of exactly equal area: the kernel's defined
-order, where GEOS's is an accident of its algorithm.</li>
-<li><strong>Vertices on straight runs</strong> are dropped.</li>
-<li><strong>Pockets</strong>: the same passes. The last pass, when it is thinner than the tolerance, can exist in one and
-not in the other. The kernel's passes have far fewer vertices, since it does not draw an arc again at every
-pass, so the reference's limit of 100,000 vertices is reached much later.</li>
-<li><strong>Hatch rows</strong>: the same rows to within 3 nm, except rows that run along an edge or graze a corner, which
-the two cut differently by nature. A row that only touches a corner is nothing to GEOS; moved to the grid
-it can cut one to four nanometres off the corner, which passes the reference's test of <code>&gt; 1e-6</code> mm. A
-port may prefer to drop parts shorter than a few grid units.</li>
-<li><strong>Contours refused</strong>: a contour that touches itself or has no area is refused with the reference's
-message. The two can disagree only on a contour whose self-contact or emptiness is a matter of less than
-the grid.</li>
+<li><strong>From the grid to doubles.</strong> A grid coordinate <code>n</code> leaves the kernel as the double <code>n / 1e6</code>. That is one
+division, which IEEE 754 rounds correctly, so every platform gets the same double; the core's JSON writes
+it as the shortest text that reads back as the same double, and Python reads that text back exactly, so
+Studio's generator and <code>kerfkite-cam</code>'s format the same numbers. The program is written to three decimals,
+a thousand grid steps, so the conversion never decides a digit.</li>
+<li><strong>Turning hatch rows.</strong> The sine and cosine of the hatch angle come from a fixed series of additions and
+multiplications after the angle has been folded exactly into the first eighth of a turn, not from the C
+library, whose last bit differs between platforms. A whole number of quarter turns gives exactly 0 and 1.</li>
+<li><strong>Short pieces of a hatch row.</strong> A piece shorter than 0.001 mm is dropped. The program's coordinates have
+three decimals, so a shorter stroke cannot be cut. The Shapely code kept pieces longer than 0.000001 mm,
+which a row grazing a corner can produce.</li>
+<li><strong>The closing point.</strong> A contour counts as closed when its last point is within 0.000001 mm of its first.
+That last point is then taken to be the first, not a further vertex. The Shapely code appends the first
+point again after it, and then usually refuses the contour as self-crossing because of the spike that
+makes.</li>
 </ul>
-<p>Because the output is no longer GEOS's to the byte, <code>validation/native_core_parity.py</code> cannot compare these
-four operations byte for byte with the Python reference once the core uses the kernel. Either the comparison
-for them becomes the tolerance comparison of <code>validation/polygon_kernel_check.py</code>, or Studio calls the
-kernel through the extension so that there is again one implementation.</p>
+<p>The checks of a job's settings, their messages and their order are unchanged, as are the warnings, the
+check of the compensated path against the work area, and the limit of 100,000 vertices on a pocket.
+V-carving is not part of this: it needs a Voronoi diagram, stays on Shapely in Studio, and is declined by
+<code>kerfkite-cam</code>.</p>
+<h3>Which code runs</h3>
+<p><code>studio.operations.polygon_backend()</code> answers <code>kernel</code> when the compiled extension is installed and
+<code>shapely</code> when it is not (the portable wheel, or a source checkout that was never built). Setting
+<code>KERFKITE_POLYGON_BACKEND=shapely</code> selects the Shapely code where the extension is installed; <code>=kernel</code>
+refuses to run without it. The two cut the same regions, but <strong>the fallback's vertices are not the
+kernel's</strong>, so a program written by an installation without the extension differs from one written with it
+in the ways listed next. <code>kerfkite-cam</code> always uses the kernel.</p>
+<h3>How the tool paths differ from the ones GEOS gave</h3>
+<ul>
+<li><strong>Coordinates</strong> are whole nanometres. The G-code is written to three decimals.</li>
+<li><strong>Where a ring starts</strong>: at its left-most vertex, where GEOS started wherever its algorithm happened to.
+Leads, ramp entries and tabs on an offset contour are placed from that start, so they move with it.
+Direction is unchanged: outer rings clockwise, holes counter-clockwise.</li>
+<li><strong>Arc vertices</strong>: the same number for a square corner (32 a quarter turn), in different places, just
+outside the true arc where GEOS's were just inside. At round corners the tool path is up to 0.034% of the
+offset distance further from the work than the exact offset, and never nearer; GEOS's was up to 0.03%
+nearer. For a 3.175 mm cutter that is half a micrometre either way.</li>
+<li><strong>The order of the holes of one polygon</strong>, and of polygons of exactly equal area: the kernel's defined
+order, where GEOS's was an accident of its algorithm. Polygons are still cut smallest first, each one's
+holes before its outline.</li>
+<li><strong>Vertices on straight runs</strong> are dropped.</li>
+<li><strong>Pockets</strong>: the same passes, with far fewer vertices, since an arc is not drawn again at every pass. A
+last pass thinner than the tolerance can exist in one and not in the other: where the cutter's centre
+could reach exactly one point, GEOS's arcs, drawn from inside, leave a speck that becomes a pass, and the
+kernel's leave nothing.</li>
+<li><strong>Hatch rows</strong>: the same rows. A row that runs along an edge of the region now runs in the row's direction
+like its neighbours; GEOS gave it the direction of the edge. Pieces under 0.001 mm are gone.</li>
+<li><strong>Contours accepted</strong>: a contour that closes to within the tolerance but not exactly is now cut; a contour
+that touches itself or has no area is refused as before. The two can otherwise disagree only on a contour
+whose self-contact or emptiness is a matter of less than the grid.</li>
+<li><strong>Which message, for a path that leaves the work area</strong>: the first offending point of a ring is reported,
+X before Y, and the ring starts elsewhere, so a job refused for <code>Compensated Y</code> can now be refused for
+<code>Compensated X</code>, or the other way round.</li>
+</ul>
+<h3>How the operations are checked</h3>
+<p><code>tests/test_polygon_operations.py</code> runs <code>prepare()</code> on the kernel and on the Shapely fallback against
+expectations worked out from the geometry: areas of offsets of squares, the distance of every vertex from
+the source contour, the number and size of pocket passes, the rows of a fill and their total length, the
+order and direction of rings, and every rejection in its order.</p>
+<p>The <code>cam</code> group of <code>validation/polygon_kernel_check.py</code> generates jobs (stars with holes, overlapping
+contours, rectangles on a lattice with shared edges; tools from a fifth of a millimetre up, hatch angles
+that are round and that are not) and runs <code>prepare()</code> both ways for each:</p>
+<pre><code>python validation/polygon_kernel_check.py --cli build/native/kerfkite-cam --only cam --cases 5000
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Check (run of 21 November 2026, GCC 13, seed 20261121; no failures)</th>
+<th>Jobs</th>
+<th>Refused by both</th>
+<th>Thin</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The extension's tool paths and <code>kerfkite-cam</code>'s for the same request are the same doubles</td>
+<td>3,000</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Outside offsets: the region between swept offsets of the source, then rings in number, order and direction</td>
+<td>740</td>
+<td>69</td>
+<td>128</td>
+</tr>
+<tr>
+<td>Inside offsets, likewise</td>
+<td>755</td>
+<td>122</td>
+<td>162 regions, 1 job by its rings</td>
+</tr>
+<tr>
+<td>Pockets, pass by pass against the inset of the source by the whole depth</td>
+<td>746 pockets, 3,672 passes</td>
+<td>156</td>
+<td>446 passes, 7 pockets</td>
+</tr>
+<tr>
+<td>Hatch and cross-hatch fills, row by row</td>
+<td>759</td>
+<td>79</td>
+<td>89</td>
+</tr>
+</tbody>
+</table>
+<p><code>Refused by both</code> are jobs the Shapely code refuses (a tool that does not fit, contours that cancel or
+cross); the kernel must refuse them with the same message, unless the matter turns on less than the grid.
+<code>Thin</code> has the meaning it has above: the kernel lay between the two swept offsets, and was further from
+GEOS's buffer than the tolerance at a sharp corner or where that buffer is itself off (GEOS's own distance
+from the true offset was up to 20 times what its chords explain in this run); for pockets, a last pass
+that only one of the two finds, thinner than the tolerance, or a pocket the Shapely code refuses for its
+100,000 vertices; for fills, a row along an edge or grazing a corner. Of the 591 fills that were neither,
+every row matched the reference's row: both ends within 3 nm (worst 2.97 nm), or, where the row meets an
+edge at a shallow angle, on the reference's line to within 3 nm with its ends on the region's boundary
+(the furthest such end was 104 nm along the row from the reference's).</p>
+<p>A separate count of outcomes, over the 3,949 generated jobs of <code>validation/native_core_parity.py</code> that ask
+for one of these operations: 3,905 end the same way on the kernel and on the Shapely fallback (a program,
+or the same rejection). The other 44 are 36 contours the Shapely code refuses as self-crossing and the
+kernel accepts (35 close only to within the tolerance; one has two vertices two millionths of a micrometre
+apart); 5 jobs refused for leaving the work area on the other axis first; 2 fills at an angle of a
+billionth of a degree whose only rows run along an edge; and 1 outside offset whose ramp entry, placed from
+the new start of the ring, no longer fits the work area.</p>
+<p><code>validation/native_core_parity.py</code> then compares whole jobs between <code>kerfkite-cam</code> and the Python generator
+with the extension. The geometry of an offset, pocket or fill is shared there by construction, so what that
+comparison shows for these jobs is everything round the operation: the settings and their rejections, the
+order of cutting, leads, tabs, ramp entries on the offset contours, laser power, post-processing and the
+totals. It names the reference it is using, and without the extension it stops instead of comparing
+Shapely's vertices with the kernel's (<code>--without-polygon-operations</code> leaves those jobs out and says so).</p>
+<p>Measured on Linux x86-64 (GCC 13, Python 3.13) with the default sizes, before and after the change. No
+case differed in either run.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Suite calls</th>
+<th>Generated cases</th>
+<th>Ramp, helix and tab cases</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Before: core on GEOS, reference on Shapely</td>
+<td>210: 116 programs, 90 rejections, 4 declined</td>
+<td>20,000: 9,678 programs, 10,255 rejections, 67 declined</td>
+<td>6,005: 3,255 programs, 2,750 rejections</td>
+</tr>
+<tr>
+<td>After: core and reference on the kernel</td>
+<td>213: 118 programs, 91 rejections, 4 declined</td>
+<td>20,000: 9,701 programs, 10,231 rejections, 68 declined</td>
+<td>6,005: 3,255 programs, 2,750 rejections</td>
+</tr>
+</tbody>
+</table>
+<p>The suite has three more calls because of the new tests. Among the generated cases, the 23 further
+programs and the one further declined job (a helical entry into a pocket, which is not ported) come from
+the differences in outcome counted above, chiefly contours that close only to within the tolerance, which
+both sides used to refuse.</p>
+<h3>What still uses Shapely in Studio</h3>
+<p>These were not changed, and each could move onto the kernel:</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Use of Shapely</th>
+<th>What moving it needs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>studio/operations.py</code>, V-carving</td>
+<td><code>voronoi_diagram</code> of points sampled along the outline, clipped to the region; distances to the boundary</td>
+<td>A Voronoi diagram or medial axis of a polygon, which the kernel does not have; then clipping (the kernel's <code>LineClipper</code>) and point-to-boundary distance. The largest piece.</td>
+</tr>
+<tr>
+<td><code>studio/operations.py</code>, the fallback</td>
+<td>The Shapely code of offsets, pockets and fills</td>
+<td>Nothing: it goes when the portable wheel carries the extension or is retired.</td>
+</tr>
+<tr>
+<td><code>studio/router_entry.py</code></td>
+<td>The region of the contours and its polygons, the inset by the cutter radius for helix and ramp clearance, nearest points, <code>LineString</code> lengths and simplicity</td>
+<td>The <code>operation</code> command already gives the region and its insets; it also needs the distance from a point to a region's boundary and the nearest boundary point, which are small additions to <code>measure.cpp</code>. The core's own <code>router_entry.cpp</code> and <code>simple_line.cpp</code> already hold the line parts.</td>
+</tr>
+<tr>
+<td><code>studio/cam.py</code></td>
+<td><code>LineString(path).is_simple</code> before tabs and entries</td>
+<td>The core's <code>simple_line.cpp</code> answers this by GEOS's rules; the kernel's <code>is_simple</code> (exact, on the grid) could replace both once the rejections are allowed to follow the grid.</td>
+</tr>
+<tr>
+<td><code>studio/design_api.py</code></td>
+<td><code>region</code>, <code>outlines</code>, <code>unary_union</code> and <code>box</code> for Boolean operations between shapes in the editor</td>
+<td><code>combine()</code> and <code>unite_all()</code> exist; it needs a command that takes two sets of contours and returns outlines. Small.</td>
+</tr>
+<tr>
+<td><code>studio/solid_text.py</code>, <code>studio/cad_exchange.py</code></td>
+<td>Regions of glyph and profile outlines, orientation, constrained Delaunay triangulation for the faces of solids, clipping to boxes</td>
+<td>Regions and orientation exist. Triangulating a polygon with holes is new work (the kernel's sweep could be extended to produce monotone pieces and triangles).</td>
+</tr>
+<tr>
+<td><code>studio/sketch_profile.py</code>, <code>studio/scad_geometry.py</code></td>
+<td><code>Polygon</code> validity and area, <code>LinearRing</code> orientation</td>
+<td><code>is_simple</code>, <code>signed_area</code>, <code>orientation</code>: all exist. Small.</td>
+</tr>
+<tr>
+<td><code>studio/pdf_import.py</code>, <code>studio/program_import.py</code></td>
+<td><code>STRtree</code> to find nearby paths, <code>MultiPoint</code> hulls, <code>Polygon</code> and <code>LineString</code> construction, containment</td>
+<td>A spatial index (the kernel's bucket grid is internal) and a convex hull; containment is <code>locate()</code>. Small to medium.</td>
+</tr>
+</tbody>
+</table>
 <h2>Sources</h2>
 <p>The kernel was written from the general, published descriptions of these methods and from first
 principles, without reading the source of GEOS, JTS, Clipper, Boost.Polygon, CGAL or any other geometry
@@ -4259,9 +4429,9 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 </thead>
 <tbody>
 <tr>
-<td>GEOS 3.14.1 (LGPL 2.1), fetched at build time by pinned hash</td>
+<td>GEOS 3.14.1 (LGPL 2.1), formerly fetched at build time by pinned hash</td>
 <td>Offsets, pockets and hatch fills</td>
-<td><strong>Being replaced.</strong> The in-house polygon kernel is written and tested (<a href="#polygon-kernel">Polygon kernel</a>); the operations are being moved onto it. GEOS then stays only as a test oracle, off by default, and is not shipped.</td>
+<td><strong>Replaced.</strong> The in-house polygon kernel computes them (<a href="#polygon-kernel">Polygon kernel</a>). GEOS is gone from the native build, with its build files and options; nothing is fetched while building, and the core contains no third-party code. GEOS remains only inside Shapely, in Studio's Python (below) and as the oracle of the validation scripts, which are not shipped in the core.</td>
 </tr>
 <tr>
 <td>JSON for Modern C++ 3.11.3 (MIT), one vendored header</td>
@@ -4334,7 +4504,7 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 <tr>
 <td>Shapely 2.2.0, which carries GEOS</td>
 <td>Polygon work in ten modules: CAM operations, entry moves, sketch profiles, imports, solid text, exchange</td>
-<td><strong>Replace.</strong> The CAM operations move to the in-house kernel first; the other modules follow as they are ported.</td>
+<td><strong>Being replaced.</strong> Offsets, pockets and hatch fills now run on the in-house kernel, through the compiled extension. Shapely stays for now as their fallback where the extension is not installed (the portable wheel), as the reference the kernel is compared with in the checks, and in the other modules (V-carving, router entry clearance, sketch profiles, imports, text, exchange) until each is ported.</td>
 </tr>
 <tr>
 <td>NumPy</td>
@@ -4464,7 +4634,7 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 <tr>
 <td>Core and <code>kerfkite-cam</code>: CAM, the geometry and solid kernels, file formats, levelling</td>
 <td>KerfKite's own code</td>
-<td>None, once GEOS and the JSON library are replaced</td>
+<td>None: GEOS and the JSON library have been replaced</td>
 <td>MIT, with no third-party obligations</td>
 </tr>
 <tr>
@@ -4518,12 +4688,12 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 <tr>
 <td>The in-house kernels (2D polygons, 3D solids, JSON)</td>
 <td>Nothing separate: they are compiled into the core and the extension.</td>
-<td>Arrive with the extension once each is switched in.</td>
+<td>Arrive with the extension once each is switched in. The JSON code and the polygon kernel are; the installed-wheel check runs offsets, a pocket and a fill through the kernel and compares the programs with a recorded digest.</td>
 </tr>
 <tr>
 <td><code>kerfkite-cam</code>, the command-line tool</td>
 <td>The program for the platform.</td>
-<td><strong>Not installed yet.</strong> To be added once GEOS is out of it, so that it carries no third-party code.</td>
+<td><strong>Not installed yet.</strong> GEOS is out of it and it carries no third-party code; adding it to the installers is what remains.</td>
 </tr>
 <tr>
 <td>The editor of the C++ application</td>
@@ -4556,7 +4726,7 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 </ol>
 <h2>Order of work</h2>
 <ol>
-<li>The polygon kernel, replacing GEOS in the core and Shapely in the CAM operations.</li>
+<li>The polygon kernel, replacing GEOS in the core and Shapely in the CAM operations. Done for the core and for Studio with its compiled extension; the other Shapely users in Studio follow.</li>
 <li>Pillow out of the installed dependencies.</li>
 <li>The remaining items as their parts are ported.</li>
 </ol>

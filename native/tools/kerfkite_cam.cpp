@@ -10,7 +10,9 @@
 //   kerfkite-cam excellon FILE [--units mm|inch] [--integer N --decimal N] [--omitted-zeros leading|trailing]
 //   kerfkite-cam excellon-drills FILE [--offset [X,Y]]       the holes as drilling operations, by diameter
 //   kerfkite-cam polygon REQUEST.json        the polygon kernel: see kerfkite/polygon_command.hpp
-//   kerfkite-cam polygon-batch CASES.jsonl   one polygon request a line, each answered {"ok": ...} or {"error": ...}
+//   kerfkite-cam polygon-batch CASES.jsonl   one polygon request a line (or, with "command": "operation", one
+//                                            operation request), each answered {"ok": ...} or {"error": ...}
+//   kerfkite-cam operation REQUEST.json      an offset, pocket or fill: see kerfkite/operation_command.hpp
 //   kerfkite-cam batch CASES.jsonl
 //   kerfkite-cam numbers
 //   kerfkite-cam arithmetic
@@ -45,6 +47,7 @@ int usage() {
                  "       kerfkite-cam probe-plan|height-map|level REQUEST.json\n"
                  "       kerfkite-cam gerber|gerber-outline|gerber-isolation|excellon|excellon-drills FILE [--option VALUE ...]\n"
                  "       kerfkite-cam polygon REQUEST.json | polygon-batch CASES.jsonl\n"
+                 "       kerfkite-cam operation REQUEST.json\n"
                  "       kerfkite-cam batch CASES.jsonl\n"
                  "       kerfkite-cam numbers < VALUES\n";
     return 1;
@@ -198,7 +201,10 @@ int polygon_batch(const std::string &path) {
         if (line.empty()) continue;
         json answer;
         try {
-            answer = json{{"ok", kerfkite::call("polygon", json::parse(line))}};
+            const json request = json::parse(line);
+            // A line is a polygon request unless it names the other geometry command: "command": "operation".
+            const bool operation = request.is_object() && request.value("command", "") == "operation";
+            answer = json{{"ok", kerfkite::call(operation ? "operation" : "polygon", request)}};
         } catch (const kerfkite::ValueError &error) {
             answer = json{{"error", error.what()}};
         } catch (const std::exception &error) {
@@ -261,7 +267,7 @@ int main(int argc, char **argv) {
     const std::string command = argv[1];
     if (command == "generate") return generate(argc, argv);
     if (command == "batch" && argc == 3) return batch(argv[2]);
-    if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "polygon") && argc == 3)
+    if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "polygon" || command == "operation") && argc == 3)
         return request(command, argv[2]);
     if (command == "polygon-batch" && argc == 3) return polygon_batch(argv[2]);
     if ((command == "gerber" || command == "gerber-outline" || command == "gerber-isolation" || command == "excellon" ||

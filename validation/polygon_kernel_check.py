@@ -1,6 +1,7 @@
 """Check KerfKite's own polygon kernel against Shapely (GEOS), by tolerance.
 
-    cmake -S native -B build/native -DKERFKITE_WITH_GEOS=OFF && cmake --build build/native
+    cmake -S native -B build/native && cmake --build build/native
+    python setup.py build_ext --inplace        # the `cam` group runs Studio's own code
     python validation/polygon_kernel_check.py --cli build/native/kerfkite-cam
 
 The kernel (native/core/include/kerfkite/polygon.hpp) works on a grid of one nanometre with exact
@@ -23,9 +24,12 @@ operations, a result united with itself must come back unchanged, and every vert
 at the offset distance from the source boundary.
 
 Groups (--only): boolean, normalise, compose, offset, pocket, clip, artwork, cam. `cam` runs
-studio.operations (inside, outside, pocket, fill) and compares its tool paths with the same steps made
-from kernel calls. --dump writes every request and answer; --replay sends the requests of such a file to
-another build and compares the answers byte for byte.
+studio.operations.prepare (inside, outside, pocket, fill) twice for each generated job, once on the kernel
+through the compiled extension, as Studio runs it, and once on its Shapely fallback, and compares the two
+sets of tool paths: the regions and each pocket pass by the tolerances above, the number and order of
+rings, and each hatch row. It also sends the same request to the command-line tool, whose answer must be
+the extension's to the last bit. --dump writes every request and answer; --replay sends the requests of
+such a file to another build and compares the answers byte for byte.
 """
 
 import argparse
@@ -979,8 +983,7 @@ def hatch_rows(region, spacing, angle):
     rows = []
     for i in range(math.ceil((y1 - y0) / spacing) + 1):
         y = min(y1, y0 + i * spacing)
-        line = affinity.rotate(LineString([(x0 - 1, y), (x1 + 1, y)]), angle, origin=(0, 0))
-        rows.append([list(line.coords[0]), list(line.coords[1])])
+        rows.append(affinity.rotate(LineString([(x0 - 1, y), (x1 + 1, y)]), angle, origin=(0, 0)))
     return rows
 
 
@@ -1034,116 +1037,140 @@ REFUSALS = (
 )
 
 
+def prepared(operations, project, paths, backend):
+    """studio.operations.prepare on the kernel or on the Shapely fallback: (tool paths, None) or (None, message)."""
+    before = os.environ.get('KERFKITE_POLYGON_BACKEND')
+    os.environ['KERFKITE_POLYGON_BACKEND'] = backend
+    try:
+        return operations.prepare(project, paths)[0], None
+    except ValueError as error:
+        return None, str(error)
+    finally:
+        # Whoever ran this check may have chosen a backend of their own: leave it as it was found.
+        if before is None:
+            del os.environ['KERFKITE_POLYGON_BACKEND']
+        else:
+            os.environ['KERFKITE_POLYGON_BACKEND'] = before
+
+
 def cam_requests(operations, cases):
-    """For each case, the kernel calls that make its operation: the region first, then the work."""
+    """For each case: the operation as Studio asks the core for it, and the same steps as regions."""
     requests, owners = [], []
     for index, (project, paths) in enumerate(cases):
         operation = project['operation']
-        requests.append({'op': 'compose', 'paths': paths})
+        settings = operations._settings(project, operation, project['mode'], [])
+        requests.append(dict(settings, command='operation', paths=paths))
         owners.append(index)
         if operation in ('outside', 'inside'):
-            radius = (project['tool_diameter'] if project['mode'] == 'router' else project['kerf']) / 2
-            distance = radius if operation == 'outside' else -radius
-            requests.append({'op': 'offset', 'rings': paths, 'distance': distance, 'outlines': True})
+            requests.append({'op': 'offset', 'rings': paths, 'distance': settings['distance'], 'outlines': True})
             owners.append(index)
         elif operation == 'pocket':
-            first, step = project['tool_diameter'] / 2, project['stepover']
+            first, step = settings['radius'], settings['step']
             requests.append({'op': 'pocket', 'rings': paths, 'first': first, 'step': step, 'outlines': True})
             owners.append(index)
-        else:
-            try:
-                region = operations.region(paths)
-            except ValueError:
-                continue
-            for angle in [project['hatch_angle']] + ([project['hatch_angle'] + 90] if project['crosshatch'] else []):
-                rows = hatch_rows(region, project['interval'], angle)
-                requests.append({'op': 'clip-lines', 'rings': paths, 'lines': rows})
-                owners.append(index)
     return requests, owners
 
 
+EMPTY = 'Operation produced no toolpaths'
+NO_ROOM = ('Tool does not fit inside these contours', 'Cutter cannot enter this pocket')
+
+
 def check_cam(kernel, report, rng, count):
-    """Inside, outside, pocket and fill as studio.operations computes them, against the same steps made
-    from kernel calls the way the core will make them."""
+    """Inside, outside, pocket and fill as studio.operations.prepare computes them on the kernel, against
+    its Shapely fallback, and against the command-line tool's answer to the same request."""
     from studio import operations
 
+    if not operations.kernel_available():
+        raise SystemExit(
+            'The cam group needs the compiled extension (python setup.py build_ext --inplace); without it'
+            ' studio.operations has only its Shapely code and there is nothing to compare. Leave the group'
+            ' out with --only to check the kernel alone.'
+        )
     cases = cam_cases(rng, count)
     requests, owners = cam_requests(operations, cases)
     answers = {}
     for index, request, answer in zip(owners, requests, kernel.run(requests)):
         answers.setdefault(index, []).append((request, answer))
+    same = report.group('cam: tool = extension')
     for index, (project, paths) in enumerate(cases):
         operation = project['operation']
         name = 'cam ' + operation
         group = report.group(name)
         group['cases'] += 1
         request = {'project': project, 'paths': paths}
-        composed = answers[index][0][1]
+        mine, refusal = prepared(operations, project, paths, 'kernel')
+        reference, message = prepared(operations, project, paths, 'shapely')
+        # The command-line tool and the extension are two builds of one source: the same answer exactly.
+        tool = answers[index][0][1]
+        wanted = {'ok': {'paths': mine or []}} if refusal in (None, EMPTY) else {'error': refusal}
+        same['cases'] += 1
+        if tool != wanted:
+            report.fail(
+                'cam: tool = extension', f'the tool answers {json.dumps(tool)[:200]}; the extension {refusal}', request
+            )
+            continue
+        steps = answers[index][1][1].get('ok') if len(answers[index]) > 1 else None
         radius = (project.get('tool_diameter', 0) if project['mode'] == 'router' else project.get('kerf', 0)) / 2
-        try:
-            reference = operations.prepare(project, paths)[0]
-        except ValueError as error:
+        distance = -radius if operation != 'outside' else radius
+        if message is not None:
             group['refused'] += 1
-            message = str(error)
             if message in REFUSALS:
-                if composed.get('error') != message and not near_degenerate(paths, UNITS):
-                    what = f'the reference refuses with {message}; the kernel answers {json.dumps(composed)[:200]}'
+                if refusal != message and not near_degenerate(paths, UNITS):
+                    what = f'the reference refuses with {message}; the kernel answers {refusal or "with tool paths"}'
                     report.fail(name, what, request)
-            elif message in ('Tool does not fit inside these contours', 'Cutter cannot enter this pocket'):
-                result = answers[index][1][1].get('ok', {})
-                left = result.get('polygons') if operation != 'pocket' else result.get('passes')
-                if left:
-                    remains = region_of(result if operation != 'pocket' else result['passes'][0], grid=False)
+            elif message in NO_ROOM:
+                if refusal is None:
+                    remains = region_of(steps if operation != 'pocket' else steps['passes'][0], grid=False)
                     if thin(remains, 4 * offset_tolerance(radius * UNITS) / UNITS):
                         group['thin'] += 1
                     else:
                         report.fail(name, f'the reference refuses with {message}; the kernel finds room', request)
-            elif message == 'Operation produced no toolpaths':
-                # A row that only touches a corner is nothing to the reference. Moved by up to half a unit
-                # to the grid, it can cut a few units off the corner instead.
-                rows = [
-                    part for _, answer in answers[index][1:] for parts in answer['ok']['segments'] for part in parts
-                ]
-                if any(math.dist(*part) > 4.5e-6 for part in rows):
-                    report.fail(name, 'the reference finds no hatch rows; the kernel finds some', request)
+                elif refusal != message:
+                    report.fail(name, f'the reference refuses with {message}; the kernel with {refusal}', request)
+            elif message == EMPTY and operation == 'fill':
+                if refusal != EMPTY:  # rows that only graze the region, which the two need not cut alike
+                    check_fill(report, name, request, project, operations.region(paths), mine, [])
             elif message == 'Pocket exceeds vertex limit':
                 # The reference counts 100,000 vertices of GEOS's rings. The kernel's passes have far fewer
-                # (it does not draw every arc again at every pass), so it is asked for the passes all the
-                # same; where it stays under the limit the case is counted as thin.
-                passes = answers[index][1][1].get('ok', {}).get('passes')
-                if passes is None:
-                    report.fail(name, 'the kernel refuses a pocket: ' + str(answers[index][1][1]), request)
-                elif sum(len(ring) for item in passes for ring in item['outlines']) <= 100000:
+                # (it does not draw every arc again at every pass), so it may well stay under the limit.
+                if refusal is None:
                     group['thin'] += 1
+                elif refusal != message:
+                    report.fail(name, f'the reference refuses with {message}; the kernel with {refusal}', request)
             else:
                 report.fail(name, 'the reference refuses with ' + message, request)
             continue
-        if 'ok' not in composed:
-            if near_degenerate(paths, UNITS):
+        region = operations.region(paths)
+        if refusal is not None:
+            if refusal in REFUSALS and near_degenerate(paths, UNITS):
                 group['thin'] += 1
+            elif refusal in NO_ROOM and thin(region.buffer(distance), 4 * offset_tolerance(radius * UNITS) / UNITS):
+                group['thin'] += 1
+            elif refusal == EMPTY and operation == 'fill':
+                check_fill(report, name, request, project, region, [], reference)
             else:
                 report.fail(
-                    name, f'the kernel refuses the contours with {composed}; the reference accepts them', request
+                    name, f'the kernel refuses with {refusal}; the reference cuts {len(reference)} paths', request
                 )
             continue
-        work = answers[index][1:]
         if operation in ('outside', 'inside'):
-            distance = radius if operation == 'outside' else -radius
-            region = operations.region(paths)
             result = region.buffer(distance, quad_segs=SEGMENTS)
-            answer = work[0][1]['ok']
-            if compare_offset(
-                report, name + ': region', request, region_of(answer), scaled(region), distance * UNITS, scaled(result)
+            if steps['outlines'] != mine:
+                report.fail(name, 'the tool paths are not the outlines of the offset region', request)
+            elif compare_offset(
+                report, name + ': region', request, region_of(steps), scaled(region), distance * UNITS, scaled(result)
             ):
                 tolerance = offset_tolerance(radius * UNITS) / UNITS
-                if not same_rings(report, name, request, answer['outlines'], reference, tolerance):
+                if not same_rings(report, name, request, mine, reference, tolerance):
                     group['thin'] += 1  # a ring more or less; the regions agree, so it is thinner than the tolerance
         elif operation == 'pocket':
             # The reference's passes, made as it makes them, beside the kernel's.
-            region = operations.region(paths)
             inset, depth = region.buffer(-radius, quad_segs=SEGMENTS), radius
-            passes = work[0][1]['ok']['passes']
-            rings, number = [], 0
+            passes = steps['passes']
+            if [ring for item in passes for ring in item['outlines']] != mine:
+                report.fail(name, 'the tool paths are not the outlines of the passes', request)
+                continue
+            number = 0
             while not inset.is_empty and number < len(passes):
                 rounding = OFFSET_GRID + number
                 ok = compare_offset(
@@ -1158,7 +1185,6 @@ def check_cam(kernel, report, rng, count):
                 )
                 if not ok:
                     break
-                rings.extend(passes[number]['outlines'])
                 inset, depth, number = (
                     inset.buffer(-project['stepover'], quad_segs=SEGMENTS),
                     depth + project['stepover'],
@@ -1175,37 +1201,77 @@ def check_cam(kernel, report, rng, count):
                 )
                 if not thin(last, 4 * offset_tolerance(depth * UNITS)) or len(passes) > number + 1:
                     report.fail(name, f'{len(passes)} passes; the reference makes a different number', request)
-                elif len(rings) == len(reference) and not same_rings(
-                    report, name, request, rings, reference, offset_tolerance(depth * UNITS) / UNITS
+                elif len(mine) == len(reference) and not same_rings(
+                    report, name, request, mine, reference, offset_tolerance(depth * UNITS) / UNITS
                 ):
                     group['thin'] += 1
         else:
-            check_fill(report, name, request, operations.region(paths), work, reference)
+            check_fill(report, name, request, project, region, mine, reference)
 
 
-def check_fill(report, name, request, region, work, reference):
-    """Hatch rows: the reference's, to the grid; or, where a row runs along an edge or grazes a corner
-    and the two cannot be expected to cut it alike, rows that lie in the region and cover its width."""
+CUT_OFF = 0.001  # millimetres: the kernel's operations drop a piece of a hatch row shorter than this
+
+
+def check_fill(report, name, request, project, region, mine, reference):
+    """Hatch rows: the reference's, to the grid. Where a row runs along an edge or grazes a corner the two
+    cannot be expected to cut it alike (the reference also gives a row along an edge the edge's direction,
+    not the row's, and keeps pieces down to a nanometre where the kernel's operation stops at a micrometre);
+    then the rows must lie in the region and cover its width."""
     group = report.group(name)
     group['limit'] = max(group['limit'], 3.0)
-    mine = []
-    for _, answer in work:
-        for i, parts in enumerate(answer['ok']['segments']):
-            # Alternate rows run the other way, last part first, so that the beam sweeps to and fro.
-            ordered = [[b, a] for a, b in reversed(parts)] if i % 2 else parts
-            mine.extend(part for part in ordered if math.dist(*part) > 1e-6)
     if len(mine) == len(reference):
-        ends = (max(math.dist(a[0], b[0]), math.dist(a[1], b[1])) for a, b in zip(mine, reference))
+        ends = [max(math.dist(a[0], b[0]), math.dist(a[1], b[1])) for a, b in zip(mine, reference)]
         worst = max(ends, default=0) * UNITS
         if worst <= 3:
             group['distance'] = max(group['distance'], worst)
+            return
+        # A row is moved by up to a grid unit when it is turned back, which moves its end along an edge it
+        # meets at a shallow angle by more than that. The same rows then means: each piece on the line of the
+        # reference's piece, both its ends on the region's boundary, running the same way.
+        boundary = region.boundary
+
+        def off_line(point, line):
+            (ax, ay), (bx, by) = line
+            return abs((bx - ax) * (point[1] - ay) - (by - ay) * (point[0] - ax)) / math.dist(*line)
+
+        if all(
+            off_line(point, wanted) <= 3 / UNITS and boundary.distance(Point(point)) <= 3 / UNITS
+            for part, wanted in zip(mine, reference)
+            for point in part
+        ):
+            forward = all(
+                (a[1][0] - a[0][0]) * (b[1][0] - b[0][0]) + (a[1][1] - a[0][1]) * (b[1][1] - b[0][1]) > 0
+                for a, b in zip(mine, reference)
+            )
+            # A piece whose middle is on the boundary runs along an edge, which the two need not cut alike
+            # (and which the reference gives the edge's direction).
+            along = any(
+                apart > 3 / UNITS
+                and boundary.distance(Point((part[0][0] + part[1][0]) / 2, (part[0][1] + part[1][1]) / 2)) <= 3 / UNITS
+                for part, apart in zip(mine, ends)
+            )
+            if forward and not along:
+                group['stray'] = max(group['stray'], worst)
+            else:
+                group['thin'] += 1
             return
     grown, shrunk = region.buffer(3 / UNITS), region.buffer(-3 / UNITS)
     if any(grown.distance(Point(p)) > 0 for part in mine for p in part):
         report.fail(name, 'a hatch row leaves the region', request)
         return
-    rows = [LineString(row) for row_request, _ in work for row in row_request['lines']]
-    least = sum(row.intersection(shrunk).length for row in rows)
+    if any(math.dist(*part) < CUT_OFF - 1e-9 for part in mine):
+        report.fail(name, 'a piece of a hatch row is shorter than 0.001 mm', request)
+        return
+    angles = [project['hatch_angle']] + ([project['hatch_angle'] + 90] if project.get('crosshatch') else [])
+    rows = [row for angle in angles for row in hatch_rows(region, project['interval'], angle)]
+    # A row is moved by up to a grid unit when it is turned, so what it must cover is measured a little inside
+    # the region and what it may cover a little outside; pieces under the cut-off may be missing altogether.
+    least = sum(
+        piece.length
+        for row in rows
+        for piece in lines_of(row.intersection(shrunk))
+        if piece.length >= CUT_OFF + 8 / UNITS
+    )
     most = sum(row.intersection(grown).length for row in rows)
     length = sum(math.dist(*part) for part in mine)
     slack = (len(mine) + len(reference) + 1) * 4 / UNITS
@@ -1213,6 +1279,12 @@ def check_fill(report, name, request, region, work, reference):
         group['thin'] += 1
     else:
         report.fail(name, f'hatch rows total {length:.6f} mm; the region allows {least:.6f} to {most:.6f}', request)
+
+
+def lines_of(geometry):
+    if geometry.geom_type == 'LineString':
+        return [geometry]
+    return [line for part in getattr(geometry, 'geoms', []) for line in lines_of(part)]
 
 
 LEGEND = """
@@ -1232,6 +1304,12 @@ distance  the worst Hausdorff distance from GEOS's result in grid units (nanomet
 stray     the furthest the kernel's boundary is from GEOS's in any case, thin ones included: where two
           edges run nearly along each other, a sliver under a unit wide between them is kept by one
           library and lost by the other for as far as the edges run
+          For `cam fill`: the furthest an end of a hatch row lies from the reference's along the row,
+          where the row meets an edge at a shallow angle; such a row is on the reference's line to within
+          the limit and ends on the region's boundary
+`cam` rows compare studio.operations.prepare on the kernel with its Shapely fallback; `cam: tool = extension`
+counts the jobs whose tool paths from the compiled extension and from the command-line tool are the same
+doubles.
 `GEOS overlay` counts cases where GEOS's answer differs by more than a sliver and exact arithmetic on the
 input shows the kernel right at a point of every part that differs."""
 

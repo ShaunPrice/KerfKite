@@ -23,7 +23,9 @@ setup(
                 'native/core/src/excellon.cpp',
                 'native/core/src/gerber.cpp',
                 'native/core/src/pcb.cpp',
-                # Isolation toolpaths, and the polygon kernel they are built on (not its "polygon" command).
+                # Offsets, pockets and fills, and the polygon kernel they are built on.
+                'native/core/src/operations.cpp',
+                # Isolation toolpaths for circuit boards, on the same kernel.
                 'native/core/src/isolation.cpp',
                 'native/core/src/polygon/arrangement.cpp',
                 'native/core/src/polygon/boolean.cpp',

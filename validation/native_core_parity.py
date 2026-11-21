@@ -11,14 +11,21 @@ Three comparisons, all against values computed by Python in this run:
 2. Recorded jobs: every studio.cam.generate call the test suite makes, replayed through the native core.
 3. Generated edge cases: projects with one to three settings replaced by unusual values, so that the
    reference's error messages are compared as well as its programs. A third as many again are closed
-   contours for the polygon operations (offsets, pockets and hatch fills), which the core computes with
-   GEOS as the reference does through Shapely.
+   contours for the polygon operations (offsets, pockets and hatch fills).
    Ramp, helix and holding-tab jobs have their own generator (entry_tab_cases), with contours that cross,
    touch, fold back or nearly close, and are counted separately.
 
 For each job the native core must either reproduce the reference exactly (program lines, preview segments,
 length, time, bounds and warnings, or the same error message) or decline it as not ported yet. A different
 answer is a failure. The report gives the share of cases reproduced, which is the measure of the port.
+
+Offsets, pockets and fills have one implementation, the core's polygon kernel, which the Python reference
+calls through the compiled extension (studio/operations.py). For those jobs the geometry of the operation
+is therefore shared, not compared; what is compared is everything around it: the checks of the settings and
+their order, the order of cutting, leads, tabs, ramp entries on the offset contours, laser power,
+post-processing and the totals. validation/polygon_kernel_check.py compares the kernel itself with Shapely.
+Without the extension the reference falls back to Shapely, whose vertices differ, so this comparison stops
+unless --without-polygon-operations is given, which leaves those jobs out and says so.
 """
 
 import argparse
@@ -289,8 +296,16 @@ def generated_cases(count, seed):
         yield project
 
 
-# The GEOS release the core builds (native/cmake/geos.cmake).
-CORE_GEOS = '3.14.1'
+def uses_polygon_operation(project):
+    """Whether a project reads its contours as a region, at the top or in its ordered operations: an offset,
+    a pocket or a fill, and also V-carving or an unknown operation, which are refused only after the region
+    has been read. Only lines and drilling do not."""
+    if not isinstance(project, dict):
+        return False
+    parts = [project]
+    if isinstance(project.get('operations'), list):
+        parts += [part for part in project['operations'] if isinstance(part, dict)]
+    return any('operation' in part and part['operation'] not in ('line', 'drill') for part in parts)
 
 
 def polygon_cases(count, seed):
@@ -339,7 +354,7 @@ def polygon_cases(count, seed):
         close = rng.random()
         if close < 0.94:
             points.append(list(points[0]))
-        elif close < 0.975:  # closed to within the tolerance but not exactly: Shapely adds a vertex
+        elif close < 0.975:  # closed to within the tolerance but not exactly
             points.append([points[0][0] + rng.choice([1e-7, -4e-7, 0]), points[0][1] + rng.choice([5e-7, -1e-9])])
         elif close < 0.99:  # just outside the tolerance
             points.append([points[0][0] + 2e-6, points[0][1]])
@@ -845,6 +860,11 @@ def main():
     parser.add_argument('--generated', type=int, default=12000, help='generated edge cases')
     parser.add_argument('--entries', type=int, default=6000, help='generated ramp, helix and holding-tab cases')
     parser.add_argument('--skip-suite', action='store_true', help='do not replay the calls made by the test suite')
+    parser.add_argument(
+        '--without-polygon-operations',
+        action='store_true',
+        help='leave out offsets, pockets and fills (for a reference without the compiled extension)',
+    )
     args = parser.parse_args()
     if not args.cli.is_file():
         raise SystemExit(f'kerfkite-cam not found: {args.cli}')
@@ -861,13 +881,26 @@ def main():
 
     from native_core_recorder import reference
     from studio.cam import generate
-    import shapely
+    from studio.operations import kernel_available
 
-    if shapely.geos_version_string != CORE_GEOS:
-        # Polygon results are only expected to match when both sides use the same GEOS release.
+    os.environ.pop('KERFKITE_POLYGON_BACKEND', None)  # the reference as Studio runs it
+    shared = kernel_available()
+    if shared:
         print(
-            f'NOTE the reference has GEOS {shapely.geos_version_string} (Shapely {shapely.__version__}); the core'
-            f' builds GEOS {CORE_GEOS}, which Shapely 2.2.0 carries, so offsets, pockets and fills may differ'
+            'NOTE the reference computes offsets, pockets and fills with the core\'s polygon kernel, through the'
+            ' compiled extension: for those jobs the operation is shared, and what surrounds it is compared'
+        )
+    elif args.without_polygon_operations:
+        print(
+            'NOTE the compiled extension is not installed, so the reference would compute offsets, pockets and'
+            ' fills with Shapely: jobs with those operations are NOT COMPARED in this run'
+        )
+    else:
+        raise SystemExit(
+            'The compiled extension (studio._relief_native) is not installed, so offsets, pockets and fills'
+            ' cannot be compared: the reference would compute them with Shapely, whose vertices differ from the'
+            ' kernel\'s. Build it (python setup.py build_ext --inplace), or pass --without-polygon-operations'
+            ' to compare everything else.'
         )
 
     with tempfile.TemporaryDirectory() as scratch:
@@ -917,7 +950,9 @@ def main():
     for (line, origin), answer in zip(lines.items(), answers, strict=True):
         case, got = json.loads(line), json.loads(answer)
         expect = case['expect']
-        if 'declined' in got:
+        if not shared and uses_polygon_operation(case['project']):
+            tally[origin, 'left out'] += 1
+        elif 'declined' in got:
             tally[origin, 'declined'] += 1
             declined[got['declined']] += 1
         elif 'raises' in expect:
@@ -937,6 +972,7 @@ def main():
         print(
             f'{origin:10s} {total:5d} cases: {tally[origin, "program"]} programs and {tally[origin, "rejection"]} rejections'
             f' reproduced ({same * 100 / total:.1f}%), {tally[origin, "declined"]} declined as not ported'
+            + (f', {tally[origin, "left out"]} with polygon operations NOT COMPARED' if not shared else '')
         )
     if declined:
         print('Not ported yet: ' + ', '.join(f'{name} ({n})' for name, n in declined.most_common()))
@@ -947,6 +983,9 @@ def main():
         raise SystemExit(f'{len(failures)} cases differ from the reference.')
     if not tally['generated', 'program'] or (suite and not tally['suite', 'program']):
         raise SystemExit('No program was reproduced: the comparison did not exercise the native core.')
+    if not shared:
+        print('PASS for the cases compared; offsets, pockets and fills were NOT COMPARED (no compiled extension).')
+        return
     print('PASS the native core reproduces or declines every case; none differs from the Python reference.')
 
 

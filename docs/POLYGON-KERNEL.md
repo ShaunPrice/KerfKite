@@ -6,10 +6,14 @@ interface in `native/core/include/kerfkite/polygon.hpp`) and depends on nothing 
 library. It was written for KerfKite from the published methods named under [Sources](#sources), not taken
 or translated from another library.
 
-**It is not yet what the application uses.** Inside and outside offsets, pockets and hatch fills still go
-through GEOS (`native/core/src/operations.cpp`) and, in Studio, through Shapely. The kernel is built and
-tested beside them, with or without GEOS in the build, and can be tried through `kerfkite-cam polygon`.
-[Switching the operations over](#switching-the-operations-over) lists what replaces what.
+**It is what the application uses** for inside and outside offsets, pockets and hatch fills.
+`native/core/src/operations.cpp` builds those operations on the kernel; `kerfkite-cam` runs that code, and
+Studio's Python calls the same code through its compiled extension (`studio/operations.py`), so the two cut
+the same paths. GEOS is no longer part of the native build, which now contains no third-party code and
+downloads nothing. Shapely, which carries GEOS, remains in Studio for three things: as the fallback for
+these operations where the extension is not installed, in the modules that have not been moved yet, and as
+the oracle the kernel is tested against. [The operations](#the-operations) describes how they are built
+and how the paths differ from the ones GEOS gave.
 
 ## What it does
 
@@ -143,8 +147,8 @@ edge by correspondingly more; it stays on the row and at the boundary.
 
 `outlines` re-orders a region for the application, as `studio.operations.outlines` does: polygons by area,
 smallest first, and for each its holes and then its outer ring, every ring closed by repeating its first
-vertex. It gives outer rings clockwise and holes counter-clockwise, the directions GEOS has given until now,
-so the direction of cut does not change.
+vertex. It gives outer rings clockwise and holes counter-clockwise, the directions the Shapely code has
+always given, so the direction of cut does not change.
 
 ## Limits
 
@@ -182,6 +186,11 @@ same digest, which shows that the test's cases do not turn on it, not that none 
 been compiled or run: the kernel is written to the standard and the portable integer is exercised here, but
 the first build on each is the test. The continuous build (`.github/workflows/native-core.yml`) runs CTest
 on them, and a different result would fail the digest there.
+
+The operations are pinned in the same way. `validation/check_installed_cam.py`, which every wheel build
+runs on the installed wheel, generates an inside offset, an outside offset, a pocket and a cross-hatch fill
+at 33.3 degrees through the extension and compares the four programs with a recorded digest. `kerfkite-cam`
+built with GCC 13 and with Clang 18 writes the same four programs as the extension does.
 
 ## How it is tested
 
@@ -237,9 +246,6 @@ The run of 21 November 2026 (GCC 13, seed 20261121; 133,602 requests to the kern
 | Offset and back brackets the source | 4,386 | | |
 | Pocket passes against the inset of the source by the whole depth | 6,940 passes, 800 pockets | 2,319 | |
 | Artwork of 1 to 25 dark and clear shapes; two contours round each | 300; 596 | 49; 150 | |
-| Application: outside and inside offsets (regions, then rings in order and direction) | 900 and 914 | 153 and 188 | 87 and 156 |
-| Application: pockets, pass by pass | 896 pockets, 4,456 passes | 526 passes, 9 pockets | 186 |
-| Application: hatch fills | 890 | 291 | 100 |
 
 `Thin` cases are accepted and counted, not hidden. For Boolean results they are slivers no wider than the
 tolerance that one library keeps and the other loses (30% of the generated pairs are a set of rings and the
@@ -247,8 +253,9 @@ same set moved by a few nanometres, which is nothing but slivers). For offsets a
 lay between the two swept offsets in every case; `thin` there means it was further from GEOS's polygon
 buffer than the tolerance, at a sharp corner or where that buffer is itself off. For hatch fills it means
 that some row ran along an edge or grazed a corner, so that the two did not cut the same parts, while the
-kernel's rows lay in the region and covered what its width allows. For application pockets, 9 are pockets
-the reference refuses for exceeding 100,000 vertices and the kernel completes within the limit.
+kernel's rows lay in the region and covered what its width allows. (That run also made the four
+operations from kernel calls and compared them with `studio.operations`, which was then Shapely alone; the
+comparison of the operations as they now are is under [The operations](#the-operations).)
 
 Measured without any oracle in that run: no point of an offset boundary was nearer the source than the
 distance by more than 1.3 nm, and none further than the arc allowance and 4 nm. Resolving took at most 4
@@ -282,63 +289,170 @@ to 45% slower (the union took 3.2 s, 3.6 s and 4.6 s).
   through the centre (59,000 crossings), took 0.25 s.
 * A shape with a neck or sliver thinner than a nanometre can come apart or lose the sliver, and an offset of
   it then lacks what the sliver would have added.
-* The limit of 100,000 vertices on a pocket in `studio/operations.py` was set for GEOS, which draws every
-  arc again at every pass. The kernel's passes have far fewer vertices (4,057 against 156,384 for one
-  generated pocket of 29 passes), so some pockets the reference refuses will be accepted.
+* The limit of 100,000 vertices on a pocket was set for GEOS, which draws every arc again at every pass.
+  The limit and its message are kept, but the kernel's passes have far fewer vertices (4,057 against
+  156,384 for one generated pocket of 29 passes), so it now takes a very large pocket to reach it, and
+  some pockets the Shapely code refuses are cut.
 * Only x86-64 with GCC and Clang has been run. See [above](#results-are-the-same-everywhere).
 * `is_valid` does not check that the interior of a polygon is connected. (Results of the kernel are; the
   comparison with GEOS, whose validity test does check it, found none that was not.)
 
-## Switching the operations over
+## The operations
 
-Each call `studio/operations.py` makes to Shapely, and `native/core/src/operations.cpp` makes to the GEOS
-layer, and what replaces it:
+`native/core/src/operations.cpp` is the one implementation of inside and outside offsets, pockets and hatch
+fills. `kerfkite-cam generate` reaches it directly. Studio's `studio/operations.py` checks the settings of
+a job in Python, with the messages and in the order they always had, and then asks the compiled extension
+for the geometry (the core's `operation` command, `kerfkite/operation_command.hpp`); the extension is built
+from the same source files. What each step of the Shapely code became:
 
-| Reference (Shapely) | Core today (`geometry::`) | Kernel (`polygon::`) |
-| --- | --- | --- |
-| `Polygon(path)` | `context.polygon(path)` | `ring_from_mm(path)` |
-| `p.is_valid` | `polygon.valid()` | `is_simple(ring)` |
-| `p.area < 1e-9` | `polygon.area() < 1e-9` | `std::fabs(signed_area(ring)) < 1e-9` |
-| `GeometryCollection()`, then `result.symmetric_difference(p)` for each contour | `empty_collection()`, `symmetric_difference` | `compose(rings)` once, for all contours |
-| `result.is_empty` | `result.empty()` | `region.empty()` |
-| `g.buffer(d, quad_segs=32)` | `context.buffer(g, d, style)` | `offset(region, d)` |
-| `inset.buffer(-step, quad_segs=32)` until empty | the same | `offset(inset, -step)` until `empty()` |
-| `outlines(result)` | `geometry::outlines(result)` | `outlines(region)` |
-| `affinity.rotate(g, -angle).bounds` | `rotate`, `bounds()` | turn the vertices of the region (`ring_to_mm`) by `-angle` and take their extremes; the kernel does not turn regions |
-| `rotated.intersection(LineString(row))`, `lines(...)`, `affinity.rotate(line, angle)` | `intersection`, `lines`, `rotate` | turn the two ends of the row by `+angle`, `to_grid` them, and `LineClipper(region).clip(a, b)`: the parts are already in the region's frame, in order along the row |
-| `line.length > 1e-6` | `line.length()` | the length of the part |
-| `shapely.errors.GEOSException` | `geometry::Error`, declined | does not arise; `ValueError` only for input beyond the limits |
+| Shapely code (now the fallback) | Kernel (`polygon::`) |
+| --- | --- |
+| `Polygon(path)` | `ring_from_mm(path)` without the path's last point |
+| `p.is_valid` | `is_simple(ring)` |
+| `p.area < 1e-9` | `std::fabs(signed_area(ring)) < 1e-9` |
+| `GeometryCollection()`, then `result.symmetric_difference(p)` for each contour | `compose(rings)` once, for all contours |
+| `result.is_empty` | `region.empty()` |
+| `g.buffer(d, quad_segs=32)` | `offset(region, d)` |
+| `inset.buffer(-step, quad_segs=32)` until empty | `offset(inset, -step)` until `empty()` |
+| `outlines(result)` | `outlines(region)` |
+| `affinity.rotate(g, -angle).bounds` | the extremes of the region's vertices turned by `-angle`; the region itself is not turned |
+| `rotated.intersection(LineString(row))`, `lines(...)`, `affinity.rotate(line, angle)` | the two ends of the row turned by `+angle` and put on the grid, then `LineClipper(region).clip(a, b)`: the parts are already in the region's frame, in order along the row |
+| `line.length > 1e-6` | the part is at least 0.001 mm long |
+| `shapely.errors.GEOSException` | does not arise; `ValueError` only for input beyond the kernel's limits |
 
-`kerfkite-cam polygon` with `"op": "compose"` is `studio.operations.region` with its three messages, and the
-`cam` group of the validation script makes inside, outside, pocket and fill jobs from kernel calls in exactly
-this way and compares them with `studio.operations`.
+Four things are fixed in that file and are worth knowing:
 
-Where the kernel's tool paths will differ from GEOS's, and why that is acceptable:
+* **From the grid to doubles.** A grid coordinate `n` leaves the kernel as the double `n / 1e6`. That is one
+  division, which IEEE 754 rounds correctly, so every platform gets the same double; the core's JSON writes
+  it as the shortest text that reads back as the same double, and Python reads that text back exactly, so
+  Studio's generator and `kerfkite-cam`'s format the same numbers. The program is written to three decimals,
+  a thousand grid steps, so the conversion never decides a digit.
+* **Turning hatch rows.** The sine and cosine of the hatch angle come from a fixed series of additions and
+  multiplications after the angle has been folded exactly into the first eighth of a turn, not from the C
+  library, whose last bit differs between platforms. A whole number of quarter turns gives exactly 0 and 1.
+* **Short pieces of a hatch row.** A piece shorter than 0.001 mm is dropped. The program's coordinates have
+  three decimals, so a shorter stroke cannot be cut. The Shapely code kept pieces longer than 0.000001 mm,
+  which a row grazing a corner can produce.
+* **The closing point.** A contour counts as closed when its last point is within 0.000001 mm of its first.
+  That last point is then taken to be the first, not a further vertex. The Shapely code appends the first
+  point again after it, and then usually refuses the contour as self-crossing because of the spike that
+  makes.
 
-* **Coordinates** are whole nanometres. The G-code is written to at most a few decimal places.
-* **Where a ring starts**: at its smallest vertex, where GEOS starts wherever its algorithm happens to.
-  Direction is unchanged (outer rings clockwise, holes counter-clockwise from `outlines`).
+The checks of a job's settings, their messages and their order are unchanged, as are the warnings, the
+check of the compensated path against the work area, and the limit of 100,000 vertices on a pocket.
+V-carving is not part of this: it needs a Voronoi diagram, stays on Shapely in Studio, and is declined by
+`kerfkite-cam`.
+
+### Which code runs
+
+`studio.operations.polygon_backend()` answers `kernel` when the compiled extension is installed and
+`shapely` when it is not (the portable wheel, or a source checkout that was never built). Setting
+`KERFKITE_POLYGON_BACKEND=shapely` selects the Shapely code where the extension is installed; `=kernel`
+refuses to run without it. The two cut the same regions, but **the fallback's vertices are not the
+kernel's**, so a program written by an installation without the extension differs from one written with it
+in the ways listed next. `kerfkite-cam` always uses the kernel.
+
+### How the tool paths differ from the ones GEOS gave
+
+* **Coordinates** are whole nanometres. The G-code is written to three decimals.
+* **Where a ring starts**: at its left-most vertex, where GEOS started wherever its algorithm happened to.
+  Leads, ramp entries and tabs on an offset contour are placed from that start, so they move with it.
+  Direction is unchanged: outer rings clockwise, holes counter-clockwise.
 * **Arc vertices**: the same number for a square corner (32 a quarter turn), in different places, just
-  outside the true arc instead of just inside. The tool path is the documented allowance further from the
-  work at round corners, never nearer.
-* **The order of the holes of one polygon** and of polygons of exactly equal area: the kernel's defined
-  order, where GEOS's is an accident of its algorithm.
+  outside the true arc where GEOS's were just inside. At round corners the tool path is up to 0.034% of the
+  offset distance further from the work than the exact offset, and never nearer; GEOS's was up to 0.03%
+  nearer. For a 3.175 mm cutter that is half a micrometre either way.
+* **The order of the holes of one polygon**, and of polygons of exactly equal area: the kernel's defined
+  order, where GEOS's was an accident of its algorithm. Polygons are still cut smallest first, each one's
+  holes before its outline.
 * **Vertices on straight runs** are dropped.
-* **Pockets**: the same passes. The last pass, when it is thinner than the tolerance, can exist in one and
-  not in the other. The kernel's passes have far fewer vertices, since it does not draw an arc again at every
-  pass, so the reference's limit of 100,000 vertices is reached much later.
-* **Hatch rows**: the same rows to within 3 nm, except rows that run along an edge or graze a corner, which
-  the two cut differently by nature. A row that only touches a corner is nothing to GEOS; moved to the grid
-  it can cut one to four nanometres off the corner, which passes the reference's test of `> 1e-6` mm. A
-  port may prefer to drop parts shorter than a few grid units.
-* **Contours refused**: a contour that touches itself or has no area is refused with the reference's
-  message. The two can disagree only on a contour whose self-contact or emptiness is a matter of less than
-  the grid.
+* **Pockets**: the same passes, with far fewer vertices, since an arc is not drawn again at every pass. A
+  last pass thinner than the tolerance can exist in one and not in the other: where the cutter's centre
+  could reach exactly one point, GEOS's arcs, drawn from inside, leave a speck that becomes a pass, and the
+  kernel's leave nothing.
+* **Hatch rows**: the same rows. A row that runs along an edge of the region now runs in the row's direction
+  like its neighbours; GEOS gave it the direction of the edge. Pieces under 0.001 mm are gone.
+* **Contours accepted**: a contour that closes to within the tolerance but not exactly is now cut; a contour
+  that touches itself or has no area is refused as before. The two can otherwise disagree only on a contour
+  whose self-contact or emptiness is a matter of less than the grid.
+* **Which message, for a path that leaves the work area**: the first offending point of a ring is reported,
+  X before Y, and the ring starts elsewhere, so a job refused for `Compensated Y` can now be refused for
+  `Compensated X`, or the other way round.
 
-Because the output is no longer GEOS's to the byte, `validation/native_core_parity.py` cannot compare these
-four operations byte for byte with the Python reference once the core uses the kernel. Either the comparison
-for them becomes the tolerance comparison of `validation/polygon_kernel_check.py`, or Studio calls the
-kernel through the extension so that there is again one implementation.
+### How the operations are checked
+
+`tests/test_polygon_operations.py` runs `prepare()` on the kernel and on the Shapely fallback against
+expectations worked out from the geometry: areas of offsets of squares, the distance of every vertex from
+the source contour, the number and size of pocket passes, the rows of a fill and their total length, the
+order and direction of rings, and every rejection in its order.
+
+The `cam` group of `validation/polygon_kernel_check.py` generates jobs (stars with holes, overlapping
+contours, rectangles on a lattice with shared edges; tools from a fifth of a millimetre up, hatch angles
+that are round and that are not) and runs `prepare()` both ways for each:
+
+    python validation/polygon_kernel_check.py --cli build/native/kerfkite-cam --only cam --cases 5000
+
+| Check (run of 21 November 2026, GCC 13, seed 20261121; no failures) | Jobs | Refused by both | Thin |
+| --- | --- | --- | --- |
+| The extension's tool paths and `kerfkite-cam`'s for the same request are the same doubles | 3,000 | | |
+| Outside offsets: the region between swept offsets of the source, then rings in number, order and direction | 740 | 69 | 128 |
+| Inside offsets, likewise | 755 | 122 | 162 regions, 1 job by its rings |
+| Pockets, pass by pass against the inset of the source by the whole depth | 746 pockets, 3,672 passes | 156 | 446 passes, 7 pockets |
+| Hatch and cross-hatch fills, row by row | 759 | 79 | 89 |
+
+`Refused by both` are jobs the Shapely code refuses (a tool that does not fit, contours that cancel or
+cross); the kernel must refuse them with the same message, unless the matter turns on less than the grid.
+`Thin` has the meaning it has above: the kernel lay between the two swept offsets, and was further from
+GEOS's buffer than the tolerance at a sharp corner or where that buffer is itself off (GEOS's own distance
+from the true offset was up to 20 times what its chords explain in this run); for pockets, a last pass
+that only one of the two finds, thinner than the tolerance, or a pocket the Shapely code refuses for its
+100,000 vertices; for fills, a row along an edge or grazing a corner. Of the 591 fills that were neither,
+every row matched the reference's row: both ends within 3 nm (worst 2.97 nm), or, where the row meets an
+edge at a shallow angle, on the reference's line to within 3 nm with its ends on the region's boundary
+(the furthest such end was 104 nm along the row from the reference's).
+
+A separate count of outcomes, over the 3,949 generated jobs of `validation/native_core_parity.py` that ask
+for one of these operations: 3,905 end the same way on the kernel and on the Shapely fallback (a program,
+or the same rejection). The other 44 are 36 contours the Shapely code refuses as self-crossing and the
+kernel accepts (35 close only to within the tolerance; one has two vertices two millionths of a micrometre
+apart); 5 jobs refused for leaving the work area on the other axis first; 2 fills at an angle of a
+billionth of a degree whose only rows run along an edge; and 1 outside offset whose ramp entry, placed from
+the new start of the ring, no longer fits the work area.
+
+`validation/native_core_parity.py` then compares whole jobs between `kerfkite-cam` and the Python generator
+with the extension. The geometry of an offset, pocket or fill is shared there by construction, so what that
+comparison shows for these jobs is everything round the operation: the settings and their rejections, the
+order of cutting, leads, tabs, ramp entries on the offset contours, laser power, post-processing and the
+totals. It names the reference it is using, and without the extension it stops instead of comparing
+Shapely's vertices with the kernel's (`--without-polygon-operations` leaves those jobs out and says so).
+
+Measured on Linux x86-64 (GCC 13, Python 3.13) with the default sizes, before and after the change. No
+case differed in either run.
+
+| | Suite calls | Generated cases | Ramp, helix and tab cases |
+| --- | --- | --- | --- |
+| Before: core on GEOS, reference on Shapely | 210: 116 programs, 90 rejections, 4 declined | 20,000: 9,678 programs, 10,255 rejections, 67 declined | 6,005: 3,255 programs, 2,750 rejections |
+| After: core and reference on the kernel | 213: 118 programs, 91 rejections, 4 declined | 20,000: 9,701 programs, 10,231 rejections, 68 declined | 6,005: 3,255 programs, 2,750 rejections |
+
+The suite has three more calls because of the new tests. Among the generated cases, the 23 further
+programs and the one further declined job (a helical entry into a pocket, which is not ported) come from
+the differences in outcome counted above, chiefly contours that close only to within the tolerance, which
+both sides used to refuse.
+
+### What still uses Shapely in Studio
+
+These were not changed, and each could move onto the kernel:
+
+| Module | Use of Shapely | What moving it needs |
+| --- | --- | --- |
+| `studio/operations.py`, V-carving | `voronoi_diagram` of points sampled along the outline, clipped to the region; distances to the boundary | A Voronoi diagram or medial axis of a polygon, which the kernel does not have; then clipping (the kernel's `LineClipper`) and point-to-boundary distance. The largest piece. |
+| `studio/operations.py`, the fallback | The Shapely code of offsets, pockets and fills | Nothing: it goes when the portable wheel carries the extension or is retired. |
+| `studio/router_entry.py` | The region of the contours and its polygons, the inset by the cutter radius for helix and ramp clearance, nearest points, `LineString` lengths and simplicity | The `operation` command already gives the region and its insets; it also needs the distance from a point to a region's boundary and the nearest boundary point, which are small additions to `measure.cpp`. The core's own `router_entry.cpp` and `simple_line.cpp` already hold the line parts. |
+| `studio/cam.py` | `LineString(path).is_simple` before tabs and entries | The core's `simple_line.cpp` answers this by GEOS's rules; the kernel's `is_simple` (exact, on the grid) could replace both once the rejections are allowed to follow the grid. |
+| `studio/design_api.py` | `region`, `outlines`, `unary_union` and `box` for Boolean operations between shapes in the editor | `combine()` and `unite_all()` exist; it needs a command that takes two sets of contours and returns outlines. Small. |
+| `studio/solid_text.py`, `studio/cad_exchange.py` | Regions of glyph and profile outlines, orientation, constrained Delaunay triangulation for the faces of solids, clipping to boxes | Regions and orientation exist. Triangulating a polygon with holes is new work (the kernel's sweep could be extended to produce monotone pieces and triangles). |
+| `studio/sketch_profile.py`, `studio/scad_geometry.py` | `Polygon` validity and area, `LinearRing` orientation | `is_simple`, `signed_area`, `orientation`: all exist. Small. |
+| `studio/pdf_import.py`, `studio/program_import.py` | `STRtree` to find nearby paths, `MultiPoint` hulls, `Polygon` and `LineString` construction, containment | A spatial index (the kernel's bucket grid is internal) and a convex hull; containment is `locate()`. Small to medium. |
 
 ## Sources
 
