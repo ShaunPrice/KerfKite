@@ -16,7 +16,7 @@ Choose the installer for the computer where you want to design. The download lin
 | Mac | [Apple silicon](https://github.com/ShaunPrice/KerfKite/releases/latest/download/KerfKite-macOS-Apple-Silicon.dmg) · [Intel](https://github.com/ShaunPrice/KerfKite/releases/latest/download/KerfKite-macOS-Intel.dmg) | Open the disk image, drag **KerfKite Studio** to **Applications**, then open it there. |
 | Raspberry Pi OS, 64-bit, or Debian/Ubuntu ARM64 | [ARM64 installer](https://github.com/ShaunPrice/KerfKite/releases/latest/download/KerfKite-Linux-arm64.deb) | Open the package in the desktop software installer, then launch **KerfKite Studio** from the applications menu. |
 | Debian/Ubuntu, 64-bit Intel/AMD | [AMD64 installer](https://github.com/ShaunPrice/KerfKite/releases/latest/download/KerfKite-Linux-amd64.deb) | Open the package in the desktop software installer. |
-| Android 8.0 (API 26) or later, minimum supported RAM 2 GB | [KerfKite Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/latest/download/KerfKite-Pocket-Android.apk) | Open the download on the phone and tap **Install**. Choose **CNC pendant** to pair with Studio. |
+| Android 8.0 (API 26) or later, minimum supported RAM 2 GB | [KerfKite Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/download/pocket-v0.5.0/KerfKite-Pocket-Android.apk) | Open the download on the phone and tap **Install**. Choose **CNC pendant** to pair with Studio. |
 
 The [installation guide](docs/INSTALL.md) covers first launch, security prompts, updates, removal and optional STEP exchange and controller access, and the source install for HTTPS and MCP services. The [release downloads](https://github.com/ShaunPrice/KerfKite/releases/latest) also include portable Linux archives and SHA-256 checksums.
 
