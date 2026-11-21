@@ -26,6 +26,8 @@ Notable changes to KerfKite Studio and KerfKite Pocket. Versions before this fil
 - The local session token is compared in constant time.
 
 ### Development
+- Pocket builds remove code they never reach (R8, names kept), for debug and release alike. With the QR scanner the debug APK is 115 KB and the unsigned release APK 73 KB; unshrunk, the scanner's library took the debug APK from 56 KB to 358 KB.
+- `validation/pairing_qr_check.py` decodes the pairing codes Studio draws with Pocket's decoder, from simulated camera frames.
 - A debug build of Pocket installs beside the released app as **Pocket debug** (`au.cncstudio.pocket.debug`), so a change can be tried on a phone without replacing the released app or its projects. The device workflows drive the debug build unless `KERFKITE_POCKET_PACKAGE` names another id.
 - `validation/pendant_tls_pin_check.py` checks Pocket's pinning class against a real phone listener with a JDK, without a phone.
 - Pocket is versioned 0.5.0 (version code 6).
