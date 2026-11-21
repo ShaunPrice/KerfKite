@@ -153,8 +153,14 @@ PyObject *solid_mesh(PyObject *, PyObject *args) {
     // No C++ exception may leave this function: Python's caller is C.
     try {
         vertices = solid.vertices();
-    } catch (const std::exception &) {
+    } catch (const std::bad_alloc &) {
         return PyErr_NoMemory();
+    } catch (const std::exception &error) {
+        PyErr_SetString(PyExc_RuntimeError, error.what());
+        return nullptr;
+    } catch (...) {
+        PyErr_SetString(PyExc_RuntimeError, "The solid kernel failed");
+        return nullptr;
     }
     const std::vector<kerfkite::solid::Triangle> &triangles = solid.triangles();
     PyObject *points = PyBytes_FromStringAndSize(reinterpret_cast<const char *>(vertices.data()), static_cast<Py_ssize_t>(vertices.size() * sizeof(kerfkite::solid::Vec3)));
