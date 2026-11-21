@@ -12,140 +12,17 @@
 #include <utility>
 
 #include "kerfkite/number_text.hpp"
+#include "kerfkite/py_math.hpp"
+#include "laser.hpp"
+#include "project.hpp"
 
 namespace kerfkite {
 
 using json = nlohmann::json;
 
+using namespace detail;
+
 namespace {
-
-// project.get(key): null when the key is absent.
-const json *get(const json &object, const char *key) {
-    const auto found = object.find(key);
-    return found == object.end() ? nullptr : &*found;
-}
-
-// Python's None: an absent key read with .get(), or a JSON null.
-bool none(const json *value) { return !value || value->is_null(); }
-
-bool is_text(const json *value, const char *text) {
-    return value && value->is_string() && value->get_ref<const std::string &>() == text;
-}
-
-// project.get(key, text) == text: an absent key takes the default; a null does not.
-bool is_text_or_absent(const json *value, const char *text) { return !value || is_text(value, text); }
-
-// Python's float(str) for ASCII text. False when Python raises ValueError.
-bool float_from_text(const std::string &raw, double &out) {
-    for (const unsigned char c : raw)
-        if (c >= 0x80) throw NotPorted("numbers written in non-ASCII text");
-    const auto space = [](char c) { return c == ' ' || (c >= '\t' && c <= '\r') || (c >= 0x1c && c <= 0x1f); };
-    size_t begin = 0, end = raw.size();
-    while (begin < end && space(raw[begin])) ++begin;
-    while (end > begin && space(raw[end - 1])) --end;
-    const std::string text = raw.substr(begin, end - begin);
-    size_t i = 0;
-    const bool negative = !text.empty() && text[0] == '-';
-    if (!text.empty() && (text[0] == '+' || text[0] == '-')) ++i;
-    std::string word;
-    for (size_t k = i; k < text.size(); ++k) word.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(text[k]))));
-    if (word == "inf" || word == "infinity") {
-        out = negative ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity();
-        return true;
-    }
-    if (word == "nan") {
-        out = std::numeric_limits<double>::quiet_NaN();
-        return true;
-    }
-    std::string clean = text.substr(0, i);
-    // digit (["_"] digit)*
-    const auto digits = [&](bool required) {
-        size_t count = 0;
-        while (i < text.size()) {
-            if (text[i] >= '0' && text[i] <= '9') {
-                clean.push_back(text[i++]);
-                ++count;
-            } else if (text[i] == '_' && count && i + 1 < text.size() && text[i + 1] >= '0' && text[i + 1] <= '9') {
-                ++i;
-            } else {
-                break;
-            }
-        }
-        return count > 0 || !required;
-    };
-    const size_t whole_from = clean.size();
-    digits(false);
-    const bool whole = clean.size() > whole_from;
-    bool fraction = false;
-    if (i < text.size() && text[i] == '.') {
-        clean.push_back(text[i++]);
-        const size_t fraction_from = clean.size();
-        digits(false);
-        fraction = clean.size() > fraction_from;
-    }
-    if (!whole && !fraction) return false;
-    if (i < text.size() && (text[i] == 'e' || text[i] == 'E')) {
-        clean.push_back(text[i++]);
-        if (i < text.size() && (text[i] == '+' || text[i] == '-')) clean.push_back(text[i++]);
-        if (!digits(true)) return false;
-    }
-    if (i != text.size()) return false;
-    out = std::strtod(clean.c_str(), nullptr);
-    return true;
-}
-
-// A plain JSON number that Python reads as an exact float or int (never a bool). False for anything else.
-bool plain_number(const json &value, double &out) {
-    if (value.is_number_unsigned()) {
-        out = static_cast<double>(value.get<uint64_t>());
-    } else if (value.is_number_integer()) {
-        out = static_cast<double>(value.get<int64_t>());
-    } else if (value.is_number_float()) {
-        out = value.get<double>();
-        // A literal beyond the double range reads as infinity here, but may be a Python int there.
-        if (!std::isfinite(out)) throw NotPorted("numbers outside the double range");
-    } else {
-        return false;
-    }
-    return true;
-}
-
-// studio.cam.number(value, name, low, high). low_text and high_text are the bounds as the reference's
-// message writes them.
-double number(const json *value, const std::string &name, double low, double high, const std::string &low_text,
-              const std::string &high_text) {
-    double result = 0;
-    const bool readable = value && !value->is_boolean() &&
-                          (plain_number(*value, result) ||
-                           (value->is_string() && float_from_text(value->get_ref<const std::string &>(), result)));
-    if (!readable) throw ValueError(name + " must be a number");
-    if (!std::isfinite(result) || !(low <= result && result <= high))
-        throw ValueError(name + " must be between " + low_text + " and " + high_text);
-    return result;
-}
-
-// number(project.get(key, default), ...): the default is used only when the key is absent.
-double setting(const json &project, const char *key, double fallback, const std::string &name, double low,
-               double high, const std::string &low_text, const std::string &high_text) {
-    const json *value = get(project, key);
-    return value ? number(value, name, low, high, low_text, high_text) : fallback;
-}
-
-std::string fixed(double value, int decimals) {
-    std::string out;
-    if (!text::fixed(out, value, decimals)) throw std::logic_error("A validated number could not be written");
-    return out;
-}
-
-double rounded(double value, int decimals) {
-    double out;
-    if (!text::rounded(value, decimals, out)) throw std::logic_error("A validated number could not be rounded");
-    return out;
-}
-
-// Python's max(a, b) and min(a, b): the first argument unless the second is strictly greater or smaller.
-double py_max(double a, double b) { return b > a ? b : a; }
-double py_min(double a, double b) { return b < a ? b : a; }
 
 using Path = std::vector<std::array<double, 2>>;
 
@@ -257,11 +134,54 @@ Job single(const json &project) {
         if (depth <= 0) throw ValueError("No contour cuts below the stock surface");
     }
     if (router && !entry_plunge) throw NotPorted("ramp and helix entry moves");
-    if (laser) throw NotPorted("laser jobs");
+
+    std::vector<std::vector<LaserVertex>> laser_paths;
+    bool leads = false;
+    if (laser) {
+        const double options[6] = {
+            setting(project, "lead_in", 0, "Lead-in distance", 0, 100, "0", "100"),
+            setting(project, "lead_out", 0, "Lead-out distance", 0, 100, "0", "100"),
+            setting(project, "ramp_in", 0, "Start ramp distance", 0, 1000, "0", "1000"),
+            setting(project, "ramp_out", 0, "End ramp distance", 0, 1000, "0", "1000"),
+            setting(project, "start_power", 100, "Start power percent", 0, 100, "0", "100"),
+            setting(project, "end_power", 100, "End power percent", 0, 100, "0", "100"),
+        };
+        leads = options[0] != 0 || options[1] != 0 || options[2] != 0 || options[3] != 0;
+        const LaserCut cut = cut_options(project);
+        const json *pixel_powers = get(project, "path_powers");
+        const bool raster = !none(pixel_powers);
+        if (raster) {
+            if (!line || leads) throw ValueError("Raster powers require line operation with lead/ramp distances zero");
+            if (!pixel_powers->is_array() || pixel_powers->size() != clean.size())
+                throw ValueError("Pixel powers must match raster paths");
+        }
+        const std::string power_text = text::repr(power);
+        size_t expanded = 0;
+        for (size_t p = 0; p < clean.size(); ++p) {
+            std::vector<LaserVertex> prepared;
+            if (!raster) {
+                prepared = prepare(clean[p], power, options, width, height, cut);
+            } else {
+                const json &powers = (*pixel_powers)[p];
+                if (!powers.is_array() || powers.size() != clean[p].size())
+                    throw ValueError("Pixel powers must match vertices");
+                for (size_t v = 0; v < clean[p].size(); ++v)
+                    prepared.push_back({clean[p][v][0], clean[p][v][1],
+                                        number(&powers[v], "Pixel power", 0, power, "0", power_text), false});
+            }
+            expanded += prepared.size();
+            if (expanded * static_cast<size_t>(passes) > 200000) throw ValueError("Laser job exceeds 200,000 segments");
+            laser_paths.push_back(std::move(prepared));
+        }
+    }
 
     std::vector<double> levels;
-    const double level_count = std::ceil(depth / step);
-    for (double i = 0; i < level_count; ++i) levels.push_back(-py_min(depth, step * (i + 1)));
+    if (laser) {
+        levels.assign(static_cast<size_t>(passes), 0.0);
+    } else {
+        const double level_count = std::ceil(depth / step);
+        for (double i = 0; i < level_count; ++i) levels.push_back(-py_min(depth, step * (i + 1)));
+    }
     count = 0;
     for (const Path &path : clean) count += path.size();
     if (count * levels.size() > 200000) throw ValueError("Job exceeds 200,000 cutting segments");
@@ -271,9 +191,11 @@ Job single(const json &project) {
     std::vector<std::string> &lines = job.lines;
     lines = {"G21", "G90", "G17", "G94", "G54", "M5"};
     const std::string safe_line = "G0 Z" + fixed(safe, 3);
-    lines.push_back(safe_line);
-    lines.push_back("M3 S" + fixed(power, 0));
-    lines.push_back("G4 P2");
+    if (!laser) {
+        lines.push_back(safe_line);
+        lines.push_back("M3 S" + fixed(power, 0));
+        lines.push_back("G4 P2");
+    }
     const double cut_feed = has_depths ? py_min(feed, plunge) : feed;
     const std::string feed_word = " F" + fixed(cut_feed, 1);
     const std::string plunge_word = " F" + fixed(plunge, 1);
@@ -281,7 +203,36 @@ Job single(const json &project) {
     job.segments.reserve(count * levels.size());
     lines.reserve(lines.size() + count * levels.size() + 4 * clean.size() * levels.size() + 8);
     std::string text;
+    for (size_t pass = 0; laser && pass < levels.size(); ++pass) {
+        for (const std::vector<LaserVertex> &path : laser_paths) {
+            double x = path[0].x, y = path[0].y;
+            lines.push_back("M5");
+            lines.push_back("G0 X" + fixed(x, 3) + " Y" + fixed(y, 3));
+            lines.push_back("M4 S" + fixed(path[0].power, 0));
+            for (size_t v = 1; v < path.size(); ++v) {
+                const double nx = path[v].x, ny = path[v].y;
+                text.assign("G1 X");
+                text::fixed(text, nx, 3);
+                text.append(" Y");
+                text::fixed(text, ny, 3);
+                text.append(feed_word);
+                text.append(" S");
+                text::fixed(text, path[v].power, 0);
+                lines.push_back(text);
+                Segment segment{x, y, nx, ny, 0, true, path[v].power, 0};
+                segment.planar = true;
+                segment.whole_power = path[v].whole_zero;
+                job.segments.push_back(segment);
+                // The reference adds the square of a zero height difference, which changes nothing.
+                length += std::sqrt(text::square(nx - x) + text::square(ny - y));
+                x = nx;
+                y = ny;
+            }
+            lines.push_back("M5");
+        }
+    }
     for (const double z : levels) {
+        if (laser) break;
         for (size_t p = 0; p < clean.size(); ++p) {
             const Path &path = clean[p];
             const std::vector<double> *row = has_depths ? &depths[p] : nullptr;
@@ -324,18 +275,31 @@ Job single(const json &project) {
         job.warnings.push_back(
             "Before loading, clear controller scaling, rotation and local offsets. Set G54 Z zero for the current "
             "tool tip with tool-length compensation off. Exact-stop output may run slower on dense curves.");
+    if (laser && leads)
+        job.warnings.push_back("Tangent leads are cutting moves and may mark outside the design. Power ramps use steps "
+                               "of at most 0.5 mm; M4 also scales power with speed.");
     job.lines = postprocess(lines, protocol, mode, get(project, "dwell_units"));
     job.cut_length = rounded(length, 2);
     job.cut_minutes = rounded(length / cut_feed, 2);
-    // [min x, min y, max x, max y] over every vertex.
-    job.bounds = {clean[0][0][0], clean[0][0][1], clean[0][0][0], clean[0][0][1]};
-    for (const Path &path : clean) {
-        for (const std::array<double, 2> &point : path) {
-            job.bounds[0] = py_min(job.bounds[0], point[0]);
-            job.bounds[1] = py_min(job.bounds[1], point[1]);
-            job.bounds[2] = py_max(job.bounds[2], point[0]);
-            job.bounds[3] = py_max(job.bounds[3], point[1]);
-        }
+    // [min x, min y, max x, max y] over every vertex of what is cut: for a laser, the paths with their leads.
+    const auto cover = [&job](double x, double y, bool first) {
+        if (first) job.bounds = {x, y, x, y};
+        job.bounds = {py_min(job.bounds[0], x), py_min(job.bounds[1], y), py_max(job.bounds[2], x),
+                      py_max(job.bounds[3], y)};
+    };
+    bool first = true;
+    if (laser) {
+        for (const std::vector<LaserVertex> &path : laser_paths)
+            for (const LaserVertex &vertex : path) {
+                cover(vertex.x, vertex.y, first);
+                first = false;
+            }
+    } else {
+        for (const Path &path : clean)
+            for (const std::array<double, 2> &point : path) {
+                cover(point[0], point[1], first);
+                first = false;
+            }
     }
     return job;
 }
@@ -433,20 +397,21 @@ Job ordered(const json &project) {
         for (const std::string &line : part.lines)
             if (line != "M30") job.lines.push_back(line);
     if (jobs.back().lines.back() == "M30") job.lines.push_back("M30");
-    double length = 0, minutes = 0;
+    std::vector<double> lengths, minutes;
     job.bounds = jobs[0].bounds;
     for (const Job &part : jobs) {
         job.segments.insert(job.segments.end(), part.segments.begin(), part.segments.end());
-        length += part.cut_length;
-        minutes += part.cut_minutes;
+        lengths.push_back(part.cut_length);
+        minutes.push_back(part.cut_minutes);
         job.bounds = {py_min(job.bounds[0], part.bounds[0]), py_min(job.bounds[1], part.bounds[1]),
                       py_max(job.bounds[2], part.bounds[2]), py_max(job.bounds[3], part.bounds[3])};
         for (const std::string &warning : part.warnings)
             if (std::find(job.warnings.begin(), job.warnings.end(), warning) == job.warnings.end())
                 job.warnings.push_back(warning);
     }
-    job.cut_length = rounded(length, 2);
-    job.cut_minutes = rounded(minutes, 2);
+    // sum() of floats in the reference is a compensated sum, not a running total.
+    job.cut_length = rounded(pymath::sum(lengths.begin(), lengths.end()), 2);
+    job.cut_minutes = rounded(pymath::sum(minutes.begin(), minutes.end()), 2);
     job.mode = project.at("mode").get<std::string>();
     return job;
 }
@@ -462,7 +427,10 @@ json to_json(const Job &job) {
     json segments = json::array();
     for (const Segment &s : job.segments) {
         json row = json::array({s.x, s.y, s.nx, s.ny, s.end_z, nullptr, s.start_z});
-        if (s.has_power) row[5] = s.power;
+        // A laser move has no height: the reference writes the integer 0 there, and inside a beam-off gap
+        // an integer 0 for the power as well.
+        if (s.planar) row[4] = row[6] = 0;
+        if (s.has_power) row[5] = s.whole_power ? json(0) : json(s.power);
         segments.push_back(std::move(row));
     }
     return json{{"lines", job.lines},           {"segments", std::move(segments)}, {"cut_length", job.cut_length},

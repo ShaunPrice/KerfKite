@@ -74,10 +74,13 @@ def pytest_configure(config):
         try:
             if not outer:
                 return original(project, *args, **kwargs)
-            line, result = reference(lambda p: original(p, **kwargs), project)
-            if line is None:
+            # The case is recorded from the list form of the segments, which keeps the reference's number
+            # types; packed segments hold every value as a double.
+            line, result = reference(original, project)
+            if line is not None:
+                CASES.setdefault(line, None)
+            if line is None or kwargs:
                 return original(project, *args, **kwargs)
-            CASES.setdefault(line, None)
             if isinstance(result, BaseException):
                 raise result
             return result
