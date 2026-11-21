@@ -28,7 +28,7 @@ struct Point {
 inline double power_of_ten(int n) {
     static const double table[] = {1e0,  1e1,  1e2,  1e3,  1e4,  1e5,  1e6,  1e7,  1e8,  1e9,  1e10, 1e11,
                                    1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22};
-    return table[n];
+    return table[n < 0 ? 0 : n > 22 ? 22 : n];
 }
 
 inline bool digit(char c) { return c >= '0' && c <= '9'; }
@@ -54,6 +54,8 @@ inline bool decimal(const std::string &text, size_t begin, size_t end, double &o
             if (!fraction) return false;  // a whole part this long is not a dimension
             continue;
         }
+        // Fractional digits past the twenty-second are below any dimension, and past the end of the table.
+        if (fraction && places == 22) continue;
         if (mantissa || c != '0') ++kept;
         mantissa = mantissa * 10 + static_cast<uint64_t>(c - '0');
         if (fraction) ++places;

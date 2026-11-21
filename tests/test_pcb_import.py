@@ -1106,5 +1106,20 @@ class WrapperTests(Base):
         self.refused(lambda: pcb_import.placement([None]), 'There is nothing to place')
 
 
+@unittest.skipUnless(pcb_import.available(), 'The compiled extension with the native core is not installed')
+class LongNumberTests(unittest.TestCase):
+    """Numbers with far more digits than a dimension needs are read, not run past the scale table."""
+
+    def test_many_leading_fraction_zeros(self):
+        tiny = '0.' + '0' * 60 + '7'
+        drill = f'M48\nMETRIC\nT1C0.8\n%\nT1\nX12.5{"0" * 40}Y{tiny}\nX3.{"0" * 21}25Y1.{"9" * 30}\nM30\n'
+        tool = pcb_import.excellon(drill)['tools'][0]
+        self.assertEqual(tool['hits'], [[12.5, 0.0], [3.0, 2.0]])
+        gerber = f'%FSLAX46Y46*%\n%MOMM*%\n%ADD10C,0.{"0" * 30}1*%\n%ADD11C,0.25{"0" * 50}*%\nD11*\nX1000000Y2000000D03*\nM02*\n'
+        layer = pcb_import.gerber(gerber)
+        self.assertEqual([aperture['diameter'] for aperture in layer['apertures']], [0.0, 0.25])
+        self.assertEqual(layer['objects'][0]['at'], [1.0, 2.0])
+
+
 if __name__ == '__main__':
     unittest.main()
