@@ -5,8 +5,9 @@
 
 Three comparisons, all against values computed by Python in this run:
 
-1. Number text: fixed-point formatting, round() and repr() for several hundred thousand values, including
-   decimal ties and values next to them.
+1. Number text and arithmetic: fixed-point formatting, round() and repr() for several hundred thousand
+   values, including decimal ties and values next to them; and math.dist and sum(), which Python computes
+   with more care than the plain formulas.
 2. Recorded jobs: every studio.cam.generate call the test suite makes, replayed through the native core.
 3. Generated edge cases: projects with one to three settings replaced by unusual values, so that the
    reference's error messages are compared as well as its programs.
@@ -76,6 +77,69 @@ def number_text(cli, count, seed):
     return len(cases), unwritten
 
 
+def arithmetic(cli, count, seed):
+    """math.dist and sum() as the core computes them, against Python's, to the last bit."""
+    rng = random.Random(seed)
+
+    def any_double():
+        while True:
+            value = struct.unpack('<d', struct.pack('<Q', rng.getrandbits(64)))[0]
+            if value == value and abs(value) < 1e300 and (value == 0 or abs(value) > 1e-300):
+                return value
+
+    requests, expected = [], []
+    for _ in range(count):
+        kind = rng.randrange(8)
+        if kind == 0:
+            a, b = (any_double(), any_double()), (any_double(), any_double())
+        elif kind == 1:
+            a, b = (rng.uniform(0, 2000), rng.uniform(0, 2000)), (rng.uniform(0, 2000), rng.uniform(0, 2000))
+        elif kind == 2:  # coordinates as designs hold them
+            a = (round(rng.uniform(0, 700), 3), round(rng.uniform(0, 300), 3))
+            b = (round(rng.uniform(0, 700), 3), round(rng.uniform(0, 300), 3))
+        elif kind == 3:  # exact right triangles
+            a = (float(rng.randrange(0, 2000)), float(rng.randrange(0, 2000)))
+            b = (
+                a[0] + rng.choice([3.0, 5.0, 8.0, 7.0, 20.0, 0.0]),
+                a[1] + rng.choice([4.0, 12.0, 15.0, 24.0, 21.0, 0.0]),
+            )
+        elif kind == 4:  # nearly coincident points
+            a = (rng.uniform(0, 1), rng.uniform(0, 1))
+            b = (a[0] + rng.uniform(-1e-9, 1e-9), a[1] + rng.uniform(-1e-9, 1e-9))
+        elif kind == 5:  # tiny magnitudes
+            a, b = (rng.uniform(-1e-300, 1e-300), 0.0), (0.0, rng.uniform(-1e-305, 1e-305))
+        elif kind == 6:  # one axis only
+            a = (rng.uniform(0, 2000), rng.uniform(0, 2000))
+            b = (a[0], rng.uniform(0, 2000))
+        else:  # subnormal numbers
+            a, b = (5e-324 * rng.randrange(1, 1000), 5e-324 * rng.randrange(1, 1000)), (0.0, 0.0)
+        requests.append(f'dist {a[0].hex()} {a[1].hex()} {b[0].hex()} {b[1].hex()}\n')
+        expected.append(math.dist(a, b))
+    for _ in range(count // 5):
+        n, kind = rng.randrange(0, 40), rng.randrange(4)
+        if kind == 0:
+            values = [rng.uniform(0, 50) for _ in range(n)]
+        elif kind == 1:  # cancellation, where a running total and a compensated sum differ
+            values = [rng.choice([1e16, 1.0, -1e16, 3.5, 1e-9, 0.1]) for _ in range(n)]
+        elif kind == 2:
+            values = [round(rng.uniform(0, 2000), 2) for _ in range(n)]
+        else:
+            values = [any_double() if rng.random() < 0.3 else rng.uniform(-1e6, 1e6) for _ in range(n)]
+        requests.append(f'sum {n} {" ".join(value.hex() for value in values)}\n')
+        expected.append(float(sum(values)))
+    answer = subprocess.run(
+        [str(cli), 'arithmetic'], input=''.join(requests), capture_output=True, text=True, check=True
+    )
+    answers = answer.stdout.split()
+    assert len(answers) == len(expected), 'The native core did not answer every calculation.'
+    for request, want, got in zip(requests, expected, answers, strict=True):
+        got = float.fromhex(got)
+        assert got.hex() == want.hex() or (got != got and want != want), (
+            f'{request.strip()} gave {got!r}, Python {want!r}'
+        )
+    return len(expected)
+
+
 WEIRD = [
     None, True, False, 0, -1, 1, 3, 5, 2.5, 0.5, 0.01, 1e9, 1e-9, -0.0, 10**30, 2000, 2000.0001, 101, 50.5,
     '5', ' 7.5 ', '1_0', '1__0', 'abc', '', 'nan', 'inf', '-Infinity', '1e2', '.5', '5.', '0x10', '+3', [], [1], {},
@@ -136,6 +200,57 @@ def generated_cases(count, seed):
             if rng.random() < 0.8:
                 del project['paths']
             project.pop('path_depths', None)
+        if 'operations' not in project and rng.random() < 0.35:
+            # A laser job: leads, power ramps, perforation, holding bridges or raster powers.
+            project['mode'] = 'laser'
+            project.pop('path_depths', None)
+            # Most are well inside the work area with modest settings, so that they produce a program;
+            # the rest keep wider settings, which the reference mostly rejects.
+            tidy = rng.random() < 0.65
+            if tidy:
+                project['protocol'] = rng.choice(['grbl', 'fluidnc', 'grblhal', 'xpro-v5'])
+                project['paths'] = [
+                    [[round(rng.uniform(20, 80), rng.randrange(0, 4)), round(rng.uniform(12, 38), rng.randrange(0, 4))] for _ in range(rng.randrange(3, 8))]
+                    for _ in range(rng.randrange(1, 4))
+                ]  # fmt: skip
+            else:
+                project['protocol'] = rng.choice(
+                    ['grbl', 'grbl', 'fluidnc', 'grblhal', 'xpro-v5', 'marlin', 'linuxcnc']
+                )
+            if rng.random() < 0.5:
+                project['passes'] = rng.choice([1, 2, 3, 2.5])
+            if rng.random() < (0.7 if tidy else 0.5):
+                project['paths'] = [path + [list(path[0])] for path in project['paths']]
+            kind = rng.randrange(5)
+            if kind in (0, 1):
+                for key, choices, wide in (
+                    ('lead_in', [0, 0.5, 3, 7], [0, 0.5, 3, 12]), ('lead_out', [0, 0.25, 2, 6.5], [0, 0.25, 2, 40]),
+                    ('ramp_in', [0, 0.3, 2, 4.1], [0, 0.3, 2, 7.5, 200]), ('ramp_out', [0, 0.4, 1.7], [0, 0.4, 1.7, 9]),
+                    ('start_power', [0, 20, 100, 33.3], [0, 20, 100, 33.3]), ('end_power', [0, 10, 100], [0, 10, 100]),
+                    ('lead_shape', ['straight', 'arc-left', 'arc-right'], ['straight', 'arc-left', 'arc-right', 'curly']),
+                ):  # fmt: skip
+                    if rng.random() < 0.55:
+                        project[key] = rng.choice(choices if tidy else wide)
+            if kind in (1, 2):
+                project['laser_pattern'] = rng.choice(
+                    ['perforate', 'bridges'] if tidy else ['perforate', 'bridges', 'continuous', 'dotted']
+                )
+                for key, choices, wide in (
+                    ('laser_gap', [0.05, 0.5, 1, 2.2], [0.01, 0.5, 1, 6, 300]), ('laser_dash', [0.3, 3, 11.5], [0.01, 0.2, 3, 25]),
+                    ('laser_bridge_count', [1, 2, 3, 4], [1, 2, 4, 9, 2.5, 1000]),
+                ):  # fmt: skip
+                    if rng.random() < 0.6:
+                        project[key] = rng.choice(choices if tidy else wide)
+            if kind == 3:
+                project['path_powers'] = [
+                    [rng.choice([0, 1, 255.5, project['power'], round(rng.uniform(0, 1), 3)]) for _ in path]
+                    for path in project['paths']
+                ]
+            if kind == 4 and rng.random() < 0.5:
+                # Repeated and nearly repeated points, which the reference drops before measuring.
+                for path in project['paths']:
+                    path.insert(1, list(path[0]))
+                    path.append([path[-1][0], min(50, path[-1][1] + 1e-10)])
         for _ in range(rng.choice([0, 0, 1, 1, 1, 2, 3])):
             what = rng.randrange(8)
             if what < 4:
@@ -186,7 +301,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--cli', required=True, type=Path, help='the kerfkite-cam executable')
     parser.add_argument('--numbers', type=int, default=300000, help='number-text comparisons')
-    parser.add_argument('--generated', type=int, default=6000, help='generated edge cases')
+    parser.add_argument('--generated', type=int, default=12000, help='generated edge cases')
     parser.add_argument('--skip-suite', action='store_true', help='do not replay the calls made by the test suite')
     args = parser.parse_args()
     if not args.cli.is_file():
@@ -194,6 +309,13 @@ def main():
 
     compared, unwritten = number_text(args.cli, args.numbers, 86)
     print(f'PASS number text: {compared} values match Python ({unwritten} beyond the exact range, none job-sized)')
+    if sys.version_info >= (3, 12):
+        print(
+            f'PASS arithmetic: {arithmetic(args.cli, args.numbers, 88)} distances and sums match Python to the last bit'
+        )
+    else:
+        # Python 3.10 and 3.11 computed math.dist and sum() differently in the last bit; the core follows 3.12.
+        print('NOTE arithmetic not compared: it follows Python 3.12 and later, and this is an earlier Python')
 
     from native_core_recorder import reference
     from studio.cam import generate

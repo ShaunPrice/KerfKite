@@ -31,6 +31,8 @@ struct Segment {
     bool has_power;
     double power;
     double start_z;
+    bool planar = false;       // a laser move: the heights are the integer 0 in the job data
+    bool whole_power = false;  // the power is the integer 0 of a beam-off gap
 };
 
 struct Job {

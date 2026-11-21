@@ -3,6 +3,7 @@
 //   kerfkite-cam generate PROJECT.json [-o PROGRAM.nc] [--json]
 //   kerfkite-cam batch CASES.jsonl
 //   kerfkite-cam numbers
+//   kerfkite-cam arithmetic
 //
 // generate writes the program (or, with --json, the whole job) and exits 0. Exit 2 means the project was
 // rejected, with the reference's message on standard error; exit 3 means it needs a feature that is not
@@ -10,16 +11,19 @@
 //
 // batch and numbers serve validation/native_core_parity.py. batch reads one {"project": ...} object per
 // line and answers each with {"ok": job}, {"error": message} or {"declined": feature}. numbers reads
-// "HEXFLOAT DECIMALS" lines and writes the fixed-point text, round() and repr() of each value.
+// "HEXFLOAT DECIMALS" lines and writes the fixed-point text, round() and repr() of each value. arithmetic
+// answers "dist" and "sum" requests with the core's versions of Python's math.dist and sum().
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "kerfkite/cam.hpp"
 #include "kerfkite/number_text.hpp"
+#include "kerfkite/py_math.hpp"
 
 using json = nlohmann::json;
 
@@ -134,6 +138,35 @@ int numbers() {
     return 0;
 }
 
+// "dist AX AY BX BY" and "sum N V1 .. VN", all in hexadecimal float form; the answer is written the same way.
+int arithmetic() {
+    std::string word;
+    while (std::cin >> word) {
+        double answer = 0;
+        const auto value = [] {
+            std::string hex;
+            std::cin >> hex;
+            return std::strtod(hex.c_str(), nullptr);
+        };
+        if (word == "dist") {
+            const double ax = value(), ay = value(), bx = value(), by = value();
+            answer = kerfkite::pymath::dist(ax, ay, bx, by);
+        } else if (word == "sum") {
+            int n = 0;
+            std::cin >> n;
+            std::vector<double> values;
+            for (int i = 0; i < n; ++i) values.push_back(value());
+            answer = kerfkite::pymath::sum(values.begin(), values.end());
+        } else {
+            return usage();
+        }
+        char text[40];
+        std::snprintf(text, sizeof text, "%a", answer);
+        std::cout << text << '\n';
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -142,5 +175,6 @@ int main(int argc, char **argv) {
     if (command == "generate") return generate(argc, argv);
     if (command == "batch" && argc == 3) return batch(argv[2]);
     if (command == "numbers" && argc == 2) return numbers();
+    if (command == "arithmetic" && argc == 2) return arithmetic();
     return usage();
 }

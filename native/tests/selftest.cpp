@@ -69,8 +69,8 @@ int main() {
     expect(message<ValueError>(R"({"mode":"plasma"})") == "Choose router, laser or knife", "an unknown head");
     expect(message<ValueError>(R"({"mode":"router","width":100,"height":50,"feed":600,"power":1,
         "paths":[[[0,0],[101,0]]]})") == "X must be between 0 and 100.0", "a point outside the work area");
-    expect(message<NotPorted>(R"({"mode":"laser","width":100,"height":50,"feed":600,"power":1,
-        "paths":[[[0,0],[1,0]]]})") == "laser jobs", "a feature that is not ported is declined, not guessed");
+    expect(message<NotPorted>(R"({"mode":"knife","width":100,"height":50,"feed":600,"power":1,
+        "paths":[[[0,0],[1,0]]]})") == "drag-knife paths", "a feature that is not ported is declined, not guessed");
 
     std::printf(failures ? "%d checks failed\n" : "PASS native core self-test%.0d\n", failures);
     return failures ? 1 : 0;

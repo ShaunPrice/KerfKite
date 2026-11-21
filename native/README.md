@@ -31,9 +31,11 @@ length and time, bounds and warnings.
 | Number text: fixed-point formatting, `round()`, `repr()` | Done. Shared with the Python extension through `core/include/kerfkite/number_text.hpp`. |
 | Project validation and its error messages | Done for every setting of a router line job. |
 | Router line jobs, with constant depth or a depth at each vertex | Done. |
+| Laser line jobs: straight and arc leads, power ramps, perforation, holding bridges, raster powers, passes | Done. |
+| Python's `math.dist` and `sum()` arithmetic (`core/include/kerfkite/py_math.hpp`) | Done, to the last bit, as CPython 3.12 and later compute them. |
 | Ordered multi-operation jobs | Done; each operation must itself be ported. |
 | Controller post-processing (Grbl family, Marlin, LinuxCNC, Mach3, Mach4, UCCNC) | Done. The table is read from `studio/static/protocols.json` at build time. |
-| Laser jobs, drag-knife paths, ramp and helix entry, holding tabs, drilling | Not yet. Declined with exit status 3. |
+| Drag-knife paths, ramp and helix entry, holding tabs, drilling | Not yet. Declined with exit status 3. |
 | Offset, pocket and fill operations | Not yet. These need a geometry library (GEOS, which the Python code reaches through Shapely). |
 | Rotary output, relief, stock simulation, importers, sender, pendant, editors | Not yet. |
 
@@ -46,10 +48,14 @@ missing branch. The core never writes a program for a case it does not reproduce
 
 compares the core with the Python reference in the same run:
 
-* several hundred thousand numbers, including decimal ties and the values either side of them;
+* several hundred thousand numbers, including decimal ties and the values either side of them, and as many
+  distances and sums;
 * every `studio.cam.generate` call made by the Python test suite;
 * thousands of generated projects with settings replaced by unusual values, so that rejections are compared
   as well as programs.
+
+The reference for lengths and totals is CPython 3.12 or later: earlier versions computed `math.dist` and
+`sum()` differently in the last bit, so the comparison is run with 3.12 or later.
 
 Each case must be reproduced exactly, or declined. A different answer fails the check. The share of cases
 reproduced is the measure of progress, and the list of declined features is the work that remains.
