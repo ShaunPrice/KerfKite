@@ -101,6 +101,8 @@ Job single(const json &project) {
     // A helix is placed in the pocket as drawn, so those contours are kept beside the pocket's passes.
     std::vector<Path> drawn;
     if (router && is_text(get(project, "router_entry"), "helix") && is_text(operation, "pocket")) drawn = clean;
+    // The depth an operation gives to every point of its paths: V-carving does.
+    std::vector<std::vector<double>> depths;
     if (!line || knife) {
         if (!none(get(project, "path_depths")))
             throw ValueError("Per-vertex depth contours require the line operation");
@@ -108,19 +110,22 @@ Job single(const json &project) {
             if (!line) throw ValueError("Knife uses contour lines, not pocket/fill operations");
             clean = knife_paths(project, clean, width, height, operation_warnings);
         } else {
-            operation_warnings = prepare_operation(project, clean, width, height);  // operations.cpp
+            operation_warnings = prepare_operation(project, clean, depths, width, height);  // operations.cpp
         }
     }
 
-    std::vector<std::vector<double>> depths;
+    const bool prepared_depths = !depths.empty();
     if (tabs_enabled) holding_tabs(project, clean, depth, depths, operation_warnings);
     const json *depth_paths = get(project, "path_depths");
-    const bool has_depths = tabs_enabled || !none(depth_paths);
+    const bool has_depths = tabs_enabled || prepared_depths || !none(depth_paths);
     if (has_depths && !tabs_enabled) {  // tab heights are the core's own and need no checking
-        if (laser || !depth_paths->is_array() || depth_paths->size() != clean.size())
-            throw ValueError("Depth paths must match router XY paths");
-        depths.reserve(clean.size());
-        for (size_t p = 0; p < clean.size(); ++p) {
+        // Nor do the depths of an operation: they are the core's own, between the depth of cut and zero.
+        if (!prepared_depths) {
+            if (laser || !depth_paths->is_array() || depth_paths->size() != clean.size())
+                throw ValueError("Depth paths must match router XY paths");
+            depths.reserve(clean.size());
+        }
+        for (size_t p = 0; !prepared_depths && p < clean.size(); ++p) {
             const json &values = (*depth_paths)[p];
             if (!values.is_array() || values.size() != clean[p].size())
                 throw ValueError("Each vertex must have a matching depth");

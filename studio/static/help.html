@@ -1791,15 +1791,15 @@ rotary = generate_rotary(project, options, backend='python')
 <p>On Windows x64 (MSVC 2022 Build Tools, Python 3.10 and 3.12) the extension builds without compiler warnings, the parity tests and the installed-wheel check pass, and the five benchmark programs have the same hashes as on Linux. macOS and ARM builds have not been run.</p>
 <p><code>validation/benchmark_gcode.py</code> times both backends and fails if their program hashes differ; <code>validation/check_installed_cam.py</code> repeats the parity check on an installed wheel.</p>
 <h2>Python-free core</h2>
-<p><code>native/</code> holds the start of the application's move to C++: a C++17 library and the <code>kerfkite-cam</code> command-line tool, which write G-code from a project file with no Python installed. It currently reproduces router line jobs, laser line jobs (leads, power ramps, perforation, holding bridges and raster powers), drilling, drag-knife paths, inside and outside offsets, pockets, hatch fills, ramp entries, helical entries into pockets, holding tabs, ordered multi-operation jobs and controller post-processing; everything else (V-carving is the one operation of a job still missing) is declined, never approximated. It contains no third-party code and its build downloads nothing. <code>native/README.md</code> lists what is ported and how to build it.</p>
+<p><code>native/</code> holds the start of the application's move to C++: a C++17 library and the <code>kerfkite-cam</code> command-line tool, which write G-code from a project file with no Python installed. It currently reproduces router line jobs, laser line jobs (leads, power ramps, perforation, holding bridges and raster powers), drilling, drag-knife paths, inside and outside offsets, pockets, hatch fills, V-carving, ramp entries, helical entries into pockets, holding tabs, ordered multi-operation jobs and controller post-processing: every operation of a job. What it cannot reproduce exactly (a number written in non-ASCII digits, a contour whose self-crossing test turns on rounding inside GEOS) is declined, never approximated. It contains no third-party code and its build downloads nothing. <code>native/README.md</code> lists what is ported and how to build it.</p>
 <p>Probe levelling (<code>native/core/src/leveling.cpp</code>) is the first part of the application written only in the core: it has no Python version. The extension compiles that file and exposes it as <code>core_call</code>, which <code>studio/leveling.py</code> wraps; the extension is therefore built as C++17 and compiles the core's JSON reader and writer with it. See <a href="#probe-leveling">Probe levelling</a>.</p>
 <p>Circuit board import (<code>gerber.cpp</code>, <code>excellon.cpp</code>, <code>pcb.cpp</code>) is written the same way, compiled into the extension and wrapped by <code>studio/pcb_import.py</code>. So are isolation toolpaths (<code>isolation.cpp</code>), for which the extension also compiles the polygon kernel (<code>polygon/</code>). See <a href="#pcb">Circuit boards</a>.</p>
-<p>Offsets, pockets and hatch fills are computed by the core's own polygon kernel (<code>native/core/src/polygon/</code>, <code>native/core/src/operations.cpp</code>; see <a href="#polygon-kernel">The polygon kernel</a>). This is the third part with a single implementation: the extension compiles the kernel and the operations, and <code>studio/operations.py</code> calls them through <code>core_call</code> after checking the job's settings in Python, so Studio and <code>kerfkite-cam</code> cut the same paths by construction. GEOS, which the core built for these operations at first, has been removed from the native build with its options.</p>
+<p>Offsets, pockets, hatch fills and V-carving are computed by the core's own polygon kernel (<code>native/core/src/polygon/</code>, <code>native/core/src/operations.cpp</code>, <code>native/core/src/vcarve.cpp</code>; see <a href="#polygon-kernel">The polygon kernel</a>). This is the third part with a single implementation: the extension compiles the kernel and the operations, and <code>studio/operations.py</code> calls them through <code>core_call</code> after checking the job's settings in Python, so Studio and <code>kerfkite-cam</code> cut the same paths by construction. GEOS, which the core built for these operations at first, has been removed from the native build with its options.</p>
 <pre><code class="language-python">from studio import operations
 operations.polygon_backend()   # 'kernel' with the extension, 'shapely' without it
 </code></pre>
-<p>Without the extension (the portable wheel) the same operations run on Shapely, as they did before the kernel. The fallback cuts the same regions, but its vertices are not the kernel's: arcs are approximated from inside the true arc and not from outside, rings start elsewhere, pockets have many more vertices, and a contour that closes only to within the tolerance is usually refused. <code>KERFKITE_POLYGON_BACKEND=shapely</code> selects the fallback where the extension is installed, and <code>=kernel</code> refuses to run without the extension. Kernel coordinates are whole millionths of a millimetre; each crosses the JSON boundary as the shortest text of the double <code>n / 1e6</code> and is read back as exactly that double, which <code>tests/test_polygon_operations.py</code> checks.</p>
-<p><code>validation/check_installed_cam.py</code> pins these operations on every platform a wheel is built for: an inside offset, an outside offset, a pocket and a cross-hatch fill at 33.3 degrees, generated through the installed extension, must give the recorded digest. On Linux x86-64 the extension (GCC 13) and <code>kerfkite-cam</code> built with GCC 13, with Clang 18 and with the address and undefined-behaviour sanitizers wrote the same four programs.</p>
+<p>Without the extension (the portable wheel) the same operations run on Shapely, as they did before the kernel. The fallback cuts the same regions, but its vertices are not the kernel's: arcs are approximated from inside the true arc and not from outside, rings start elsewhere, pockets have many more vertices, a contour that closes only to within the tolerance is usually refused, and a V-carve is written as one path for each piece of the diagram, in no particular order. <code>KERFKITE_POLYGON_BACKEND=shapely</code> selects the fallback where the extension is installed, and <code>=kernel</code> refuses to run without the extension. Kernel coordinates are whole millionths of a millimetre; each crosses the JSON boundary as the shortest text of the double <code>n / 1e6</code> and is read back as exactly that double, which <code>tests/test_polygon_operations.py</code> checks.</p>
+<p><code>validation/check_installed_cam.py</code> pins these operations on every platform a wheel is built for: an inside offset, an outside offset, a pocket and a cross-hatch fill at 33.3 degrees, generated through the installed extension, must give the recorded digest, and so must the paths, depths and program of a V-carve (a slanted outline with an island and a block letter, 13,320 points). On Linux x86-64 the extension (GCC 13) and <code>kerfkite-cam</code> built with GCC 13, with Clang 18 and with the address and undefined-behaviour sanitizers wrote the same four programs.</p>
 <p>Solid modelling is the fourth part computed by the core for Studio. The extension compiles the solid kernel (<code>native/core/src/solid/</code>, <code>solid_command.cpp</code>) and the polygon kernel's own command (<code>polygon/command.cpp</code>), and <code>studio/solid_kernel.py</code> gives them the interface Studio's 3D CAD modules call: parts, CAD scripts and their 2D drawings, lofts, STEP tessellations and assemblies. Unlike the operations above, a model is built in many steps, so the extension has a second entry beside <code>core_call</code>: <code>solid_call(request, kept)</code> answers with the JSON and with the solid itself, which Python keeps and passes back to later requests, so no mesh crosses as text between steps. <code>solid_mesh(solid)</code> gives the mesh of a kept solid as bytes for numpy.</p>
 <pre><code class="language-python">from studio import solid_kernel
 solid_kernel.solid_backend()   # 'kernel' with the extension, 'manifold' without it
@@ -1815,6 +1815,9 @@ solid_kernel.solid_backend()   # 'kernel' with the extension, 'manifold' without
 <p>Helical entries into pockets are reproduced as well (<code>native/core/src/router_entry.cpp</code>). The reference placed each helix with Shapely: the pocket's region, two insets of it, the nearest point of an inset to the first point of each pass, a distance to the boundary and a covering test for the feed from the helix to the pass. The vertices of a GEOS inset cannot be reproduced to the last bit by other code, so this part was moved instead, as the offsets and pockets were: <code>native/core/src/pocket_entry.cpp</code> places the helix on the core's own polygon kernel by the same rules, the extension exposes it as the <code>helix</code> operation of <code>core_call('operation', ...)</code>, and <code>studio/router_entry.py</code> calls it through <code>studio.operations.kernel_pocket_entries</code> whenever the extension is installed. Studio and <code>kerfkite-cam</code> therefore place the same helix by construction, and the Shapely code remains as the fallback without the extension (or with <code>KERFKITE_POLYGON_BACKEND=shapely</code>). The centre of a helix is a double worked out with <code>+ - * /</code> alone, the same on every platform; the start angle is the platform's <code>atan2</code>, and the helix points its <code>sin</code> and <code>cos</code>, as in Python. The move also put right a fault that came with the kernel's pockets: Studio had been checking the kernel's passes, which lie on a grid of a millionth of a millimetre, against a Shapely inset to a hundredth of that, and refused most pockets with walls at an angle.</p>
 <p>That the cutter stays clear is checked independently of both codes. <code>tests/test_router_entry.py</code> generates pockets of many shapes, with and without islands, and measures with Shapely the distance from every cutter position of the job to the contours as drawn: the centre of each helix is at least the cutter radius plus the helix radius from every wall, with no tolerance, and the feeds and passes are within 0.000002 mm of the cutter radius, the two half steps of the kernel's grid. The core's self-test makes the same check on generated pockets with a distance function of its own and compares a digest of the centres with a recorded value, and <code>validation/check_installed_cam.py</code> pins the centres an installed wheel gives.</p>
 <p>With these, and with the drag-knife fix, the measurement on Linux x86-64 (GCC 13, Python 3.13) is: 368 of 369 recorded suite calls reproduced (219 programs and 149 rejections; the one declined is V-carving); 19,986 of 20,000 generated cases; all 6,005 ramp, helix and tab cases; and 4,998 of 5,004 pockets entered by a helix, a new group (2,189 programs and 2,809 rejections; the six declined are untidy cases whose operation was replaced with V-carving). Nothing differs, and V-carving is the only feature declined (21 cases in all).</p>
+<p>V-carving is reproduced too, and with it every operation of a job (<code>native/core/src/vcarve.cpp</code>). The reference sampled the outlines, took Shapely's Voronoi diagram of the samples, cut it to the region and measured each point's distance to the walls. The vertices of a GEOS diagram cannot be reproduced to the last bit by other code, so this part was moved as the offsets and the helix were: the polygon kernel gained its own Delaunay triangulation and Voronoi diagram of points (<code>native/core/src/polygon/voronoi.cpp</code>: divide and conquer in O(n log n), the side-of-line test exact in 128 bits and the in-circle test in 256, vertices worked out as exact fractions and rounded to the grid, halves upwards) and the distance from a point to a region's boundary; the carve is built on them; the extension exposes it as the <code>vcarve</code> operation of <code>core_call('operation', ...)</code>; and <code>studio/operations.py</code> calls it through <code>kernel_vcarve</code> whenever the extension is installed. The Shapely code remains as the fallback without the extension (or with <code>KERFKITE_POLYGON_BACKEND=shapely</code>). The method, its allowance of one sampling interval, the settings, their limits, the messages and the warning are the reference's. What the kernel adds is a defined result: samples from each ring's smallest vertex, coordinates on the grid, pieces that share an end joined into longer paths, and the paths in an order with little travel. Nothing in a carve comes from the C library but <code>sqrt</code>; the tangent of the bit's half angle is the kernel's own series. A carve of more points than a job may hold (200,000) is refused in the core with the generator's message, without being built. <a href="#polygon-kernel">The polygon kernel</a> has the rules and the measurements.</p>
+<p>That the bit never cuts outside the outline is checked independently of both codes. At every point of every path the circle the bit cuts at that depth, of radius <code>|z| tan(angle / 2)</code>, must be at least the sampling interval short of the nearest wall, and in the middle of every move it must still be short of the wall; the point must be in the region, and the depth within the depth of cut and the tool's radius. <code>tests/test_vcarve.py</code> and <code>validation/vcarve_check.py</code> measure this with Shapely on generated shapes (words of block letters, shapes with holes, thin strokes, flat areas, round shapes, stars), the core's self-test measures it with a distance function of its own and compares a digest of the carves with a recorded value, and <code>validation/check_installed_cam.py</code> pins the carve an installed wheel gives. The same scripts compare the carve with Shapely's carve of the same samples, which it follows to nanometres.</p>
+<p>With V-carving, the measurement on Linux x86-64 (GCC 13, Python 3.13) is: all 370 recorded suite calls reproduced (221 programs and 149 rejections); all 20,000 generated cases (9,737 programs and 10,263 rejections); all 6,005 ramp, helix and tab cases; all 5,004 pockets entered by a helix; and all 4,010 V-carves, a new group (2,366 programs and 1,644 rejections). Nothing differs and nothing is declined: in this run every case was reproduced. The core can still decline an input, never an operation: a number written in non-ASCII digits or beyond the range of a double, a contour whose self-crossing test turns on rounding inside GEOS or passes the bound on work, and a few degenerate contours under tabs and ramps. <code>validation/vcarve_check.py</code> on 4,000 generated projects carved 2,287 shapes: at every point the cut was at least 1.0000 sampling intervals short of the nearest wall and in the middle of every move at least 0.5082; against Shapely's carve of the same samples no point of either carve was further than 2.2 nm from the other and the total lengths agreed to 2.1 parts in a million. <code>kerfkite-cam</code> built with GCC 13, with Clang 18, with the kernel's own 128-bit integer throughout (the one a compiler without a 128-bit type uses) and under the address and undefined-behaviour sanitizers gave the same bytes for 1,114 generated jobs, 810 of them V-carves, and each build passed the self-tests with their recorded digests. Windows (MSVC), macOS and ARM64 builds have not been run; the digests in the self-tests and the installed-wheel check are what test them.</p>
 <p>The test of whether a contour crosses itself (<code>native/core/src/simple_line.cpp</code>) has a bounded worst case. It used to apply GEOS's test to every pair of segments whose bounding boxes overlap. For a contour of long segments side by side that is every pair: a comb of 20,000 parallel strokes took 2.1 s and one of 100,000, the most a job may hold, about a minute; a fan of rays and a square spiral behaved alike. (A contour that does cross was never slow: the first crossing found ends the test.) Two things bound it now.</p>
 <ul>
 <li>A tree over the segments, walked two branches at a time. A pair of branches is left out whole when GEOS's test is certain to pass every pair of segments in it: when the boxes of the two branches are apart, or when every end point in one branch is clear of, and on one side of, the line of every segment in the other. The second holds because GEOS passes two segments as soon as its orientation test puts both ends of one strictly on one side of the other, and that test is exact whenever its floating-point filter settles the sign; the tree asks for three times the margin the filter needs, at every corner of the boxes of end points, and the determinant is of the first degree in each coordinate, so the corners bound it. The branches are split on whichever coordinate of the segments' first or second end points is most spread, which keeps those boxes small for combs, fans and spirals alike. The same contours of 100,000 segments now take 0.05 to 0.12 s.</li>
@@ -2882,18 +2885,20 @@ sh start.sh --port 8765
 <p>The report identifies the completed cases. Actual machine travel, cutter and laser calibration, clamping and material response need commissioning on the target machine.</p>
 </section><section id="polygon-kernel"><h1>The polygon kernel</h1>
 <p>KerfKite's own two-dimensional polygon library: regions with holes, Boolean operations, round offsets, line
-clipping and the union of very many shapes. It is part of the native core (<code>native/core/src/polygon/</code>,
+clipping, the union of very many shapes, and the Delaunay triangulation and Voronoi diagram of points. It is
+part of the native core (<code>native/core/src/polygon/</code>,
 interface in <code>native/core/include/kerfkite/polygon.hpp</code>) and depends on nothing but the C++17 standard
 library. It was written for KerfKite from the published methods named under <a href="#sources">Sources</a>, not taken
 or translated from another library.</p>
-<p><strong>It is what the application uses</strong> for inside and outside offsets, pockets and hatch fills.
-<code>native/core/src/operations.cpp</code> builds those operations on the kernel; <code>kerfkite-cam</code> runs that code, and
-Studio's Python calls the same code through its compiled extension (<code>studio/operations.py</code>), so the two cut
-the same paths. GEOS is no longer part of the native build, which now contains no third-party code and
-downloads nothing. Shapely, which carries GEOS, remains in Studio for three things: as the fallback for
-these operations where the extension is not installed, in the modules that have not been moved yet, and as
-the oracle the kernel is tested against. <a href="#the-operations">The operations</a> describes how they are built
-and how the paths differ from the ones GEOS gave.</p>
+<p><strong>It is what the application uses</strong> for inside and outside offsets, pockets, hatch fills and V-carving.
+<code>native/core/src/operations.cpp</code> and <code>native/core/src/vcarve.cpp</code> build those operations on the kernel;
+<code>kerfkite-cam</code> runs that code, and Studio's Python calls the same code through its compiled extension
+(<code>studio/operations.py</code>), so the two cut the same paths. GEOS is no longer part of the native build, which
+now contains no third-party code and downloads nothing. Shapely, which carries GEOS, remains in Studio for
+three things: as the fallback for these operations where the extension is not installed, in the modules
+that have not been moved yet, and as the oracle the kernel is tested against.
+<a href="#the-operations">The operations</a> describes how they are built and how the paths differ from the ones GEOS
+gave, and <a href="#v-carving">V-carving</a> does the same for the carve.</p>
 <h2>What it does</h2>
 <table>
 <thead>
@@ -2943,10 +2948,23 @@ and how the paths differ from the ones GEOS gave.</p>
 <td>The rings of a region in the order and directions the application cuts them</td>
 <td><code>outlines</code></td>
 </tr>
+<tr>
+<td>The Delaunay triangulation of points</td>
+<td><code>delaunay</code></td>
+</tr>
+<tr>
+<td>The edges of the Voronoi diagram of points, cut to a box</td>
+<td><code>voronoi_edges</code></td>
+</tr>
+<tr>
+<td>The distance from a point to the boundary of a region</td>
+<td><code>BoundaryDistance</code></td>
+</tr>
 </tbody>
 </table>
-<p>Not provided: Voronoi diagrams (V-carving still needs them), curves other than circular arcs drawn as straight
-edges, and anything in three dimensions.</p>
+<p>Not provided: the Voronoi diagram of segments (the exact medial axis of a polygon), triangulation of a
+polygon with holes, curves other than circular arcs drawn as straight edges, and anything in three
+dimensions.</p>
 <h2>The grid</h2>
 <p>Every vertex is a pair of 64-bit integers counting nanometres (1e-6 mm). A millimetre value is multiplied by
 1e6 and rounded to the nearest whole number on the way in, halves upwards, and a result is divided by 1e6
@@ -3058,6 +3076,79 @@ touches a corner gives nothing. Each end of a part is then rounded to the grid.<
 <p>The ends of the segment itself are grid points, so a hatch row asked for at an arbitrary height or angle is
 moved by up to half a nanometre. Where such a row meets an edge at a shallow angle its end slides along the
 edge by correspondingly more; it stays on the row and at the boundary.</p>
+<h2>Voronoi diagrams of points</h2>
+<p><code>delaunay(points)</code> gives the Delaunay triangulation of grid points and <code>voronoi_edges(triangulation, low, high)</code> the edges of the Voronoi diagram that is its dual, cut to a box (<code>voronoi.cpp</code>). V-carving follows
+this diagram.</p>
+<h3>What comes back</h3>
+<p>A <code>Triangulation</code> holds the distinct points in order of x and then y; every triangle counter-clockwise from
+its smallest point, the triangles in order; and every edge once, from its smaller point, with the triangle
+on its left and the triangle on its right, or none where the edge is on the convex hull. A <code>VoronoiEdge</code> is
+a straight segment between two grid points, the smaller first, with the two points (sites) it lies between;
+the edges come in order of their ends. Nothing else is stored: there are no faces or cells, because the
+application needs only the edges.</p>
+<h3>The method</h3>
+<p>The triangulation is built by divide and conquer on the quad-edge structure, as Guibas and Stolfi describe
+it: the points are sorted, halved until two or three remain, and the halves are merged from their lower
+common tangent upwards, each new cross edge being the one whose circle through the ends of the last is
+empty. Sorting and merging take <strong>O(n log n)</strong> time whatever the arrangement of the points; the structure
+holds eight 32-bit numbers for each edge, about 100 bytes a point in all.</p>
+<h3>The two tests</h3>
+<ul>
+<li><strong>Which side of a line a point is on</strong> is the sign of a product of coordinate differences, exact in 128
+bits, as everywhere in the kernel.</li>
+<li><strong>Whether a point is inside the circle through three others</strong> is the sign of a determinant of the fourth
+degree. With differences below 2^38 its terms reach 2^154, so it is taken as three products of 128-bit
+values added in 256 bits (<code>Int256</code> in <code>wide.hpp</code>: four 64-bit pieces, from the same 64-bit multiplication
+the portable 128-bit integer uses, so it is one code for every compiler).</li>
+</ul>
+<p>Neither test has a tolerance or a floating-point short cut, so there is nothing for a platform to round
+differently, and no perturbation.</p>
+<h3>Points on one line and on one circle</h3>
+<p>Both are ordinary here: the samples along a straight wall lie on one line, and the samples of a rectangle or
+of anything symmetric lie four or more to a circle.</p>
+<ul>
+<li><strong>Repeated points</strong> count once.</li>
+<li><strong>Points all on one line</strong> are joined in a chain. There are no triangles; each edge's bisector is a
+Voronoi edge without ends, cut to the box.</li>
+<li><strong>Points on one line among others</strong> make no flat triangle: the in-circle test is strict, and three points
+on a line have no circle.</li>
+<li><strong>Four or more points on one circle</strong> can be triangulated in more than one way, and which diagonals are
+chosen follows from the order of the points alone, so it is the same everywhere. It does not matter to
+the diagram: the triangles either side of such a diagonal have the same centre, the Voronoi edge between
+them has no length, and edges of no length are left out. The Voronoi edges that remain are the same
+whichever diagonals were chosen.</li>
+</ul>
+<h3>Voronoi vertices and the rounding rule</h3>
+<p>A Voronoi vertex is the centre of the circle through the corners of a triangle, and is not a grid point in
+general. An edge lies on the perpendicular bisector of its two sites <code>a</code> and <code>b</code>; with <code>m</code> the middle of
+<code>ab</code> and <code>d</code> the direction of <code>ab</code> turned a quarter turn to the left, the centre for a third point <code>c</code> is
+<code>m + t d</code> with</p>
+<pre><code>t = (c - a) . (c - b) / (2 (b - a) x (c - a))
+</code></pre>
+<p>an exact fraction of two 128-bit whole numbers. The edge runs from the <code>t</code> of the triangle on the right of
+<code>ab</code> to the <code>t</code> of the triangle on its left, and has no end on a side where there is no triangle. That range
+is cut to the box by comparing fractions exactly (256-bit products), <strong>and only then</strong> are the two ends
+worked out, each coordinate as one exact quotient <strong>rounded to the nearest grid point, halves upwards</strong>.
+So:</p>
+<ul>
+<li>an end is within 0.5 nm of the exact vertex in each coordinate (0.71 nm in all);</li>
+<li>the three edges that meet at a vertex round the same exact point, so they end at the same grid point;</li>
+<li>the centre of a thin triangle, which may be kilometres away, is never represented: only where its edges
+cross the box;</li>
+<li>an edge whose two ends round to one grid point is left out.</li>
+</ul>
+<h3>Limits</h3>
+<p>Coordinates up to 2^37 units (137 m) either side of the origin, for the points and for the box; up to
+2,000,000 points. Beyond either, <code>ValueError</code>. Nothing recurses in proportion to the number of points: the
+depth of the halving is its logarithm.</p>
+<h3>The distance to a boundary</h3>
+<p><code>BoundaryDistance(region).to(point)</code> is the distance in grid units from a grid point to the nearest edge of
+the region. For each edge the foot of the perpendicular is placed exactly (before the edge, on it, past
+it); the distance is then the square root of a whole number, or a whole number divided by such a square
+root, each whole number converted to the nearest double first. Square root and division are rounded
+correctly by IEEE 754, so the distance to an edge is the same double everywhere, within 4 parts in 10^16 of
+the true one, and the answer is the least over all edges. The edges are kept in buckets, which only limit
+how many are measured.</p>
 <h2>The order of a result</h2>
 <ul>
 <li>Outer rings run counter-clockwise, holes clockwise.</li>
@@ -3107,6 +3198,10 @@ always given, so the direction of cut does not change.</p>
 <td>Rounds of resolving</td>
 <td>200</td>
 </tr>
+<tr>
+<td>Points in a triangulation</td>
+<td>2,000,000, each within 2^37 units of the origin</td>
+</tr>
 </tbody>
 </table>
 <p>Input beyond a limit, or not finite, throws <code>kerfkite::ValueError</code>. Nothing recurses in proportion to the
@@ -3116,7 +3211,10 @@ size of the input.</p>
 addition, subtraction, multiplication, division and square root, which IEEE 754 rounds correctly, and its
 results are rounded to the grid. The bucket grid uses floating point too, but only to decide which pairs of
 edges are examined, which cannot change a result.</p>
-<p>Two things could still make a platform differ, and the self-test's recorded digest exists to catch them:</p>
+<p>A triangulation and its Voronoi edges are whole-number arithmetic throughout, and the distance to a boundary
+adds only a square root and a division.</p>
+<p>Two things could still make a platform differ, and the self-test's recorded digests exist to catch them
+(one for regions, offsets and hatch rows, and one for triangulations, Voronoi edges and distances):</p>
 <ul>
 <li><strong>Fused multiply-add.</strong> A compiler allowed to contract <code>a * b + c</code> rounds once where the source rounds
 twice. The build passes <code>-ffp-contract=off</code> or <code>/fp:precise</code>, as the rest of the core requires, and the
@@ -3126,6 +3224,10 @@ is not supported.</li>
 </ul>
 <p>Measured: GCC 13 and Clang 18 on x86-64 give byte-identical answers to the 133,602 requests of the full
 comparison with GEOS, and the same digest with either 128-bit integer, at <code>-O2</code> and at <code>-O3 -march=native</code>.
+The digest of triangulations, Voronoi edges and distances is likewise the same with GCC 13 and Clang 18 and
+with either integer, and 1,114 generated jobs, 810 of them V-carves, gave the same bytes from
+<code>kerfkite-cam</code> built with GCC, with Clang, with the kernel's own 128-bit integer throughout, and under the
+address and undefined-behaviour sanitizers.
 A build with fused multiply-add deliberately allowed (<code>-march=native -ffp-contract=fast</code>) also gave the
 same digest, which shows that the test's cases do not turn on it, not that none can. ARM64 and MSVC have not
 been compiled or run: the kernel is written to the standard and the portable integer is exercised here, but
@@ -3149,10 +3251,27 @@ its source are nested; hatch rows lie in the region, end at its boundary, and th
 spacing give its area;</li>
 <li>a knot of slivers through one point, artwork of 3,000 dark and clear shapes with three contours round
 it, and a pocket followed until nothing is left;</li>
-<li>a digest of every generated result, compared with the value recorded in the test.</li>
+<li>a digest of every generated result, compared with the value recorded in the test;</li>
+<li>for triangulations: the in-circle test against the same determinant taken another way in 128 bits on
+20,000 sets of four points, and again with the points moved to the edge of the range and made 65,536 times
+larger, where the sums pass 2^128; small cases with known answers (a square, points on a line, a centre
+on a half grid step, a centre 137 m outside the box); and 260 generated sets of up to 900 points
+(scattered, lattices with repeats, on one line, on one circle with and without its centre, the samples of
+rectangles and of walls, points a few units apart, clusters, points at the edge of the range), for each of
+which, exactly: the points are the distinct points given; every triangle turns left; no point is inside
+any triangle's circle; every edge has its triangles on the proper sides; every hull edge has all points on
+one side; <code>points - edges + triangles + 1 = 2</code> (Euler's formula); with <code>h</code> points on the hull there are
+<code>2n - 2 - h</code> triangles and <code>3n - 3 - h</code> edges, so the hull is complete; every corner of <code>convex_hull</code> is
+on a hull edge; points on one line form a chain; and every Voronoi edge lies in the box with each end
+equally far from its two sites and no third site nearer, to the rounding of the end. The triangulation
+must also be the same for the points given in reverse and for the points moved 68 m. A second digest
+covers these results and the distances.</li>
 </ul>
 <p><code>tests/test_polygon_kernel.py</code> checks the same properties through <code>kerfkite-cam polygon</code> when the tool has
-been built (<code>KERFKITE_CAM</code>, or <code>build/native</code>).</p>
+been built (<code>KERFKITE_CAM</code>, or <code>build/native</code>). For triangulations it repeats the exact checks in Python's
+whole numbers, compares the Voronoi edges of scattered points with Shapely's <code>voronoi_diagram</code> (the same
+total length to 0.0001 mm, and every end of either diagram within 0.00001 mm of an edge of the other), and
+the distance to a boundary with Shapely's.</p>
 <p><code>validation/polygon_kernel_check.py</code> compares the kernel with Shapely 2.2.0 (GEOS 3.14.1):</p>
 <pre><code>python validation/polygon_kernel_check.py --cli build/native/kerfkite-cam --cases 12000
 </code></pre>
@@ -3291,6 +3410,22 @@ every group but pockets, with no report and the same bytes.</p>
 <td>A hatch of the contour: 2,001 rows, 117,679 parts</td>
 <td>0.15 s</td>
 </tr>
+<tr>
+<td>The triangulation and Voronoi edges of 1,000 scattered points (1,984 triangles, 2,893 edges)</td>
+<td>0.002 s</td>
+</tr>
+<tr>
+<td>The same for 12,000 points, the most a V-carve samples (23,974 triangles, 35,605 edges)</td>
+<td>0.03 s</td>
+</tr>
+<tr>
+<td>The same for 100,000 points</td>
+<td>0.30 s</td>
+</tr>
+<tr>
+<td>The same for 11,960 samples of the walls of a comb, every half millimetre: points on lines and on circles throughout</td>
+<td>0.02 s</td>
+</tr>
 </tbody>
 </table>
 <p>These are the best of three runs. The machine was shared while they were taken and the other runs were up
@@ -3309,6 +3444,14 @@ The limit and its message are kept, but the kernel's passes have far fewer verti
 156,384 for one generated pocket of 29 passes), so it now takes a very large pocket to reach it, and
 some pockets the Shapely code refuses are cut.</li>
 <li>Only x86-64 with GCC and Clang has been run. See <a href="#results-are-the-same-everywhere">above</a>.</li>
+<li>The Voronoi diagram is of points, not of the region's edges, so a V-carve is the reference's sampled
+approximation of the medial axis and no more: it is safe by its allowance of one sampling interval, which
+also makes it shallower than the bit could go, and round a corner that turns inwards its paths stand
+further apart than the interval. An exact medial axis needs the Voronoi diagram of segments, which the
+kernel does not have.</li>
+<li>A V-carve still lifts the tool once for each spoke, about once for every sample of the outline. Joining
+halves the number of paths the reference wrote; cutting each spoke out and back would remove most of the
+rest at the cost of cutting it twice, and was not done.</li>
 <li><code>is_valid</code> does not check that the interior of a polygon is connected. (Results of the kernel are; the
 comparison with GEOS, whose validity test does check it, found none that was not.)</li>
 </ul>
@@ -3396,8 +3539,7 @@ makes.</li>
 </ul>
 <p>The checks of a job's settings, their messages and their order are unchanged, as are the warnings, the
 check of the compensated path against the work area, and the limit of 100,000 vertices on a pocket.
-V-carving is not part of this: it needs a Voronoi diagram, stays on Shapely in Studio, and is declined by
-<code>kerfkite-cam</code>.</p>
+V-carving is built on the kernel as well, in its own file: see <a href="#v-carving">V-carving</a>.</p>
 <h3>Which code runs</h3>
 <p><code>studio.operations.polygon_backend()</code> answers <code>kernel</code> when the compiled extension is installed and
 <code>shapely</code> when it is not (the portable wheel, or a source checkout that was never built). Setting
@@ -3537,6 +3679,208 @@ case differed in either run.</p>
 programs and the one further declined job (a helical entry into a pocket, which is not ported) come from
 the differences in outcome counted above, chiefly contours that close only to within the tolerance, which
 both sides used to refuse.</p>
+<h2>V-carving</h2>
+<p><code>native/core/src/vcarve.cpp</code> is the one implementation of V-carving. <code>kerfkite-cam generate</code> reaches it
+directly; Studio checks the settings in Python, in the order and with the messages they always had, and
+asks the extension for the paths and depths (<code>&quot;op&quot;: &quot;vcarve&quot;</code> of the <code>operation</code> command,
+<code>studio.operations.kernel_vcarve</code>). The Shapely code in <code>studio/operations.py</code> remains as the fallback for
+an installation without the extension.</p>
+<h3>The method</h3>
+<p>It is the reference's sampled medial axis, unchanged in what it cuts:</p>
+<ol>
+<li>Every ring of the region is sampled at equal steps of at most the sampling interval (<code>v_resolution</code>), at
+most 12,000 samples in all.</li>
+<li>The Voronoi diagram of the samples is cut to the region. What remains approximates the medial axis, with
+a spoke from the axis to the wall between each two neighbouring samples.</li>
+<li>Each piece is divided into steps of at most the interval, and at each point the bit goes as deep as lets
+it cut a circle of radius <code>r = min(tool radius, distance to the wall - interval)</code>, no deeper than the
+depth of cut: <code>z = -min(depth, r / tan(angle / 2))</code>.</li>
+</ol>
+<p>The interval taken off the distance is what makes the carve safe between points as well as at them. The
+distance to the wall cannot change faster than the cutter moves, so between two points one step apart it
+is never less than at the nearer of them less half a step; a straight move between two points whose cuts
+are each an interval short of the wall therefore stays at least half an interval short of it in its middle.</p>
+<h3>What the kernel fixes</h3>
+<table>
+<thead>
+<tr>
+<th>Shapely code (now the fallback)</th>
+<th>Kernel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>outlines(g)</code>, each ring from wherever GEOS starts it</td>
+<td>every ring of the region from its smallest vertex</td>
+</tr>
+<tr>
+<td><code>line.interpolate(length * i / n)</code></td>
+<td>the same positions, lengths being square roots of whole numbers, each sample rounded to the grid</td>
+</tr>
+<tr>
+<td><code>voronoi_diagram(MultiPoint(samples), edges=True)</code></td>
+<td><code>voronoi_edges(delaunay(samples), box of the region)</code></td>
+</tr>
+<tr>
+<td><code>.intersection(g)</code></td>
+<td><code>LineClipper(g).clip</code> for each edge</td>
+</tr>
+<tr>
+<td>a piece shorter than a tenth of the interval is dropped</td>
+<td>the same</td>
+</tr>
+<tr>
+<td><code>edge.interpolate(length * i / n)</code></td>
+<td>the same positions along the piece, each rounded to the grid</td>
+</tr>
+<tr>
+<td><code>pt.distance(g.boundary)</code></td>
+<td><code>BoundaryDistance(g).to(point)</code></td>
+</tr>
+<tr>
+<td><code>math.tan(math.radians(angle / 2))</code></td>
+<td>sine over cosine from the kernel's series, the same on every platform</td>
+</tr>
+<tr>
+<td>a piece that nowhere cuts deeper than 0.0001 mm is dropped</td>
+<td>the same</td>
+</tr>
+<tr>
+<td>one path for each piece, in the order GEOS lists them</td>
+<td>pieces joined into longer paths, in an order with little travel</td>
+</tr>
+</tbody>
+</table>
+<p>Every coordinate of a path is a whole number of nanometres divided by 1e6, and every depth comes from one
+square root, at most two divisions and the series. <strong>No function of the C library is called but <code>sqrt</code></strong>,
+so a V-carve is the same on every platform, and <code>validation/check_installed_cam.py</code> pins one.</p>
+<h3>Joining and order</h3>
+<p>The reference wrote one path for each piece of the diagram and lifted the tool between every two. The
+kernel cuts every piece once, as before, but in fewer paths and with less travel. Both rules use whole
+numbers, or doubles got from them by correctly rounded operations, so the result is the same everywhere.</p>
+<ul>
+<li><strong>Joining.</strong> Pieces that share an end are joined end to end. From each end where an odd number of pieces
+meet, taken in order of x and then y, a path sets out along the piece whose far end is smallest, and at
+each junction follows the unused piece that continues most nearly straight (of two equally straight, the
+one whose far end is smaller), until none is left. What then remains is closed loops, which are followed
+the same way from their smallest point. The centre line of a stroke becomes one path and each spoke
+another.</li>
+<li><strong>Order.</strong> The first path is the one with the smallest end of all, started from that end. Each next path
+is the one with an end nearest to where the last finished (of two equally near, the one whose end is the
+smaller point, then the earlier path), entered at that end, so a path may run in either direction.</li>
+</ul>
+<p>Over the shapes of the check below the kernel wrote 46% as many paths as the fallback and 16% of its travel
+between paths.</p>
+<h3>Limits and messages</h3>
+<p><code>V-carve outline too complex; increase sampling interval</code>, <code>V-carving requires router mode</code> and <code>Operation produced no toolpaths</code> are raised as before, in the same order relative to the other checks. One limit is
+applied earlier: a job may hold 200,000 points, and a carve whose pieces already pass that is refused in
+the core with the generator's own message, <code>Job exceeds 200,000 cutting segments</code>, without being built. A
+flat area far wider than the sampling interval reaches it (every spoke runs to the middle), and the
+Shapely code measured every point of such a carve, one at a time, before the generator refused it. Where
+such a job is wrong in another way as well (a ramp entry, say), it is the limit that is now reported.</p>
+<h3>How the carve differs from the one Shapely gave</h3>
+<ul>
+<li><strong>What is cut</strong> is the same sampled medial axis. Given the same samples, the kernel's pieces and
+Shapely's coincide to nanometres (measured below).</li>
+<li><strong>Where the samples are.</strong> The kernel samples each ring from its smallest vertex, where the Shapely code
+starts wherever GEOS starts the ring; and where a ring's length is a whole number of intervals, rounding
+could give Shapely one sample more. The spokes therefore stand elsewhere along the walls, by up to half
+an interval, and near a corner the pieces differ by about an interval. A piece that barely cuts in one
+carve may not cut at all in the other.</li>
+<li><strong>Round a corner that turns inwards</strong> the method leaves gaps wider than the interval in either carve: the
+two samples beside such a corner own wedges that widen with the distance from it. The two carves put the
+edges of those wedges in different places, up to a few intervals apart. This is the reference's
+behaviour, and what its warning about wide areas refers to.</li>
+<li><strong>Coordinates</strong> are whole nanometres; the program is written to three decimals.</li>
+<li><strong>Paths</strong>: fewer and longer, in another order, some run the other way.</li>
+</ul>
+<h3>How it is checked</h3>
+<p>The safety rule is: at every point of every path the circle the bit cuts at that depth, of radius
+<code>|z| tan(angle / 2)</code>, reaches no wall; the point is in the region; <code>|z|</code> is within the depth of cut and the
+cut radius within the tool's.</p>
+<ul>
+<li>
+<p><code>native/tests/selftest.cpp</code> carves 100 generated shapes and measures every point and the middle of every
+move with a plain floating-point distance of its own, compares a digest of every path and depth with a
+recorded value, and checks the program of a carve and each refusal.</p>
+</li>
+<li>
+<p><code>tests/test_vcarve.py</code> measures the same rule with Shapely on the kernel and on the fallback, compares
+the kernel's carve with Shapely's carve of the same samples and with the fallback as shipped, and checks
+the joining and the order against their stated rules, the refusals on either code, and that Studio uses
+the core's answer unchanged.</p>
+</li>
+<li>
+<p><code>validation/vcarve_check.py</code> runs those measurements on the shapes of the parity comparison and prints the
+worst figures.</p>
+<p>python validation/vcarve_check.py --cases 4000</p>
+</li>
+</ul>
+<p>The run of 22 November 2026 (GCC 13, Shapely 2.2.0 with GEOS 3.14.1, seed 93) carved 2,287 of the generated
+shapes; the other 757 had nothing to carve or passed a limit. No shape failed.</p>
+<table>
+<thead>
+<tr>
+<th>Measure</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The room between the cut and the nearest wall, at any point that cuts</td>
+<td>at least 1.0000 sampling intervals</td>
+</tr>
+<tr>
+<td>The same in the middle of any move that cuts</td>
+<td>at least 0.5082 sampling intervals</td>
+</tr>
+<tr>
+<td>Against Shapely's carve of the same samples, 2,283 shapes: the furthest any point of either carve is from the other</td>
+<td>0.0000022 mm (2.2 nm; 0.000015 of the sampling interval)</td>
+</tr>
+<tr>
+<td>Total length of the two</td>
+<td>within 2.1 parts in a million</td>
+</tr>
+<tr>
+<td>Deepest cut of the two</td>
+<td>within 0.0000062 mm</td>
+</tr>
+<tr>
+<td>Against the fallback as shipped, the 958 shapes with a cut at least one interval in radius: the furthest such a cut is from a path of the other carve</td>
+<td>0.20 intervals in the middle shape, 1.99 in 95% of shapes, 5.44 in the worst</td>
+</tr>
+<tr>
+<td>The same for the 295 of them with no corner turning inwards</td>
+<td>0.50 intervals in the worst</td>
+</tr>
+<tr>
+<td>Total length against the fallback, 2,281 shapes</td>
+<td>335,842 mm against 335,225 mm in all (0.18%); by shape, 0.05% in the middle one and 8.7% in 95%</td>
+</tr>
+<tr>
+<td>Paths</td>
+<td>184,039 against 401,030</td>
+</tr>
+<tr>
+<td>Travel between paths</td>
+<td>95.8 m against 611.1 m</td>
+</tr>
+</tbody>
+</table>
+<p>The first two rows are the safety rule with room to spare: an interval at the points, as the allowance
+provides, and half an interval between them, as the argument above requires. The next three show that the
+kernel's diagram and GEOS's are the same diagram: given the same samples the two carves agree to
+nanometres. The rows against the fallback as shipped measure how far apart two carves of the same shape
+are when their samples start in different places: half an interval where the walls are sampled evenly as
+seen from every path, and a few intervals in the wedges round corners that turn inwards. The length of a
+single shape can differ much more than the total where one carve barely cuts and the other does not: in
+the worst, the kernel cut eleven times the length the fallback did.</p>
+<p><code>validation/native_core_parity.py</code> compares whole V-carve jobs between <code>kerfkite-cam</code> and the Python
+generator with the extension: words of block letters, shapes with holes, thin strokes, flat areas, round
+shapes and stars, with sampling intervals, bit angles, depths, step-downs and tool diameters over their
+whole ranges and beyond them. The paths and depths are shared by construction; what is compared is the
+checks and their order, the depth levels, the program and the totals.</p>
 <h3>What still uses Shapely in Studio</h3>
 <p>These were not changed, and each could move onto the kernel:</p>
 <table>
@@ -3549,14 +3893,9 @@ both sides used to refuse.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>studio/operations.py</code>, V-carving</td>
-<td><code>voronoi_diagram</code> of points sampled along the outline, clipped to the region; distances to the boundary</td>
-<td>A Voronoi diagram or medial axis of a polygon, which the kernel does not have; then clipping (the kernel's <code>LineClipper</code>) and point-to-boundary distance. The largest piece.</td>
-</tr>
-<tr>
 <td><code>studio/operations.py</code>, the fallback</td>
-<td>The Shapely code of offsets, pockets and fills</td>
-<td>Nothing: it goes when the portable wheel carries the extension or is retired.</td>
+<td>The Shapely code of offsets, pockets, fills and V-carving (<code>voronoi_diagram</code> of points sampled along the outline, clipped to the region; distances to the boundary)</td>
+<td>Nothing: it goes when the portable wheel carries the extension or is retired. V-carving moved onto the kernel's own Voronoi diagram; see <a href="#v-carving">V-carving</a>.</td>
 </tr>
 <tr>
 <td><code>studio/router_entry.py</code></td>
@@ -3601,8 +3940,15 @@ library while writing it:</p>
 Packer): rounding crossings to a grid and bending every segment that passes through a rounded pixel;</li>
 <li>the Minkowski sum of a polygon and a disc as a union of swept edges and corner sectors, and the winding
 number of the curve bounding them (the convolution view of Guibas, Ramshaw and Stolfi);</li>
-<li>the crossing-number test for a point in a polygon, and symbolic perturbation for a vertex on a line.</li>
+<li>the crossing-number test for a point in a polygon, and symbolic perturbation for a vertex on a line;</li>
+<li>the Delaunay triangulation by divide and conquer on the quad-edge structure (Guibas and Stolfi,
+&quot;Primitives for the manipulation of general subdivisions and the computation of Voronoi diagrams&quot;, ACM
+Transactions on Graphics 4(2), 1985), the in-circle determinant, and the Voronoi diagram as the dual of
+the triangulation, each vertex the centre of a triangle's circumscribed circle.</li>
 </ul>
+<p>The triangulation and the Voronoi diagram were written from that paper's description and from the
+geometry, without reading or translating the source of GEOS, Boost, CGAL, Qhull, Triangle or any
+implementation of Fortune's algorithm.</p>
 </section><section id="probe-leveling"><h1>Probe levelling</h1>
 <p>A thin engraving needs its depth held to a few hundredths of a millimetre. Isolation routing on a circuit board is the usual case: the copper is about 0.035 mm thick, and a board clamped to a spoilboard is seldom flatter than a tenth. Probe levelling measures the stock surface on a grid with the controller's probe input, then runs the job with every cutting move following that surface.</p>
 <p>It applies to router jobs on Grbl-family controllers (Grbl 1.1, grblHAL, FluidNC, xPRO V5), which probe with <code>G38.2</code>. Laser, drag-knife and rotary jobs are not levelled.</p>
@@ -5482,7 +5828,7 @@ solid_kernel.solid_backend()   # 'kernel' with the extension, 'manifold' without
 <tr>
 <td>Shapely 2.2.0, which carries GEOS</td>
 <td>Polygon work in ten modules: CAM operations, entry moves, sketch profiles, imports, solid text, exchange</td>
-<td><strong>Being replaced.</strong> Offsets, pockets and hatch fills now run on the in-house kernel, through the compiled extension. Shapely stays for now as their fallback where the extension is not installed (the portable wheel), as the reference the kernel is compared with in the checks, and in the other modules (V-carving, router entry clearance, sketch profiles, imports, text, exchange) until each is ported.</td>
+<td><strong>Being replaced.</strong> Offsets, pockets, hatch fills, the placing of helical pocket entries and V-carving now run on the in-house kernel, through the compiled extension; V-carving follows the kernel's own Voronoi diagram, so no CAM operation needs Shapely where the extension is installed. Shapely stays for now as their fallback where the extension is not installed (the portable wheel), as the reference the kernel is compared with in the checks, and in the other modules (contour checks before entries and tabs, sketch profiles, imports, text, exchange) until each is ported.</td>
 </tr>
 <tr>
 <td>NumPy</td>
@@ -5704,7 +6050,7 @@ solid_kernel.solid_backend()   # 'kernel' with the extension, 'manifold' without
 </ol>
 <h2>Order of work</h2>
 <ol>
-<li>The polygon kernel, replacing GEOS in the core and Shapely in the CAM operations. Done for the core and for Studio with its compiled extension; the other Shapely users in Studio follow.</li>
+<li>The polygon kernel, replacing GEOS in the core and Shapely in the CAM operations. Done for the core and for Studio with its compiled extension, V-carving included; the other Shapely users in Studio follow.</li>
 <li>The solid kernel, replacing manifold3d in Studio's 3D CAD. Done for Studio with its compiled extension; the library remains as the fallback without it and as the test oracle.</li>
 <li>Pillow out of the installed dependencies.</li>
 <li>The remaining items as their parts are ported.</li>
@@ -6748,7 +7094,7 @@ solid_kernel.solid_backend()   # 'kernel' with the extension, 'manifold' without
 </tr>
 <tr>
 <td>V-carve</td>
-<td>Sampled medial-axis paths with V-angle, depth and cutter-diameter limits. Fine detail and wide-area clearing need inspection.</td>
+<td>Sampled medial-axis paths with V-angle, depth and cutter-diameter limits. The cut stays one sampling step (<strong>V detail sampling</strong>) short of every wall. With the compiled extension the pieces are joined into longer paths and cut in an order with little travel. Fine detail and wide-area clearing need inspection.</td>
 </tr>
 <tr>
 <td>Vinyl drag knife</td>

@@ -8,6 +8,7 @@
 //   {"op": "fill", "paths": [...], "interval": i, "angle": a, "crosshatch": false}
 //   {"op": "region", "paths": [...]}                   the contours' even-odd region alone
 //   {"op": "helix", "paths": [...], "seams": [[x, y], ...], "bit_radius": r, "radius": h}
+//   {"op": "vcarve", "paths": [...], "resolution": s, "angle": a, "depth": d, "radius": r}
 //
 // paths are closed contours as lists of [x, y] in millimetres. The answer is {"paths": [...]}: the tool
 // paths in cutting order. Each coordinate is a whole number of millionths of a millimetre divided by 1e6,
@@ -17,6 +18,11 @@
 // helix of radius h, one for each seam (the first point of a pocket contour). Its answer is
 // {"entries": [[x, y, angle], ...]}: the centre of each helix and the angle, in radians, at which it
 // starts and ends, each written as the shortest text that reads back as the same double.
+//
+// "vcarve" carves the region with a V-bit of whole angle a degrees and radius r, sampling every s
+// millimetres and cutting no deeper than d. Its answer is {"paths": [...], "depths": [[z, ...], ...]}:
+// the depth of the cutter at each point of each path, zero or below. With "samples": true the answer also
+// has "samples": the points taken along the outlines, whose Voronoi diagram the paths follow.
 //
 // A contour the operation cannot use, or a tool that does not fit, throws ValueError with the message
 // Studio shows.

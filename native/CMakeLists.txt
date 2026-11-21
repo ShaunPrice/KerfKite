@@ -34,11 +34,12 @@ else()
   target_compile_options(kerfkite_core PUBLIC -ffp-contract=off -Wall -Wextra)
 endif()
 
-# KerfKite's own polygon kernel, and the offset, pocket and fill operations and the helical pocket entry
-# built on it: standard library only. The core contains no third-party code and its build fetches nothing.
+# KerfKite's own polygon kernel, and the offset, pocket and fill operations, the helical pocket entry and
+# V-carving built on it: standard library only. The core contains no third-party code and its build fetches
+# nothing.
 target_sources(kerfkite_core PRIVATE core/src/polygon/arrangement.cpp core/src/polygon/boolean.cpp core/src/polygon/clip.cpp
-  core/src/polygon/command.cpp core/src/polygon/measure.cpp core/src/polygon/offset.cpp core/src/operations.cpp
-  core/src/pocket_entry.cpp)
+  core/src/polygon/command.cpp core/src/polygon/distance.cpp core/src/polygon/measure.cpp core/src/polygon/offset.cpp
+  core/src/polygon/voronoi.cpp core/src/operations.cpp core/src/pocket_entry.cpp core/src/vcarve.cpp)
 
 add_executable(kerfkite-cam tools/kerfkite_cam.cpp)
 target_link_libraries(kerfkite-cam PRIVATE kerfkite_core)
@@ -73,7 +74,8 @@ add_test(NAME polygon COMMAND kerfkite_polygon_selftest)
 # The same check with the kernel's own 128-bit integer in place of the compiler's, which is what a compiler
 # without one (MSVC) uses. Both must give the recorded digest.
 add_executable(kerfkite_polygon_selftest_portable tests/polygon_selftest.cpp core/src/polygon/arrangement.cpp
-  core/src/polygon/boolean.cpp core/src/polygon/clip.cpp core/src/polygon/measure.cpp core/src/polygon/offset.cpp)
+  core/src/polygon/boolean.cpp core/src/polygon/clip.cpp core/src/polygon/distance.cpp core/src/polygon/measure.cpp
+  core/src/polygon/offset.cpp core/src/polygon/voronoi.cpp)
 target_compile_definitions(kerfkite_polygon_selftest_portable PRIVATE KERFKITE_POLYGON_PORTABLE_INT128)
 target_include_directories(kerfkite_polygon_selftest_portable PRIVATE core/include)
 target_compile_options(kerfkite_polygon_selftest_portable PRIVATE $<TARGET_PROPERTY:kerfkite_core,INTERFACE_COMPILE_OPTIONS>)

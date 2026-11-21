@@ -5,7 +5,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <initializer_list>
+#include <array>
 #include <string>
+#include <vector>
 
 #include "kerfkite/cam.hpp"
 #include "kerfkite/leveling.hpp"
@@ -372,6 +374,169 @@ static void helical_entries() {
     std::printf("helical entries: %zu helices in generated pockets, %zu pockets refused\n", helices, refused);
 }
 
+// FNV-1a of the paths and depths carved in the generated shapes of v_carving(), recorded from x86-64 GCC.
+// Nothing in a V-carve comes from the C library but square roots, so every platform must give this value.
+static const std::uint64_t VCARVE_DIGEST = 3245276528135944660ULL;
+
+// V-carving: the program, the refusals, and for generated shapes that the bit never cuts outside the
+// outline, measured with the plain distance function above, which shares no code with the core.
+static void v_carving() {
+    // A 30 by 8 mm bar carved with a 90 degree bit: the middle of the bar is 4 mm from its sides, so with
+    // half a millimetre taken off for the sampling the bit goes 3.5 mm deep there, less than the 6 mm asked.
+    const char *settings = R"("mode":"router","protocol":"grbl","width":90,"height":90,"safe":3,"power":9000,"feed":400,
+        "plunge":90,"operation":"vcarve")";
+    const auto carve = [&](const std::string &paths, const std::string &more) {
+        return "{" + std::string(settings) + "," + more + ",\"paths\":[" + paths + "]}";
+    };
+    const std::string bar = "[[10,10],[40,10],[40,18],[10,18],[10,10]]";
+    const Job job = generate(json::parse(carve(bar, R"("v_angle":90,"v_resolution":0.5,"depth":6,"step":6,"tool_diameter":12)")));
+    double deepest = 0, lowest_end = 0;
+    for (const Segment &move : job.segments) deepest = std::min(deepest, move.end_z), lowest_end = std::min(lowest_end, std::min(move.start_z, move.end_z));
+    expect(job.lines.size() > 400 && job.lines[9] == "G0 Z3.000" && job.lines.back() == "M5" && std::fabs(deepest + 3.5) < 1e-9,
+           "a bar carved to the depth its width allows: " + std::to_string(job.lines.size()) + " lines, deepest " + std::to_string(deepest));
+    expect(job.warnings.size() == 4 && job.warnings[1] == "Sampled medial-axis V-carve with conservative sampling allowance; fine detail and "
+                                                           "wide-area flat clearing require inspection.",
+           "its warning");
+    expect(job.bounds[0] >= 10 && job.bounds[1] >= 10 && job.bounds[2] <= 40 && job.bounds[3] <= 18, "its bounds are inside the bar");
+    // The depth of cut and the tool's radius each limit the depth.
+    const auto deepest_of = [&](const std::string &more) {
+        double low = 0;
+        for (const Segment &move : generate(json::parse(carve(bar, more))).segments) low = std::min(low, move.end_z);
+        return low;
+    };
+    expect(deepest_of(R"("v_angle":90,"v_resolution":0.5,"depth":2,"step":2,"tool_diameter":12)") == -2.0, "no deeper than the depth of cut");
+    expect(std::fabs(deepest_of(R"("v_angle":90,"v_resolution":0.5,"depth":6,"step":6,"tool_diameter":5)") + 2.5) < 1e-12, "no deeper than the bit's radius allows");
+    expect(deepest_of(R"("v_resolution":0.5,"depth":6,"step":3,"tool_diameter":12)") == -6.0, "two levels reach the depth of cut with a 60 degree bit");
+
+    // The same paths through the command Studio's Python calls: a depth for every point, and every path
+    // starting where the last ended or as near it as any path does.
+    const json contours = json::parse("[" + bar + "]");
+    const json carved = operation_call("operation", json{{"op", "vcarve"}, {"paths", contours}, {"resolution", 0.5}, {"angle", 90.0}, {"depth", 6.0}, {"radius", 6.0}});
+    bool matched = carved["paths"].size() == carved["depths"].size() && carved["paths"].size() > 20;
+    for (std::size_t i = 0; matched && i < carved["paths"].size(); ++i) matched = carved["paths"][i].size() == carved["depths"][i].size() && carved["paths"][i].size() >= 2;
+    expect(matched, "the command gives a depth for every point");
+    expect(carved["paths"][0][0].dump() == "[10.0,10.75]" && carved["depths"][0][0].dump() == "-0.0",
+           "the first path starts at the smallest end, on the wall, at no depth: " + carved["paths"][0][0].dump() + " " + carved["depths"][0][0].dump());
+
+    // Refusals, with the reference's messages and in its order.
+    const auto refusal = [&](const std::string &paths, const std::string &more) { return message<ValueError>(carve(paths, more).c_str()); };
+    expect(message<ValueError>(R"({"mode":"laser","operation":"vcarve","width":100,"height":50,"feed":600,"power":1,
+        "paths":[[[10,10],[30,10],[30,30],[10,30],[10,10]]]})") == "V-carving requires router mode",
+           "V-carving with a laser");
+    expect(message<ValueError>(R"({"mode":"laser","operation":"vcarve","width":100,"height":50,"feed":600,"power":1,
+        "paths":[[[10,10],[30,30],[30,10],[10,30],[10,10]]]})") == "Repair self-crossing or zero-area contours before CAM",
+           "a contour that crosses itself is reported before the head");
+    expect(refusal(bar, R"("v_resolution":0.05)") == "v_resolution must be between 0.1 and 5" && refusal(bar, R"("v_angle":171)") == "v_angle must be between 10 and 170" &&
+               refusal(bar, R"("v_angle":"sharp")") == "v_angle must be numeric" && refusal(bar, R"("v_resolution":0.5,"tool_diameter":0.05)") == "tool_diameter must be between 0.1 and 100",
+           "settings out of range");
+    expect(refusal("[[2,2],[88,2],[88,88],[2,88],[2,2]],[[4,4],[86,4],[86,86],[4,86],[4,4]],[[6,6],[84,6],[84,84],[6,84],[6,6]],[[8,8],[82,8],[82,82],[8,82],[8,8]]",
+                   R"("v_resolution":0.1)") == "V-carve outline too complex; increase sampling interval",
+           "an outline of more than 12,000 samples");
+    expect(refusal("[[10,10],[40,10],[40,10.8],[10,10.8],[10,10]]", R"("v_resolution":0.5)") == "Operation produced no toolpaths", "a bar narrower than the sampling allowance");
+    expect(message<ValueError>(R"({"mode":"router","operation":"vcarve","width":2000,"height":2000,"feed":600,"power":1,"depth":50,"tool_diameter":100,
+        "v_resolution":0.7,"paths":[[[10,10],[1990,10],[1990,1990],[10,1990],[10,10]]]})") == "Job exceeds 200,000 cutting segments",
+           "a carve of more points than a job may hold");
+    expect(refusal(bar, R"("v_resolution":0.5,"router_entry":"ramp")") == "Ramp and helix entries require flat end mills on closed profiles or pockets with one target depth",
+           "a ramp into a V-carve");
+
+    // Generated shapes: a rectangle with its corners cut by different amounts, sometimes with a triangular
+    // island and sometimes with a second shape beside it, every coordinate a whole number of thousandths.
+    // At every point of every path the circle the bit cuts at that depth must reach no wall: its radius is
+    // at most the distance to the nearest wall less the sampling interval, so the straight move to the next
+    // point, which is no longer than the interval, stays clear as well, and the middle of each move is
+    // measured to show it.
+    std::uint64_t state = 2027, digest = 1469598103934665603ULL;
+    const auto draw = [&](std::uint64_t below) {
+        state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+        return (state >> 33) % below;
+    };
+    const auto mm = [](std::uint64_t thousandths) { return static_cast<double>(thousandths) / 1000.0; };
+    const auto absorb = [&](double value) {
+        std::uint64_t bits;
+        std::copy(reinterpret_cast<const unsigned char *>(&value), reinterpret_cast<const unsigned char *>(&value) + 8, reinterpret_cast<unsigned char *>(&bits));
+        for (int byte = 0; byte < 8; ++byte) digest = (digest ^ ((bits >> (8 * byte)) & 0xff)) * 1099511628211ULL;
+    };
+    std::size_t points = 0, paths = 0, cutting = 0, empty = 0;
+    double least_margin = 1e300, longest_step = 0;
+    bool safe = true, inside = true, bounded = true, once = true;
+    for (int round = 0; round < 100; ++round) {
+        const double x0 = mm(20000 + draw(5000));
+        const double y0 = mm(20000 + draw(5000));
+        const double w = mm(3000 + draw(22000));
+        const bool thin = round % 12 == 5;  // a sliver: nowhere further from its sides than the interval
+        const double h = thin ? mm(100 + draw(300)) : mm(3000 + draw(14000));
+        double cut[4];
+        for (double &corner : cut) corner = thin ? 0 : mm(draw(1400));
+        json outer = json::array({json::array({x0 + cut[0], y0}), json::array({x0 + w - cut[1], y0}), json::array({x0 + w, y0 + cut[1]}),
+                                  json::array({x0 + w, y0 + h - cut[2]}), json::array({x0 + w - cut[2], y0 + h}),
+                                  json::array({x0 + cut[3], y0 + h}), json::array({x0, y0 + h - cut[3]}), json::array({x0, y0 + cut[0]})});
+        outer.push_back(outer[0]);
+        json shapes = json::array({outer});
+        const std::uint64_t extra = thin ? 0 : draw(3);
+        if (extra == 1 && w > 8 && h > 8) {  // an island
+            const double ix = x0 + w / 2 + mm(draw(2000)) - 1.5;
+            const double iy = y0 + h / 2 + mm(draw(2000)) - 1.5;
+            const double size = mm(500 + draw(2000));
+            shapes.push_back(json::array({json::array({ix, iy}), json::array({ix + size, iy + size / 4}),
+                                          json::array({ix + size / 3, iy + size}), json::array({ix, iy})}));
+        } else if (extra == 2) {  // a second shape, thin enough at times that nothing is carved in it
+            const double side = mm(600 + draw(5000));
+            shapes.push_back(json::array({json::array({x0 + w + 3, y0}), json::array({x0 + w + 3 + side, y0}),
+                                          json::array({x0 + w + 3 + side / 2, y0 + 2 * side}), json::array({x0 + w + 3, y0})}));
+        }
+        const double resolution = mm(200 + 100 * draw(9));
+        const double angle = static_cast<double>(30 + 15 * draw(7));
+        const double depth = mm(500 + 500 * draw(8));
+        const double radius = mm(500 + 500 * draw(8));
+        const json result = operation_call("operation", json{{"op", "vcarve"}, {"paths", shapes}, {"resolution", resolution}, {"angle", angle},
+                                                             {"depth", depth}, {"radius", radius}});
+        const json &lines = result["paths"], &depths = result["depths"];
+        if (lines.empty()) ++empty;
+        const double slope = std::tan(angle / 2 * 3.141592653589793 / 180);
+        std::vector<std::array<double, 4>> moves;
+        for (std::size_t i = 0; i < lines.size(); ++i) {
+            ++paths;
+            double px = 0, py = 0, pz = 0;
+            for (std::size_t k = 0; k < lines[i].size(); ++k) {
+                ++points;
+                const double x = lines[i][k][0].get<double>(), y = lines[i][k][1].get<double>(), z = depths[i][k].get<double>();
+                absorb(x), absorb(y), absorb(z);
+                const double wall = to_walls(shapes, x, y), reach = -z * slope;
+                if (!(z <= 0) || -z > depth || reach > radius * (1 + 1e-12)) bounded = false;
+                if (z < 0) {
+                    ++cutting;
+                    if (!in_pocket(shapes, x, y)) inside = false;
+                    // The interval less two steps of the kernel's grid, for the rounding of the point and of the walls.
+                    if (reach > wall - resolution + 2e-6) safe = false;
+                    least_margin = std::min(least_margin, wall - reach);
+                } else if (wall > 2e-6 && !in_pocket(shapes, x, y)) {
+                    inside = false;  // a point at no depth may sit on a wall, within the grid, but not beyond it
+                }
+                if (k) {
+                    const double mx = (x + px) / 2, my = (y + py) / 2, mz = (z + pz) / 2;
+                    if (mz < 0 && -mz * slope > to_walls(shapes, mx, my)) safe = false;
+                    if (mz < 0) least_margin = std::min(least_margin, to_walls(shapes, mx, my) + mz * slope);
+                    longest_step = std::max(longest_step, std::hypot(x - px, y - py) - resolution);
+                    moves.push_back(x < px || (x == px && y < py) ? std::array<double, 4>{x, y, px, py} : std::array<double, 4>{px, py, x, y});
+                }
+                px = x, py = y, pz = z;
+            }
+        }
+        std::sort(moves.begin(), moves.end());
+        if (std::adjacent_find(moves.begin(), moves.end()) != moves.end()) once = false;
+    }
+    expect(safe, "the bit cuts outside an outline");
+    expect(inside, "a point of a V-carve is outside its region");
+    expect(bounded, "a V-carve goes deeper than the depth of cut or wider than the bit");
+    expect(once, "a piece of a V-carve is cut twice");
+    expect(longest_step < 1e-6, "a move of a V-carve is longer than the sampling interval");
+    expect(points > 50000 && cutting > 20000 && empty > 0 && empty < 30, "the generated shapes are carved, and a few too thin to carve: " + std::to_string(empty));
+    if (digest != VCARVE_DIGEST) std::printf("V-carving: digest %llu\n", static_cast<unsigned long long>(digest));
+    expect(digest == VCARVE_DIGEST, "the V-carve paths are the recorded ones");
+    std::printf("V-carving: %zu points in %zu paths of generated shapes, %zu of them cutting; the bit stays at least %.4f mm from every wall\n", points, paths,
+                cutting, least_margin);
+}
+
 // FNV-1a of one isolation answer as JSON text, recorded from x86-64 GCC. See circuit_boards().
 static const std::uint64_t ISOLATION_DIGEST = 14393510534754887855ULL;
 
@@ -545,8 +710,8 @@ int main() {
     expect(message<ValueError>(R"({"mode":"plasma"})") == "Choose router, laser or knife", "an unknown head");
     expect(message<ValueError>(R"({"mode":"router","width":100,"height":50,"feed":600,"power":1,
         "paths":[[[0,0],[101,0]]]})") == "X must be between 0 and 100.0", "a point outside the work area");
-    expect(message<NotPorted>(R"({"mode":"router","operation":"vcarve","width":100,"height":50,"feed":600,"power":1,
-        "paths":[[[10,10],[30,10],[30,30],[10,30],[10,10]]]})") == "V-carving",
+    expect(message<NotPorted>("{\"mode\":\"router\",\"width\":100,\"height\":50,\"feed\":\"\xef\xbc\x96\xef\xbc\x90\xef\xbc\x90\",\"power\":1,"
+                              "\"paths\":[[[10,10],[30,10]]]}") == "numbers written in non-ASCII text",
            "a case that is not reproduced is declined, not guessed");
 
     // Drilling: a peck at each marker, with the last peck at the full depth.
@@ -684,6 +849,7 @@ int main() {
 
     self_crossing();
     helical_entries();
+    v_carving();
     circuit_boards();
 
     std::printf(failures ? "%d checks failed\n" : "PASS native core self-test%.0d\n", failures);

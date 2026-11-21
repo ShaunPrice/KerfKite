@@ -167,6 +167,33 @@ helix_job = generate(
     )
 )
 assert len(helix_job['lines']) > len(polygon_jobs[2]['lines']) + 36 * len(seams)
+# V-carving follows the kernel's own Voronoi diagram of points sampled along the outlines, through this
+# extension: exact whole-number tests for the diagram, its vertices rounded to the kernel's grid by one rule,
+# and depths from the distance to the nearest wall and the kernel's own series for the tangent of the bit's
+# half angle. The only function of the C maths library behind these paths and depths is sqrt, which IEEE 754
+# rounds correctly, so they are pinned: a slanted outline with an island, and a block letter whose samples
+# lie on lines and on circles, must be carved the same on every platform a wheel is built for.
+assert operations.kernel_vcarve_available()
+letter = [[82.5, 12.25], [97.5, 12.25], [97.5, 15.5], [85.75, 15.5], [85.75, 24.0], [93.0, 24.0], [93.0, 27.25], [85.75, 27.25],
+          [85.75, 35.75], [97.5, 35.75], [97.5, 39.0], [82.5, 39.0], [82.5, 12.25]]  # fmt: skip
+carved_paths, carved_depths = operations.kernel_vcarve([outline, island, letter], 0.4, 60, 3, 3.175)
+carve_job = generate(
+    dict(
+        shape,
+        paths=[outline, island, letter],
+        mode='router',
+        operation='vcarve',
+        v_resolution=0.4,
+        v_angle=60,
+        depth=3,
+        step=1.5,
+        tool_diameter=6.35,
+    )
+)
+assert carve_job['prepared_paths'] == carved_paths and carve_job['prepared_depths'] == carved_depths
+digest = sha256(repr((carved_paths, carved_depths)).encode() + '\n'.join(carve_job['lines']).encode()).hexdigest()[:16]
+summary = (len(carved_paths), sum(map(len, carved_paths)), len(carve_job['lines']), digest)
+assert summary == (732, 13320, 31042, '43cdd9d78de5d07d'), summary
 # Isolation toolpaths exist only in the native core as well, on its own polygon kernel, whose arithmetic is in
 # whole nanometres: the copper image, the contours and the unreachable places of this board are pinned, so
 # that every platform a wheel is built for gives the same bytes. The board is written here because an

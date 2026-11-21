@@ -1,5 +1,6 @@
 // KerfKite's own planar polygon kernel: regions with holes, Boolean operations, round offsets, line
-// clipping and the union of very many shapes. It depends on nothing but the C++17 standard library.
+// clipping, the union of very many shapes, and the Delaunay triangulation and Voronoi diagram of points.
+// It depends on nothing but the C++17 standard library.
 // docs/POLYGON-KERNEL.md describes the method, the limits and how it is tested.
 //
 // Coordinates. Every vertex is a pair of 64-bit integers on a fixed grid of one nanometre (1e-6 mm).
@@ -259,6 +260,68 @@ class LineClipper {
     // point gives nothing. The cuts are found exactly and their end points rounded to the grid; a part
     // whose ends round to the same grid point is dropped.
     std::vector<Segment> clip(const Point &a, const Point &b) const;
+
+  private:
+    struct State;
+    std::unique_ptr<State> state_;
+};
+
+// ---- Voronoi diagrams of points ---------------------------------------------------------------------
+
+// The most points a triangulation takes.
+constexpr std::size_t kMaxSites = 2000000;
+// Where a triangle would be named and there is none: the side of an edge that faces outwards.
+constexpr std::uint32_t kNoTriangle = 0xffffffffu;
+
+// The Delaunay triangulation of grid points: no point lies strictly inside the circle through the corners
+// of any triangle. Every decision is exact, so the result is the same on every platform. Where four or more
+// points lie on one circle the diagonals chosen follow from the order of the points alone.
+struct Triangulation {
+    // The distinct points in order of x and then y. Everything below names points by their place here.
+    std::vector<Point> points;
+    // Each triangle counter-clockwise, its smallest point first; the triangles in order. Empty when the
+    // points all lie on one line.
+    std::vector<std::array<std::uint32_t, 3>> triangles;
+    // Each edge once, in order, from its smaller point a to b, with the triangles on its left and on its
+    // right going from a to b, kNoTriangle where the edge is on the convex hull. Points on one line are
+    // joined in a chain, with no triangle on either side.
+    struct Edge {
+        std::uint32_t a, b, left, right;
+    };
+    std::vector<Edge> edges;
+};
+// Throws ValueError for a coordinate beyond kMaxCoordinate or more than kMaxSites points. Repeated points
+// count once. O(n log n) time for n points, whatever their arrangement.
+Triangulation delaunay(const std::vector<Point> &points);
+
+// An edge of the Voronoi diagram: the part of the perpendicular bisector of two points that is nearer to
+// those two than to any other.
+struct VoronoiEdge {
+    Segment ends;                        // on the grid, the smaller end first
+    std::array<std::uint32_t, 2> sites;  // the two points it lies between, the smaller first
+};
+// The edges of the Voronoi diagram of a triangulation's points, cut to the box from low to high, in order
+// of their ends. An edge that has no end, or that ends outside the box, is cut where it leaves the box. The
+// ends are the centres of the triangles' circumscribed circles, and the cuts by the box, worked out
+// exactly as fractions and then rounded to the nearest grid point, halves upwards. An edge whose ends
+// round to one point is left out, as is an edge of no length between triangles whose corners share a circle.
+std::vector<VoronoiEdge> voronoi_edges(const Triangulation &triangulation, const Point &low, const Point &high);
+
+// The distance from a point to the boundary of a region. Build one for a region and ask it for many
+// points. One BoundaryDistance is for one thread at a time.
+class BoundaryDistance {
+  public:
+    explicit BoundaryDistance(const PolygonSet &region);
+    ~BoundaryDistance();
+    BoundaryDistance(const BoundaryDistance &) = delete;
+    BoundaryDistance &operator=(const BoundaryDistance &) = delete;
+
+    // The distance in grid units from a grid point to the nearest point of any ring, whether the point is
+    // inside the region or outside it; infinity for an empty region. For each edge the foot of the
+    // perpendicular is placed exactly, and the distance is then the nearest double to an exact whole
+    // number, a square root and at most one division: the same double on every platform, within
+    // 4 parts in 10^16 of the true distance. The least over all the edges is returned.
+    double to(const Point &point) const;
 
   private:
     struct State;

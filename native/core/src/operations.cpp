@@ -2,7 +2,8 @@
 //
 // This file is the one implementation of inside and outside offsets, pockets and hatch fills. The
 // command-line tool reaches it through generate(), and Studio's Python through the "operation" command
-// of its compiled extension, so both cut the same paths.
+// of its compiled extension, so both cut the same paths. V-carving is reached here too; its geometry is
+// in vcarve.cpp.
 //
 // What the kernel fixes, none of it visible in the reference's source:
 //
@@ -81,12 +82,10 @@ PolygonSet contour_region(const std::vector<Path> &paths) {
     return result;
 }
 
-namespace {
-
 // The cosine and sine of an angle given in degrees, the same bits on every platform. The angle is folded
 // into the first eighth of a turn exactly (fmod and these subtractions do not round), so that a whole
 // number of quarter turns gives exactly 0 and 1, and the series runs on at most 45 degrees.
-void turn(double degrees, double &cosine, double &sine) {
+void cos_sin_degrees(double degrees, double &cosine, double &sine) {
     const double a = std::fmod(std::fabs(degrees), 360.0);
     const int quarter = a >= 270 ? 3 : a >= 180 ? 2 : a >= 90 ? 1 : 0;
     const double within = a - 90.0 * quarter;
@@ -105,6 +104,8 @@ void turn(double degrees, double &cosine, double &sine) {
     sine = s == 0 ? 0.0 : degrees < 0 ? -s : s;
 }
 
+namespace {
+
 // studio.operations.hatch(g, spacing, angle): rows across the region as it lies when turned by -angle,
 // each row cut to the region, alternate rows reversed so that the beam sweeps to and fro.
 //
@@ -112,7 +113,7 @@ void turn(double degrees, double &cosine, double &sine) {
 // by +angle before it is cut, which is the same rows without moving the region off its grid.
 void hatch(const PolygonSet &g, double spacing, double angle, std::vector<Path> &result) {
     double c, s;
-    turn(angle, c, s);
+    cos_sin_degrees(angle, c, s);
     bool any = false;
     double x0 = 0, y0 = 0, x1 = 0, y1 = 0;
     const auto measure = [&](const polygon::Ring &ring) {
@@ -189,7 +190,7 @@ bool truthy(const json *value) {
     return !value->empty();
 }
 
-std::vector<std::string> prepare(const json &project, std::vector<Path> &paths) {
+std::vector<std::string> prepare(const json &project, std::vector<Path> &paths, std::vector<std::vector<double>> &depths) {
     const json *operation = get(project, "operation");
     const bool router = is_text(get(project, "mode"), "router"), laser = is_text(get(project, "mode"), "laser");
     std::vector<std::string> warnings;
@@ -217,7 +218,15 @@ std::vector<std::string> prepare(const json &project, std::vector<Path> &paths) 
         paths = fill_paths(g, interval, angle, truthy(get(project, "crosshatch")));
     } else if (is_text(operation, "vcarve")) {
         if (!router) throw ValueError("V-carving requires router mode");
-        throw NotPorted("V-carving");
+        const double resolution = value(project, "v_resolution", 0.5, 0.1, 5, "0.1", "5");
+        const double angle = value(project, "v_angle", 60, 10, 170, "10", "170");
+        const double max_depth = value(project, "depth", 1, 0.01, 50, "0.01", "50");
+        const double radius = value(project, "tool_diameter", 6, 0.1, 100, "0.1", "100") / 2;
+        VCarve carved = vcarve_paths(g, resolution, angle, max_depth, radius);
+        paths = std::move(carved.paths);
+        depths = std::move(carved.depths);
+        warnings.push_back("Sampled medial-axis V-carve with conservative sampling allowance; fine detail and wide-area flat "
+                           "clearing require inspection.");
     } else {
         throw ValueError("Unsupported operation");
     }
@@ -253,8 +262,9 @@ double request_number(const json &request, const char *key) {
 
 }  // namespace
 
-std::vector<std::string> prepare_operation(const json &project, std::vector<Path> &paths, double width, double height) {
-    std::vector<std::string> warnings = prepare(project, paths);
+std::vector<std::string> prepare_operation(const json &project, std::vector<Path> &paths, std::vector<std::vector<double>> &depths,
+                                           double width, double height) {
+    std::vector<std::string> warnings = prepare(project, paths, depths);
     // studio.cam: compensated geometry is checked against the work area again, X before Y at each point.
     const std::string width_text = text::repr(width), height_text = text::repr(height);
     for (const Path &path : paths)
@@ -295,10 +305,24 @@ Json operation_call(const std::string &command, const Json &request) {
             entries.push_back(json::array({entry.x, entry.y, entry.angle}));
         return json{{"entries", std::move(entries)}};
     }
-    if (op != "region" && op != "offset" && op != "pocket" && op != "fill") throw ValueError("Unknown operation: " + op);
+    if (op != "region" && op != "offset" && op != "pocket" && op != "fill" && op != "vcarve") throw ValueError("Unknown operation: " + op);
     const PolygonSet g = contour_region(contours(request));
     std::vector<Path> paths;
-    if (op == "region") {
+    std::vector<std::vector<double>> depths;
+    Path samples;
+    if (op == "vcarve") {
+        const double resolution = request_number(request, "resolution"), angle = request_number(request, "angle");
+        const double depth = request_number(request, "depth"), radius = request_number(request, "radius");
+        // Outside these the sampling would not end, or the bit would have no slope or no depth to reach.
+        if (!(resolution >= 0.001) || !(angle >= 1 && angle <= 179) || !(depth > 0) || !(radius > 0) || !std::isfinite(depth) ||
+            !std::isfinite(radius) || !std::isfinite(resolution))
+            throw ValueError("V-carving needs a sampling interval of at least 0.001 mm, a bit angle from 1 to 179 degrees, and "
+                             "a depth and a tool radius greater than zero");
+        VCarve carved = vcarve_paths(g, resolution, angle, depth, radius);
+        paths = std::move(carved.paths);
+        depths = std::move(carved.depths);
+        samples = std::move(carved.samples);
+    } else if (op == "region") {
         paths = polygon::outlines(g);
     } else if (op == "offset") {
         paths = offset_paths(g, request_number(request, "distance"));
@@ -318,6 +342,22 @@ Json operation_call(const std::string &command, const Json &request) {
         json points = json::array();
         for (const std::array<double, 2> &point : path) points.push_back(json::array({point[0], point[1]}));
         out.push_back(std::move(points));
+    }
+    if (op == "vcarve") {
+        json rows = json::array();
+        for (const std::vector<double> &row : depths) {
+            json values = json::array();
+            for (const double z : row) values.push_back(z);
+            rows.push_back(std::move(values));
+        }
+        json answer{{"paths", std::move(out)}, {"depths", std::move(rows)}};
+        const json *wanted = get(request, "samples");
+        if (wanted && wanted->is_boolean() && wanted->get<bool>()) {
+            json points = json::array();
+            for (const std::array<double, 2> &point : samples) points.push_back(json::array({point[0], point[1]}));
+            answer["samples"] = std::move(points);
+        }
+        return answer;
     }
     return json{{"paths", std::move(out)}};
 }
