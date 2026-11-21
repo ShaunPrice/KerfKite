@@ -38,6 +38,18 @@ class PackedSegments:
         x, y, nx, ny, z, power, start = row
         self._writable().extend(_ROW.pack(x, y, nx, ny, z, math.nan if power is None else power, start))
 
+    def appender(self):
+        """A function that appends one row from seven arguments, for generator loops.
+
+        It writes to the buffer as it is now, so finish the loop before calling buffer().
+        """
+        extend, pack, nan = self._writable().extend, _ROW.pack, math.nan
+
+        def add(x, y, nx, ny, z, power, start):
+            extend(pack(x, y, nx, ny, z, nan if power is None else power, start))
+
+        return add
+
     def __len__(self):
         return len(self._data) // _ROW.size
 
@@ -77,13 +89,20 @@ class CutRun:
         # The reference post reads planar X/Y/Z to 3 decimals, F to 1, S to 0.
         # Quantize once here so wrapped output follows the identical machine path.
         feed = round(self.feed, 1)
-        for _, _, x, y, z, power, _ in self.segments.rows(self.start, self.stop):
-            words = {'G': 1.0, 'X': round(x, 3), 'Y': round(y, 3), 'F': feed}
-            if self.variable_z:
-                words['Z'] = round(z, 3)
-            if self.laser:
+        rows = self.segments.rows(self.start, self.stop)
+        if self.laser:
+            for _, _, x, y, z, power, _ in rows:
+                words = {'G': 1.0, 'X': round(x, 3), 'Y': round(y, 3), 'F': feed}
+                if self.variable_z:
+                    words['Z'] = round(z, 3)
                 words['S'] = round(power, 0)
-            yield 'G1', words, None
+                yield 'G1', words, None
+        elif self.variable_z:
+            for _, _, x, y, z, _, _ in rows:
+                yield 'G1', {'G': 1.0, 'X': round(x, 3), 'Y': round(y, 3), 'F': feed, 'Z': round(z, 3)}, None
+        else:
+            for _, _, x, y, _, _, _ in rows:
+                yield 'G1', {'G': 1.0, 'X': round(x, 3), 'Y': round(y, 3), 'F': feed}, None
 
 
 def block_count(lines):

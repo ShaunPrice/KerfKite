@@ -11,6 +11,7 @@ final class Part {
     final double x, y, width, height;
     final String name;
     private final double[][][] geometry;
+    private double[][][] outline; // A shape never changes, so its outline is computed once. Callers must not modify it.
 
     Part(int type, int sides, double x, double y, double width, double height) {
         if (type < 0 || type >= TYPES.length || sides < 3 || sides > 64)
@@ -72,6 +73,11 @@ final class Part {
 
     double[][][] paths() {
         if(geometry!=null)return geometry;
+        if(outline==null)outline=primitivePaths();
+        return outline;
+    }
+
+    private double[][][] primitivePaths() {
         if(type==0)return new double[][][]{{{x,y},{x+width,y},{x+width,y+height},{x,y+height},{x,y}}};
         int n = type == 1 ? 96 : sides;
         double[][] path = new double[n+1][2];

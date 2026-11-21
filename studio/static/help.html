@@ -1693,6 +1693,45 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <p>Run <code>python -m validation.benchmark_native result.json</code> from the checkout with the extension installed. The benchmark requires matching G-code hashes and a maximum stock-cell difference below 1 × 10⁻¹⁰ mm. For the viewport, <code>python validation/benchmark_viewport.py --browser PATH</code> compares the same camera orbit through WebGL2 and Canvas. On Apple M4 using Metal, median frame intervals for an 18,432-triangle mesh were 16.7 ms and 50.0 ms respectively.</p>
 <p>The indexed artwork catalog retained all 1,768 original entries and all 1,358,040 coordinate pairs in a value-for-value comparison. An isolated Mac process searching metadata and loading one template peaked at 32.6 MiB with the index. The earlier eager loader peaked at 432.8 MiB. The compressed catalog payload decreased from 18.89 MiB to 15.11 MiB.</p>
 <p>Pocket's signed Android app was exercised on an ARM64 Android API 37 emulator configured with 2,048 MiB of RAM. The editor passed file import, reference-preserving export, resizing, SVG conversion, recovery, and library persistence after a cold restart. The paired pendant passed jog, home, zero, start, pause, resume and stop against the Studio simulator over virtual LAN and ADB reverse. The APK minimum is API 26. On a physical Galaxy S23 Ultra running Android 17, the published Pocket 0.4.1 APK started cold in 273 ms and 499 ms, used 41 to 97 MiB proportional memory while editing, and rendered 648 frames with a 5 ms median and a 13 ms 90th percentile. Pi 4/5 performance for this revision and material-cutting tests require their respective devices.</p>
+<h2>G-code and rotary generation after 0.6.1</h2>
+<p>The relief and stock-preview kernels are native, which left G-code and rotary generation in Python as the largest stages. Their per-move loops were tightened without changing the output: plain in-range numbers skip the general validator, per-block sets are built once per job, and packed rows are written through a bound function. <code>validation/benchmark_gcode.py</code> gives best-of-nine times and a hash of each generated program on the 256 × 256 relief fixture.</p>
+<table>
+<thead>
+<tr>
+<th>Stage (Linux x86-64, Python 3.13)</th>
+<th style="text-align:right">Before</th>
+<th style="text-align:right">After</th>
+<th>Program hash, unchanged</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Relief job, 135,886 lines</td>
+<td style="text-align:right">291 ms</td>
+<td style="text-align:right">200 ms</td>
+<td><code>08c0811b116f</code></td>
+</tr>
+<tr>
+<td>Flat six-level job, 135,886 lines</td>
+<td style="text-align:right">201 ms</td>
+<td style="text-align:right">143 ms</td>
+<td><code>31c8a9794b61</code></td>
+</tr>
+<tr>
+<td>Laser job, 67,945 lines</td>
+<td style="text-align:right">269 ms</td>
+<td style="text-align:right">213 ms</td>
+<td><code>6636b83bda44</code></td>
+</tr>
+<tr>
+<td>Rotary job, 136,691 lines</td>
+<td style="text-align:right">1,060 ms</td>
+<td style="text-align:right">773 ms</td>
+<td><code>cfe252049e5c</code></td>
+</tr>
+</tbody>
+</table>
+<p>Every generator, relief and stock-preview call made by the regression suite (578 calls, including 174 that must fail) returned the same result or the same error before and after. Start-up was measured and left alone: importing the server takes about 0.2 s warm and 48 MiB, with the geometry, PDF, DXF and STEP libraries already loaded on first use.</p>
 </section><section id="phone-connections"><h1>Connect an Android phone to the Studio pendant</h1>
 <p>KerfKite Pocket sends pendant commands to the <strong>Studio machine server</strong>. The server owns the CNC controller connection, machining preview and job. The phone needs an IP route to the server's <strong>phone monitor</strong> port, which defaults to 8766. The same native pendant works over Wi-Fi, a USB tether network or a Bluetooth Personal Area Network (PAN). Your phone, server operating system and network drivers determine which links are available.</p>
 <h2>Choose the network</h2>
