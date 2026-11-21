@@ -229,3 +229,86 @@ assert (isolated['tool_width'], isolated['smallest_gap'], isolated['clipped']) =
     0.13,
     {'cut': 1, 'dropped': 0},
 )
+
+# Solids and drawings are modelled by the native core's solid and polygon kernels through this extension:
+# whole nanometres, exact arithmetic for every decision, and sines and cosines from the core's own series.
+# This part and this drawing go through Studio's own entry points and are pinned to the last vertex, so
+# that every platform a wheel is built for models the same bytes. Between them they use each primitive,
+# turns by odd angles, a pattern, all three Boolean operations, a hull, a twisted and tapered extrusion, a
+# partial revolution, the three kinds of offset, a section and a projection. Nothing in them calls the
+# platform's mathematics library on the way to the kernel: no sketch fillets, no loft, no turn about a
+# tilted axis and no script function such as sin().
+from studio import solid_kernel
+from studio.scad_geometry import build_script
+from studio.solid_cad import horizontal_section, rebuild
+
+assert solid_kernel.kernel_available() and solid_kernel.solid_backend() == 'kernel'
+BRACKET = {
+    'version': 1,
+    'parameters': {'width': '2 * half', 'half': 20.5, 'thickness': 6.25},
+    'features': [
+        {'id': 'base', 'kind': 'box', 'size': ['width', 30, 'thickness']},
+        {
+            'id': 'bores',
+            'kind': 'cylinder',
+            'op': 'cut',
+            'radius': 2.4,
+            'topRadius': 1.9,
+            'height': 'thickness + 2',
+            'origin': [9.3, 15, -1],
+            'pattern': {'kind': 'polar', 'count': 5, 'angle': 50, 'center': ['half', 15, 0]},
+        },
+        {'id': 'boss', 'kind': 'sphere', 'radius': 7.1, 'origin': ['half', 15, 'thickness']},
+        {
+            'id': 'rib',
+            'kind': 'extrude',
+            'points': [[0, 0], [11.7, 0], [3.3, 8.9]],
+            'height': 4.2,
+            'rotation': [90, 0, 33],
+            'origin': [4.4, 3.1, 'thickness - 0.5'],
+        },
+        {
+            'id': 'groove',
+            'kind': 'revolve',
+            'op': 'cut',
+            'points': [[9, 0], [11.5, 0], [11.5, 2.2], [9, 3.1]],
+            'angle': 200,
+            'rotation': [0, 0, 77],
+            'origin': ['half', 15, 'thickness - 1.5'],
+        },
+        {'id': 'trim', 'kind': 'box', 'op': 'intersect', 'size': [60, 26.5, 30], 'origin': [-5, 1.75, -2]},
+        {
+            'id': 'post',
+            'kind': 'script',
+            'source': """
+                $fn = 20;
+                translate([31.3, 9.2, thickness - 1]) difference() {
+                    hull() { cylinder(h=lift, r1=6, r2=4.2); translate([7.3, 2.1, 0]) cube([4, 5, 3]); }
+                    translate([0, 0, -1]) linear_extrude(height=lift + 2, twist=40, slices=5, scale=0.8)
+                        offset(r=0.6) square([3.1, 2.2], center=true);
+                    rotate([0, 90, 17]) translate([-2.5, 0, 0]) cylinder(h=30, d=2.4, center=true);
+                }
+            """,
+            'scriptParameters': {'lift': 5.5},
+        },
+    ],
+}
+GASKET = """
+    difference() {
+        offset(delta=1.3) offset(r=2.5, $fn=28) polygon([[0, 0], [31.7, 2.2], [27.4, 19.9], [12.6, 11.3], [3.1, 21.4]]);
+        translate([9.4, 6.3]) circle(d=5.2, $fn=18);
+        translate([24.1, 8.8]) rotate(25) offset(delta=0.7, chamfer=true) square([6.2, 3.4], center=true);
+    }
+"""
+part = rebuild(BRACKET)
+cut = horizontal_section(BRACKET, 1.3)['profiles']
+gasket = build_script(GASKET)[1]
+drawn = {'rings': [ring.tolist() for ring in gasket.to_polygons()], 'area': gasket.area()}
+digest = sha256(json.dumps([part, cut, drawn], sort_keys=True, separators=(',', ':')).encode()).hexdigest()[:16]
+summary = (len(part['vertices']), len(part['triangles']), len(part['profiles']), len(cut), gasket.num_vert(), digest)
+assert summary == (6746, 13516, 6, 5, 66, '6c12e0b4dd788bbb'), summary
+assert (part['volume'], part['bounds'], gasket.area()) == (
+    7596.4173578476875,
+    [0.0, 1.75, -0.85, 42.6, 28.25, 14.65],
+    808.9521749015435,
+), (part['volume'], part['bounds'], gasket.area())

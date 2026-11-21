@@ -176,6 +176,31 @@ struct ArcOptions {
 // each edge and corner, so it is always a valid region; see docs/POLYGON-KERNEL.md for its accuracy.
 PolygonSet offset(const PolygonSet &region, double distance, const ArcOptions &arcs = ArcOptions());
 
+// The corners of an offset as a drawing asks for them, in place of the circumscribed arcs above.
+enum class Join {
+    Round,  // an arc about the corner whose vertices lie on the true arc (an inscribed polygon)
+    Miter,  // the two offset edges carried on until they meet
+    Bevel,  // the ends of the two offset edges joined by one straight edge
+};
+struct JoinOptions {
+    Join join = Join::Round;
+    // Round: edges in a whole turn, from 3 to 4096. An arc is divided into equal parts of at most 1.0625
+    // of one such step.
+    int segments = 48;
+    // Miter: the longest a corner may reach from the vertex, as a multiple of the distance, at least 1. A
+    // sharper corner is cut square instead: by the line across the corner at the distance from the vertex.
+    double miter_limit = 2;
+};
+// The region grown or shrunk by a distance in millimetres with corners joined as given. Like the round
+// offset it is exactly the union (or, shrinking, the difference) of the region and polygons built on the
+// grid along each edge and round each corner, so the result is always a valid region. A round join is
+// short of the distance between its vertices by at most distance * (1 - cos(0.53125 * step)).
+PolygonSet offset(const PolygonSet &region, double distance, const JoinOptions &joins);
+
+// The convex hull of points: one counter-clockwise ring in this kernel's form, exact on the grid. Empty
+// when the points lie on one line.
+Ring convex_hull(const std::vector<Point> &points);
+
 // Simple counter-clockwise rings, in millimetres on the way in.
 // A disc, as a circumscribed polygon of 4 * segments edges (fewer for a disc of a few grid units).
 Ring disc(double centre_x, double centre_y, double diameter, const ArcOptions &arcs = ArcOptions());

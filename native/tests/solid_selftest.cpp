@@ -308,6 +308,13 @@ static void sections_and_queries() {
     const Solid plate = box({40, 30, 6}) - cylinder(4, 4, 4, 96).translated({20, 15, 2});
     expect(section(plate, 0).size() == 1 && section(plate, 3).size() == 2 && section(plate, 6).empty() && section(plate, -1).empty(), "sections count the blind pocket only above its floor");
     expect(close_to(rings_area(section(plate, 0)), 1200, 1e-9) && close_to(rings_area(section(plate, 4)), 1200 - 0.5 * 96 * 16 * std::sin(2 * 3.14159265358979323846 / 96), 1e-3), "section areas");
+    // A straight side has no points along it, however many triangles of one face the plane crosses.
+    const std::vector<Ring> through = section(plate, 4);
+    size_t outline = 0, bore = 0;
+    for (const Ring &r : through) (ring_area(r) > 0 ? outline : bore) += r.size();
+    expect(outline == 4 && bore == 96, "a section has a point at each corner and none inside a flat face");
+    const PlaneSection across = section(box({10, 10, 10}), Plane3{{5, 5, 5}, {1, 1, 1}});
+    expect(across.rings.size() == 1 && across.rings[0].size() == 6, "a hexagonal section has six points");
     const Solid shape = sphere(5, 48) - box({4, 4, 20}, true);
     double integral = 0;
     for (int k = 0; k < 1000; ++k) integral += rings_area(section(shape, -5 + (k + 0.5) * 0.01)) * 0.01;

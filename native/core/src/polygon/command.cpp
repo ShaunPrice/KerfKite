@@ -5,6 +5,7 @@
 
 #include "kerfkite/cam.hpp"
 #include "kerfkite/polygon.hpp"
+#include "kerfkite/solid.hpp"
 #include "../operations.hpp"
 #include "kernel.hpp"
 
@@ -62,6 +63,53 @@ ArcOptions arcs(const json &request) {
     options.segments_per_quarter = static_cast<int>(segments);
     options.tolerance = number(request, "tolerance", 0);
     return options;
+}
+
+int whole(const json &request, const char *key, int fallback, int low, int high) {
+    if (!request.contains(key)) return fallback;
+    const double value = number(request.at(key), key);
+    if (!(value >= low && value <= high) || value != std::floor(value))
+        throw ValueError(std::string(key) + " must be a whole number from " + std::to_string(low) + " to " + std::to_string(high));
+    return static_cast<int>(value);
+}
+
+// "join": "round", "miter" or "bevel" asks for the corners of a drawing, with "turn_segments" and "miter_limit".
+JoinOptions joins(const json &request) {
+    JoinOptions options;
+    const std::string name = request.at("join").is_string() ? request.at("join").get<std::string>() : std::string();
+    if (name == "round") options.join = Join::Round;
+    else if (name == "miter") options.join = Join::Miter;
+    else if (name == "bevel") options.join = Join::Bevel;
+    else throw ValueError("join must be round, miter or bevel");
+    options.segments = whole(request, "turn_segments", options.segments, 3, 4096);
+    options.miter_limit = number(request, "miter_limit", options.miter_limit);
+    return options;
+}
+
+// The rings of a region moved by x' = a x + b y + c, y' = d x + e y + f, in millimetres, and rounded to the
+// grid. A map that turns the plane over turns every ring round, so each is reversed to bound its material
+// on the left again; the rings are then read by the positive rule, which also settles any two that the
+// rounding has made touch.
+PolygonSet moved(const PolygonSet &region, const double m[6]) {
+    for (int i = 0; i < 6; ++i)
+        if (!std::isfinite(m[i])) throw ValueError("A transform must be finite");
+    const bool turned_over = m[0] * m[4] - m[1] * m[3] < 0;
+    std::vector<Ring> out;
+    const auto move = [&](const Ring &ring) {
+        Ring to;
+        to.reserve(ring.size());
+        for (const Point &p : ring) {
+            const double x = to_mm(p.x), y = to_mm(p.y);
+            to.push_back(to_grid(PointMm{m[0] * x + m[1] * y + m[2], m[3] * x + m[4] * y + m[5]}));
+        }
+        if (turned_over) std::reverse(to.begin(), to.end());
+        out.push_back(to);
+    };
+    for (const Polygon &polygon : region) {
+        move(polygon.shell);
+        for (const Ring &hole : polygon.holes) move(hole);
+    }
+    return normalise(out, FillRule::Positive);
 }
 
 json points(const Ring &ring) {
@@ -145,8 +193,44 @@ json polygon_call(const std::string &command, const json &request) {
         const Operation operation = op == "union" ? Operation::Union : op == "intersection" ? Operation::Intersection : op == "difference" ? Operation::Difference : Operation::Xor;
         return answer(combine(operation, rings(field(request, "a")), fill(request), rings(field(request, "b")), fill(request)), request);
     }
-    if (op == "offset")
-        return answer(offset(normalise(rings(field(request, "rings")), fill(request)), number(field(request, "distance"), "distance"), arcs(request)), request);
+    if (op == "offset") {
+        const PolygonSet region = normalise(rings(field(request, "rings")), fill(request));
+        const double distance = number(field(request, "distance"), "distance");
+        return answer(request.contains("join") ? offset(region, distance, joins(request)) : offset(region, distance, arcs(request)), request);
+    }
+    if (op == "hull") {
+        std::vector<Point> all;
+        for (const Ring &ring : rings(field(request, "rings"))) all.insert(all.end(), ring.begin(), ring.end());
+        const Ring hull = convex_hull(all);
+        return answer(hull.empty() ? PolygonSet() : PolygonSet{Polygon{hull, {}}}, request);
+    }
+    if (op == "circle") {
+        // The cross-section of the solid kernel's cylinder of this radius: the same vertices, rounded the same way.
+        const double radius = number(field(request, "radius"), "radius") * kUnitsPerMm;
+        if (!(radius >= 0.5 && radius <= static_cast<double>(kMaxDistance))) throw ValueError("A circle radius must be positive and within the range of the polygon kernel");
+        const int count = whole(request, "segments", 48, 3, 65536);
+        Ring ring;
+        for (int k = 0; k < count; ++k) {
+            double sine, cosine;
+            solid::sincos_turn(k, count, sine, cosine);
+            ring.push_back({static_cast<Coord>(std::round(radius * cosine)), static_cast<Coord>(std::round(radius * sine))});
+        }
+        return answer(normalise({ring}, FillRule::Positive), request);
+    }
+    if (op == "transform" || op == "rotate") {
+        double m[6] = {1, 0, 0, 0, 1, 0};
+        if (op == "rotate") {
+            double sine, cosine;
+            solid::sincos_degrees(number(field(request, "degrees"), "degrees"), sine, cosine);
+            m[0] = cosine, m[1] = -sine, m[3] = sine, m[4] = cosine;
+        } else {
+            const json &rows = field(request, "matrix");
+            if (!rows.is_array() || rows.size() != 2 || !rows[0].is_array() || rows[0].size() != 3 || !rows[1].is_array() || rows[1].size() != 3)
+                throw ValueError("matrix must be two rows of three numbers");
+            for (std::size_t i = 0; i < 6; ++i) m[i] = number(rows[i / 3][i % 3], "matrix");
+        }
+        return answer(moved(normalise(rings(field(request, "rings")), fill(request)), m), request);
+    }
     if (op == "pocket") {
         const double first = number(field(request, "first"), "first"), step = number(field(request, "step"), "step");
         if (!(first > 0) || !(step > 0)) throw ValueError("first and step must be greater than zero");

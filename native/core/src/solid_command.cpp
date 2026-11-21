@@ -96,6 +96,7 @@ std::vector<Triangle> triangles_of(const json &value) {
 
 struct Builder {
     std::size_t nodes = 0;
+    const std::vector<Solid> *kept = nullptr;  // what {"kept": i} stands for
 
     std::vector<Solid> list(const json &value, int depth) {
         if (!value.is_array()) throw ValueError("an operation needs a list of shapes");
@@ -107,6 +108,11 @@ struct Builder {
     Solid build(const json &node, int depth) {
         if (depth > kMaxDepth || ++nodes > kMaxNodes) throw ValueError("The shape is nested too deeply or has too many parts");
         if (!node.is_object()) throw ValueError("Each shape must be an object");
+        if (node.contains("kept")) {
+            const json &index = node.at("kept");
+            if (!kept || !index.is_number_unsigned() || index.get<std::uint64_t>() >= kept->size()) throw ValueError("kept names a solid that was not passed with the request");
+            return (*kept)[static_cast<std::size_t>(index.get<std::uint64_t>())];
+        }
         if (node.contains("box")) return box(vec3(node.at("box"), "box"), flag(node, "center", false));
         if (node.contains("cylinder")) {
             const json &c = node.at("cylinder");
@@ -198,10 +204,14 @@ double area_of(const std::vector<Ring> &rings) {
 
 }  // namespace
 
-json solid_call(const json &request) {
+json solid_call(const json &request) { return solid_call(request, std::vector<Solid>(), nullptr); }
+
+json solid_call(const json &request, const std::vector<Solid> &kept, Solid *built) {
     if (!request.is_object() || !request.contains("shape")) throw ValueError("A solid request needs a \"shape\"");
     Builder builder;
+    builder.kept = &kept;
     const Solid result = builder.build(request.at("shape"), 0);
+    if (built) *built = result;
     const Box3 box = result.bounds();
     const Vec3 centre = result.centroid();
     const BooleanStats stats = last_boolean_stats();
@@ -286,6 +296,11 @@ json solid_call(const json &request) {
             else hits.push_back({{"distance", hit.distance}, {"point", {hit.point.x, hit.point.y, hit.point.z}}, {"normal", {hit.normal.x, hit.normal.y, hit.normal.z}}, {"triangle", hit.triangle}});
         }
         answer["rays"] = hits;
+    }
+    if (request.contains("min_gap")) {
+        const json &g = request.at("min_gap");
+        if (!g.is_object() || !g.contains("to") || !g.contains("search_length")) throw ValueError("min_gap needs the shape \"to\" measure to and a \"search_length\"");
+        answer["min_gap"] = min_gap(result, builder.build(g.at("to"), 0), number(g.at("search_length"), "search_length"));
     }
     if (request.contains("stl")) {
         if (request.at("stl") != "ascii") throw ValueError("stl must be \"ascii\"");

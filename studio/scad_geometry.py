@@ -1,10 +1,26 @@
-"""Build millimetre-scale OpenSCAD-style regions and solids with Manifold."""
+"""Build millimetre-scale OpenSCAD-style regions and solids.
+
+The geometry is computed by KerfKite's own solid and polygon kernels when the compiled extension is
+installed, and by manifold3d otherwise: studio/solid_kernel.py chooses, and presents both through the one
+interface this module calls as `kernel`.
+"""
 
 import math
 
-import manifold3d as kernel
 import numpy as np
 from shapely.geometry import LinearRing
+
+from .solid_kernel import modelling
+
+
+class _Kernel:
+    """The modelling backend in use, looked up when it is called so that the choice can be made late."""
+
+    def __getattr__(self, name):
+        return getattr(modelling(), name)
+
+
+kernel = _Kernel()
 
 _MAX_COORD = 100_000
 _MAX_VERTICES = 8_000
@@ -111,7 +127,7 @@ def _polyhedron(fields):
     tolerance = max(1e-9, np.ptp(points, axis=0).max() * 1e-9)
     triangles = []
     for face in faces:
-        # Manifold uses CCW exterior winding; OpenSCAD's external faces are CW.
+        # The kernels use CCW exterior winding; OpenSCAD's external faces are CW.
         indices = [_integer(i, 0, len(points) - 1, 'Vertex index') for i in reversed(face)]
         if len(set(indices)) != len(indices):
             raise ValueError('A face cannot repeat a vertex')

@@ -5,6 +5,10 @@
 // Every triangle with vertices on both sides contributes one directed segment, and because the mesh is
 // closed those segments chain into closed rings through the triangles' shared edges. No geometry is
 // compared to join them, so the rings are closed whatever the coordinates.
+//
+// A ring has a point where it passes from one triangle to the next, except where the two triangles are
+// parts of one flat face: the section runs straight on there, and the point would only divide a straight
+// side. That test is exact, so a section of a box is four points however its faces are triangulated.
 #include <algorithm>
 #include <cmath>
 
@@ -17,16 +21,32 @@ namespace {
 
 struct Cut {
     uint64_t in, out;  // the crossed edges, each as (vertex below << 32 | vertex above)
+    uint32_t triangle;
 };
+
+// Whether two triangles that share the edge from p to q lie in one plane, one on each side of the edge.
+bool flat_across(const detail::Mesh &m, const Triangle &s, const Triangle &t, uint32_t p, uint32_t q) {
+    const auto third = [&](const Triangle &of) { return of[0] != p && of[0] != q ? of[0] : of[1] != p && of[1] != q ? of[1] : of[2]; };
+    const int64_t *a = m.v[p].data(), *b = m.v[q].data(), *c = m.v[third(s)].data(), *d = m.v[third(t)].data();
+    if (detail::orient3d_grid(a, b, c, d) != 0) return false;
+    // Seen along an axis the plane is not edge-on to, the two other corners are on opposite sides of the edge.
+    for (int k = 0; k < 3; ++k) {
+        const int u = (k + 1) % 3, v = (k + 2) % 3;
+        const int side = detail::orient2d_grid(a, b, c, u, v);
+        if (side != 0) return side * detail::orient2d_grid(a, b, d, u, v) < 0;
+    }
+    return false;
+}
 
 // `above[v]` for every vertex; `point(below, above)` gives the crossing as the caller wants it.
 template <class Point, class Make>
 std::vector<std::vector<Point>> chain(const detail::Mesh &m, const std::vector<char> &above, Make &&point) {
     std::vector<Cut> cuts;
-    for (const Triangle &t : m.t) {
+    for (size_t index = 0; index < m.t.size(); ++index) {
+        const Triangle &t = m.t[index];
         const int count = above[t[0]] + above[t[1]] + above[t[2]];
         if (count == 0 || count == 3) continue;
-        Cut cut{0, 0};
+        Cut cut{0, 0, static_cast<uint32_t>(index)};
         for (size_t k = 0; k < 3; ++k) {
             const uint32_t a = t[k], b = t[(k + 1) % 3];
             // Going round the triangle, the edge that climbs through the plane is where the segment ends
@@ -41,11 +61,11 @@ std::vector<std::vector<Point>> chain(const detail::Mesh &m, const std::vector<c
     std::vector<std::vector<Point>> rings;
     for (size_t start = 0; start < cuts.size(); ++start) {
         if (used[start]) continue;
-        std::vector<Point> ring;
+        std::vector<size_t> sequence;  // the cuts of this ring, in order
         size_t current = start;
         while (!used[current]) {
             used[current] = 1;
-            ring.push_back(point(static_cast<uint32_t>(cuts[current].in >> 32), static_cast<uint32_t>(cuts[current].in & 0xffffffffu)));
+            sequence.push_back(current);
             const uint64_t next = cuts[current].out;
             size_t lo = 0, hi = cuts.size();
             while (lo < hi) {
@@ -55,6 +75,14 @@ std::vector<std::vector<Point>> chain(const detail::Mesh &m, const std::vector<c
             }
             if (lo == cuts.size() || cuts[lo].in != next) break;  // cannot happen in a closed mesh
             current = lo;
+        }
+        // The point on the edge by which each cut is entered, unless the triangle before is the same flat face.
+        std::vector<Point> ring;
+        for (size_t i = 0; i < sequence.size(); ++i) {
+            const Cut &cut = cuts[sequence[i]], &before = cuts[sequence[i == 0 ? sequence.size() - 1 : i - 1]];
+            const uint32_t below = static_cast<uint32_t>(cut.in >> 32), over = static_cast<uint32_t>(cut.in & 0xffffffffu);
+            if (before.out == cut.in && flat_across(m, m.t[before.triangle], m.t[cut.triangle], below, over)) continue;
+            ring.push_back(point(below, over));
         }
         rings.push_back(ring);
     }
