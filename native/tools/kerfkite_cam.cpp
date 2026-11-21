@@ -35,7 +35,7 @@
 #include "kerfkite/number_text.hpp"
 #include "kerfkite/py_math.hpp"
 
-using json = nlohmann::json;
+using json = kerfkite::Json;
 
 namespace {
 

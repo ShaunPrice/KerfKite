@@ -2,6 +2,8 @@
 
 The desktop launcher contains only Go standard-library code. Each package carries a platform-matched Studio wheel with the C++ relief and stock simulators and locked requirements. The launcher fetches the platform’s uv archive from the pinned upstream release, verifies its SHA-256, and uses it to install a private CPython 3.12 runtime. All application wheels are hash-checked. Python, geometry libraries and optional STEP binaries are installed on the user’s machine.
 
+The installers are how every part of the product, and each third-party component kept inside it, reaches a user. [What the installers install](SUPPLY-CHAIN.md#what-the-installers-install) lists each part, what has to be put in place for it, and the rule that a component and its installation land in the same change.
+
 ## Release workstation
 
 Use macOS with Go, Python 3.12, Pillow, uv, dpkg-deb, Apple command line tools and NSIS (makensis). Alternatively the Windows packaging step accepts a local Docker image named kerfkite-installer-nsis containing Debian’s NSIS package. All paths below are relative to the checkout root.

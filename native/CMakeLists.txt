@@ -16,9 +16,11 @@ configure_file(core/src/protocols_data.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/genera
 
 add_library(kerfkite_core STATIC core/src/api.cpp core/src/cam.cpp core/src/drilling.cpp core/src/knife.cpp core/src/laser.cpp
   core/src/leveling.cpp core/src/protocols.cpp core/src/router_entry.cpp core/src/simple_line.cpp core/src/tabs.cpp)
+# The core's own JSON reader and writer.
+target_sources(kerfkite_core PRIVATE core/src/json.cpp)
 # Circuit board import: Gerber layers and Excellon drill files.
 target_sources(kerfkite_core PRIVATE core/src/excellon.cpp core/src/gerber.cpp core/src/pcb.cpp)
-target_include_directories(kerfkite_core PUBLIC core/include third_party PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_include_directories(kerfkite_core PUBLIC core/include PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 if(MSVC)
   # Sources are UTF-8. Floating point stays strict so results match the reference on every platform.
   target_compile_options(kerfkite_core PUBLIC /utf-8 /fp:precise /W3)
@@ -45,6 +47,9 @@ enable_testing()
 add_executable(kerfkite_selftest tests/selftest.cpp)
 target_link_libraries(kerfkite_selftest PRIVATE kerfkite_core)
 add_test(NAME selftest COMMAND kerfkite_selftest)
+add_executable(kerfkite_json_selftest tests/json_selftest.cpp)
+target_link_libraries(kerfkite_json_selftest PRIVATE kerfkite_core)
+add_test(NAME json COMMAND kerfkite_json_selftest)
 add_executable(kerfkite_geometry_selftest tests/geometry_selftest.cpp)
 target_link_libraries(kerfkite_geometry_selftest PRIVATE kerfkite_core)
 add_test(NAME geometry COMMAND kerfkite_geometry_selftest)

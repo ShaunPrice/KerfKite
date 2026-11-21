@@ -13,6 +13,8 @@
 #include <cstdlib>
 #include <string>
 
+#include "kerfkite/decimal.hpp"
+
 namespace kerfkite {
 namespace text {
 
@@ -118,44 +120,54 @@ inline double square(double value) {
     return std::pow(value, two);
 }
 
-// Python's repr(float): the shortest digits that read back as the same double, in fixed notation for
-// exponents -4..15 and exponent notation otherwise. Used where the reference puts a float in a message.
-inline std::string repr(double value) {
-    if (std::isnan(value)) return "nan";
-    if (std::isinf(value)) return value < 0 ? "-inf" : "inf";
-    char buffer[40];
-    int precision = 0;
-    for (; precision < 17; ++precision) {
-        std::snprintf(buffer, sizeof buffer, "%.*e", precision, value);
-        if (std::strtod(buffer, nullptr) == value) break;
+// Python's repr(float), appended to out: the shortest digits that read back as the same double, in fixed
+// notation for exponents -4..15 and exponent notation otherwise. Used where the reference puts a float in
+// a message, and for every float the core writes as JSON. The digits come from decimal.hpp, not the C
+// library.
+inline void append_repr(std::string &out, double value) {
+    if (std::isnan(value)) {
+        out.append("nan");
+        return;
     }
-    if (precision == 17) std::snprintf(buffer, sizeof buffer, "%.16e", value);
-    // buffer is [-]d[.ddd]e[+-]XX
-    std::string digits;
-    const char *p = buffer;
-    const bool negative = *p == '-';
-    if (negative) ++p;
-    for (; *p && *p != 'e'; ++p)
-        if (*p != '.') digits.push_back(*p);
-    const int exponent = std::atoi(p + 1);
-    std::string out = negative ? "-" : "";
+    if (std::signbit(value)) out.push_back('-');
+    if (std::isinf(value)) {
+        out.append("inf");
+        return;
+    }
+    if (value == 0) {
+        out.append("0.0");
+        return;
+    }
+    char digits[17];
+    int point;
+    const size_t count = static_cast<size_t>(shortest_digits(std::fabs(value), digits, point));
+    const int exponent = point - 1;  // of the first digit
     if (exponent < -4 || exponent >= 16) {
         out.push_back(digits[0]);
-        if (digits.size() > 1) out.append(".").append(digits, 1, std::string::npos);
-        char tail[16];
-        std::snprintf(tail, sizeof tail, "e%c%02d", exponent < 0 ? '-' : '+', std::abs(exponent));
-        return out + tail;
+        if (count > 1) out.append(".").append(digits + 1, count - 1);
+        out.push_back('e');
+        out.push_back(exponent < 0 ? '-' : '+');
+        const int size = exponent < 0 ? -exponent : exponent;
+        if (size >= 100) out.push_back(static_cast<char>('0' + size / 100));
+        out.push_back(static_cast<char>('0' + size / 10 % 10));
+        out.push_back(static_cast<char>('0' + size % 10));
+        return;
     }
     if (exponent < 0) {
-        out.append("0.").append(static_cast<size_t>(-exponent - 1), '0').append(digits);
-        return out;
+        out.append("0.").append(static_cast<size_t>(-exponent - 1), '0').append(digits, count);
+        return;
     }
     const size_t whole = static_cast<size_t>(exponent) + 1;
-    if (digits.size() <= whole) {
-        out.append(digits).append(whole - digits.size(), '0').append(".0");
-        return out;
+    if (count <= whole) {
+        out.append(digits, count).append(whole - count, '0').append(".0");
+        return;
     }
-    out.append(digits, 0, whole).append(".").append(digits, whole, std::string::npos);
+    out.append(digits, whole).append(".").append(digits + whole, count - whole);
+}
+
+inline std::string repr(double value) {
+    std::string out;
+    append_repr(out, value);
     return out;
 }
 

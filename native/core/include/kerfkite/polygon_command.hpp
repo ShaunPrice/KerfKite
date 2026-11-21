@@ -26,14 +26,14 @@
 
 #include <string>
 
-#include <nlohmann/json.hpp>
+#include "kerfkite/json.hpp"
 
 namespace kerfkite {
 
 // Whether polygon_call answers this command.
 bool polygon_command(const std::string &command);
 
-nlohmann::json polygon_call(const std::string &command, const nlohmann::json &request);
+kerfkite::Json polygon_call(const std::string &command, const kerfkite::Json &request);
 
 }  // namespace kerfkite
 

@@ -11,7 +11,7 @@ namespace kerfkite {
 
 namespace {
 
-using json = nlohmann::json;
+using json = kerfkite::Json;
 using namespace polygon;
 
 const json &field(const json &request, const char *key) {

@@ -5,7 +5,7 @@
 
 namespace kerfkite {
 
-nlohmann::json call(const std::string &command, const nlohmann::json &request) {
+Json call(const std::string &command, const Json &request) {
     if (command == "generate") return to_json(generate(request));
     if (pcb_command(command)) return pcb_call(command, request);
     if (polygon_command(command)) return polygon_call(command, request);

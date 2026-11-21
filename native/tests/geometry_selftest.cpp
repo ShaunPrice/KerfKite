@@ -8,7 +8,7 @@
 #include "../core/src/geometry.hpp"
 #include "kerfkite/cam.hpp"
 
-using json = nlohmann::json;
+using json = kerfkite::Json;
 using namespace kerfkite;
 
 static int failures = 0;
