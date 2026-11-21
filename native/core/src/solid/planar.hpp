@@ -46,6 +46,18 @@ public:
     std::vector<std::array<int, 3>> neighbours;  // across edge (v[i], v[i+1]); -1 on the outside
 
     int orient(int a, int b, int c) const { return sign_ * pool_.orient2d(a, b, c, au_, av_); }
+    // For tests: every turn asked of the pool, without the shorter ways of o().
+    bool plain = false;
+
+    // What the triangulation keeps of each point for its turns: two coordinates as doubles with the most
+    // each can be wrong by (nothing for a whole coordinate), and whether the point is on the grid.
+    struct Local {
+        double u, v, ru, rv;
+        bool grid;
+    };
+    static Local local_of(const Interval &u, const Interval &v, bool grid);
+    // The sign of the turn a b c from those doubles when they suffice to be certain of it, otherwise 2.
+    static int filtered_turn(const Local &a, const Local &b, const Local &c);
 
 private:
     struct Tri {
@@ -58,9 +70,16 @@ private:
     std::vector<int> pid_;   // local vertex -> pool id
     std::vector<int> vtri_;  // local vertex -> one triangle that has it
     int last_ = 0;
+    std::vector<Local> local_;  // by local vertex
+    // The segments each point is known to lie on the line of: split() notes them by pool id, triangulate()
+    // files them by local vertex (the segments of vertex k are line_ids_[line_start_[k]] up to
+    // line_ids_[line_start_[k + 1]], ascending).
+    std::vector<std::pair<int, int>> on_line_;
+    std::vector<int> line_start_, line_ids_;
 
     bool between(int a, int b, int p) const;
-    int o(int a, int b, int c) const { return orient(pid_[static_cast<size_t>(a)], pid_[static_cast<size_t>(b)], pid_[static_cast<size_t>(c)]); }
+    int o(int a, int b, int c) const;
+    bool one_line(int a, int b, int c) const;
     void relink(int neighbour, int from, int to);
     void insert(int p);
     void split_face(int t, int p);

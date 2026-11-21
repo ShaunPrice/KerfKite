@@ -32,6 +32,77 @@ bool Planar::between(int a, int b, int p) const {
     return c1 == c2 && c1 != 0;
 }
 
+// The middle of each interval and half its width, with the rounding of both: the true coordinate is
+// within r of m. An interval of one number (a whole coordinate) is exact.
+Planar::Local Planar::local_of(const Interval &cu, const Interval &cv, bool grid) {
+    Local at;
+    at.u = (cu.lo + cu.hi) / 2;
+    at.v = (cv.lo + cv.hi) / 2;
+    at.ru = cu.lo == cu.hi ? 0.0 : (cu.hi - cu.lo) * 0.5 * (1 + 0x1p-50) + std::fabs(at.u) * 0x1p-52;
+    at.rv = cv.lo == cv.hi ? 0.0 : (cv.hi - cv.lo) * 0.5 * (1 + 0x1p-50) + std::fabs(at.v) * 0x1p-52;
+    at.grid = grid;
+    return at;
+}
+
+// A turn in doubles. With A = bu - au, B = cv - av, C = bv - av, D = cu - au the turn is the sign of
+// A B - C D. Each coordinate is known as a double m and a bound r with the true value within r of m.
+// Every operation below is rounded to nearest, so its result is within 2^-53 of itself of the true
+// result of its operands (written u for 2^-53; the code uses 2^-52):
+//     the true A is within dA = |A| u + ra + rb of the computed A, and likewise B, C, D;
+//     the true A B is within |A| dB + |B| dA + dA dB of the computed A times the computed B, which the
+//     rounded product P is within |P| u of; likewise C D and Q;
+//     the rounded P - Q is within |P - Q| u of P - Q.
+// So the true value is within E = |A| dB + |B| dA + dA dB + |C| dD + |D| dC + dC dD + u (|P| + |Q| + |P - Q|)
+// of the computed one. E is a sum of products of non-negative numbers, some twenty rounded operations,
+// each raising or lowering it by 2^-53 of itself at most; it is taken a millionth larger, and a little
+// more for results too small for that. A computed value beyond E has the sign of the true one; for any
+// other the answer is 2, "cannot tell", and the caller asks the pool. Only + - * and comparisons of
+// doubles are used, each correctly rounded on every platform (the build forbids contraction into fused
+// operations), so the same turns are decided here everywhere; and since the pool gives the exact sign
+// for the rest, the result would be the same even if they were not.
+int Planar::filtered_turn(const Local &pa, const Local &pb, const Local &pc) {
+    const double kU = 0x1p-52;
+    const double A = pb.u - pa.u, B = pc.v - pa.v, C = pb.v - pa.v, D = pc.u - pa.u;
+    const double dA = std::fabs(A) * kU + (pa.ru + pb.ru), dB = std::fabs(B) * kU + (pa.rv + pc.rv);
+    const double dC = std::fabs(C) * kU + (pa.rv + pb.rv), dD = std::fabs(D) * kU + (pa.ru + pc.ru);
+    const double P = A * B, Q = C * D, value = P - Q;
+    const double bound = (std::fabs(A) * dB + std::fabs(B) * dA + dA * dB + std::fabs(C) * dD + std::fabs(D) * dC + dC * dD +
+                          kU * (std::fabs(P) + std::fabs(Q) + std::fabs(value))) * 1.000001 + 0x1p-900;
+    return value > bound ? 1 : value < -bound ? -1 : 2;
+}
+
+// The turn of three local vertices: orient() of their points, by two shorter ways where they apply.
+// First in doubles (filtered_turn). Then by what the points are: three points on the line of one segment
+// do not turn, and split() has noted every point it placed on a segment, each by an exact test or by
+// construction (a crossing lies in the carrier plane and in the planes of both segments). What is left
+// is asked of the pool, with intervals and then integers, as every turn used to be. Grid points go to
+// the pool at once: their turn is two products of integers.
+int Planar::o(int a, int b, int c) const {
+    const Local &pa = local_[static_cast<size_t>(a)], &pb = local_[static_cast<size_t>(b)], &pc = local_[static_cast<size_t>(c)];
+    if (!plain && !(pa.grid && pb.grid && pc.grid)) {
+        const int turn = filtered_turn(pa, pb, pc);
+        if (turn != 2) return sign_ * turn;
+        if (one_line(a, b, c)) return 0;
+    }
+    return orient(pid_[static_cast<size_t>(a)], pid_[static_cast<size_t>(b)], pid_[static_cast<size_t>(c)]);
+}
+
+// Whether the three local vertices are known to lie on the line of one segment.
+bool Planar::one_line(int a, int b, int c) const {
+    if (line_start_.empty()) return false;
+    // Go through the shortest list and look in the other two.
+    int x = a, y = b, z = c;
+    const auto length = [&](int k) { return line_start_[static_cast<size_t>(k) + 1] - line_start_[static_cast<size_t>(k)]; };
+    if (length(y) < length(x)) std::swap(x, y);
+    if (length(z) < length(x)) std::swap(x, z);
+    const int *ids = line_ids_.data();
+    const int *y0 = ids + line_start_[static_cast<size_t>(y)], *y1 = ids + line_start_[static_cast<size_t>(y) + 1];
+    const int *z0 = ids + line_start_[static_cast<size_t>(z)], *z1 = ids + line_start_[static_cast<size_t>(z) + 1];
+    for (int k = line_start_[static_cast<size_t>(x)]; k < line_start_[static_cast<size_t>(x) + 1]; ++k)
+        if (std::binary_search(y0, y1, ids[k]) && std::binary_search(z0, z1, ids[k])) return true;
+    return false;
+}
+
 void Planar::split() {
     std::sort(points.begin(), points.end());
     points.erase(std::unique(points.begin(), points.end()), points.end());
@@ -99,11 +170,16 @@ void Planar::split() {
     }
     points.insert(points.end(), created.begin(), created.end());
     pieces.clear();
+    on_line_.clear();
     for (size_t i = 0; i < n; ++i) {
         const PlanarSegment &s = segments[i];
         if (s.a == s.b) continue;
         points.push_back(s.a);
         points.push_back(s.b);
+        // Its ends and the points placed on it lie on its line: for o().
+        on_line_.emplace_back(s.a, static_cast<int>(i));
+        on_line_.emplace_back(s.b, static_cast<int>(i));
+        for (const int q : on[i]) on_line_.emplace_back(q, static_cast<int>(i));
         if (on[i].empty()) {
             pieces.push_back(s);
             continue;
@@ -486,6 +562,28 @@ void Planar::triangulate(int r0, int r1, int r2) {
         return ids[lo];
     };
     if (orient(r0, r1, r2) <= 0) defect("the outer triangle is not counter-clockwise");
+    // The coordinates of each local vertex, for o().
+    local_.resize(pid_.size());
+    for (size_t k = 0; k < pid_.size(); ++k) {
+        pool_.settle(pid_[k]);
+        const Pt &q = pool_.pts[static_cast<size_t>(pid_[k])];
+        local_[k] = local_of(q.c[au_], q.c[av_], q.rat < 0);
+    }
+    // The segments each local vertex lies on the line of, from the notes of split().
+    line_start_.clear();
+    line_ids_.clear();
+    if (!on_line_.empty()) {
+        std::vector<std::pair<int, int>> filed;
+        filed.reserve(on_line_.size());
+        for (const std::pair<int, int> &note : on_line_) filed.emplace_back(local(note.first), note.second);
+        std::sort(filed.begin(), filed.end());
+        filed.erase(std::unique(filed.begin(), filed.end()), filed.end());
+        line_start_.assign(pid_.size() + 1, 0);
+        for (const std::pair<int, int> &note : filed) ++line_start_[static_cast<size_t>(note.first) + 1];
+        for (size_t k = 0; k < pid_.size(); ++k) line_start_[k + 1] += line_start_[k];
+        line_ids_.resize(filed.size());
+        for (size_t k = 0; k < filed.size(); ++k) line_ids_[k] = filed[k].second;
+    }
     tris_.clear();
     tris_.reserve(2 * pid_.size() + 4);
     tris_.push_back(Tri{{0, 1, 2}, {-1, -1, -1}});

@@ -7,6 +7,7 @@
 #include <cmath>
 
 #include "mesh.hpp"
+#include "timing.hpp"
 
 namespace kerfkite {
 namespace solid {
@@ -111,6 +112,7 @@ int segment_count(int segments) {
 }  // namespace
 
 Solid box(const Vec3 &size, bool center) {
+    KERFKITE_SOLID_PHASE(Construct);
     const double s[3] = {size.x, size.y, size.z};
     int64_t lo[3], hi[3];
     for (int k = 0; k < 3; ++k) {
@@ -126,6 +128,7 @@ Solid box(const Vec3 &size, bool center) {
 }
 
 Solid cylinder(double height, double radius_low, double radius_high, int segments, bool center) {
+    KERFKITE_SOLID_PHASE(Construct);
     const uint32_t n = static_cast<uint32_t>(segment_count(segments));
     const int64_t h = round_units(positive_units(height, "Cylinder height"));
     if (!(radius_low >= 0) || !(radius_high >= 0) || !(radius_low > 0 || radius_high > 0))
@@ -168,6 +171,7 @@ Solid cylinder(double height, double radius_low, double radius_high, int segment
 }
 
 Solid sphere(double radius, int segments) {
+    KERFKITE_SOLID_PHASE(Construct);
     const uint32_t n = (static_cast<uint32_t>(segment_count(segments)) + 3) / 4 * 4;
     const uint32_t stacks = n / 2;
     const double r = positive_units(radius, "Sphere radius");

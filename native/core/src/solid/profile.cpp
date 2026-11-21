@@ -8,6 +8,7 @@
 
 #include "mesh.hpp"
 #include "planar.hpp"
+#include "timing.hpp"
 
 namespace kerfkite {
 namespace solid {
@@ -212,6 +213,7 @@ std::vector<Ring> resolve_rings(const std::vector<Ring> &rings, FillRule fill) {
 }
 
 Solid extrude(const std::vector<Ring> &rings, double height, const ExtrudeOptions &options) {
+    KERFKITE_SOLID_PHASE(Construct);
     const double h = height * kUnitsPerMm;
     if (!(h >= 0.5) || !(h <= static_cast<double>(detail::kMaxCoord))) throw ValueError("extrude: the height must be positive and at most 100000 mm");
     if (options.slices < 1 || options.slices > 4096) throw ValueError("extrude: 1 to 4096 slices");
@@ -272,6 +274,7 @@ Solid extrude(const std::vector<Ring> &rings, double height, const ExtrudeOption
 }
 
 Solid revolve(const std::vector<Ring> &rings, int segments, double degrees, FillRule fill) {
+    KERFKITE_SOLID_PHASE(Construct);
     if (segments < 3 || segments > 65536) throw ValueError("revolve: 3 to 65536 segments");
     if (!(degrees > 0) || !(degrees <= 360)) throw ValueError("revolve: the angle must be above 0 and at most 360 degrees");
     for (const Ring &ring : rings)

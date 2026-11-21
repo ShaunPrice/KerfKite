@@ -5,6 +5,8 @@
 //   kerfkite_solid_selftest --stress N SEED  N generated cases of every kind, each result verified exactly
 //   kerfkite_solid_selftest --digest N SEED  N generated cases; prints one hash of every resulting mesh, to
 //                                            compare builds by different compilers (the hashes must be equal)
+//   kerfkite_solid_selftest --plain N SEED   N generated pairs of solids, each operation computed twice: with the
+//                                            kernel's shorter ways and with every step in full; they must agree
 //   kerfkite_solid_selftest --bench          timings against the targets in docs/SOLID-KERNEL.md
 #include <chrono>
 #include <cmath>
@@ -14,7 +16,14 @@
 #include <string>
 #include <vector>
 
+#include <unordered_map>
+
+#include "../core/src/solid/arrangement.hpp"
+#include "../core/src/solid/bucket.hpp"
+#include "../core/src/solid/bvh.hpp"
+#include "../core/src/solid/edgemap.hpp"
 #include "../core/src/solid/exact.hpp"
+#include "../core/src/solid/planar.hpp"
 #include "kerfkite/solid.hpp"
 
 using namespace kerfkite;
@@ -118,6 +127,256 @@ static void arithmetic() {
     pool.round(cross, rounded);
     expect(rounded[0] == 1 && rounded[1] == 1 && rounded[2] == 0, "rounding to the nearest grid point");
 }
+
+// ---- the shorter ways against the full computation ------------------------------------------------
+//
+// The kernel has ways round work that would give nothing new: points left pending until something needs
+// them, crossings remembered by edge and ratio, turns decided in doubles within a proven bound, planes
+// and lines known from how a point or a triangle was made, tables laid out flat. None of them may change
+// an answer. Each is checked here against the computation it stands in for, on generated inputs that
+// include the degenerate ones: points on the grid, the same point reached two ways, points in one line.
+
+static void shorter_ways_arithmetic() {
+    using detail::BigInt;
+    using detail::I128;
+    using detail::U256;
+    // The 256-bit product that compares two ratios, against the big integer.
+    for (int i = 0; i < 20000; ++i) {
+        const I128 a = I128::mul(static_cast<int64_t>(rnd() >> (1 + pick(60))), static_cast<int64_t>(rnd() >> (10 + pick(50))));
+        const I128 b = I128::mul(static_cast<int64_t>(rnd() >> (1 + pick(60))), static_cast<int64_t>(rnd() >> (10 + pick(50))));
+        const U256 product = U256::product(a, b);
+        BigInt sum;
+        for (int k = 3; k >= 0; --k) sum = sum * BigInt(int64_t(1) << 32) * BigInt(int64_t(1) << 32) + BigInt(I128(0, product.w[k]));
+        expect(BigInt::cmp(sum, BigInt(a) * BigInt(b)) == 0, "the 256-bit product against the big integer");
+        // Equal ratios are found equal, and a ratio one unit off is not.
+        const int64_t k = 1 + static_cast<int64_t>(rnd() >> 40);
+        const I128 a2 = I128::mul(static_cast<int64_t>(rnd() >> 30), k), b2 = I128::mul(static_cast<int64_t>(rnd() >> 30) + 1, k);
+        const I128 a1 = I128::mul(static_cast<int64_t>(a2.to_double() / static_cast<double>(k) + 0.5), 1), b1 = I128::mul(static_cast<int64_t>(b2.to_double() / static_cast<double>(k) + 0.5), 1);
+        expect(U256::product(a1, b2) == U256::product(a2, b1), "equal ratios have equal cross products");
+        expect(!(U256::product(a1 + I128(1), b2) == U256::product(a2, b1)), "unequal ratios have unequal cross products");
+    }
+    // The counting sort against std::sort, with many items to a key and with few.
+    for (int round = 0; round < 60; ++round) {
+        struct Item {
+            int key, b, c;
+        };
+        const size_t range = static_cast<size_t>(1 + pick(round % 2 ? 40 : 5000));
+        std::vector<Item> items(static_cast<size_t>(pick(3000)));
+        for (size_t k = 0; k < items.size(); ++k) items[k] = Item{pick(static_cast<int>(range)), pick(50), static_cast<int>(k)};
+        std::vector<Item> expected = items, scratch;
+        std::sort(expected.begin(), expected.end(), [](const Item &x, const Item &y) { return x.key != y.key ? x.key < y.key : x.b != y.b ? x.b < y.b : x.c < y.c; });
+        std::vector<size_t> starts;
+        detail::sort_by_key(items, range, [](const Item &x) { return static_cast<size_t>(x.key); }, [](const Item &x, const Item &y) { return x.b != y.b ? x.b < y.b : x.c < y.c; }, starts, scratch);
+        bool same = items.size() == expected.size();
+        for (size_t k = 0; same && k < items.size(); ++k) same = items[k].key == expected[k].key && items[k].b == expected[k].b && items[k].c == expected[k].c;
+        expect(same, "the counting sort gives the order of std::sort");
+    }
+    // The edge table against the standard one, through sets, changes and removals.
+    {
+        detail::EdgeMap flat;
+        std::unordered_map<uint64_t, uint32_t> standard;
+        bool same = true;
+        for (int i = 0; i < 200000 && same; ++i) {
+            const uint64_t key = detail::EdgeMap::key(static_cast<uint32_t>(pick(300)), static_cast<uint32_t>(pick(300)));
+            const int what = pick(5);
+            if (what < 2) {
+                const uint32_t value = static_cast<uint32_t>(rnd());
+                flat.set(key, value);
+                standard[key] = value;
+            } else if (what == 2) {
+                flat.erase(key);
+                standard.erase(key);
+            } else {
+                const uint32_t *found = flat.find(key);
+                const auto it = standard.find(key);
+                same = (found != nullptr) == (it != standard.end()) && (!found || *found == it->second) && flat.has(key) == (found != nullptr);
+            }
+        }
+        expect(same, "the edge table agrees with the standard table");
+    }
+    // A tree over part of the boxes against looking at every box of that part.
+    for (int round = 0; round < 40; ++round) {
+        std::vector<detail::Box> boxes(static_cast<size_t>(1 + pick(400)));
+        for (detail::Box &b : boxes)
+            for (int k = 0; k < 3; ++k) {
+                b.lo[k] = pick(2000) - 1000;
+                b.hi[k] = b.lo[k] + pick(round % 3 ? 60 : 900);
+            }
+        const size_t first = static_cast<size_t>(pick(static_cast<int>(boxes.size()))), count = static_cast<size_t>(pick(static_cast<int>(boxes.size() - first) + 1));
+        detail::Bvh tree;
+        tree.build(boxes, first, count);
+        bool same = true;
+        for (int q = 0; q < 50 && same; ++q) {
+            detail::Box query;
+            for (int k = 0; k < 3; ++k) {
+                query.lo[k] = pick(2200) - 1100;
+                query.hi[k] = query.lo[k] + pick(500);
+            }
+            std::vector<int> found, expected;
+            tree.query(boxes, query, [&](int item) { found.push_back(item); });
+            for (size_t k = first; k < first + count; ++k)
+                if (boxes[k].overlaps(query)) expected.push_back(static_cast<int>(k));
+            std::sort(found.begin(), found.end());
+            same = found == expected;
+        }
+        expect(same, "a tree over a range of boxes reports what a scan of the range does");
+    }
+}
+
+// Two pools given the same requests, one leaving crossings pending and one computing every point at once,
+// must number the points alike and answer every predicate alike.
+static void shorter_ways_points() {
+    using detail::I128;
+    using detail::Plane;
+    using detail::Pool;
+    size_t pending = 0, on_grid = 0, repeated = 0, rejoined = 0, asked = 0;
+    for (int round = 0; round < 400; ++round) {
+        Pool lazy, eager;
+        eager.plain = true;
+        // Small coordinates make coincidences common (crossings on the grid, one point from two edges);
+        // large ones exercise the widths of the numbers.
+        const int64_t span = round % 4 == 0 ? 4 : round % 4 == 1 ? 40 : round % 4 == 2 ? 1000000 : 60000000000LL;
+        const auto coordinate = [&] { return static_cast<int64_t>(rnd() % static_cast<uint64_t>(2 * span + 1)) - span; };
+        std::vector<int> ids;
+        for (int k = 0; k < 24; ++k) {
+            const int64_t x = coordinate(), y = coordinate(), z = coordinate();
+            const int a = lazy.add_grid(x, y, z), b = eager.add_grid(x, y, z);
+            expect(a == b, "grid points are numbered alike");
+            ids.push_back(a);
+        }
+        bool alike = true;
+        struct Request {
+            int p, q;
+            I128 at_p, at_q;
+        };
+        std::vector<Request> made;
+        for (int request = 0; request < 160 && alike; ++request) {
+            int p = ids[static_cast<size_t>(pick(24))], q = ids[static_cast<size_t>(pick(24))];
+            const int a = ids[static_cast<size_t>(pick(24))], b = ids[static_cast<size_t>(pick(24))], c = ids[static_cast<size_t>(pick(24))];
+            Plane plane = detail::plane_of(lazy.pts[static_cast<size_t>(a)].i, lazy.pts[static_cast<size_t>(b)].i, lazy.pts[static_cast<size_t>(c)].i);
+            const int kind = pick(4);
+            if (kind == 0) {
+                // A plane square to Z through the middle of the edge: the crossing is on the grid when the
+                // sums of the other coordinates are even.
+                const int64_t *u = lazy.pts[static_cast<size_t>(p)].i, *v = lazy.pts[static_cast<size_t>(q)].i;
+                if ((u[2] + v[2]) % 2) continue;
+                const int64_t z = (u[2] + v[2]) / 2, o[3] = {0, 0, z}, ex[3] = {1, 0, z}, ey[3] = {0, 1, z};
+                plane = detail::plane_of(o, ex, ey);
+            }
+            if (plane.n[0].zero() && plane.n[1].zero() && plane.n[2].zero()) continue;
+            I128 at_p = detail::plane_value(plane, lazy.pts[static_cast<size_t>(p)].i), at_q = detail::plane_value(plane, lazy.pts[static_cast<size_t>(q)].i);
+            if (kind == 1 && !made.empty()) {
+                // An earlier crossing asked for again: from the other end, with the plane's values scaled
+                // and perhaps of the other sign. It is the same point.
+                const Request &earlier = made[static_cast<size_t>(pick(static_cast<int>(made.size())))];
+                const int64_t scale = (1 + pick(1000)) * (pick(2) ? 1 : -1);
+                p = earlier.q;
+                q = earlier.p;
+                at_p = earlier.at_q.times(scale);
+                at_q = earlier.at_p.times(scale);
+            }
+            if (at_p.sign() * at_q.sign() >= 0) continue;
+            ++asked;
+            made.push_back(Request{p, q, at_p, at_q});
+            const size_t before = lazy.pts.size();
+            const int x = lazy.line_plane(p, q, at_p, at_q), y = eager.line_plane(p, q, at_p, at_q);
+            alike = x == y && lazy.pts.size() == eager.pts.size() && lazy.rational_points() == eager.rational_points();
+            if (lazy.pts.size() == before) ++repeated;
+            else if (lazy.grid(x)) ++on_grid;
+            else if (lazy.pts[static_cast<size_t>(x)].pending >= 0) ++pending;
+            if (pick(3) == 0) {
+                // The same point again as the meeting of three planes: it must be found, pending or not.
+                // (Only where the request was made from this plane: a repeated one has scaled values.)
+                const Plane e1 = detail::plane_through_edge(lazy.pts[static_cast<size_t>(p)].i, lazy.pts[static_cast<size_t>(q)].i, pick(3));
+                const Plane e2 = detail::plane_through_edge(lazy.pts[static_cast<size_t>(p)].i, lazy.pts[static_cast<size_t>(q)].i, pick(3));
+                const int u = lazy.three_planes(plane, e1, e2), v = eager.three_planes(plane, e1, e2);
+                alike = alike && u == v && (u < 0 || kind == 1 || u == x) && lazy.pts.size() == eager.pts.size();
+                if (u >= 0 && kind != 1) ++rejoined;
+            }
+            if (pick(4) == 0) {
+                // A predicate between two requests settles some points early; the numbering must not care.
+                const int n = static_cast<int>(lazy.pts.size());
+                const int i = pick(n), j = pick(n), k = pick(n);
+                const int axis = pick(3);
+                alike = alike && lazy.compare(i, j, axis) == eager.compare(i, j, axis);
+                alike = alike && lazy.orient2d(i, j, k, 0, 1) == eager.orient2d(i, j, k, 0, 1);
+            }
+        }
+        expect(alike, "pending crossings are numbered as crossings computed at once");
+        if (!alike) continue;
+        // Every predicate on every kind of point, then the points themselves once settled.
+        const int n = static_cast<int>(lazy.pts.size());
+        bool same = true;
+        for (int test = 0; test < 400 && same; ++test) {
+            const int i = pick(n), j = pick(n), k = pick(n), m = pick(n), axis = pick(3);
+            same = lazy.compare(i, j, axis) == eager.compare(i, j, axis) && lazy.orient2d(i, j, k, axis, (axis + 1) % 3) == eager.orient2d(i, j, k, axis, (axis + 1) % 3) &&
+                   lazy.orient3d(i, j, k, m) == eager.orient3d(i, j, k, m);
+            const Plane plane = detail::plane_of(lazy.pts[static_cast<size_t>(ids[0])].i, lazy.pts[static_cast<size_t>(ids[1 + pick(3)])].i, lazy.pts[static_cast<size_t>(ids[4 + pick(3)])].i);
+            same = same && lazy.side(plane, i) == eager.side(plane, i);
+        }
+        for (int i = 0; i < n && same; ++i) {
+            lazy.settle(i);
+            const detail::Pt &a = lazy.pts[static_cast<size_t>(i)], &b = eager.pts[static_cast<size_t>(i)];
+            int64_t ra[3], rb[3];
+            lazy.round(i, ra);
+            eager.round(i, rb);
+            same = lazy.grid(i) == eager.grid(i) && ra[0] == rb[0] && ra[1] == rb[1] && ra[2] == rb[2];
+            for (int k = 0; k < 3 && same; ++k) same = a.c[k].lo == b.c[k].lo && a.c[k].hi == b.c[k].hi;
+        }
+        expect(same, "a pending point, once computed, is the point computed at once");
+    }
+    expect(asked > 20000 && pending > 5000 && on_grid > 500 && repeated > 5000 && rejoined > 1000, "the point requests covered pending points, grid points, repeats and points reached two ways");
+}
+
+// The turn decided in doubles against the exact turn: whenever the doubles claim a sign it is the exact
+// one, and they must claim none for three points of one line.
+static void shorter_ways_turns() {
+    using detail::I128;
+    using detail::Planar;
+    using detail::Plane;
+    using detail::Pool;
+    size_t decided = 0, undecided = 0, zero = 0, wrong = 0;
+    for (int round = 0; round < 300; ++round) {
+        Pool pool;
+        const int64_t span = round % 3 == 0 ? 30 : round % 3 == 1 ? 100000 : 60000000000LL;
+        const auto coordinate = [&] { return static_cast<int64_t>(rnd() % static_cast<uint64_t>(2 * span + 1)) - span; };
+        std::vector<int> grid, points;
+        for (int k = 0; k < 16; ++k) grid.push_back(pool.add_grid(coordinate(), coordinate(), coordinate()));
+        points = grid;
+        // Points along a few edges, several to an edge, so that many triples lie in one line; and points
+        // a hair off such a line (the same edge cut by a plane moved by one unit).
+        for (int e = 0; e < 8; ++e) {
+            const int p = grid[static_cast<size_t>(pick(16))], q = grid[static_cast<size_t>(pick(16))];
+            for (int cut = 0; cut < 6; ++cut) {
+                Plane plane = detail::plane_of(pool.pts[static_cast<size_t>(grid[static_cast<size_t>(pick(16))])].i, pool.pts[static_cast<size_t>(grid[static_cast<size_t>(pick(16))])].i,
+                                                pool.pts[static_cast<size_t>(grid[static_cast<size_t>(pick(16))])].i);
+                if (plane.n[0].zero() && plane.n[1].zero() && plane.n[2].zero()) continue;
+                if (cut % 2) plane.d = plane.d + I128(pick(3) - 1);
+                const I128 at_p = detail::plane_value(plane, pool.pts[static_cast<size_t>(p)].i), at_q = detail::plane_value(plane, pool.pts[static_cast<size_t>(q)].i);
+                if (at_p.sign() * at_q.sign() >= 0) continue;
+                points.push_back(pool.line_plane(p, q, at_p, at_q));
+            }
+        }
+        for (const int id : points) pool.settle(id);
+        for (int test = 0; test < 3000; ++test) {
+            const int a = points[static_cast<size_t>(pick(static_cast<int>(points.size())))], b = points[static_cast<size_t>(pick(static_cast<int>(points.size())))],
+                      c = points[static_cast<size_t>(pick(static_cast<int>(points.size())))];
+            const int u = pick(3), v = (u + 1 + pick(2)) % 3;
+            const detail::Pt &pa = pool.pts[static_cast<size_t>(a)], &pb = pool.pts[static_cast<size_t>(b)], &pc = pool.pts[static_cast<size_t>(c)];
+            const int exact = pool.orient2d(a, b, c, u, v);
+            const int quick = Planar::filtered_turn(Planar::local_of(pa.c[u], pa.c[v], pa.rat < 0), Planar::local_of(pb.c[u], pb.c[v], pb.rat < 0), Planar::local_of(pc.c[u], pc.c[v], pc.rat < 0));
+            if (quick == 2) ++undecided;
+            else ++decided;
+            if (exact == 0) ++zero;
+            if (quick != 2 && quick != exact) ++wrong;
+        }
+    }
+    expect(wrong == 0, "a turn decided in doubles is the exact turn");
+    expect(decided > 100000 && undecided > 10000 && zero > 10000, "the turns covered decided, undecided and collinear triples");
+}
+
+// Whole operations with every shorter way taken and with none: the same vertices, triangles and counts.
+static void shorter_ways_operations(int cases);
 
 static void trigonometry() {
     double s, c;
@@ -517,6 +776,89 @@ static void generate(int cases, bool verify) {
         }
 }
 
+static void shorter_ways_operations(int cases) {
+    size_t compared = 0, refused = 0, differ = 0, with_new_points = 0, repaired = 0;
+    // One operation on fresh copies of the operands (so that neither run inherits what the other
+    // established about them), in the given mode.
+    struct Outcome {
+        bool refused = false;
+        std::vector<GridPoint> vertices;
+        std::vector<Triangle> triangles;
+        BooleanStats stats;
+    };
+    const auto run = [](const Solid &a, const Solid &b, Op op, bool plain) {
+        Outcome out;
+        detail::plain_paths() = plain;
+        try {
+            const Solid fresh_a = from_grid_mesh(a.grid_vertices(), a.triangles()), fresh_b = from_grid_mesh(b.grid_vertices(), b.triangles());
+            const Solid result = boolean(fresh_a, fresh_b, op);
+            out.vertices = result.grid_vertices();
+            out.triangles = result.triangles();
+            out.stats = last_boolean_stats();
+        } catch (const ValueError &) {
+            out.refused = true;
+        }
+        detail::plain_paths() = false;
+        return out;
+    };
+    for (int c = 0; c < cases; ++c) {
+        Solid a, b;
+        switch (c % 5) {
+            case 0:  // placed primitives
+                a = placed();
+                b = placed();
+                break;
+            case 1: {  // sharing faces, then turned together: faces that nearly coincide
+                a = base();
+                b = base();
+                const Box3 ba = a.bounds();
+                b = b.translated({pick(2) ? ba.max.x - b.bounds().min.x : static_cast<double>(pick(3)), static_cast<double>(pick(3) - 1), pick(2) ? 0.0 : ba.max.z - b.bounds().min.z});
+                const double rx = uni(-180, 180), ry = uni(-180, 180), rz = uni(-180, 180);
+                a = a.rotated(rx, ry, rz);
+                b = b.rotated(rx, ry, rz);
+                break;
+            }
+            case 2:  // a solid and a copy a few nanometres away
+                a = turned(base(), 180);
+                b = a.translated({(pick(7) - 3) * 1e-6, (pick(7) - 3) * 1e-6, (pick(7) - 3) * 1e-6});
+                break;
+            case 3: {  // a result of an earlier operation against a third solid: many flat faces in pieces
+                const Solid first = placed(), second = placed();
+                try {
+                    a = boolean(first, second, pick(2) ? Op::Union : Op::Difference);
+                } catch (const ValueError &) {
+                    a = first;
+                }
+                if (a.empty()) a = first;
+                b = placed();
+                break;
+            }
+            default:  // grid-aligned boxes and cylinders: crossings on the grid, coincident and touching faces
+                a = pick(2) ? box({2.0 + pick(3), 2.0 + pick(3), 1.0 + pick(2)}) : cylinder(1 + pick(3), 1 + pick(2), 1 + pick(2), 8 + 4 * pick(3));
+                b = (pick(2) ? box({1.0 + pick(3), 1.0 + pick(3), 1.0 + pick(3)}) : cylinder(1 + pick(3), 1, 1 + pick(2), 8 + 4 * pick(3))).translated({static_cast<double>(pick(4) - 1), static_cast<double>(pick(4) - 1), static_cast<double>(pick(3) - 1)});
+                break;
+        }
+        for (const Op op : {Op::Union, Op::Difference, Op::Intersection}) {
+            const Outcome fast = run(a, b, op, false), plain = run(a, b, op, true);
+            ++compared;
+            refused += fast.refused;
+            with_new_points += fast.stats.constructed_points > 0;
+            repaired += fast.stats.repair_passes > 0;
+            const BooleanStats &x = fast.stats, &y = plain.stats;
+            const bool same = fast.refused == plain.refused && fast.vertices == plain.vertices && fast.triangles == plain.triangles && x.candidate_pairs == y.candidate_pairs &&
+                              x.intersecting_pairs == y.intersecting_pairs && x.split_triangles == y.split_triangles && x.coplanar_groups == y.coplanar_groups &&
+                              x.constructed_points == y.constructed_points && x.rounded_vertices == y.rounded_vertices && x.repair_passes == y.repair_passes && x.coarser_retries == y.coarser_retries;
+            if (!same) {
+                ++differ;
+                std::printf("FAIL the shorter ways changed a result: case %d, operation %d\n", c, static_cast<int>(op));
+            }
+        }
+    }
+    failures += static_cast<int>(differ);
+    expect(with_new_points * 4 > compared && repaired > 0, "the compared operations made new points and needed repairs");
+    (void)refused;
+}
+
 static double seconds() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 
 static void bench() {
@@ -576,6 +918,14 @@ int main(int argc, char **argv) {
         bench();
         return 0;
     }
+    if (mode == "--plain") {
+        // Operations with every shorter way taken and with none, at length.
+        const int cases = argc > 2 ? std::atoi(argv[2]) : 2000;
+        if (argc > 3) state = std::strtoull(argv[3], nullptr, 10);
+        shorter_ways_operations(cases);
+        std::printf("%d cases, three operations each, with and without the shorter ways: %d differ\n", cases, failures);
+        return failures ? 1 : 0;
+    }
     if (mode == "--stress" || mode == "--digest") {
         const int cases = argc > 2 ? std::atoi(argv[2]) : 100;
         if (argc > 3) state = std::strtoull(argv[3], nullptr, 10);
@@ -585,6 +935,9 @@ int main(int argc, char **argv) {
         return failures ? 1 : 0;
     }
     arithmetic();
+    shorter_ways_arithmetic();
+    shorter_ways_points();
+    shorter_ways_turns();
     trigonometry();
     primitives_and_measures();
     meshes();
@@ -593,6 +946,7 @@ int main(int argc, char **argv) {
     profiles();
     sections_and_queries();
     generate(40, true);
+    shorter_ways_operations(150);
     std::printf(failures ? "solid self-test FAILED\n" : "solid self-test passed\n");
     return failures ? 1 : 0;
 }

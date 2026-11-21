@@ -43,6 +43,16 @@ target_sources(kerfkite_core PRIVATE core/src/polygon/arrangement.cpp core/src/p
 add_executable(kerfkite-cam tools/kerfkite_cam.cpp)
 target_link_libraries(kerfkite-cam PRIVATE kerfkite_core)
 
+# Timings of the solid kernel on the models a Studio user builds, with a hash of each result. With
+# -DKERFKITE_SOLID_PROFILE=ON the kernel also clocks its phases (core/src/solid/timing.hpp); the clocks
+# only measure, and are left out of every other build.
+option(KERFKITE_SOLID_PROFILE "Clock the phases of the solid kernel, for kerfkite_solid_bench" OFF)
+if(KERFKITE_SOLID_PROFILE)
+  target_compile_definitions(kerfkite_core PUBLIC KERFKITE_SOLID_PROFILE)
+endif()
+add_executable(kerfkite_solid_bench tools/solid_bench.cpp)
+target_link_libraries(kerfkite_solid_bench PRIVATE kerfkite_core)
+
 enable_testing()
 add_executable(kerfkite_selftest tests/selftest.cpp)
 target_link_libraries(kerfkite_selftest PRIVATE kerfkite_core)

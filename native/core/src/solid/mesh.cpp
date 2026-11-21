@@ -5,7 +5,9 @@
 #include <cmath>
 #include <numeric>
 
+#include "bucket.hpp"
 #include "radial.hpp"
+#include "timing.hpp"
 
 namespace kerfkite {
 namespace solid {
@@ -97,29 +99,41 @@ std::string check_mesh(const std::vector<GridPoint> &v, const std::vector<Triang
             if (p[static_cast<size_t>(k)] > kMaxCoord || p[static_cast<size_t>(k)] < -kMaxCoord)
                 return "a coordinate is outside \xC2\xB1" "100000 mm";
     const size_t nv = v.size();
-    std::vector<uint64_t> edges;
-    edges.reserve(t.size() * 3);
+    // The directed edges, filed by the vertex they start at: the ends of the edges from vertex a are
+    // target[start[a]] up to target[start[a + 1]].
+    std::vector<uint32_t> start(nv + 1, 0), target(t.size() * 3);
     for (size_t i = 0; i < t.size(); ++i) {
         const Triangle &tri = t[i];
         if (tri[0] >= nv || tri[1] >= nv || tri[2] >= nv) return "triangle " + std::to_string(i) + " names a vertex that does not exist";
         if (tri[0] == tri[1] || tri[1] == tri[2] || tri[0] == tri[2] || zero_area(v[tri[0]], v[tri[1]], v[tri[2]]))
             return "triangle " + std::to_string(i) + " has no area";
-        for (int k = 0; k < 3; ++k)
-            edges.push_back((static_cast<uint64_t>(tri[static_cast<size_t>(k)]) << 32) | tri[static_cast<size_t>((k + 1) % 3)]);
+        for (size_t k = 0; k < 3; ++k) ++start[tri[k] + 1];
     }
-    std::sort(edges.begin(), edges.end());
-    for (size_t i = 1; i < edges.size(); ++i)
-        if (edges[i] == edges[i - 1])
+    for (size_t a = 0; a < nv; ++a) start[a + 1] += start[a];
+    {
+        std::vector<uint32_t> fill(start.begin(), start.end() - 1);
+        for (const Triangle &tri : t)
+            for (size_t k = 0; k < 3; ++k) target[fill[tri[k]]++] = tri[(k + 1) % 3];
+    }
+    for (size_t a = 0; a < nv; ++a) {
+        const auto first = target.begin() + start[a], last = target.begin() + start[a + 1];
+        std::sort(first, last);
+        if (std::adjacent_find(first, last) != last)
             return "an edge is used twice in the same direction (the surface is not consistently oriented, or more than two triangles meet there)";
-    for (const uint64_t e : edges)
-        if (!std::binary_search(edges.begin(), edges.end(), (e << 32) | (e >> 32)))
-            return "the surface is not closed (an edge has a triangle on one side only)";
+    }
+    for (size_t a = 0; a < nv; ++a)
+        for (uint32_t k = start[a]; k < start[a + 1]; ++k) {
+            const uint32_t b = target[k];
+            if (!std::binary_search(target.begin() + start[b], target.begin() + start[b + 1], static_cast<uint32_t>(a)))
+                return "the surface is not closed (an edge has a triangle on one side only)";
+        }
     if (six_volume(v, t).sign() <= 0) return "it has no positive volume (it is flat or inside out)";
     return std::string();
 }
 
 Solid make_solid(std::vector<GridPoint> v, std::vector<Triangle> t, bool simple, const char *context, bool trusted) {
     if (t.empty()) return Solid();
+    KERFKITE_SOLID_PHASE(Canonical);
     const size_t nv = v.size();
     std::vector<char> used(nv, 0);
     for (const Triangle &tri : t)
@@ -127,17 +141,24 @@ Solid make_solid(std::vector<GridPoint> v, std::vector<Triangle> t, bool simple,
             if (tri[static_cast<size_t>(k)] >= nv) throw ValueError(std::string(context) + ": a triangle names a vertex that does not exist");
             used[tri[static_cast<size_t>(k)]] = 1;
         }
-    std::vector<uint32_t> order;
+    // The used vertices by position, and by their old number where two are at one position. Sorted with
+    // the positions beside the numbers, so that a comparison reads memory in step.
+    struct Placed {
+        GridPoint at;
+        uint32_t index;
+    };
+    std::vector<Placed> order;
     order.reserve(nv);
     for (size_t i = 0; i < nv; ++i)
-        if (used[i]) order.push_back(static_cast<uint32_t>(i));
-    std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) { return v[a] != v[b] ? v[a] < v[b] : a < b; });
+        if (used[i]) order.push_back(Placed{v[i], static_cast<uint32_t>(i)});
+    const auto before = [](const Placed &a, const Placed &b) { return a.at != b.at ? a.at < b.at : a.index < b.index; };
+    if (!std::is_sorted(order.begin(), order.end(), before)) std::sort(order.begin(), order.end(), before);
     std::vector<uint32_t> remap(nv, 0);
     auto mesh = std::make_shared<Mesh>();
     mesh->v.resize(order.size());
     for (size_t i = 0; i < order.size(); ++i) {
-        remap[order[i]] = static_cast<uint32_t>(i);
-        mesh->v[i] = v[order[i]];
+        remap[order[i].index] = static_cast<uint32_t>(i);
+        mesh->v[i] = order[i].at;
     }
     mesh->t.resize(t.size());
     for (size_t i = 0; i < t.size(); ++i) {
@@ -146,7 +167,14 @@ Solid make_solid(std::vector<GridPoint> v, std::vector<Triangle> t, bool simple,
         else if (tri[2] < tri[0] && tri[2] < tri[1]) tri = {tri[2], tri[0], tri[1]};
         mesh->t[i] = tri;
     }
-    std::sort(mesh->t.begin(), mesh->t.end());
+    {
+        // In ascending order of the three numbers.
+        std::vector<size_t> starts;
+        std::vector<Triangle> scratch;
+        sort_by_key(
+            mesh->t, mesh->v.size(), [](const Triangle &x) { return static_cast<size_t>(x[0]); },
+            [](const Triangle &x, const Triangle &y) { return x[1] != y[1] ? x[1] < y[1] : x[2] < y[2]; }, starts, scratch);
+    }
     if (!trusted) {
         const std::string why = check_mesh(mesh->v, mesh->t);
         if (!why.empty()) throw ValueError(std::string(context) + ": " + why);
@@ -446,6 +474,7 @@ namespace {
 Solid apply(const Solid &solid, const double m[9], const double t_units[3], const char *context) {
     const Mesh &mesh = Access::mesh(solid);
     if (mesh.t.empty()) return solid;
+    KERFKITE_SOLID_PHASE(Construct);
     for (int i = 0; i < 9; ++i)
         if (!(std::fabs(m[i]) <= 1e9)) throw ValueError(std::string(context) + ": the matrix must be finite");
     const double det = m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
