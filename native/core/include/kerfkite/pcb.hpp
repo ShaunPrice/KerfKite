@@ -13,7 +13,7 @@ namespace kerfkite {
 // Whether pcb_call answers this command.
 bool pcb_command(const std::string &command);
 
-nlohmann::json pcb_call(const std::string &command, const nlohmann::json &request);
+Json pcb_call(const std::string &command, const Json &request);
 
 }  // namespace kerfkite
 

@@ -15,7 +15,7 @@
 namespace kerfkite {
 namespace pcb {
 
-using json = nlohmann::json;
+using json = Json;
 
 const double MAX_COORDINATE = 10000;  // millimetres either side of the origin
 const double INCH = 25.4;

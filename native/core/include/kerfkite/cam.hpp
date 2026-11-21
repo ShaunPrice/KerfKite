@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-#include <nlohmann/json.hpp>
+#include "kerfkite/json.hpp"
 
 #include "kerfkite/errors.hpp"  // ValueError
 
@@ -44,11 +44,11 @@ struct Job {
 };
 
 // The job for a project, as studio.cam.generate(project) returns it.
-Job generate(const nlohmann::json &project);
+Job generate(const Json &project);
 
 // The job as the JSON object the Studio API returns: lines, segments, cut_length, cut_minutes, mode,
 // bounds and warnings.
-nlohmann::json to_json(const Job &job);
+Json to_json(const Job &job);
 
 struct Protocol {
     std::string id, name, family, notes;
@@ -56,11 +56,11 @@ struct Protocol {
 };
 
 // The controller profile, from the table shared with the editor (studio/static/protocols.json).
-const Protocol &get_protocol(const nlohmann::json *protocol);
+const Protocol &get_protocol(const Json *protocol);
 
 // The program as the selected controller family expects it.
-std::vector<std::string> postprocess(const std::vector<std::string> &lines, const nlohmann::json *protocol,
-                                     const std::string &mode, const nlohmann::json *dwell_units);
+std::vector<std::string> postprocess(const std::vector<std::string> &lines, const Json *protocol,
+                                     const std::string &mode, const Json *dwell_units);
 
 }  // namespace kerfkite
 

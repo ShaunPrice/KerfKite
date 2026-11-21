@@ -22,7 +22,7 @@ namespace kerfkite {
 // "objects":[{"type":"flash"|"line"|"arc"|"region", "polarity":"dark"|"clear", ...}] in drawing order,
 // "counts":{"flash","line","arc","region"}, "bounds":[min X, min Y, max X, max Y] or null, "warnings":[...]}.
 // A file that cannot be read in full is refused with ValueError; nothing is guessed.
-nlohmann::json gerber_import(const nlohmann::json &request);
+Json gerber_import(const Json &request);
 
 // The board outline of a profile (Edge.Cuts) layer as closed paths for a cut-out line job.
 // Request: {"text", and optionally "arc_tolerance", "tolerance" (0.01): how far apart two line ends may be
@@ -30,7 +30,7 @@ nlohmann::json gerber_import(const nlohmann::json &request);
 // the fit checked}.
 // Answer: {"paths":[[[x,y],...],...] each closed, largest first, "line_width", "bounds", "warnings"}.
 // An outline that is open or that branches is refused.
-nlohmann::json gerber_outline(const nlohmann::json &request);
+Json gerber_outline(const Json &request);
 
 }  // namespace kerfkite
 

@@ -8,7 +8,7 @@
 
 namespace kerfkite {
 
-nlohmann::json solid_call(const nlohmann::json &request);
+kerfkite::Json solid_call(const kerfkite::Json &request);
 
 }  // namespace kerfkite
 

@@ -8,6 +8,8 @@
 //   kerfkite-cam gerber-outline FILE [--tolerance MM] [--offset [X,Y]]   a profile layer as closed paths
 //   kerfkite-cam excellon FILE [--units mm|inch] [--integer N --decimal N] [--omitted-zeros leading|trailing]
 //   kerfkite-cam excellon-drills FILE [--offset [X,Y]]       the holes as drilling operations, by diameter
+//   kerfkite-cam polygon REQUEST.json        the polygon kernel: see kerfkite/polygon_command.hpp
+//   kerfkite-cam polygon-batch CASES.jsonl   one polygon request a line, each answered {"ok": ...} or {"error": ...}
 //   kerfkite-cam solid REQUEST.json          a solid built from primitives and Boolean operations: measures, mesh, sections
 //   kerfkite-cam solid-batch REQUESTS.jsonl  the same, one request a line, each answered {"ok": ...} or {"error": message}
 //   kerfkite-cam batch CASES.jsonl
@@ -35,7 +37,7 @@
 #include "kerfkite/number_text.hpp"
 #include "kerfkite/py_math.hpp"
 
-using json = nlohmann::json;
+using json = kerfkite::Json;
 
 namespace {
 
@@ -44,6 +46,7 @@ int usage() {
                  "       kerfkite-cam probe-plan|height-map|level|solid REQUEST.json\n"
                  "       kerfkite-cam solid-batch REQUESTS.jsonl\n"
                  "       kerfkite-cam gerber|gerber-outline|excellon|excellon-drills FILE [--option VALUE ...]\n"
+                 "       kerfkite-cam polygon REQUEST.json | polygon-batch CASES.jsonl\n"
                  "       kerfkite-cam batch CASES.jsonl\n"
                  "       kerfkite-cam numbers < VALUES\n";
     return 1;
@@ -185,8 +188,9 @@ int batch(const std::string &path) {
     return 0;
 }
 
-// Solid requests, one a line: the differential check (validation/solid_kernel_check.py) sends thousands.
-int solid_batch(const std::string &path) {
+// Requests to one of the kernels' commands, one a line: the differential checks
+// (validation/polygon_kernel_check.py, validation/solid_kernel_check.py) send thousands.
+int kernel_batch(const std::string &command, const std::string &path) {
     std::ifstream cases(path, std::ios::binary);
     if (!cases) {
         std::cerr << "kerfkite-cam: cannot read " << path << "\n";
@@ -197,7 +201,7 @@ int solid_batch(const std::string &path) {
         if (line.empty()) continue;
         json answer;
         try {
-            answer = json{{"ok", kerfkite::call("solid", json::parse(line))}};
+            answer = json{{"ok", kerfkite::call(command, json::parse(line))}};
         } catch (const kerfkite::ValueError &error) {
             answer = json{{"error", error.what()}};
         } catch (const std::exception &error) {
@@ -260,8 +264,11 @@ int main(int argc, char **argv) {
     const std::string command = argv[1];
     if (command == "generate") return generate(argc, argv);
     if (command == "batch" && argc == 3) return batch(argv[2]);
-    if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "solid") && argc == 3) return request(command, argv[2]);
-    if (command == "solid-batch" && argc == 3) return solid_batch(argv[2]);
+    if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "polygon" || command == "solid") &&
+        argc == 3)
+        return request(command, argv[2]);
+    if ((command == "polygon-batch" || command == "solid-batch") && argc == 3)
+        return kernel_batch(command.substr(0, command.size() - 6), argv[2]);
     if ((command == "gerber" || command == "gerber-outline" || command == "excellon" || command == "excellon-drills") && argc >= 3)
         return board(command, argc, argv);
     if (command == "numbers" && argc == 2) return numbers();

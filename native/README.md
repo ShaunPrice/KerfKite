@@ -12,11 +12,20 @@ removed only when its C++ replacement gives the same output to the byte on every
     cmake --build build/native --config Release
     ctest --test-dir build/native -C Release
 
-A C++17 compiler and CMake 3.16 or later are the only requirements. There is nothing to install: the JSON
-parser is vendored in `third_party/` (JSON for Modern C++ 3.11.3, MIT), and the first configuration
-downloads the GEOS 3.14.1 release, checks its SHA-256 and builds it with the core (see [GEOS](#geos)).
-`-DKERFKITE_WITH_GEOS=OFF` builds without it and without a network; the polygon operations are then
-declined.
+A C++17 compiler and CMake 3.16 or later are the only requirements. There is nothing to install: the
+first configuration downloads the GEOS 3.14.1 release, checks its SHA-256 and builds it with the core (see
+[GEOS](#geos)). `-DKERFKITE_WITH_GEOS=OFF` builds without it and without a network; the polygon operations
+are then declined. Apart from GEOS, which is being replaced separately, the core has no third-party
+source.
+
+JSON is read and written by the core's own code (`core/include/kerfkite/json.hpp`, `core/src/json.cpp`):
+all of RFC 8259 on input, numbers that stay whole numbers or floats as they were written, object names in
+byte order, and one-line output. Floats are read as the nearest double and written as the shortest text
+that reads back as the same double, in the form Python writes, by exact integer arithmetic
+(`core/include/kerfkite/decimal.hpp`) and not by the C library. Arrays and objects nest at most 200 deep
+in text that is read, text must be UTF-8, and a number beyond the range of a double is refused.
+`tests/json_selftest.cpp` checks all of this under CTest; `docs/NATIVE.md` gives the comparisons made with
+Python and with the library this code replaced.
 
 ## Use
 
@@ -44,6 +53,12 @@ read circuit board files: a Gerber layer as the objects it draws, a board outlin
 file as tools and holes, and its holes as drilling operations. The board file itself is the input, and each
 `--option value` pair is a field of the request. See `docs/PCB.md`.
 
+    kerfkite-cam polygon request.json
+
+answers a request to the core's own polygon kernel (`"op"`: `union`, `intersection`, `difference`, `xor`,
+`normalise`, `compose`, `offset`, `pocket`, `clip-lines`, `artwork`, `inspect`, `locate`), with rings in
+millimetres. It is there to test the kernel from outside; see [The polygon kernel](#the-polygon-kernel).
+
 ## What is ported
 
 | Area | State |
@@ -63,6 +78,7 @@ file as tools and holes, and its holes as drilling operations. The board file it
 | Holding tabs on router line jobs (`core/src/tabs.cpp`) | Done: tab count or explicit positions, tabs across the seam, and every rejection. |
 | Shapely's `LineString.is_simple` and `.length`, which both features ask of each contour (`core/src/simple_line.cpp`) | Done by GEOS's own rules, including its double-double orientation test. A contour whose answer depends on rounding inside GEOS is declined. |
 | Inside and outside offsets (router: tool radius; laser: half the kerf), concentric pockets, hatch and cross-hatch fills (`core/src/operations.cpp`) | Done, with GEOS 3.14.1, the release inside the Shapely wheels the reference uses. Declined in a build without GEOS. |
+| The core's own polygon kernel (`core/src/polygon/`, `core/include/kerfkite/polygon.hpp`) | Done and tested beside GEOS; **not yet what the operations above use**. See [The polygon kernel](#the-polygon-kernel). |
 | 3D solid modelling (`core/include/kerfkite/solid.hpp`, `core/src/solid/`) | Done as a kernel and a `solid` command. New in the core: Studio's Python still uses a third-party library and is not switched over. See `docs/SOLID-KERNEL.md`. |
 | V-carving | Not yet. Declined with exit status 3. |
 | Rotary output, relief, stock simulation, importers, sender, pendant, editors | Not yet. |
@@ -137,6 +153,41 @@ platform can show it. The GEOS functions whose results the output depends on are
 
 If a platform differs, the comparison reports the first differing case; the fix is then to decline the
 operation on that platform, not to accept a different program.
+
+## The polygon kernel
+
+`core/src/polygon/` is KerfKite's own polygon library, written to take the place of GEOS in the core:
+regions with holes, Boolean operations, round offsets, line clipping, and the union of very many shapes
+with dark and clear polarity, which printed-circuit isolation needs. It uses the C++17 standard library and
+nothing else, and is built whether GEOS is in the build or not. `docs/POLYGON-KERNEL.md` is its full
+description; in short:
+
+* Vertices are whole nanometres. Every decision about the shape of a result is exact integer arithmetic in
+  128 bits (the compiler's type, or the kernel's own where there is none). A crossing is rounded to the
+  nearest grid point and the edges near it are bent through that point, repeatedly, until the edges meet
+  only at shared ends. Degenerate input (shared edges, overlaps, slivers, rings that touch themselves) is
+  ordinary input.
+* An offset is the exact union of the region with polygons built on the grid round each edge and corner, so
+  it is always valid and nothing smaller than the tool can turn inside out. Round corners are drawn just
+  outside the true arc (by at most 0.00034 of the radius at 32 segments a quarter turn), so a tool path is
+  never nearer the work than the tool's radius.
+* No trigonometric function of the platform's library is called, so results are the same on every
+  platform. The self-test compares a digest of its results with a recorded value.
+* A result has a defined order: outer rings counter-clockwise, holes clockwise, each ring from its smallest
+  vertex, polygons and holes by their first vertices.
+
+The operations of this core still call GEOS. Replacing those calls is the next step, and the document lists
+each call with its replacement and the ways the tool paths will differ (where a ring starts, where the
+vertices of an arc fall, the order of the holes of one polygon). The output will then no longer be GEOS's to
+the byte, so the comparison below will have to treat offsets, pockets and fills by tolerance, as
+`validation/polygon_kernel_check.py` does.
+
+    ctest --test-dir build/native -R polygon
+    python validation/polygon_kernel_check.py --cli build/native/kerfkite-cam
+
+The first runs the kernel's self-test, with the compiler's 128-bit integer and with the kernel's own. The
+second compares the kernel with Shapely by tolerance over generated cases, including the four operations
+made from kernel calls against `studio.operations`.
 
 ## How it is checked
 

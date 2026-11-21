@@ -29,8 +29,8 @@ struct HeightMap {
 };
 
 // {"x0","y0","dx","dy","columns","rows","offsets":[...]} with every limit checked.
-HeightMap height_map_from_json(const nlohmann::json &value);
-nlohmann::json to_json(const HeightMap &map);
+HeightMap height_map_from_json(const Json &value);
+Json to_json(const HeightMap &map);
 
 // A probing program for Grbl-family controllers (G38.2) covering the cutting bounds of a job.
 // Request: {"bounds":[x0,y0,x1,y1], "width", "height", and optionally "spacing" (10), "margin" (2),
@@ -39,13 +39,13 @@ nlohmann::json to_json(const HeightMap &map);
 // thickness of a touch plate. The spindle is switched off (M5) before the first move.
 // Answer: {"lines":[...], "points":[[x,y],...] in probing order, "grid":{x0,y0,dx,dy,columns,rows},
 // "order":[[column,row],...], and the "clearance", "depth" and "feed" used}.
-nlohmann::json probe_plan(const nlohmann::json &request);
+Json probe_plan(const Json &request);
 
 // The height map from the probe results of a plan.
 // Request: {"grid":{...}, "order":[[column,row],...], and either "heights":[z,...] or
 // "reports":["[PRB:x,y,z:1]",...] in probing order, optionally "reference" (index of the point taken as
 // zero, default 0) and "limit" (largest accepted difference from the reference, default 5)}.
-HeightMap height_map_from_probes(const nlohmann::json &request);
+HeightMap height_map_from_probes(const Json &request);
 
 // The program with every cutting move following the surface. Only absolute, millimetre programs of
 // straight moves are accepted; a line that could move the tool in a way this does not handle is refused.
@@ -53,14 +53,14 @@ std::vector<std::string> level_program(const std::vector<std::string> &lines, co
                                        double max_segment);
 
 // {"lines":[...], "height_map":{...}, optionally "max_segment"} -> {"lines":[...], "max_segment", "highest"}.
-nlohmann::json level_request(const nlohmann::json &request);
+Json level_request(const Json &request);
 
 // The levelling commands by name, each taking and returning JSON: "probe-plan", "height-map" and "level".
 // This is what the Python extension exposes.
-nlohmann::json levelling_call(const std::string &command, const nlohmann::json &request);
+Json levelling_call(const std::string &command, const Json &request);
 
 // Every core command by name, for the command-line tool: the above and "generate".
-nlohmann::json call(const std::string &command, const nlohmann::json &request);
+Json call(const std::string &command, const Json &request);
 
 }  // namespace kerfkite
 

@@ -20,12 +20,12 @@ PyObject *core_call(PyObject *, PyObject *args) {
     // Nothing below touches Python objects, so other threads may run meanwhile.
     Py_BEGIN_ALLOW_THREADS
     try {
-        const nlohmann::json parsed = nlohmann::json::parse(request);
+        const kerfkite::Json parsed = kerfkite::Json::parse(request);
         answer = (kerfkite::pcb_command(command) ? kerfkite::pcb_call(command, parsed) : kerfkite::levelling_call(command, parsed)).dump();
     } catch (const kerfkite::ValueError &error) {
         rejected = true;
         failure = error.what();
-    } catch (const nlohmann::json::exception &) {
+    } catch (const kerfkite::Json::exception &) {
         rejected = true;
         failure = "The request is not valid JSON";
     } catch (const std::exception &error) {

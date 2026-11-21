@@ -8,7 +8,7 @@
 
 namespace kerfkite {
 
-using json = nlohmann::json;
+using json = Json;
 
 namespace {
 

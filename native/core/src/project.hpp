@@ -15,7 +15,7 @@
 namespace kerfkite {
 namespace detail {
 
-using json = nlohmann::json;
+using json = Json;
 
 // project.get(key): null when the key is absent.
 inline const json *get(const json &object, const char *key) {
@@ -88,8 +88,8 @@ inline bool float_from_text(const std::string &raw, double &out) {
         if (!digits(true)) return false;
     }
     if (i != text.size()) return false;
-    out = std::strtod(clean.c_str(), nullptr);
-    return true;
+    // The text has the form parse_double reads, so this cannot fail; the nearest double, as Python gives.
+    return text::parse_double(clean.data(), clean.data() + clean.size(), out);
 }
 
 // A plain JSON number that Python reads as an exact float or int (never a bool). False for anything else.

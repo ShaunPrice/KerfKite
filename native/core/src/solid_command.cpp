@@ -7,7 +7,7 @@
 
 #include "kerfkite/solid.hpp"
 
-using json = nlohmann::json;
+using json = kerfkite::Json;
 
 namespace kerfkite {
 
