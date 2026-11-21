@@ -11,6 +11,7 @@ Notable changes to KerfKite Studio and KerfKite Pocket. Versions before this fil
 - Machine-control routes of the local server (`/api/connect`, `/api/command`, `/api/run`, `/api/head`, `/api/arm` and the arm follow-ups, `/api/generate`, `/api/phone-monitor`) now answer a malformed or non-object body with a JSON `400` instead of an unhandled `500`.
 
 ### Performance
+- The per-move loops of G-code and rotary generation are ported to C++ in the optional native extension (`studio/_gcode_native.cpp`). With it the relief benchmark generates 4.5 times faster and the rotary benchmark 4.4 times faster than the Python loops, with byte-identical programs. Python remains the reference and the fallback; `backend='python'` or `KERFKITE_GCODE_BACKEND=python` selects it.
 - G-code generation is 21% to 31% faster and rotary generation 27% faster on the relief benchmark, with byte-identical programs (`validation/benchmark_gcode.py`).
 - Packaged screenshots are recompressed losslessly (635 KiB smaller, pixels identical). The two generated artwork images are untouched because re-encoding would invalidate their content credentials.
 - Pocket no longer allocates while drawing the preview and computes each shape's outline once.

@@ -18,7 +18,7 @@ def validate_upload(data):
     if not isinstance(name, str) or len(name) > 128 or name != secure_filename(name):
         raise ValueError('Use a simple file name without folders')
     if not name.lower().endswith(('.nc', '.gcode', '.svg', '.cncstudio.json', '.templates.json', '.paths3d.json')):
-        raise ValueError('Supported files: .nc, .gcode, .svg, .cncstudio.json, .templates.json')
+        raise ValueError('Supported files: .nc, .gcode, .svg, .cncstudio.json, .templates.json, .paths3d.json')
     if not isinstance(content, str) or '\x00' in content:
         raise ValueError('Upload must contain text, without NUL characters')
     encoded = content.encode('utf-8')

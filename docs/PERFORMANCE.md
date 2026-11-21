@@ -28,3 +28,17 @@ The relief and stock-preview kernels are native, which left G-code and rotary ge
 
 Every generator, relief and stock-preview call made by the regression suite (578 calls, including 174 that must fail) returned the same result or the same error before and after. Start-up was measured and left alone: importing the server takes about 0.2 s warm and 48 MiB, with the geometry, PDF, DXF and STEP libraries already loaded on first use.
 
+### C++ move loops
+
+The same jobs with the per-move loops ported to C++ (`studio/_gcode_native.cpp`; see [Native](NATIVE.md)). Best of nine, Linux x86-64, Python 3.13. Both backends produce the program hash shown.
+
+| Stage | Python loops | C++ loops | Gain | Program hash |
+| --- | ---: | ---: | ---: | --- |
+| Relief job, packed segments | 209 ms | 47 ms | 4.5× | `08c0811b116f` |
+| Relief job, list rows | 194 ms | 71 ms | 2.7× | `08c0811b116f` |
+| Flat six-level job | 146 ms | 31 ms | 4.7× | `31c8a9794b61` |
+| Laser job | 202 ms | 128 ms | 1.6× | `6636b83bda44` |
+| Rotary job | 729 ms | 167 ms | 4.4× | `cfe252049e5c` |
+
+Against the 0.6.1 figures above, the relief job is 6.3 times faster and the rotary job 6.4 times. The laser job gains least because preparing laser paths remains in Python, as does the rotary cut-length calculation; both depend on Python's own `hypot` and `dist`, and porting them would change the last digits of some values.
+
