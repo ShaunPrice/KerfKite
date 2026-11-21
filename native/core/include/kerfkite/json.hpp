@@ -1,7 +1,7 @@
 // KerfKite's own JSON reader and writer (RFC 8259), with only the C++ standard library behind it.
 //
 // A Json is one value: null, true or false, a number, text, an array of values or an object of named
-// values. The class has the operations the core uses and no more; it is not a general-purpose library.
+// values. The class has the operations the core uses and little more; it is not a general-purpose library.
 //
 // Numbers keep the kind they were written with, because the Python reference tells an int from a float:
 // 1 is a whole number (unsigned when read from text without a sign, signed when it has one or comes from

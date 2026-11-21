@@ -12,11 +12,20 @@ removed only when its C++ replacement gives the same output to the byte on every
     cmake --build build/native --config Release
     ctest --test-dir build/native -C Release
 
-A C++17 compiler and CMake 3.16 or later are the only requirements. There is nothing to install: the JSON
-parser is vendored in `third_party/` (JSON for Modern C++ 3.11.3, MIT), and the first configuration
-downloads the GEOS 3.14.1 release, checks its SHA-256 and builds it with the core (see [GEOS](#geos)).
-`-DKERFKITE_WITH_GEOS=OFF` builds without it and without a network; the polygon operations are then
-declined.
+A C++17 compiler and CMake 3.16 or later are the only requirements. There is nothing to install: the
+first configuration downloads the GEOS 3.14.1 release, checks its SHA-256 and builds it with the core (see
+[GEOS](#geos)). `-DKERFKITE_WITH_GEOS=OFF` builds without it and without a network; the polygon operations
+are then declined. Apart from GEOS, which is being replaced separately, the core has no third-party
+source.
+
+JSON is read and written by the core's own code (`core/include/kerfkite/json.hpp`, `core/src/json.cpp`):
+all of RFC 8259 on input, numbers that stay whole numbers or floats as they were written, object names in
+byte order, and one-line output. Floats are read as the nearest double and written as the shortest text
+that reads back as the same double, in the form Python writes, by exact integer arithmetic
+(`core/include/kerfkite/decimal.hpp`) and not by the C library. Arrays and objects nest at most 200 deep
+in text that is read, text must be UTF-8, and a number beyond the range of a double is refused.
+`tests/json_selftest.cpp` checks all of this under CTest; `docs/NATIVE.md` gives the comparisons made with
+Python and with the library this code replaced.
 
 ## Use
 
