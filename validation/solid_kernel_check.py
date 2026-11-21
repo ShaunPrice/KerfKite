@@ -23,6 +23,13 @@ Tolerances. A kernel result differs from the exact one by the rounding of new ve
 at most a few nanometres on the surfaces involved. The volume may therefore differ by
 `LAYER_MM * area of the leaves * operations`, a section area by the same layer times a length, and a
 bounding box by `BOX_MM`. Nothing here is tuned to make a case pass.
+
+The oracle is not always right. Where the volumes differ, the difference is followed down to the operation
+at which it starts, and that operation is tested by a rule that needs neither side's word: the union of a
+solid with itself is that solid, and a hull contains every point of its operands. Only when the rule shows
+the oracle wrong and the kernel right is the case set aside, and it is listed with the reason. A hull
+whose operand contains a flake without volume (which the oracle keeps and the kernel does not have) is not
+comparable and is counted as such.
 """
 
 import argparse
@@ -102,6 +109,7 @@ class Dual:
     def __init__(self, tree, solid, area, operations, note=''):
         self.tree, self.oracle, self.area, self.operations, self.note = tree, solid, area, operations, note
         self.fragile = False
+        self.parts = []
         Dual.made.append(self)
 
     @classmethod
@@ -147,6 +155,7 @@ class Dual:
     def _unary(self, name, argument, solid):
         made = Dual({name: argument, 'of': self.tree}, solid, self.area, self.operations + 1)
         made.fragile = self.fragile
+        made.parts = [self]
         return made
 
     def translate(self, v):
@@ -175,6 +184,7 @@ class Dual:
             sum(p.operations for p in parts) + len(parts) - 1,
         )
         made.fragile = any(p.fragile for p in parts)
+        made.parts = list(parts)
         return made
 
     def __add__(self, other):
@@ -195,17 +205,24 @@ class Dual:
         }[operation]
         return Dual._combine(name, list(parts), oracle.Manifold.batch_boolean([p.oracle for p in parts], operation))
 
+    def tolerance(self):
+        return LAYER_MM * self.area * max(1, self.operations) + 1e-9
+
     def sliver(self):
-        """Whether the oracle's solid is within the volume tolerance of nothing: a flake the kernel may not keep."""
-        return self.fragile or (
-            not self.oracle.is_empty() and self.oracle.volume() <= LAYER_MM * self.area * max(1, self.operations) + 1e-9
-        )
+        """Whether the oracle's solid is, or contains, a flake the kernel may not keep: the whole solid within
+        the volume tolerance of nothing, or one of its bodies thinner than the layer."""
+        if self.fragile or self.oracle.is_empty():
+            return self.fragile
+        if self.oracle.volume() <= self.tolerance():
+            return True
+        return any(abs(body.volume()) <= LAYER_MM * body.surface_area() + 1e-12 for body in self.oracle.decompose())
 
     @staticmethod
     def batch_hull(parts):
         made = Dual._combine('hull', list(parts), oracle.Manifold.batch_hull([p.oracle for p in parts]))
         # The hull of a flake a few nanometres thick is a solid of full size: whether the flake exists decides
-        # the answer, so such a hull cannot be compared.
+        # the answer, so such a hull cannot be compared. The oracle keeps flakes without volume (ten triangles
+        # at one point, where two solids touch) as bodies of a union; the kernel has none.
         made.fragile = any(p.sliver() for p in parts)
         return made
 
@@ -322,6 +339,61 @@ def stand_in():
 # ---- comparison -----------------------------------------------------------------------------------
 
 
+def kernel_volume(tree):
+    answer = run_batch([{'shape': tree}])[0]
+    return answer['ok']['volume'] if 'ok' in answer else None
+
+
+def outside(points, vertices, triangles):
+    """The largest distance by which a point lies outside the convex mesh."""
+    a, b, c = (vertices[triangles[:, i]] for i in range(3))
+    normals = np.cross(b - a, c - a)
+    lengths = np.linalg.norm(normals, axis=1)
+    keep = lengths > 0
+    normals = normals[keep] / lengths[keep, None]
+    return float(np.max(np.einsum('tk,tpk->tp', normals, points[None, :, :] - a[keep, None, :])))
+
+
+def blame(dual):
+    """The deepest operation at which the kernel and the oracle part ways."""
+    for part in dual.parts:
+        volume = kernel_volume(part.tree)
+        if volume is None or abs(volume - part.oracle.volume()) > part.tolerance():
+            return blame(part)
+    return dual
+
+
+def oracle_is_wrong(dual):
+    """A difference in volume is followed down to the operation where it starts, and that operation is tested
+    by a rule that needs neither side's word. Returns the reason when the rule shows the oracle to be the one
+    that is wrong and the kernel to satisfy it; None otherwise, and the difference stands as a failure."""
+    node = blame(dual)
+    name = next(key for key in node.tree if key not in ('of', 'center'))
+    mine = kernel_volume(node.tree)
+    if mine is None or not node.parts:
+        return None
+    same = len(node.parts) > 1 and all(part.tree == node.parts[0].tree for part in node.parts)
+    if same and name in ('union', 'intersection', 'difference'):
+        # A + A = A, A ^ A = A, A - A is empty: exact identities.
+        truth = 0.0 if name == 'difference' else node.parts[0].oracle.volume()
+        if abs(node.oracle.volume() - truth) > node.tolerance() and abs(mine - truth) <= node.tolerance():
+            return (
+                f'the {name} of a solid with itself: the oracle gives {node.oracle.volume()!r}, the solid has {truth!r}'
+            )
+    if name == 'hull':
+        # A hull contains every point of its operands.
+        points = np.vstack(
+            [np.asarray(p.oracle.to_mesh64().vert_properties)[:, :3] for p in node.parts if not p.oracle.is_empty()]
+        )
+        hull = node.oracle.to_mesh64()
+        theirs = outside(points, np.asarray(hull.vert_properties)[:, :3], np.asarray(hull.tri_verts).astype(np.int64))
+        answer = run_batch([{'shape': node.tree, 'mesh': True}])[0]['ok']['mesh']
+        ours = outside(points, np.array(answer['vertices']), np.array(answer['triangles'], dtype=np.int64))
+        if theirs > 1e-4 and ours <= 1e-5:
+            return f"a hull: the oracle's leaves its own operands' points outside it by up to {theirs:.3g} mm, the kernel's by {ours:.3g} mm"
+    return None
+
+
 def bodies_of(solid):
     return 0 if solid.is_empty() else len(solid.decompose())
 
@@ -331,8 +403,19 @@ class Report:
         self.compared = self.refused = self.oracle_failed = self.fragile = 0
         self.worst = {'volume': 0.0, 'box': 0.0, 'section': 0.0}
         self.failures, self.body_notes, self.sliver_notes = [], [], []
-        self.flake_bodies = 0
+        self.flake_bodies = self.flake_boxes = 0
+        self.oracle_wrong = []
         self.records = []  # (kind, whole tree, detail), for --write-notes
+
+    @staticmethod
+    def box_without_flakes(solid, bounds):
+        """Whether the kernel's bounds are those of the oracle's solid once its flakes without volume are left out."""
+        bodies = [b for b in solid.decompose() if abs(b.volume()) > LAYER_MM * b.surface_area() + 1e-12]
+        if not bodies or len(bodies) == len(solid.decompose()):
+            return False
+        boxes = np.array([b.bounding_box() for b in bodies])
+        box = list(boxes[:, :3].min(axis=0)) + list(boxes[:, 3:].max(axis=0))
+        return max(abs(a - b) for a, b in zip(bounds, box)) <= BOX_MM
 
     def note(self, kind, dual, where, detail, into):
         into.append(f'{where}\n    {detail}')
@@ -377,15 +460,22 @@ class Report:
             operations = max(1, dual.operations)
             tolerance = LAYER_MM * dual.area * operations + 1e-9
             error = abs(mine['volume'] - dual.oracle.volume())
-            self.worst['volume'] = max(self.worst['volume'], error / tolerance)
             if error > tolerance:
                 detail = f'volume {mine["volume"]!r} against {dual.oracle.volume()!r} (tolerance {tolerance:.3g})'
-                self.note('failure', dual, where, detail, self.failures)
+                reason = oracle_is_wrong(dual)
+                if reason:
+                    self.note('oracle', dual, where, f'{detail}\n    {reason}', self.oracle_wrong)
+                else:
+                    self.note('failure', dual, where, detail, self.failures)
                 continue
+            self.worst['volume'] = max(self.worst['volume'], error / tolerance)
             if dual.oracle.is_empty() or mine['empty']:
                 continue  # both empty, or one a sliver within the volume tolerance
             box = dual.oracle.bounding_box()
             error = max(abs(a - b) for a, b in zip(mine['bounds'], box))
+            if error > BOX_MM and self.box_without_flakes(dual.oracle, mine['bounds']):
+                self.flake_boxes += 1
+                continue
             if error > BOX_MM:
                 # Where the volumes agree this closely, the difference is a body thinner than the layer that
                 # one of the two has kept and the other has not. It is listed, not failed.
@@ -660,8 +750,11 @@ def main():
         'worst difference as a share of its tolerance: '
         + ', '.join(f'{name} {value:.3g}' for name, value in report.worst.items())
     )
-    if report.flake_bodies:
-        print(f'{report.flake_bodies} solids where the oracle counts flakes without volume as bodies; otherwise equal')
+    if report.flake_bodies or report.flake_boxes:
+        print(
+            f'{report.flake_bodies} solids where the oracle counts flakes without volume as bodies and {report.flake_boxes} '
+            'where its bounds include them; equal once they are left out'
+        )
     if report.body_notes:
         print(f'{len(report.body_notes)} solids with a different number of bodies that have a volume; the first:')
         print('  ' + report.body_notes[0])
@@ -670,6 +763,10 @@ def main():
             f'{len(report.sliver_notes)} solids whose bounds differ though their volumes agree (a sliver kept by one and not the other); the first:'
         )
         print('  ' + report.sliver_notes[0])
+    if report.oracle_wrong:
+        print(f'{len(report.oracle_wrong)} solids where the oracle is wrong, by a rule that needs neither side:')
+        for text in report.oracle_wrong[:20]:
+            print('  ' + text)
     for failure in report.failures[:20]:
         print('FAIL ' + failure)
     print(f'{len(report.failures)} failures')

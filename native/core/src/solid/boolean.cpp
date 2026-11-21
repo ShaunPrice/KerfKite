@@ -8,12 +8,14 @@
 // or turn a sliver inside out. So afterwards the kernel checks, exactly:
 //   (a) no triangle with a moved vertex has lost its area,
 //   (b) no triangle with a moved vertex meets any other triangle except in a common vertex or edge,
-//   (c) for every connected shell with a moved vertex, the space in front of one of its triangles is
-//       empty (an exact ray count), so that no shell has turned inside out or moved through another.
-// Triangles without a moved vertex are faces of the exact arrangement and cannot meet wrongly. If a check
-// fails, the rounded mesh is resolved against itself (the same engine, keeping what is wound a positive
-// number of times) and rounded again. A result that still fails after kRepairPasses is refused; an
-// invalid solid is never returned.
+//   (c) for every connected shell, moved or not, the space in front of one of its triangles is empty (an
+//       exact ray count), so that no shell has turned inside out and none lies on the wrong side of
+//       another. A shell that did not move is checked too: a surface that moved may have passed it.
+// Triangles without a moved vertex are faces of the exact arrangement and cannot meet wrongly. With (b),
+// the shells are closed surfaces that do not cross, and (c) then fixes the winding number on both sides
+// of each: the mesh is a valid solid. If a check fails, the rounded mesh is resolved against itself (the
+// same engine, keeping what is wound a positive number of times) and rounded again. A result that still
+// fails after kRepairPasses is refused; an invalid solid is never returned.
 #include <algorithm>
 #include <numeric>
 #include <unordered_map>
@@ -75,7 +77,7 @@ bool damaged(const std::vector<GridPoint> &v, const std::vector<Triangle> &t, co
     std::vector<Operand> operands(1, Operand{&v, &t, 0, false, nullptr});
     check.load(operands);
     if (check.intersect(&flagged, true) > 0) return true;
-    // One triangle of each shell that was touched: the space in front of it must be empty.
+    // One triangle of each shell: the space in front of it must be empty.
     std::vector<uint32_t> parent(v.size());
     std::iota(parent.begin(), parent.end(), 0u);
     const auto find = [&](uint32_t x) {
@@ -90,12 +92,10 @@ bool damaged(const std::vector<GridPoint> &v, const std::vector<Triangle> &t, co
             const uint32_t a = find(tri[0]), b = find(tri[k]);
             if (a != b) parent[std::max(a, b)] = std::min(a, b);
         }
-    std::vector<char> shell_touched(v.size(), 0), shell_done(v.size(), 0);
-    for (uint32_t i = 0; i < v.size(); ++i)
-        if (at[i]) shell_touched[find(i)] = 1;
+    std::vector<char> shell_done(v.size(), 0);
     for (size_t i = 0; i < t.size(); ++i) {
         const uint32_t root = find(t[i][0]);
-        if (!shell_touched[root] || shell_done[root]) continue;
+        if (shell_done[root]) continue;
         shell_done[root] = 1;
         if (check.winding_in_front(static_cast<int>(i)) != 0) return true;
     }
