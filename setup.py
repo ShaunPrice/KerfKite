@@ -17,6 +17,7 @@ setup(
                 'studio/_gcode_native.cpp',
                 # The native core's levelling module and its Python entry point.
                 'studio/_core_native.cpp',
+                'native/core/src/json.cpp',
                 'native/core/src/leveling.cpp',
                 # Circuit board import: Gerber layers and Excellon drill files.
                 'native/core/src/excellon.cpp',
@@ -24,7 +25,7 @@ setup(
                 'native/core/src/pcb.cpp',
             ],
             language='c++',
-            include_dirs=['native/core/include', 'native/third_party'],
+            include_dirs=['native/core/include'],
             optional=os.environ.get('KERFKITE_REQUIRE_NATIVE') != '1',
             extra_compile_args=['/O2', '/fp:precise', '/std:c++17', '/utf-8']
             if sys.platform == 'win32'

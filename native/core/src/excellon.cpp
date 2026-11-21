@@ -16,7 +16,7 @@
 
 namespace kerfkite {
 
-using json = nlohmann::json;
+using json = Json;
 using namespace detail;
 using namespace pcb;
 

@@ -19,7 +19,7 @@ namespace kerfkite {
 // "units_from","digits_from","zeros_from"}, "plated": true, false or null, "file_function": text or null,
 // "tools":[{"number","diameter","hits":[[x,y],...]}], "slots":[{"tool","diameter","points":[[x,y],...]}],
 // "counts":{"hits","slots"}, "bounds":[min X, min Y, max X, max Y] of the hole edges or null, "warnings":[...]}.
-nlohmann::json excellon_import(const nlohmann::json &request);
+Json excellon_import(const Json &request);
 
 // The holes of a drill file as drilling operations for studio.cam.generate, grouped by drill diameter.
 // Request: as excellon_import, with optionally "offset":[dx,dy] added to every hole, and "width" and
@@ -28,7 +28,7 @@ nlohmann::json excellon_import(const nlohmann::json &request);
 // "groups":[{"tool_diameter","holes","tools":[numbers]}], "slots":[...] (not drilled), "bounds",
 // "interpretation", "warnings"}. Operations of one diameter may share an ordered job; each diameter is a
 // separate job, because an ordered job has one tool.
-nlohmann::json excellon_drills(const nlohmann::json &request);
+Json excellon_drills(const Json &request);
 
 }  // namespace kerfkite
 
