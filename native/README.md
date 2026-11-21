@@ -197,6 +197,10 @@ stops; `--without-polygon-operations` runs it with those jobs left out, and says
 
 `.github/workflows/native-core.yml` runs the build, the self-test and this comparison on macOS (Apple
 silicon and Intel), Windows, and Linux (x86-64 and ARM64).
+`.github/workflows/native-sanitizers.yml` builds the core a second time with Clang on Linux (x86-64 and
+ARM64), and builds it under the address and undefined-behaviour sanitizers with GCC and Clang on Linux ARM64,
+Clang on Linux x86-64 and Apple Clang on both kinds of Mac, running the self-tests each time. The recorded
+digests are part of those tests, so every one of these compilers has to give the same results.
 
 ## Adding a part
 
