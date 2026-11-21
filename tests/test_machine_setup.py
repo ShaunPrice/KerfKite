@@ -55,6 +55,10 @@ class DescribeTests(unittest.TestCase):
         self.assertIn('Z travel', machine['missing'])
         self.assertTrue(any('beyond the 2000 mm' in warning for warning in machine['warnings']))
         self.assertTrue(any('inches' in warning for warning in machine['warnings']))
+        tall = describe(grbl_status(settings={**GRBL_SETTINGS, '132': 2400}))
+        self.assertNotIn('z_travel', tall['environment'])
+        self.assertNotIn('Z travel', tall['missing'])  # it was reported; it is refused, and the warning says so
+        self.assertTrue(any('Z travel of 2400 mm is beyond' in warning for warning in tall['warnings']))
 
     def test_firmware_is_recognised_and_a_wrong_dialect_is_pointed_out(self):
         cases = [

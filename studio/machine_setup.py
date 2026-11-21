@@ -119,7 +119,11 @@ def describe(status):
             reported.append(f'{axis.upper()} travel {_text(travel[axis])} mm')
     if travel['z'] is None:
         missing.append('Z travel')
-    elif travel['z'] <= TRAVEL_LIMIT:
+    elif travel['z'] > TRAVEL_LIMIT:
+        out['warnings'].append(
+            f'Z travel of {_text(travel["z"])} mm is beyond the {TRAVEL_LIMIT} mm a machine profile allows'
+        )
+    else:
         environment['z_travel'] = travel['z']
         reported.append(f'Z travel {_text(travel["z"])} mm')
     planar = [feed[axis] for axis in 'xy' if feed[axis] is not None]
