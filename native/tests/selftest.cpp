@@ -72,7 +72,41 @@ int main() {
     expect(message<ValueError>(R"({"mode":"router","width":100,"height":50,"feed":600,"power":1,
         "paths":[[[0,0],[101,0]]]})") == "X must be between 0 and 100.0", "a point outside the work area");
     expect(message<NotPorted>(R"({"mode":"knife","width":100,"height":50,"feed":600,"power":1,
-        "paths":[[[0,0],[1,0]]]})") == "drag-knife paths", "a feature that is not ported is declined, not guessed");
+        "paths":[[[9,9],[9.00000009,9],[9.00000018,9],[9,9]]]})") ==
+               "a drag-knife path that returns to a point (the reference fails on it)",
+           "a case that is not reproduced is declined, not guessed");
+
+    // Drilling: a peck at each marker, with the last peck at the full depth.
+    const Job drilled = generate(json::parse(R"({"mode":"router","operation":"drill","protocol":"grbl","width":100,
+        "height":50,"feed":600,"power":12000,"depth":1,"drill_peck":0.4,"paths":[[[10,10],[10,10]],[[30.5,20],[30.5,20]]]})"));
+    program.clear();
+    for (const std::string &line : drilled.lines) program += line + "\n";
+    const std::string pecks = "G1 Z-0.400 F100.0\nG0 Z5.000\nG1 Z-0.800 F100.0\nG0 Z5.000\nG1 Z-1.000 F100.0\nG0 Z5.000\n";
+    expect(program == "G21\nG90\nG17\nG94\nG54\nM5\nG0 Z5.000\nM3 S12000\nG4 P2\nG0 X10.000 Y10.000\n" + pecks +
+                          "G0 X30.500 Y20.000\n" + pecks + "M5\n",
+           "a peck-drilling program");
+    expect(drilled.cut_length == 34.4 && drilled.cut_minutes == 0.34 && drilled.segments.size() == 6 &&
+               drilled.segments[0].end_z == -0.4 && drilled.segments[0].start_z == 5 && drilled.warnings.size() == 2 &&
+               drilled.bounds[0] == 10 && drilled.bounds[1] == 10 && drilled.bounds[2] == 30.5 && drilled.bounds[3] == 20,
+           "its summary");
+    expect(message<ValueError>(R"({"mode":"router","operation":"drill","width":100,"height":50,"feed":600,"power":1,
+        "paths":[[[10,10],[11,10]]]})") == "Drill requires point markers or closed circular hole outlines",
+           "a line is not a hole");
+
+    // A drag knife: the blade trails its pivot, so the path starts with a lead-in and swivels at the corner.
+    const Job sliced = generate(json::parse(R"({"mode":"knife","protocol":"grbl","width":100,"height":50,"feed":600,
+        "power":1,"depth":0.5,"paths":[[[10,10],[20,10],[20,20]]]})"));
+    const std::vector<std::string> &cut = sliced.lines;
+    expect(cut.size() == 33 && cut[6] == "G0 Z5.000" && cut[7] == "G0 Z5.000" && cut[8] == "G0 X9.250 Y10.000" &&
+               cut[9] == "G1 Z-0.500 F100.0" && cut[10] == "G1 X10.250 Y10.000 F600.0" &&
+               cut[11] == "G1 X20.250 Y10.000 F600.0" && cut[12] == "G1 X20.249 Y10.022 F600.0" &&
+               cut[29] == "G1 X20.000 Y10.250 F600.0" && cut[30] == "G1 X20.000 Y20.250 F600.0" && cut[32] == "M5",
+           "a drag-knife program");
+    expect(sliced.cut_length == 21.39 && sliced.warnings.size() == 4 && sliced.bounds[0] == 9.25 &&
+               sliced.bounds[3] == 20.25,
+           "its summary");
+    expect(message<ValueError>(R"({"mode":"knife","width":100,"height":50,"feed":600,"power":1,"knife_offset":2,
+        "paths":[[[10,10],[20,10]]]})") == "knife_lead must be between 2.0 and 20", "a lead shorter than the offset");
 
     // A ramp entry: one lap down a closed contour at no more than the entry angle, then a lap at depth.
     const Job ramp = generate(json::parse(R"({"mode":"router","width":100,"height":50,"feed":600,"power":12000,
