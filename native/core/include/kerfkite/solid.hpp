@@ -113,7 +113,7 @@ enum class FillRule { EvenOdd, NonZero, Positive };
 struct ExtrudeOptions {
     int slices = 1;            // layers of side walls
     double twist_degrees = 0;  // rotation of the top relative to the bottom, counter-clockwise seen from +Z
-    double scale_x = 1;        // scale of the top relative to the bottom; both 0 makes a point
+    double scale_x = 1;        // scale of the top relative to the bottom, applied after the twist; both 0 makes a point
     double scale_y = 1;
     FillRule fill = FillRule::EvenOdd;
 };
@@ -122,7 +122,7 @@ struct ExtrudeOptions {
 Solid extrude(const std::vector<Ring> &rings, double height, const ExtrudeOptions &options = ExtrudeOptions());
 // The solid swept by a profile in the (radius, Z) half-plane turning about the Z axis: ring x is the
 // radius (not negative), ring y is Z. The turn starts on the +X axis and runs counter-clockwise seen
-// from +Z, in ceil(segments * degrees / 360) equal steps. degrees is above 0 and at most 360.
+// from +Z, in `segments` equal steps whatever the angle. degrees is above 0 and at most 360.
 Solid revolve(const std::vector<Ring> &rings, int segments, double degrees = 360, FillRule fill = FillRule::EvenOdd);
 // The convex hull of points, or of the vertices of solids.
 Solid convex_hull(const std::vector<Vec3> &points);

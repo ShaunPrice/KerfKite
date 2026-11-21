@@ -244,8 +244,9 @@ Solid extrude(const std::vector<Ring> &rings, double height, const ExtrudeOption
                 v[i] = GridPoint{{p[0], p[1], 0}};
                 continue;
             }
-            const double x = static_cast<double>(p[0]) * sx, y = static_cast<double>(p[1]) * sy;
-            const double rx = c * x - s * y, ry = s * x + c * y;
+            // Turned, then scaled: the order Studio's extrusions have always had.
+            const double x = static_cast<double>(p[0]), y = static_cast<double>(p[1]);
+            const double rx = (c * x - s * y) * sx, ry = (s * x + c * y) * sy;
             if (!(std::fabs(rx) <= static_cast<double>(detail::kMaxCoord)) || !(std::fabs(ry) <= static_cast<double>(detail::kMaxCoord)))
                 throw ValueError("extrude: the result is outside \xC2\xB1" "100000 mm");
             v[static_cast<size_t>(layer) * n + i] = GridPoint{{static_cast<int64_t>(std::round(rx)), static_cast<int64_t>(std::round(ry)), z}};
@@ -286,7 +287,7 @@ Solid revolve(const std::vector<Ring> &rings, int segments, double degrees, Fill
     const auto index = [&](int id) { return static_cast<uint32_t>(std::lower_bound(ids.begin(), ids.end(), id) - ids.begin()); };
     const uint32_t n = static_cast<uint32_t>(ids.size());
     const bool full = degrees == 360;
-    const uint32_t steps = full ? static_cast<uint32_t>(segments) : static_cast<uint32_t>(std::max(1.0, std::ceil(segments * degrees / 360.0)));
+    const uint32_t steps = static_cast<uint32_t>(segments);  // over the angle turned, as Studio's revolutions have always been faceted
     const uint32_t stations = full ? steps : steps + 1;
     if (static_cast<size_t>(steps) * region.boundary.size() * 2 + region.triangles.size() * 2 > kMaxTriangles)
         throw ValueError("revolve: more than " + std::to_string(kMaxTriangles) + " triangles");

@@ -287,7 +287,9 @@ static void profiles() {
            "fill rules");
     const Solid quarter = revolve({{{2, 0}, {4, 0}, {4, 5}, {2, 5}}}, 64, 90);
     const Box3 qb = quarter.bounds();
-    expect(qb.min.x == 0 && qb.min.y == 0 && qb.max.x == 4 && qb.max.y == 4 && qb.max.z == 5 && close_to(quarter.volume(), 3.14159265358979323846 * 12 * 5 / 4, 0.1) && verify_exact(quarter), "a quarter turn of a rectangle");
+    expect(qb.min.x == 0 && qb.min.y == 0 && qb.max.x == 4 && qb.max.y == 4 && qb.max.z == 5 && close_to(quarter.volume(), 3.14159265358979323846 * 12 * 5 / 4, 0.01) && quarter.num_triangles() == 4 * 2 * 64 + 4 &&
+               verify_exact(quarter),
+           "a quarter turn of a rectangle");
     const Solid lathe = revolve({{{0, 0}, {4, 0}, {4, 10}, {0, 10}}}, 96);
     expect(close_to(lathe.volume(), cylinder(10, 4, 4, 96).volume(), 1e-9) && lathe.num_bodies() == 1, "a profile on the axis turns into a cylinder");
     const Solid pinch = revolve({{{0, 1}, {1, 0}, {2, 1}, {1, 2}}}, 24);
