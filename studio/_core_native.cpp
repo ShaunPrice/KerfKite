@@ -1,13 +1,14 @@
-// The native core's levelling commands for Python: JSON text in, JSON text out.
+// The native core's levelling and circuit board commands for Python: JSON text in, JSON text out.
 //
 // Unlike the other functions of this extension there is no Python implementation behind this one: probe
-// levelling is written once, in native/core, and Studio calls it here.
+// levelling and board import are written once, in native/core, and Studio calls them here.
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 
 #include <string>
 
 #include "kerfkite/leveling.hpp"
+#include "kerfkite/pcb.hpp"
 
 PyObject *core_call(PyObject *, PyObject *args) {
     const char *command_text, *request_text;
@@ -19,7 +20,8 @@ PyObject *core_call(PyObject *, PyObject *args) {
     // Nothing below touches Python objects, so other threads may run meanwhile.
     Py_BEGIN_ALLOW_THREADS
     try {
-        answer = kerfkite::levelling_call(command, nlohmann::json::parse(request)).dump();
+        const nlohmann::json parsed = nlohmann::json::parse(request);
+        answer = (kerfkite::pcb_command(command) ? kerfkite::pcb_call(command, parsed) : kerfkite::levelling_call(command, parsed)).dump();
     } catch (const kerfkite::ValueError &error) {
         rejected = true;
         failure = error.what();

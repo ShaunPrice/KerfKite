@@ -1,0 +1,15 @@
+M48
+;Written by hand for the test suite. Synthetic data, free to redistribute.
+;FILE_FORMAT=3:3
+METRIC,LZ,000.000
+;TYPE=NON_PLATED
+T01F00S00C3.2000
+T02C0.9
+%
+T01
+X0105Y-0085
+X1105Y00625
+T02
+X012Y034567
+X0005Y-01
+M30

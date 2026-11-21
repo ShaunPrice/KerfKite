@@ -7,6 +7,7 @@
 #include "kerfkite/cam.hpp"
 #include "kerfkite/leveling.hpp"
 #include "kerfkite/number_text.hpp"
+#include "kerfkite/pcb.hpp"
 
 using json = nlohmann::json;
 using namespace kerfkite;
@@ -35,6 +36,105 @@ template <typename Thrown> static std::string message(const char *project) {
         return "(another exception)";
     }
     return "(nothing thrown)";
+}
+
+// What a circuit board command answers, or the message it refuses with.
+static json board(const char *command, const std::string &text, json request = json::object()) {
+    request["text"] = text;
+    try {
+        return pcb_call(command, request);
+    } catch (const ValueError &error) {
+        return std::string(error.what());
+    } catch (const std::exception &) {
+        return "(another exception)";
+    }
+}
+
+static void circuit_boards() {
+    // Gerber: a flash, a line, a quarter arc and a macro with arithmetic, in millimetres with six decimals.
+    const std::string head = "%FSLAX46Y46*%\n%MOMM*%\n";
+    const json layer =
+        board("gerber",
+              head +
+                  "%AMBOX*$3=$1x2*21,1,$3,$2,0,0,90*%\n%ADD10C,0.5*%\n%ADD11BOX,1.5X1*%\nD11*\nX2000000Y3000000D03*\n"
+                  "D10*\nG01*\nX0Y0D02*\nX10000000Y0D01*\nG75*\nG03X0Y10000000I-10000000J0D01*\nM02*\n");
+    expect(layer.is_object() && layer["counts"] == json::parse(R"({"flash":1,"line":1,"arc":1,"region":0})") &&
+               layer["warnings"].empty(),
+           "a Gerber layer is read");
+    if (layer.is_object()) {
+        const json &objects = layer["objects"];
+        expect(objects[0] == json::parse(R"({"type":"flash","polarity":"dark","aperture":11,"at":[2.0,3.0]})"),
+               "its flash");
+        expect(objects[1]["end"] == json::parse("[10.0,0.0]") && objects[2]["centre"] == json::parse("[0.0,0.0]") &&
+                   objects[2]["clockwise"] == false && objects[2]["points"].size() > 8,
+               "its line and arc");
+        bool on_arc = true;
+        for (const json &point : objects[2]["points"])
+            on_arc = on_arc && std::fabs(std::hypot(point[0].get<double>(), point[1].get<double>()) - 10) < 1e-5;
+        expect(on_arc, "the flattened arc lies on the circle");
+        // $3 = 1.5 x 2 wide and 1 high, turned a quarter turn: 1 wide and 3 high.
+        expect(layer["apertures"][1]["parts"][0]["points"] ==
+                   json::parse("[[0.5,-1.5],[0.5,1.5],[-0.5,1.5],[-0.5,-1.5],[0.5,-1.5]]"),
+               "a macro with arithmetic and rotation");
+        expect(layer["bounds"] == json::parse("[-0.25,-0.25,10.25,10.25]"),
+               "the bounds include the apertures and the arc's reach");
+    }
+    expect(board("gerber", head + "%ADD10C,0.5*%\nD10*\nX0Y0D03*\n") ==
+               "The Gerber file has no end-of-file command (M02); it may be truncated",
+           "a truncated Gerber file is refused");
+    expect(board("gerber", head + "D12*\nM02*\n") == "Line 3: aperture D12 is selected but not defined",
+           "an unknown aperture is refused");
+    expect(board("gerber", head + "%ADD10C,0.5*%\nD10*\n%SRX1000Y1000I1J1*%\nX0Y0D03*\nM02*\n") ==
+               "Step-and-repeat would draw more than 100000 objects",
+           "a huge step-and-repeat is refused before it is expanded");
+    expect(
+        board("gerber", head + "%AMD*1,1," + std::string(5000, '(') + "1" + std::string(5000, ')') +
+                            ",0,0*%\n%ADD10D*%\nM02*\n") == "Line 4: aperture macro D nests brackets more than 32 deep",
+        "deep macro nesting is refused");
+    expect(board("gerber", head + "%ADD10C,0.5*%\nD10*\nX99999999999Y0D03*\nM02*\n") ==
+               "Line 5: a coordinate lies outside -10000 to 10000 mm",
+           "an absurd coordinate is refused");
+
+    // A board outline: four lines out of order close into one path; with one missing it is open.
+    const std::string edges = head +
+                              "%ADD10C,0.1*%\nD10*\nG01*\nX0Y0D02*\nX8000000Y0D01*\nX0Y5000000D02*\nX0Y0D01*"
+                              "\nX8000000Y5000000D02*\nX8000000Y0D01*\n";
+    const json outline =
+        board("gerber-outline", edges + "X8000000Y5000000D02*\nX0Y5000000D01*\nM02*\n", json{{"offset", {1, 2}}});
+    expect(outline.is_object() &&
+               outline["paths"] == json::parse("[[[1.0,2.0],[9.0,2.0],[9.0,7.0],[1.0,7.0],[1.0,2.0]]]") &&
+               outline["bounds"] == json::parse("[1.0,2.0,9.0,7.0]"),
+           "a board outline is joined into a closed path");
+    const json open = board("gerber-outline", edges + "M02*\n");
+    expect(open.is_string() && open.get<std::string>().find("The board outline is open at X") == 0,
+           "an open outline is refused");
+
+    // Excellon: inches with leading zeros omitted and a repeat; then a file that leaves its format unstated.
+    const json drill = board("excellon", "M48\nINCH,TZ\nT1C0.04\n%\nT1\nX10000Y5000\nR2X2500\nM30\n");
+    expect(drill.is_object() &&
+               drill["tools"] ==
+                   json::parse(R"([{"number":1,"diameter":1.016,"hits":[[25.4,12.7],[31.75,12.7],[38.1,12.7]]}])") &&
+               drill["interpretation"]["omitted_zeros"] == "leading" && drill["warnings"].size() == 1,
+           "a drill file in inches with a repeat");
+    const std::string bare = "M48\nM72\nT1C0.04\n%\nT1\nX5200Y3400\nM30\n";
+    const json guessed = board("excellon", bare),
+               stated = board("excellon", bare, json{{"omitted_zeros", "leading"}, {"integer", 2}, {"decimal", 4}});
+    expect(guessed.is_object() && guessed["warnings"].size() == 2 &&
+               guessed["interpretation"]["zeros_from"] == "default" &&
+               guessed["tools"][0]["hits"] == json::parse("[[1320.8,863.6]]"),
+           "an unstated number format is read by the defaults and reported");
+    expect(stated.is_object() && stated["warnings"].empty() &&
+               stated["tools"][0]["hits"] == json::parse("[[13.208,8.636]]"),
+           "the request can state the number format");
+    expect(board("excellon", "M48\nT1C0.8\n%\nT1\nX1.0Y1.0\nM30\n") ==
+               "The drill file does not state its units (METRIC, INCH, M71 or M72); give \"units\" in the request",
+           "units are not assumed");
+    const json drills = board(
+        "excellon-drills", "M48\nMETRIC\nT1C0.8\nT2C0.4\nT3C0.8\n%\nT1\nX1.0Y1.0\nT2\nX2.0Y1.0\nT3\nX3.0Y1.0\nM30\n");
+    expect(drills.is_object() && drills["operations"] == json::parse(R"([
+               {"operation":"drill","tool_shape":"drill","tool_diameter":0.4,"paths":[[[2.0,1.0],[2.0,1.0]]]},
+               {"operation":"drill","tool_shape":"drill","tool_diameter":0.8,"paths":[[[1.0,1.0],[1.0,1.0]],[[3.0,1.0],[3.0,1.0]]]}])"),
+           "holes become drilling operations grouped by diameter");
 }
 
 int main() {
@@ -179,6 +279,8 @@ int main() {
     } catch (const ValueError &error) {
         expect(std::string(error.what()).find("only straight moves") != std::string::npos, "an arc is refused");
     }
+
+    circuit_boards();
 
     std::printf(failures ? "%d checks failed\n" : "PASS native core self-test%.0d\n", failures);
     return failures ? 1 : 0;

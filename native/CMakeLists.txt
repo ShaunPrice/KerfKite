@@ -16,6 +16,8 @@ configure_file(core/src/protocols_data.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/genera
 
 add_library(kerfkite_core STATIC core/src/api.cpp core/src/cam.cpp core/src/drilling.cpp core/src/knife.cpp core/src/laser.cpp
   core/src/leveling.cpp core/src/protocols.cpp core/src/router_entry.cpp core/src/simple_line.cpp core/src/tabs.cpp)
+# Circuit board import: Gerber layers and Excellon drill files.
+target_sources(kerfkite_core PRIVATE core/src/excellon.cpp core/src/gerber.cpp core/src/pcb.cpp)
 target_include_directories(kerfkite_core PUBLIC core/include third_party PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 if(MSVC)
   # Sources are UTF-8. Floating point stays strict so results match the reference on every platform.

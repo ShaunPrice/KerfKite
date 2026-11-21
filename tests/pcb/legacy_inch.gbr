@@ -1,0 +1,27 @@
+G04 KerfKite test fixture: an older RS-274X file in inches, with the deprecated codes still met in practice.*
+G04 Written by hand for the test suite. Synthetic data, free to redistribute.*
+%FSLAX24Y24*MOIN*%
+%IPPOS*%
+%LNcopper*%
+%OFA0B0*%
+%SFA1.0B1.0*%
+%ADD10C,0.0100*%
+%ADD11R,0.0600X0.0400*%
+G70*
+G90*
+G54D10*
+G01X1000Y1000D02*
+X5000Y1000D01*
+X5000Y3000*
+X1000Y3000*
+G74*
+G03X0Y4000I1000J0D01*
+G02X1000Y5000I1000J0D01*
+G02X1000Y5000I500J0D01*
+G01*
+G54D11*
+X3000Y2000D03*
+G55X4000Y2000D03*
+X2000Y2000D02*
+D03*
+M02*

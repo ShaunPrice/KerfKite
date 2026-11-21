@@ -67,6 +67,8 @@ On Windows x64 (MSVC 2022 Build Tools, Python 3.10 and 3.12) the extension build
 
 Probe levelling (`native/core/src/leveling.cpp`) is the first part of the application written only in the core: it has no Python version. The extension compiles that file and exposes it as `core_call`, which `studio/leveling.py` wraps; the extension is therefore built as C++17 and includes the vendored JSON header. See [Probe levelling](PROBE-LEVELING.md).
 
+Circuit board import (`gerber.cpp`, `excellon.cpp`, `pcb.cpp`) is written the same way, compiled into the extension and wrapped by `studio/pcb_import.py`. See [Circuit boards](PCB.md).
+
 The exact number formatting described above now lives in one header, `native/core/include/kerfkite/number_text.hpp`, used by both the Python extension and the core.
 
 `python validation/native_core_parity.py --cli <kerfkite-cam>` compares the core with the Python reference: number text, every generator call the test suite makes, and thousands of generated edge cases. A case must be reproduced exactly or declined; a different answer fails. With laser jobs ported, the measurement on Linux x86-64 is: 300,000 numbers and 360,000 distances and sums identical; 124 of 202 recorded suite calls reproduced (61%); 11,225 of 12,000 generated cases reproduced (94%), among them 1,137 laser programs; and no differences. The three benchmark programs written by `kerfkite-cam` have the same hashes as Python's.
