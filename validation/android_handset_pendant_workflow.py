@@ -13,6 +13,10 @@ and no project is modified. The controller is always the simulator: nothing here
 The run pairs over the LAN, sends a 0.1 mm X jog, Home and Zero XYZ, starts an armed job, pauses,
 resumes, sends Pocket to the background and back with the job running, stops, and forgets the pairing.
 It refuses to continue when the handset already holds a pairing unless --replace-pairing is given.
+
+With --encrypted the run uses Studio's own phone listener and its pairing link, which carries the
+fingerprint of the certificate created for that pairing (Pocket 0.5.0 or later). Without it the run
+uses the plain HTTP listener that Pocket 0.4.1 understands.
 """
 
 import argparse
@@ -32,6 +36,7 @@ from werkzeug.serving import make_server
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from studio.device import DeviceController
 from pocket_app import PACKAGE, component
+from studio import phone_monitor_service
 from studio.monitor import create_monitor_app
 from studio.phone_jobs import PhoneJobs
 
@@ -127,7 +132,7 @@ def step(name, action):
     print(f'PASS {name} ({time.monotonic() - started:.1f} s)', flush=True)
 
 
-def exercise(phone, host, port, replace_pairing):
+def exercise(phone, host, port, replace_pairing, encrypted=False):
     assert phone.run('shell', 'getprop', 'sys.boot_completed') == '1', 'Unlock and boot the handset before running.'
     assert phone.run('shell', 'pm', 'list', 'packages', PACKAGE), 'Install KerfKite Pocket on the handset first.'
     print(
@@ -143,19 +148,48 @@ def exercise(phone, host, port, replace_pairing):
     controller.connect('simulator')
     jobs = PhoneJobs(controller)
     token = secrets.token_urlsafe(32)
-    app = create_monitor_app(controller, token, jobs)
     accepted, peers = [], set()
 
-    @app.after_request
     def record(response):
         peers.add(request.remote_addr)
         if request.method == 'POST' and response.status_code == 200:
             accepted.append(request.get_json())
         return response
 
-    server = make_server('0.0.0.0', port, app, threaded=True)  # noqa: S104 - the handset connects over the LAN
-    worker = threading.Thread(target=server.serve_forever, daemon=True)
-    worker.start()
+    if encrypted:
+        # Studio's own listener, as the workstation starts it. Its monitor app is given the same recorder.
+        build = phone_monitor_service.create_monitor_app
+
+        def recording(*args, **kwargs):
+            app = build(*args, **kwargs)
+            app.after_request(record)
+            return app
+
+        phone_monitor_service.create_monitor_app = recording
+        monitor = phone_monitor_service.PhoneMonitor(controller, jobs, port=port)
+        try:
+            info = monitor.enable()
+        finally:
+            phone_monitor_service.create_monitor_app = build
+        assert info['encryption'] == 'pinned', 'Install the web extra: the listener is not encrypted.'
+        link = f'https://{host}:{port}/#{info["fragment"]}'
+        print('Listener: HTTPS, certificate fingerprint', info['fingerprint'][:16] + '…', flush=True)
+
+        def close():
+            monitor.disable()
+    else:
+        app = create_monitor_app(controller, token, jobs)
+        app.after_request(record)
+        server = make_server('0.0.0.0', port, app, threaded=True)  # noqa: S104 - the handset connects over the LAN
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        link = f'http://{host}:{port}/#token={token}'
+
+        def close():
+            server.shutdown()
+            worker.join()
+            server.server_close()
+
     paired = False
     try:
         phone.run('shell', 'am', 'force-stop', PACKAGE)
@@ -172,7 +206,8 @@ def exercise(phone, host, port, replace_pairing):
 
         def pair():
             phone.tap('Monitor pairing link')
-            phone.run('shell', 'input', 'text', f'http://{host}:{port}/#token={token}')
+            # The handset's shell would otherwise treat the & before the fingerprint as a command separator.
+            phone.run('shell', 'input', 'text', link.replace('&', '\\&'))
             # Back would leave the pendant when no keyboard is showing.
             if 'mInputShown=true' in phone.run('shell', 'dumpsys', 'input_method'):
                 phone.run('shell', 'input', 'keyevent', 'KEYCODE_BACK')
@@ -254,16 +289,15 @@ def exercise(phone, host, port, replace_pairing):
         step('forget pairing', forget)
         paired = False
     finally:
-        server.shutdown()
-        worker.join()
-        server.server_close()
+        close()
         controller.disconnect()
         phone.cleanup()
         if paired:
             print('The handset still holds the test pairing. Open CNC pendant and choose Forget pairing.', flush=True)
     assert len(peers) == 1, 'Requests arrived from more than one address.'
     print(
-        'PASS native pair, X jog, home, zero, start, pause, resume, background return, stop and forget on a physical handset.'
+        'PASS native pair, X jog, home, zero, start, pause, resume, background return, stop and forget on a physical handset'
+        + (' over the pinned HTTPS listener.' if encrypted else '.')
     )
 
 
@@ -274,6 +308,7 @@ if __name__ == '__main__':
     parser.add_argument('--host', required=True, help='Workstation address the handset can reach')
     parser.add_argument('--port', type=int, default=8766, help='Monitor port to listen on')
     parser.add_argument('--replace-pairing', action='store_true', help='Forget a pairing already stored on the handset')
+    parser.add_argument('--encrypted', action='store_true', help="Pair with Studio's pinned HTTPS listener")
     args = parser.parse_args()
     logging.getLogger('werkzeug').setLevel(logging.ERROR)
-    exercise(Phone(args.adb, args.serial), args.host, args.port, args.replace_pairing)
+    exercise(Phone(args.adb, args.serial), args.host, args.port, args.replace_pairing, args.encrypted)
