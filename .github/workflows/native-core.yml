@@ -1,0 +1,38 @@
+name: Build and compare the native core
+# Runs for pull requests that change the core or its comparison, and on request.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - native/**
+      - validation/native_core_parity.py
+      - validation/native_core_recorder.py
+      - .github/workflows/native-core.yml
+permissions:
+  contents: read
+jobs:
+  core:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel, windows-2022, ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install the Python reference
+        run: python -m pip install -e ".[dev]"
+      - name: Build the native core
+        run: |
+          cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/native --config Release
+      - name: Self-test without Python
+        run: ctest --test-dir build/native -C Release --output-on-failure
+      - name: Compare with the Python reference
+        shell: bash
+        run: |
+          cli=build/native/kerfkite-cam
+          if [ -f build/native/Release/kerfkite-cam.exe ]; then cli=build/native/Release/kerfkite-cam.exe; fi
+          python validation/native_core_parity.py --cli "$cli"

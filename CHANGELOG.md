@@ -5,6 +5,7 @@ Notable changes to KerfKite Studio and KerfKite Pocket. Versions before this fil
 ## Unreleased
 
 ### Added
+- A Python-free native core (`native/`): the `kerfkite-cam` command-line tool writes G-code for router line jobs and ordered multi-operation jobs, for every supported controller, with no Python installed. It is the first stage of porting the application to C++. Anything it cannot reproduce exactly is declined. `validation/native_core_parity.py` compares it with the Python reference.
 - Pair Pocket by QR code. Studio draws the pairing link as a QR code under **Phone pendant**, and Pocket's **CNC pendant** has **Scan QR code**, which reads it with the rear camera and pairs exactly as a pasted link does. Pocket asks for camera access when the scanner is first opened and uses it for nothing else. Decoding uses ZXing core (Apache-2.0).
 
 ### Fixed

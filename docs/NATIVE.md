@@ -61,3 +61,11 @@ On Windows x64 (MSVC 2022 Build Tools, Python 3.10 and 3.12) the extension build
 
 `validation/benchmark_gcode.py` times both backends and fails if their program hashes differ; `validation/check_installed_cam.py` repeats the parity check on an installed wheel.
 
+## Python-free core
+
+`native/` holds the start of the application's move to C++: a C++17 library and the `kerfkite-cam` command-line tool, which write G-code from a project file with no Python installed. It currently reproduces router line jobs, ordered multi-operation jobs and controller post-processing; everything else is declined, never approximated. `native/README.md` lists what is ported and how to build it.
+
+The exact number formatting described above now lives in one header, `native/core/include/kerfkite/number_text.hpp`, used by both the Python extension and the core.
+
+`python validation/native_core_parity.py --cli <kerfkite-cam>` compares the core with the Python reference: number text, every generator call the test suite makes, and thousands of generated edge cases. A case must be reproduced exactly or declined; a different answer fails. On Linux x86-64 the first measurement was 300,000 numbers identical, 91 of 205 recorded suite calls reproduced (44%), 5,435 of 6,000 generated cases reproduced (91%), and no differences.
+
