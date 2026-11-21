@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#ai-vision">Ai Vision</a> <a href="#android">Android</a> <a href="#assemblies">Assemblies</a> <a href="#branding">Branding</a> <a href="#cad-macros">Cad Macros</a> <a href="#cad-scripting">Cad Scripting</a> <a href="#camera-register">Camera Register</a> <a href="#desktop">Desktop</a> <a href="#developer">Developer</a> <a href="#drilling">Drilling</a> <a href="#fixtures">Fixtures</a> <a href="#geometry">Geometry</a> <a href="#install">Install</a> <a href="#installer-builds">Installer Builds</a> <a href="#labels">Labels</a> <a href="#laser-order">Laser Order</a> <a href="#laser-patterns">Laser Patterns</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#licensing">Licensing</a> <a href="#lightburn-import">Lightburn Import</a> <a href="#machine-setup">Machine Setup</a> <a href="#materials">Materials</a> <a href="#mcp-hosting">Mcp Hosting</a> <a href="#mcp">Mcp</a> <a href="#native">Native</a> <a href="#pcb">Pcb</a> <a href="#performance">Performance</a> <a href="#phone-connections">Phone Connections</a> <a href="#platforms">Platforms</a> <a href="#probe-leveling">Probe Leveling</a> <a href="#product">Product</a> <a href="#program-import">Program Import</a> <a href="#protocols">Protocols</a> <a href="#release-review">Release Review</a> <a href="#request-coverage">Request Coverage</a> <a href="#rotary">Rotary</a> <a href="#router-entry">Router Entry</a> <a href="#sbc">Sbc</a> <a href="#simulation">Simulation</a> <a href="#sketch">Sketch</a> <a href="#solid-cad">Solid Cad</a> <a href="#status">Status</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#svg">Svg</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#user-guide">User Guide</a> <a href="#web">Web</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#ai-vision">Ai Vision</a> <a href="#android">Android</a> <a href="#assemblies">Assemblies</a> <a href="#branding">Branding</a> <a href="#cad-macros">Cad Macros</a> <a href="#cad-scripting">Cad Scripting</a> <a href="#camera-register">Camera Register</a> <a href="#desktop">Desktop</a> <a href="#developer">Developer</a> <a href="#drilling">Drilling</a> <a href="#fixtures">Fixtures</a> <a href="#geometry">Geometry</a> <a href="#install">Install</a> <a href="#installer-builds">Installer Builds</a> <a href="#labels">Labels</a> <a href="#laser-order">Laser Order</a> <a href="#laser-patterns">Laser Patterns</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#licensing">Licensing</a> <a href="#lightburn-import">Lightburn Import</a> <a href="#machine-setup">Machine Setup</a> <a href="#materials">Materials</a> <a href="#mcp-hosting">Mcp Hosting</a> <a href="#mcp">Mcp</a> <a href="#native">Native</a> <a href="#pcb">Pcb</a> <a href="#performance">Performance</a> <a href="#phone-connections">Phone Connections</a> <a href="#platforms">Platforms</a> <a href="#probe-leveling">Probe Leveling</a> <a href="#product">Product</a> <a href="#program-import">Program Import</a> <a href="#protocols">Protocols</a> <a href="#release-review">Release Review</a> <a href="#request-coverage">Request Coverage</a> <a href="#rotary">Rotary</a> <a href="#router-entry">Router Entry</a> <a href="#sbc">Sbc</a> <a href="#simulation">Simulation</a> <a href="#sketch">Sketch</a> <a href="#solid-cad">Solid Cad</a> <a href="#status">Status</a> <a href="#supply-chain">Supply Chain</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#svg">Svg</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#user-guide">User Guide</a> <a href="#web">Web</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
 <p>KerfKite Studio is an open-source CAD/CAM workbench for interchangeable CNC router, laser and drag-knife heads. Design in a browser, simulate a job, and prepare output for a supported controller. The Python application runs locally or as an authenticated HTTPS editor. KerfKite Pocket on Android includes an offline sketch editor and a CNC pendant paired with the Studio server.</p>
 <p><a href="screen-desktop-workspace.png"><img src="screen-desktop-workspace.png" alt="KerfKite’s desktop editor showing wattle, banksia and scarlet gum tags on a shared sheet, with separate layers for the outlines, engraving and lettering" /></a></p>
 <p>Three botanical tags share a sheet. The <strong>Layers</strong> tab separates engraving, lettering and cut outlines.</p>
@@ -1072,6 +1072,7 @@ sh start.sh --port 8765
 <p>Version 0.6.1 upgrades the browser project library the first time it opens. Before downgrading, open each design and revision you want to keep and choose <strong>Download project</strong>. Older releases can open the downloaded project files. The upgraded browser library requires version 0.6.1 or later.</p>
 </section><section id="installer-builds"><h1>Building KerfKite installers</h1>
 <p>The desktop launcher contains only Go standard-library code. Each package carries a platform-matched Studio wheel with the C++ relief and stock simulators and locked requirements. The launcher fetches the platform’s uv archive from the pinned upstream release, verifies its SHA-256, and uses it to install a private CPython 3.12 runtime. All application wheels are hash-checked. Python, geometry libraries and optional STEP binaries are installed on the user’s machine.</p>
+<p>The installers are how every part of the product, and each third-party component kept inside it, reaches a user. <a href="#supply-chain">What the installers install</a> lists each part, what has to be put in place for it, and the rule that a component and its installation land in the same change.</p>
 <h2>Release workstation</h2>
 <p>Use macOS with Go, Python 3.12, Pillow, uv, dpkg-deb, Apple command line tools and NSIS (makensis). Alternatively the Windows packaging step accepts a local Docker image named kerfkite-installer-nsis containing Debian’s NSIS package. All paths below are relative to the checkout root.</p>
 <ol>
@@ -1248,7 +1249,7 @@ python packaging/desktop/build_browser.py &quot;dist/browser/kerfkite_studio-${s
 <li><strong>Numerics, image, serial and web services.</strong> NumPy's distribution carries component-specific notices alongside its BSD and other permissive licences. Pillow uses MIT-CMU and its binary wheel contains separately licensed image codecs and font/text libraries. Preserve the actual wheel's complete licence bundle, including any attribution required by the included FreeType and JPEG components. pySerial uses BSD terms. Flask and its supporting libraries retain their upstream notices. Cheroot and cryptography carry separate terms, and a cryptography wheel can include OpenSSL. <a href="https://github.com/numpy/numpy/blob/main/LICENSE.txt">NumPy licences</a> · <a href="https://pillow.readthedocs.io/en/stable/about.html#license">Pillow licence</a> · <a href="https://pyserial.readthedocs.io/en/latest/appendix.html#license">pySerial licence</a> · <a href="https://cryptography.io/en/latest/installation/">cryptography installation</a></li>
 <li><strong>MCP.</strong> The resolved FastMCP and FastMCP Slim advertise Apache 2.0. The MCP SDK advertises MIT. The dependency set includes certifi's Mozilla trust bundle under MPL 2.0. Preserve the MPL notice and comply with its source-availability provisions if distributing the covered material. Other transitive licences are listed in the inventory. The optional service is installed independently of the Studio wheel. <a href="https://pypi.org/project/fastmcp/3.4.11/">FastMCP release</a> · <a href="https://github.com/certifi/python-certifi">certifi</a> · <a href="https://www.mozilla.org/en-US/MPL/2.0/">MPL 2.0</a></li>
 </ul>
-<p>The native core's source tree vendors JSON for Modern C++ 3.11.3 (MIT) as <code>native/third_party/nlohmann/json.hpp</code>, with its licence beside it. It is compiled into <code>kerfkite-cam</code> and, with the probe-levelling module, into the compiled extension of the Python wheels, which carry its licence file; the portable wheel and the Pocket APK do not contain it.</p>
+<p>The native core has no third-party source of its own. Its JSON reader and writer (<code>native/core/include/kerfkite/json.hpp</code>, <code>native/core/src/json.cpp</code>) and the decimal conversions under them (<code>native/core/include/kerfkite/decimal.hpp</code>) are first-party code under the project's MIT licence, written from RFC 8259 and from the published methods named in those files. They replace JSON for Modern C++ 3.11.3 (MIT), which the source tree used to vendor as <code>native/third_party/nlohmann/json.hpp</code>. A <code>kerfkite-cam</code> binary or compiled extension built from a revision that still has that header contains it and must keep its licence file. The one third-party library the core still builds with is GEOS, described next; replacing it is separate work.</p>
 <p><strong>GEOS in the native core.</strong> With the default build options <code>kerfkite-cam</code> contains GEOS 3.14.1, the same release the Shapely 2.2.0 wheels carry, so that the core and the Python reference compute polygons with the same library. GEOS is licensed under the GNU LGPL, version 2.1. Its source is not in this repository: the build downloads the upstream release tarball, checks its SHA-256 and compiles it unmodified (<code>native/cmake/geos.cmake</code>). The licence text is kept at <code>native/third_party/geos/COPYING</code>. The Python wheels, the compiled extension and the Pocket APK do not contain this copy of GEOS. <a href="https://github.com/libgeos/geos/releases/tag/3.14.1">GEOS 3.14.1 release</a></p>
 <p>By default GEOS is linked statically into the program. LGPL 2.1 allows a program under another licence to be distributed linked with the library, on conditions (section 6): the recipient is told that the program uses GEOS and that GEOS is under the LGPL, receives the licence text and GEOS's source or a written offer of it, and is able to modify GEOS and relink the program with the modified library. For a statically linked program the last condition means supplying what is needed to relink: the program's own source or object files for exactly that build. KerfKite's source is public under MIT, which permits modification and rebuilding, so a recipient who has the source of the released version and the pinned GEOS tarball can rebuild <code>kerfkite-cam</code> against a changed GEOS. The licence's terms must also not forbid modification for the recipient's own use or reverse engineering to debug such modifications; MIT forbids neither.</p>
 <p>Two build options change how GEOS is combined with the program. <code>-DKERFKITE_GEOS_SHARED=ON</code> builds GEOS as shared libraries placed beside <code>kerfkite-cam</code>, which a recipient can replace with a compatible build without relinking (the arrangement section 6b describes). <code>-DKERFKITE_SYSTEM_GEOS=ON</code> links a GEOS 3.14.1 already installed on the system. <code>-DKERFKITE_WITH_GEOS=OFF</code> leaves GEOS out; the polygon operations are then declined.</p>
@@ -1787,10 +1788,12 @@ rotary = generate_rotary(project, options, backend='python')
 <p><code>validation/benchmark_gcode.py</code> times both backends and fails if their program hashes differ; <code>validation/check_installed_cam.py</code> repeats the parity check on an installed wheel.</p>
 <h2>Python-free core</h2>
 <p><code>native/</code> holds the start of the application's move to C++: a C++17 library and the <code>kerfkite-cam</code> command-line tool, which write G-code from a project file with no Python installed. It currently reproduces router line jobs, laser line jobs (leads, power ramps, perforation, holding bridges and raster powers), drilling, drag-knife paths, ordered multi-operation jobs and controller post-processing; everything else is declined, never approximated. <code>native/README.md</code> lists what is ported and how to build it.</p>
-<p>Probe levelling (<code>native/core/src/leveling.cpp</code>) is the first part of the application written only in the core: it has no Python version. The extension compiles that file and exposes it as <code>core_call</code>, which <code>studio/leveling.py</code> wraps; the extension is therefore built as C++17 and includes the vendored JSON header. See <a href="#probe-leveling">Probe levelling</a>.</p>
+<p>Probe levelling (<code>native/core/src/leveling.cpp</code>) is the first part of the application written only in the core: it has no Python version. The extension compiles that file and exposes it as <code>core_call</code>, which <code>studio/leveling.py</code> wraps; the extension is therefore built as C++17 and compiles the core's JSON reader and writer with it. See <a href="#probe-leveling">Probe levelling</a>.</p>
 <p>Circuit board import (<code>gerber.cpp</code>, <code>excellon.cpp</code>, <code>pcb.cpp</code>) is written the same way, compiled into the extension and wrapped by <code>studio/pcb_import.py</code>. See <a href="#pcb">Circuit boards</a>.</p>
 <p>Offsets, pockets and hatch fills are computed with GEOS 3.14.1, the release inside the Shapely 2.2.0 wheels that the Python code uses, through the same calls with the same arguments (<code>native/core/src/geometry.hpp</code>, <code>native/core/src/operations.cpp</code>). The build fetches the pinned GEOS release and checks its SHA-256; <code>native/README.md</code> gives the options, the build cost and the limits of what has been measured, and <a href="#licensing">Licences</a> covers GEOS's LGPL terms. On Linux x86-64 the generated comparison adds 4,000 contour jobs, of which about 2,400 produce programs (offsets, pockets and fills) and the rest rejections; all are reproduced or declined, none differs.</p>
 <p>The exact number formatting described above now lives in one header, <code>native/core/include/kerfkite/number_text.hpp</code>, used by both the Python extension and the core.</p>
+<p>The core reads and writes JSON with its own code (<code>native/core/include/kerfkite/json.hpp</code>, <code>native/core/src/json.cpp</code>), which replaced the vendored JSON for Modern C++ header; apart from GEOS, which is being replaced separately, the core now has no third-party source. It supports what the core uses: all of RFC 8259 on input, with every escape and surrogate pairs; numbers that keep their kind, so that <code>1</code> stays a whole number and <code>1.0</code> a float as the Python reference requires; objects with their names in byte order, the last value standing where a name repeats; and one-line output. Its limits: arrays and objects nest at most 200 deep in text that is read, text must be well-formed UTF-8 in both directions, a literal beyond the range of a double is refused, and there is no indented output, comment syntax or binary format. A float is read as the nearest double and written as the shortest text that reads back as the same double, by exact integer arithmetic in <code>native/core/include/kerfkite/decimal.hpp</code>; the C library's conversions and the C locale are not involved, and <code>repr</code> in <code>number_text.hpp</code> and <code>float()</code> of text in a project use the same code. Floats are therefore written as Python writes them. The old library wrote two things differently: a float from 1e15 up to 1e16 in exponent form (<code>1e+15</code>, now <code>1000000000000000.0</code>), and, for roughly one double in a thousand, digits that were not the shortest (<code>23.343139999999998</code>, now <code>23.34314</code>). Both forms read back as the same double.</p>
+<p>It was checked on Linux x86-64 (GCC 13 and Clang 18) in four ways. <code>native/tests/json_selftest.cpp</code>, which CTest runs on every platform, covers each construct, the number kinds, the limits and malformed input, holds tables of doubles computed by Python, and compares every short cut in the number conversions with the exact arithmetic behind it on some 300,000 doubles and the decimals written from them. Against Python, 5 million decimal texts (ties between doubles, decimals one digit either side of a tie hundreds of places along, subnormals, exponents far outside the range) gave the double <code>float()</code> gives, and 5 million doubles gave the text <code>repr()</code> gives, with the short cuts and without them. Against the library it replaced, while that was still in the tree, 440,000 documents (generated, damaged at random, and real: fixtures, projects recorded from the test suite and the answers to them) were read by both: the same were accepted and refused, with the same values, kinds and order; equality between 87,000 pairs of values agreed; and the 26,215 jobs of the parity comparison below gave answers equal in every value and type, 97.7% of them byte for byte, the rest differing only as described above. The one deliberate difference in what is accepted, apart from the depth limit, is that text after a NUL byte is refused, where the old library stopped reading at the NUL. Under the address and undefined-behaviour sanitizers, the self-tests, 500,000 mutated documents, the comparison corpus and 2,500 jobs through <code>kerfkite-cam</code> ran without a report. Windows (MSVC), macOS and ARM64 builds have not been run; the self-test is the check for them.</p>
 <p><code>python validation/native_core_parity.py --cli &lt;kerfkite-cam&gt;</code> compares the core with the Python reference: number text, every generator call the test suite makes, and thousands of generated edge cases. A case must be reproduced exactly or declined; a different answer fails. With laser jobs ported, the measurement on Linux x86-64 is: 300,000 numbers and 360,000 distances and sums identical; 124 of 202 recorded suite calls reproduced (61%); 11,225 of 12,000 generated cases reproduced (94%), among them 1,137 laser programs; and no differences. The three benchmark programs written by <code>kerfkite-cam</code> have the same hashes as Python's.</p>
 <p>Drilling (<code>native/core/src/drilling.cpp</code>) and drag-knife paths (<code>native/core/src/knife.cpp</code>) are ported as well. The generated cases gained 4,000 drilling and knife projects. On Linux x86-64, with those two parts: 160 of 205 recorded suite calls reproduced (78%, from 62%); 15,562 of 16,000 generated cases reproduced (97%), among them 1,290 drilling and 1,634 drag-knife programs; and no differences. The one knife case declined is a path that returns to a point through steps too short to keep, where the Python divides by zero. Knife swivels use the platform's <code>atan2</code>, <code>sin</code> and <code>cos</code>, as Python does, so they are compared on each platform against the Python there.</p>
 <p>Ramp entries and holding tabs on router line jobs are reproduced too (<code>native/core/src/router_entry.cpp</code>, <code>tabs.cpp</code>). Before either, the reference asks Shapely whether each contour crosses itself; <code>simple_line.cpp</code> answers by the rules GEOS applies, including its double-double orientation test, and declines the rare contour for which that test and exact arithmetic disagree. A helix entry needs a pocket, so on a line job it is rejected as the reference rejects it. The ramp slope is <code>math.tan</code> of the entry angle, one C library call on each side. With these ported, the measurement on Linux x86-64 is: 161 of 205 recorded suite calls reproduced (79%); 11,432 of the same 12,000 generated cases (95%); and 5,951 of 6,005 ramp, helix and tab cases, among them 3,254 programs, the rest of those declined because they also ask for an offset, a pocket or drilling; no differences.</p>
@@ -3346,6 +3349,334 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 </ul>
 <p>The <a href="#android">Android pendant</a> pairs with the machine-side Studio server. The <a href="#phone-connections">connection guide</a> covers Wi-Fi, Bluetooth tethering and USB tethering. See the <a href="#geometry">geometry guide</a> for the 2D Trim &amp; Join workflow.</p>
 <p>The keyboard CAD workspace supports editable 2D and 3D scripts, reusable parameterized macros and viewport commands. The assistant workshop exposes the same editor through MCP, with optional adapters for a paired machine and hosted files. <a href="#cad-scripting">Keyboard CAD</a> · <a href="#cad-macros">Macro programming</a> · <a href="#mcp">Assistant setup</a> · <a href="#rotary">Rotary engraving</a></p>
+</section><section id="supply-chain"><h1>Third-party components and the plan for each</h1>
+<p>KerfKite prefers its own code to third-party components. The aim is a smaller supply chain and tighter control of what ships. This register lists every third-party component the product uses, what it is used for, and what is planned for it. <a href="#licensing">Licensing</a> holds the licence texts and notices; this document holds the decisions.</p>
+<h2>The rule</h2>
+<ol>
+<li><strong>Write it ourselves</strong> when the function is within reach: file formats, geometry, parsers, protocol handling, user interface code.</li>
+<li><strong>Exceptions</strong>, where our own code would raise risk and not lower it:
+<ul>
+<li>cryptography and TLS;</li>
+<li>the operating system's own interfaces, compilers and build tools;</li>
+<li>data that is not code, such as fonts.</li>
+</ul>
+</li>
+<li><strong>Whatever third-party code remains</strong> is vendored in the repository or pinned by cryptographic hash, is never fetched unpinned while building something that ships, and has its licence recorded.</li>
+<li><strong>A third-party library may serve as a test oracle</strong> in development and in the checks, to compare our code against. An oracle is never part of anything that ships.</li>
+<li><strong>When a Python part is ported to C++, the port uses our own code</strong>, not a C++ library that happens to do the same job as the Python one.</li>
+</ol>
+<h2>Native core (C++)</h2>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Use</th>
+<th>Plan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GEOS 3.14.1 (LGPL 2.1), fetched at build time by pinned hash</td>
+<td>Offsets, pockets and hatch fills</td>
+<td><strong>Replace now.</strong> An in-house polygon kernel is being written. GEOS then stays only as a test oracle, off by default, and is not shipped.</td>
+</tr>
+<tr>
+<td>JSON for Modern C++ 3.11.3 (MIT), one vendored header</td>
+<td>Reading projects and writing answers</td>
+<td><strong>Replaced.</strong> The core reads and writes JSON with its own code (<code>kerfkite::Json</code>), and the vendored header is gone. The old library was the test oracle while the replacement was written.</td>
+</tr>
+</tbody>
+</table>
+<h2>KerfKite Pocket (Android)</h2>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Use</th>
+<th>Plan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ZXing core 3.5.3 (Apache 2.0), from Maven</td>
+<td>Reading the pairing QR code</td>
+<td><strong>Replace later.</strong> The app reads one kind of symbol for one purpose; a decoder for that case is a contained piece of work. Until then the version stays pinned.</td>
+</tr>
+<tr>
+<td>Android Gradle Plugin, Gradle, Android Build Tools</td>
+<td>Building the app</td>
+<td>Keep: build tools. Versions are pinned.</td>
+</tr>
+</tbody>
+</table>
+<h2>Studio editor (browser code, vendored in <code>studio/static/vendor/</code>)</h2>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Use</th>
+<th>Plan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>qrcodegen (MIT)</td>
+<td>Drawing the pairing QR code</td>
+<td><strong>Replace later.</strong> Small; a QR encoder for short byte strings.</td>
+</tr>
+<tr>
+<td>opentype.js 2.0.0 (MIT), with tiny-inflate</td>
+<td>Reading font outlines for the text tool</td>
+<td><strong>Replace later</strong>, with a reader for the outline tables the text tool uses.</td>
+</tr>
+<tr>
+<td>Cormorant Garamond, Lora, Montserrat (OFL)</td>
+<td>Fonts</td>
+<td>Keep: data, not code.</td>
+</tr>
+</tbody>
+</table>
+<p>The rest of the editor is KerfKite's own JavaScript.</p>
+<h2>Studio (Python), to be retired as the C++ port proceeds</h2>
+<p>Each of these goes when the part that uses it is ported, under rule 5.</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Use</th>
+<th>Plan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Shapely 2.2.0, which carries GEOS</td>
+<td>Polygon work in ten modules: CAM operations, entry moves, sketch profiles, imports, solid text, exchange</td>
+<td><strong>Replace.</strong> The CAM operations move to the in-house kernel first; the other modules follow as they are ported.</td>
+</tr>
+<tr>
+<td>NumPy</td>
+<td>Arrays in seven modules: relief, stock simulation and others</td>
+<td>Replace on porting; plain arrays in C++.</td>
+</tr>
+<tr>
+<td>pyserial</td>
+<td>The serial link to the controller</td>
+<td>Replace on porting the sender: the serial port through each operating system's own interface.</td>
+</tr>
+<tr>
+<td>Flask, with Werkzeug, Jinja2, Click, itsdangerous, MarkupSafe, blinker</td>
+<td>The local web server behind the editor</td>
+<td>Replace on porting the server: a small local HTTP server of our own.</td>
+</tr>
+<tr>
+<td>ezdxf, with pyparsing, fonttools, typing-extensions</td>
+<td>DXF import and export</td>
+<td>Replace on porting: a reader and writer for the DXF entities Studio handles.</td>
+</tr>
+<tr>
+<td>pypdf</td>
+<td>Vector import from PDF</td>
+<td>Replace on porting. A sizeable piece: objects, compressed streams and drawing operators.</td>
+</tr>
+<tr>
+<td>manifold3d</td>
+<td>Solid modelling: unions, differences and intersections of 3D shapes</td>
+<td><strong>Replace</strong> (owner's decision, 21 November 2026). An in-house 3D solid kernel is being written, because engravings can be three-dimensional and multi-axis machines are to follow. It also provides what those need: sections on any plane, ray casting with surface normals, and height maps.</td>
+</tr>
+<tr>
+<td>Pillow</td>
+<td>Used only by packaging and guide-building scripts, not by Studio when it runs</td>
+<td><strong>Quick win:</strong> move it from the installed dependencies to a build-time requirement, after confirming the installers still build.</td>
+</tr>
+<tr>
+<td>cadquery-ocp (Open Cascade, LGPL 2.1 with exception), optional</td>
+<td>STEP import and export</td>
+<td><strong>Keep, optional</strong> (owner's decision, 21 November 2026). Writing a STEP and B-rep kernel is not realistic. It stays a separately installed part, so the main product does not carry it.</td>
+</tr>
+<tr>
+<td>cheroot and cryptography, optional</td>
+<td>The hosted editor, and the encrypted pendant link</td>
+<td>Keep cryptography: rule 2. In a native application the operating system's own TLS can take its place.</td>
+</tr>
+<tr>
+<td>fastmcp, pydantic, playwright, optional</td>
+<td>The MCP service</td>
+<td>Replace on porting the service; the browser driver goes when the editor no longer needs driving.</td>
+</tr>
+<tr>
+<td>Python and setuptools</td>
+<td>The runtime and packaging</td>
+<td>Retired when the port is complete.</td>
+</tr>
+</tbody>
+</table>
+<h2>Desktop launcher and installers</h2>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Use</th>
+<th>Plan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Go standard library</td>
+<td>The launcher</td>
+<td>Keep: it is the language's own library, with no other packages.</td>
+</tr>
+<tr>
+<td>uv, downloaded by pinned SHA-256 for each platform</td>
+<td>Installing the Python environment on first run</td>
+<td>Goes when Python goes. Until then it stays pinned by hash.</td>
+</tr>
+<tr>
+<td>The locked Python packages, each pinned by hash (<code>packaging/desktop/requirements.lock</code>)</td>
+<td>The installed environment</td>
+<td>As for each package above.</td>
+</tr>
+</tbody>
+</table>
+<h2>Build and checks</h2>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Use</th>
+<th>Plan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GitHub Actions: checkout, setup-python, upload-artifact, cache</td>
+<td>The checks</td>
+<td>Keep. Each is pinned by commit hash, with its version beside it.</td>
+</tr>
+<tr>
+<td>ruff, pytest, pytest-cov</td>
+<td>Development only</td>
+<td>Keep: they do not ship.</td>
+</tr>
+<tr>
+<td>CMake and the platform compilers</td>
+<td>Building</td>
+<td>Keep: build tools.</td>
+</tr>
+</tbody>
+</table>
+<h2>The editor in the C++ application</h2>
+<p><strong>Qt 6 is kept</strong> for the editor of the C++ application (owner's decision, 21 November 2026). It is a deliberate exception to rule 1: a user interface toolkit for three desktop platforms is not within reach to write. Qt is used through dynamic linking, and only the modules Qt offers under the LGPL are used; some Qt modules are offered to open-source users under the GPL only and are avoided.</p>
+<h2>Licences by part</h2>
+<p>Where a component cannot be replaced, its licence comes with it. The way to keep that contained is to keep each such component inside one part of the product, behind a clear boundary, and to let each part carry only the licences of what it contains. The core never links a component that belongs to another part.</p>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>What it contains</th>
+<th>Third-party inside</th>
+<th>Licence position</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Core and <code>kerfkite-cam</code>: CAM, the geometry and solid kernels, file formats, levelling</td>
+<td>KerfKite's own code</td>
+<td>None, once GEOS and the JSON library are replaced</td>
+<td>MIT, with no third-party obligations</td>
+</tr>
+<tr>
+<td>Editor application</td>
+<td>KerfKite's own code, linked dynamically to Qt</td>
+<td>Qt 6 (LGPL 3)</td>
+<td>The code stays MIT. A distributed package must meet the LGPL for Qt: the notice and licence text, Qt's source or an offer of it, and the means to replace the Qt libraries. A commercial Qt licence is the alternative.</td>
+</tr>
+<tr>
+<td>STEP add-on, optional</td>
+<td>A thin wrapper</td>
+<td>Open Cascade (LGPL 2.1 with its exception)</td>
+<td>Installed separately. Its package meets the LGPL for Open Cascade; nothing else in the product is affected.</td>
+</tr>
+<tr>
+<td>Encrypted links</td>
+<td>The pendant listener and hosted editor</td>
+<td>A cryptography library, or the operating system's own TLS</td>
+<td>The library's permissive licence; notices only</td>
+</tr>
+<tr>
+<td>KerfKite Pocket</td>
+<td>KerfKite's own Java</td>
+<td>ZXing (Apache 2.0) until replaced</td>
+<td>Notices only</td>
+</tr>
+</tbody>
+</table>
+<p>The owner has decided both questions that this raised (21 November 2026):</p>
+<ol>
+<li><strong>KerfKite's own code stays under MIT throughout.</strong> MIT is compatible with every component above, so no part needs a different licence for its own code.</li>
+<li><strong>KerfKite is distributed through GitHub only, not through app stores.</strong> Releases are downloads: installers, the command-line tool and the Pocket APK. The LGPL's requirement that a user can replace the library is met by shipping Qt and Open Cascade as separate libraries beside the program. If store distribution is ever considered, this has to be looked at again first.</li>
+</ol>
+<p>This register describes what is done and what the licences ask; it is not legal advice.</p>
+<h2>What the installers install</h2>
+<p>Every part of the product reaches a user through an installer, so each part, and each component kept inside it, has to be installed by one. A part that the installer does not install does not exist for the user.</p>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>What the installer puts in place</th>
+<th>State</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Studio and its Python environment</td>
+<td>The launcher, the locked Python packages, and the compiled extension for the platform. Probe levelling and circuit-board import live in that extension, so they arrive with it.</td>
+<td>Installed today; the installer check exercises it.</td>
+</tr>
+<tr>
+<td>The in-house kernels (2D polygons, 3D solids, JSON)</td>
+<td>Nothing separate: they are compiled into the core and the extension.</td>
+<td>Arrive with the extension once each is switched in.</td>
+</tr>
+<tr>
+<td><code>kerfkite-cam</code>, the command-line tool</td>
+<td>The program for the platform.</td>
+<td><strong>Not installed yet.</strong> To be added once GEOS is out of it, so that it carries no third-party code.</td>
+</tr>
+<tr>
+<td>The editor of the C++ application</td>
+<td>The program, and the Qt libraries it uses as separate files beside it, with Qt's notice, licence text and source offer.</td>
+<td>To be built; the installer work is part of that stage, not after it.</td>
+</tr>
+<tr>
+<td>STEP add-on</td>
+<td>Open Cascade and its wrapper, as a component the user chooses, with its notice and licence text.</td>
+<td>Installed today as an option; the installer check has a STEP run.</td>
+</tr>
+<tr>
+<td>Encrypted links</td>
+<td>The cryptography library for the platform.</td>
+<td>Installed today.</td>
+</tr>
+<tr>
+<td>KerfKite Pocket</td>
+<td>The signed APK, downloaded from the release.</td>
+<td>Published separately.</td>
+</tr>
+</tbody>
+</table>
+<p>Rules for this:</p>
+<ol>
+<li><strong>A component and its installation land together.</strong> A change that adds a component to a part also adds it to the installers for every platform, with its licence files, and to the installer check.</li>
+<li><strong>The installer check proves presence by use</strong>, not by listing files: it runs the installed program and exercises the component.</li>
+<li><strong>A kept third-party library is installed as a separate, replaceable file</strong>, never merged into the program, so that the licence position above holds on every platform.</li>
+<li><strong>Nothing is fetched at install time that is not pinned by hash.</strong></li>
+</ol>
+<h2>Order of work</h2>
+<ol>
+<li>The polygon kernel, replacing GEOS in the core and Shapely in the CAM operations.</li>
+<li>Pillow out of the installed dependencies.</li>
+<li>The remaining items as their parts are ported.</li>
+</ol>
 </section><section id="surfaces-step"><h1>Surface modelling and STEP exchange</h1>
 <p>In <strong>3D CAD</strong>, open <strong>Surfaces and STEP</strong> below the solid viewport. The Studio server supplies the modelling kernel. A filesystem project retains its geometry when moved to a server. All Studio coordinates are millimetres.</p>
 <h2>Shape a practice surface</h2>
