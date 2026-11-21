@@ -88,10 +88,10 @@ Where a component cannot be replaced, its licence comes with it. The way to keep
 | Encrypted links | The pendant listener and hosted editor | A cryptography library, or the operating system's own TLS | The library's permissive licence; notices only |
 | KerfKite Pocket | KerfKite's own Java | ZXing (Apache 2.0) until replaced | Notices only |
 
-Two questions are open for the owner and should have legal review before anything changes:
+The owner has decided both questions that this raised (21 November 2026):
 
-1. **Whether KerfKite's own code should stay under one licence.** MIT throughout is the simplest position and is compatible with every component above. A different licence for a part is possible for future versions of code the owner holds the copyright in; versions already released under MIT stay under MIT.
-2. **App stores and locked devices.** The LGPL's requirement that a user can replace the library needs particular care where a platform does not allow it.
+1. **KerfKite's own code stays under MIT throughout.** MIT is compatible with every component above, so no part needs a different licence for its own code.
+2. **KerfKite is distributed through GitHub only, not through app stores.** Releases are downloads: installers, the command-line tool and the Pocket APK. The LGPL's requirement that a user can replace the library is met by shipping Qt and Open Cascade as separate libraries beside the program. If store distribution is ever considered, this has to be looked at again first.
 
 This register describes what is done and what the licences ask; it is not legal advice.
 
