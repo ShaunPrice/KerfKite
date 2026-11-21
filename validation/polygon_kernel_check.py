@@ -1217,10 +1217,10 @@ def check_fill(report, name, request, region, work, reference):
 
 LEGEND = """
 cases     results compared (for pocket and cam passes, one for each pass)
-          `GEOS overlay` counts cases where GEOS's answer differs by more than a sliver and exact
-          arithmetic on the input shows the kernel right at a point of every part that differs
-thin      accepted although not within the limit: what differs is nowhere wider than the tolerance (a
-          sliver, a sharp corner of an offset, a hatch row along an edge)
+thin      accepted although not within the limit of GEOS's answer: what differs is nowhere wider than the
+          tolerance (a sliver, a hatch row along an edge), or, for offsets, the kernel lies between the
+          swept offsets that decide the case and is far from GEOS's buffer only at a sharp corner or
+          where that buffer is itself off
 refused   cases the reference refuses; the kernel must refuse them with the same message
 area      the worst area of difference from GEOS as a share of what is allowed (boundary length times the
           tolerance); for `...: distance` rows, the worst overshoot of the offset distance as a share of
@@ -1231,7 +1231,9 @@ distance  the worst Hausdorff distance from GEOS's result in grid units (nanomet
           the worst shortfall from the offset distance in grid units
 stray     the furthest the kernel's boundary is from GEOS's in any case, thin ones included: where two
           edges run nearly along each other, a sliver under a unit wide between them is kept by one
-          library and lost by the other for as far as the edges run"""
+          library and lost by the other for as far as the edges run
+`GEOS overlay` counts cases where GEOS's answer differs by more than a sliver and exact arithmetic on the
+input shows the kernel right at a point of every part that differs."""
 
 GROUPS = {
     'boolean': (check_boolean, 1.0),

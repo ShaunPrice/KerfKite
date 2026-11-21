@@ -44,24 +44,29 @@ built both ways.
 ### Rounding
 
 A point that has to be constructed, where two edges cross, is not on the grid in general. It is rounded to
-the nearest grid point, and both edges are bent through that point. So is every other edge that passes
-within half a unit of a vertex: a vertex lying on an edge, the ends of a length two edges share, and the
-edges that run close by a rounded crossing. Bending an edge can make it meet another that it missed before,
-so the pieces are looked at again, round after round, until a round finds nothing: the edges then meet only
-at shared end points, as exact arithmetic confirms and not as a rule of thumb assumes. This is snap
-rounding, repeated until it is stable.
+the nearest grid point, and both edges are bent through that point; so is every other edge that passes
+within half a unit of it. A vertex that lies exactly on an edge, and the ends of a length two edges share,
+split the edge where they are, and nothing moves. Bending an edge can make it meet another that it missed
+before, so the pieces are looked at again, round after round, until a round finds nothing: the edges then
+meet only at shared end points, as exact arithmetic confirms and not as a rule of thumb assumes. This is
+snap rounding, repeated until it is stable.
+
+An edge is never bent towards a vertex that was already there. An edge and a vertex may therefore end
+closer than a unit and still exactly apart, each bend moves an edge by at most 0.71 nm, and a result put
+through the kernel again comes back vertex for vertex.
 
 What this means for a result:
 
 * It is always a valid region. Shared edges, collinear overlaps, touching vertices, slivers, rings that
   touch themselves, repeated points and features of a few nanometres are ordinary input.
-* An edge of a result can lie up to about a nanometre from where exact arithmetic would put it (in the
-  comparison with GEOS, 99.9% of results are within 1.5 nm and the limit used is 3 nm).
+* An edge of a result lies within about a nanometre of where exact arithmetic would put it. In the
+  comparison with GEOS the limit used is 3 nm; in a sample of 9,830 Boolean results the kernel's boundary
+  was within 0.71 nm of GEOS's in 99% and within 1 nm in 99.8%, the rest being slivers, as follows.
 * A sliver thinner than a nanometre may vanish, and where two edges run nearly along each other the sliver
   between them may be kept or lost for as far as they run.
-* A simple case takes one round or two. The most seen in any test is 5, for slivers a few nanometres wide
-  and a metre long fanned through one point. The limit is 200 rounds, after which the kernel refuses the
-  input rather than run on; no input has reached it, but that no input can is not proved.
+* A simple case takes one round or two, the second finding nothing. The most seen in any test is
+  4. The limit is 200 rounds, after which the kernel refuses the input rather than run on; no
+  input has come near it, but that none can is not proved.
 
 ## Regions and Boolean operations
 
@@ -170,10 +175,13 @@ Two things could still make a platform differ, and the self-test's recorded dige
 * **Extended precision.** A compiler that evaluates `double` in 80-bit registers (32-bit x86 without SSE2)
   is not supported.
 
-Measured: GCC 13 and Clang 18 on x86-64 give byte-identical answers to the 201,201 requests of the full
+Measured: GCC 13 and Clang 18 on x86-64 give byte-identical answers to the 133,602 requests of the full
 comparison with GEOS, and the same digest with either 128-bit integer, at `-O2` and at `-O3 -march=native`.
-ARM64 and MSVC have not been run; the continuous build (`.github/workflows/native-core.yml`) runs the
-self-test on them, and a difference would fail it there.
+A build with fused multiply-add deliberately allowed (`-march=native -ffp-contract=fast`) also gave the
+same digest, which shows that the test's cases do not turn on it, not that none can. ARM64 and MSVC have not
+been compiled or run: the kernel is written to the standard and the portable integer is exercised here, but
+the first build on each is the test. The continuous build (`.github/workflows/native-core.yml`) runs CTest
+on them, and a different result would fail the digest there.
 
 ## How it is tested
 
@@ -208,34 +216,75 @@ symmetric difference and by the Hausdorff distance between their boundaries, aga
 from the grid and the arc allowance. A difference that is nowhere wider than the tolerance is accepted and
 counted separately as `thin`. For offsets the deciding test is containment between two offsets made the
 slow, sure way (the region with a disc swept along every edge added or taken away), because GEOS's own
-polygon buffer is not exact: it is measured in the same run and was up to 437 times further from the true
-offset than the chords of its arcs explain (13% of the distance, across a notch between two arcs).
+polygon buffer is not exact: its distance from the true offset is measured in the same run, and was up to
+681 times what the chords of its arcs explain (about a fifth of the offset distance; the case examined was
+a straight edge drawn across a notch where two arcs meet). GEOS's overlay is not exact either: one case in
+a further 2,000 was a sliver two units wide that GEOS's own symmetric difference misreported, which the
+script settles with exact rational arithmetic on the input.
 
-The run of 21 November 2026, GCC 13, seed 20261121, with no failures:
+The run of 21 November 2026 (GCC 13, seed 20261121; 133,602 requests to the kernel) had no failures:
 
-RESULTS_TABLE
+| Check | Cases | Thin | Refused alike |
+| --- | --- | --- | --- |
+| Union, intersection, difference, symmetric difference against GEOS | 12,000 each | 945, 638, 2,391, 2,660 | |
+| The area identities of those four | 12,000 | | |
+| The region of arbitrary rings under each fill rule | 12,000 | 434 | |
+| A result united with itself is itself, vertex for vertex | 12,000 | | |
+| `compose` against `studio.operations.region` | 6,000 | 45 | 2,283 |
+| Lines cut to a region | 37,817 lines, 6,000 regions | 5,493 | |
+| Offsets outwards and inwards, between swept offsets | 3,033 and 2,924 | 221 and 241 | |
+| The offset distance measured from the result, with no oracle | 4,386 | | |
+| Offset and back brackets the source | 4,386 | | |
+| Pocket passes against the inset of the source by the whole depth | 6,940 passes, 800 pockets | 2,319 | |
+| Artwork of 1 to 25 dark and clear shapes; two contours round each | 300; 596 | 49; 150 | |
+| Application: outside and inside offsets (regions, then rings in order and direction) | 900 and 914 | 153 and 188 | 87 and 156 |
+| Application: pockets, pass by pass | 896 pockets, 4,456 passes | 526 passes, 9 pockets | 186 |
+| Application: hatch fills | 890 | 291 | 100 |
 
-Read with the legend the script prints: `thin` cases are the slivers, sharp corners and grazing hatch rows
-described above. The script also replays a recorded run through another build and compares the answers
-byte for byte (`--replay`), which is how the Clang build and the AddressSanitizer and
-UndefinedBehaviorSanitizer build were checked: SANITIZER_LINE
+`Thin` cases are accepted and counted, not hidden. For Boolean results they are slivers no wider than the
+tolerance that one library keeps and the other loses (30% of the generated pairs are a set of rings and the
+same set moved by a few nanometres, which is nothing but slivers). For offsets and pocket passes the kernel
+lay between the two swept offsets in every case; `thin` there means it was further from GEOS's polygon
+buffer than the tolerance, at a sharp corner or where that buffer is itself off. For hatch fills it means
+that some row ran along an edge or grazed a corner, so that the two did not cut the same parts, while the
+kernel's rows lay in the region and covered what its width allows. For application pockets, 9 are pockets
+the reference refuses for exceeding 100,000 vertices and the kernel completes within the limit.
+
+Measured without any oracle in that run: no point of an offset boundary was nearer the source than the
+distance by more than 1.3 nm, and none further than the arc allowance and 4 nm. Resolving took at most 4
+rounds.
+
+The script also replays a recorded run through another build and compares the answers byte for byte
+(`--replay`). The Clang 18 build gave the same bytes for all 133,602 requests. A build with
+AddressSanitizer and UndefinedBehaviorSanitizer (GCC 13) ran the self-test and 52,100 of the requests, from
+every group but pockets, with no report and the same bytes.
 
 ## Measured speed
 
 On the development sandbox (2 shared cores, x86-64, GCC 13 `-O2`), `kerfkite_polygon_selftest --bench`:
 
-BENCH_TABLE
+| Case | Time |
+| --- | --- |
+| A pocket: a contour of 2,000 vertices shrunk by 1.5 mm and then 50 times by 0.8 mm (27,482 vertices of tool path) | 0.07 s |
+| The union of 50,000 discs, rectangles, obrounds and strokes that overlap their neighbours (1.2 million edges in, 10 polygons of 220,956 vertices out) | 3.2 s |
+| That image grown by 0.1 mm for an isolation contour | 0.7 s |
+| A hatch of the contour: 2,001 rows, 117,679 parts | 0.15 s |
 
-The machine was shared while these were taken and repeated runs varied by half as much again.
+These are the best of three runs. The machine was shared while they were taken and the other runs were up
+to 45% slower (the union took 3.2 s, 3.6 s and 4.6 s).
 
 ## Known weaknesses
 
 * Termination of the resolving rounds is observed, not proved; the limit of 200 rounds turns a failure to
   settle into a refusal.
-* Time is proportional to the number of edges and crossings in ordinary input, but edges packed into a
-  small part of the plane at many scales are slower: a polygon of 343 sides shrunk by exactly its radius,
-  so that every offset edge passes through the centre, took 0.9 s.
-* A shape with a neck or sliver thinner than a nanometre can come apart or lose the sliver.
+* Time grows with the number of edges and crossings. The worst case met is one where every edge crosses
+  every other: a polygon of 343 sides shrunk by exactly its radius, so that all its offset edges pass
+  through the centre (59,000 crossings), took 0.25 s.
+* A shape with a neck or sliver thinner than a nanometre can come apart or lose the sliver, and an offset of
+  it then lacks what the sliver would have added.
+* The limit of 100,000 vertices on a pocket in `studio/operations.py` was set for GEOS, which draws every
+  arc again at every pass. The kernel's passes have far fewer vertices (4,057 against 156,384 for one
+  generated pocket of 29 passes), so some pockets the reference refuses will be accepted.
 * Only x86-64 with GCC and Clang has been run. See [above](#results-are-the-same-everywhere).
 * `is_valid` does not check that the interior of a polygon is connected. (Results of the kernel are; the
   comparison with GEOS, whose validity test does check it, found none that was not.)
@@ -276,10 +325,12 @@ Where the kernel's tool paths will differ from GEOS's, and why that is acceptabl
   order, where GEOS's is an accident of its algorithm.
 * **Vertices on straight runs** are dropped.
 * **Pockets**: the same passes. The last pass, when it is thinner than the tolerance, can exist in one and
-  not in the other. The kernel's passes have fewer vertices, since it does not re-approximate an arc at every
-  pass.
+  not in the other. The kernel's passes have far fewer vertices, since it does not draw an arc again at every
+  pass, so the reference's limit of 100,000 vertices is reached much later.
 * **Hatch rows**: the same rows to within 3 nm, except rows that run along an edge or graze a corner, which
-  the two cut differently by nature.
+  the two cut differently by nature. A row that only touches a corner is nothing to GEOS; moved to the grid
+  it can cut one to four nanometres off the corner, which passes the reference's test of `> 1e-6` mm. A
+  port may prefer to drop parts shorter than a few grid units.
 * **Contours refused**: a contour that touches itself or has no area is refused with the reference's
   message. The two can disagree only on a contour whose self-contact or emptiness is a matter of less than
   the grid.
