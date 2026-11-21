@@ -125,3 +125,23 @@ assert (len(plan['lines']), len(levelled), digest) == (356, 367, 'c8dc676458939e
     len(levelled),
     digest,
 )
+
+# Offsets, pockets and fills are computed by the native core's polygon kernel through this extension, with
+# whole-number arithmetic and no call into the C maths library, so their programs are pinned as well: an
+# inside offset, an outside offset, a pocket and a cross-hatch fill at an odd angle must come out the same
+# on every platform a wheel is built for.
+from studio import operations
+
+assert operations.kernel_available() and operations.polygon_backend() == 'kernel'
+outline = [[12.4, 9.1], [58.75, 6.3], [71.2, 31.85], [49.6, 52.4], [33.3, 38.7], [14.05, 47.9], [12.4, 9.1]]
+island = [[30.5, 18.2], [44.1, 16.9], [46.3, 29.4], [35.2, 27.75], [30.5, 18.2]]
+shape = dict(protocol='grbl', width=120, height=80, feed=500, power=12000, paths=[outline, island])
+polygon_jobs = [
+    generate(dict(shape, mode='router', operation='inside', tool_diameter=3.175, depth=1.2, step=0.6)),
+    generate(dict(shape, mode='router', operation='outside', tool_diameter=6, depth=1, step=1)),
+    generate(dict(shape, mode='router', operation='pocket', tool_diameter=4, stepover=1.6, depth=1, step=1)),
+    generate(dict(shape, mode='laser', power=800, operation='fill', interval=0.45, hatch_angle=33.3, crosshatch=True)),
+]
+counts = tuple(len(job['lines']) for job in polygon_jobs)
+digest = sha256('\n'.join(line for job in polygon_jobs for line in job['lines']).encode()).hexdigest()[:16]
+assert (counts, digest) == ((344, 176, 684, 1737), '59a9b75edf5ac767'), (counts, digest)

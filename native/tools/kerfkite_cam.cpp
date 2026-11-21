@@ -9,7 +9,9 @@
 //   kerfkite-cam excellon FILE [--units mm|inch] [--integer N --decimal N] [--omitted-zeros leading|trailing]
 //   kerfkite-cam excellon-drills FILE [--offset [X,Y]]       the holes as drilling operations, by diameter
 //   kerfkite-cam polygon REQUEST.json        the polygon kernel: see kerfkite/polygon_command.hpp
-//   kerfkite-cam polygon-batch CASES.jsonl   one polygon request a line, each answered {"ok": ...} or {"error": ...}
+//   kerfkite-cam polygon-batch CASES.jsonl   one polygon request a line (or, with "command": "operation", one
+//                                            operation request), each answered {"ok": ...} or {"error": ...}
+//   kerfkite-cam operation REQUEST.json      an offset, pocket or fill: see kerfkite/operation_command.hpp
 //   kerfkite-cam solid REQUEST.json          a solid built from primitives and Boolean operations: measures, mesh, sections
 //   kerfkite-cam solid-batch REQUESTS.jsonl  the same, one request a line, each answered {"ok": ...} or {"error": message}
 //   kerfkite-cam batch CASES.jsonl
@@ -47,6 +49,7 @@ int usage() {
                  "       kerfkite-cam solid-batch REQUESTS.jsonl\n"
                  "       kerfkite-cam gerber|gerber-outline|excellon|excellon-drills FILE [--option VALUE ...]\n"
                  "       kerfkite-cam polygon REQUEST.json | polygon-batch CASES.jsonl\n"
+                 "       kerfkite-cam operation REQUEST.json\n"
                  "       kerfkite-cam batch CASES.jsonl\n"
                  "       kerfkite-cam numbers < VALUES\n";
     return 1;
@@ -201,7 +204,10 @@ int kernel_batch(const std::string &command, const std::string &path) {
         if (line.empty()) continue;
         json answer;
         try {
-            answer = json{{"ok", kerfkite::call(command, json::parse(line))}};
+            const json request = json::parse(line);
+            // A polygon batch line may name the other geometry command instead: "command": "operation".
+            const bool operation = command == "polygon" && request.is_object() && request.value("command", "") == "operation";
+            answer = json{{"ok", kerfkite::call(operation ? "operation" : command, request)}};
         } catch (const kerfkite::ValueError &error) {
             answer = json{{"error", error.what()}};
         } catch (const std::exception &error) {
@@ -264,7 +270,8 @@ int main(int argc, char **argv) {
     const std::string command = argv[1];
     if (command == "generate") return generate(argc, argv);
     if (command == "batch" && argc == 3) return batch(argv[2]);
-    if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "polygon" || command == "solid") &&
+    if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "polygon" || command == "operation" ||
+         command == "solid") &&
         argc == 3)
         return request(command, argv[2]);
     if ((command == "polygon-batch" || command == "solid-batch") && argc == 3)

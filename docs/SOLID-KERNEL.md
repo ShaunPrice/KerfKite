@@ -194,7 +194,7 @@ Results measured on this code (GCC 13.3 and Clang 18.1 on x86-64 Linux):
 
 | Check | Result |
 | --- | --- |
-| Self-test, as CTest runs it | Passes in both build configurations (with and without GEOS). |
+| Self-test, as CTest runs it | Passes. |
 | Generated cases with every result verified exactly (`--stress 1000 77`) | 6000 cases, 0 failures. 2 refused as too fine, both among the 1000 cases of solids sharing faces and then turned together. |
 | The same under AddressSanitizer and UndefinedBehaviorSanitizer (`--stress 350 23`) | 2100 cases, 0 failures, no report from either sanitizer. |
 | GCC `-O3` against Clang `-O2` (`--digest 700 2026`) | 4200 cases: the hash of every vertex and triangle of every result is equal. 3 refusals in each (2 of the 700 turned-together cases, 1 of the 700 absorption cases). |

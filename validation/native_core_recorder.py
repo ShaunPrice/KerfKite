@@ -70,6 +70,9 @@ def pytest_configure(config):
         # Only calls that ask the question the native core answers: a project, in any segment form. The
         # backend keyword selects between Python's own implementations and is tested on its own.
         outer = _DEPTH[0] == 0 and not args and set(kwargs) <= {'packed_segments'}
+        # A test that forces the Shapely fallback for offsets, pockets and fills is not asking it either: the
+        # core has the kernel's paths, and the fallback's vertices differ.
+        outer = outer and os.environ.get('KERFKITE_POLYGON_BACKEND') != 'shapely'
         _DEPTH[0] += 1
         try:
             if not outer:
