@@ -108,6 +108,47 @@ int main() {
     expect(message<ValueError>(R"({"mode":"knife","width":100,"height":50,"feed":600,"power":1,"knife_offset":2,
         "paths":[[[10,10],[20,10]]]})") == "knife_lead must be between 2.0 and 20", "a lead shorter than the offset");
 
+    // A ramp entry: one lap down a closed contour at no more than the entry angle, then a lap at depth.
+    const Job ramp = generate(json::parse(R"({"mode":"router","width":100,"height":50,"feed":600,"power":12000,
+        "depth":1,"step":1,"router_entry":"ramp","entry_angle":15,"paths":[[[10,10],[30,10],[30,20],[10,10]]]})"));
+    program.clear();
+    for (const std::string &line : ramp.lines) program += line + "\n";
+    expect(program ==
+               "G21\nG90\nG17\nG94\nG54\nM5\nG0 Z5.000\nM3 S12000\nG4 P2\nG0 Z5.000\nG0 X10.000 Y10.000\n"
+               "G1 X10.000 Y10.000 Z0.000 F100.0\nG1 X30.000 Y10.000 Z-0.382 F100.0\nG1 X30.000 Y20.000 Z-0.573 F100.0\n"
+               "G1 X10.000 Y10.000 Z-1.000 F100.0\nG1 X30.000 Y10.000 Z-1.000 F600.0\nG1 X30.000 Y20.000 Z-1.000 F600.0\n"
+               "G1 X10.000 Y10.000 Z-1.000 F600.0\nG0 Z5.000\nM5\n",
+           "a ramp entry program");
+    expect(ramp.cut_length == 109.73 && ramp.cut_minutes == 0.66 && ramp.warnings.size() == 2, "its summary");
+    expect(to_json(ramp)["segments"][0].dump() == "[10.0,10.0,10.0,10.0,0,null,5.0]",
+           "the first height of a ramp is the reference's integer 0");
+    expect(message<ValueError>(R"({"mode":"router","width":100,"height":50,"feed":600,"power":1,"router_entry":"ramp",
+        "paths":[[[10,10],[30,30],[30,10],[10,30],[10,10]]]})") ==
+               "Repair crossing or degenerate machining contours before using a ramp",
+           "a ramp along a contour that crosses itself");
+    expect(message<ValueError>(R"({"mode":"router","width":100,"height":50,"feed":600,"power":1,"router_entry":"helix",
+        "paths":[[[10,10],[30,10],[30,20],[10,10]]]})") == "Helical entry requires a pocket with confirmed cutter clearance",
+           "a helix on a contour");
+
+    // Holding tabs: the contour rises to the tab height over each tab, with vertical moves at its shoulders.
+    const Job tabbed = generate(json::parse(R"({"mode":"router","width":100,"height":50,"feed":600,"power":12000,
+        "depth":2,"step":2,"stock_thickness":2,"tabs":{"width":2,"height":0.5,"count":1},
+        "paths":[[[10,10],[30,10],[30,20],[10,20],[10,10]]]})"));
+    program.clear();
+    for (const std::string &line : tabbed.lines) program += line + "\n";
+    expect(program ==
+               "G21\nG90\nG17\nG94\nG54\nM5\nG0 Z5.000\nM3 S12000\nG4 P2\nG0 Z5.000\nG0 X10.000 Y10.000\nG1 Z-2.000 F100.0\n"
+               "G1 X30.000 Y10.000 F100.0 Z-2.000\nG1 X30.000 Y17.413 F100.0 Z-2.000\nG1 X30.000 Y17.413 F100.0 Z-1.500\n"
+               "G1 X30.000 Y20.000 F100.0 Z-1.500\nG1 X27.413 Y20.000 F100.0 Z-1.500\nG1 X27.413 Y20.000 F100.0 Z-2.000\n"
+               "G1 X10.000 Y20.000 F100.0 Z-2.000\nG1 X10.000 Y10.000 F100.0 Z-2.000\nG0 Z5.000\nM5\n",
+           "a program with one holding tab");
+    expect(tabbed.cut_length == 61.0 && tabbed.cut_minutes == 0.61 && tabbed.warnings.size() == 6 && tabbed.segments.size() == 8,
+           "its summary");
+    expect(message<ValueError>(R"({"mode":"router","width":100,"height":50,"feed":600,"power":1,"depth":2,"stock_thickness":2,
+        "tabs":{"width":40,"height":0.5,"count":2},"paths":[[[10,10],[30,10],[30,20],[10,20],[10,10]]]})") ==
+               "Tabs overlap or cover the contour; reduce count/width or change positions",
+           "tabs that cover the contour");
+
     // Probe levelling: a plan over the job, a tilted plane as the probed surface, and the job following it.
     const json plan = probe_plan(json{{"bounds", job.bounds}, {"width", 100}, {"height", 50}, {"zero", true}});
     expect(plan["grid"] == json::parse(R"({"x0":8.0,"y0":8.0,"dx":7.25,"dy":8.0,"columns":3,"rows":4})"), "the probe grid");

@@ -17,6 +17,8 @@
 #include "knife.hpp"
 #include "laser.hpp"
 #include "project.hpp"
+#include "router_entry.hpp"
+#include "tabs.hpp"
 
 namespace kerfkite {
 
@@ -104,12 +106,13 @@ Job single(const json &project) {
             throw NotPorted("offset, pocket and fill operations");
         }
     }
-    if (tabs_enabled) throw NotPorted("holding tabs");
+    std::vector<std::string> operation_warnings;  // the reference's operation_warnings
 
     std::vector<std::vector<double>> depths;
+    if (tabs_enabled) holding_tabs(project, clean, depth, depths, operation_warnings);
     const json *depth_paths = get(project, "path_depths");
-    const bool has_depths = !none(depth_paths);
-    if (has_depths) {
+    const bool has_depths = tabs_enabled || !none(depth_paths);
+    if (has_depths && !tabs_enabled) {  // tab heights are the core's own and need no checking
         if (laser || !depth_paths->is_array() || depth_paths->size() != clean.size())
             throw ValueError("Depth paths must match router XY paths");
         depths.reserve(clean.size());
@@ -136,7 +139,9 @@ Job single(const json &project) {
         }
         if (depth <= 0) throw ValueError("No contour cuts below the stock surface");
     }
-    if (router && !entry_plunge) throw NotPorted("ramp and helix entry moves");
+    if (router && !entry_plunge)
+        return entry_job(project, clean, has_depths ? &depths : nullptr, depth, step, safe, feed, plunge, power, width,
+                         height, operation_warnings);
 
     std::vector<std::vector<LaserVertex>> laser_paths;
     bool leads = false;
@@ -276,6 +281,7 @@ Job single(const json &project) {
     const Protocol &profile = get_protocol(protocol);
     job.warnings = {profile.notes, "Review tool geometry, stock and clearance before running.",
                     "Time estimate excludes travel, plunge, acceleration and spindle startup."};
+    job.warnings.insert(job.warnings.begin() + 1, operation_warnings.begin(), operation_warnings.end());
     if (knife) job.warnings.insert(job.warnings.begin() + 1, KNIFE_WARNING);
     if (profile.family == "rs274")
         job.warnings.push_back(
@@ -438,6 +444,8 @@ json to_json(const Job &job) {
         // A laser move has no height: the reference writes the integer 0 there, and inside a beam-off gap
         // an integer 0 for the power as well.
         if (s.planar) row[4] = row[6] = 0;
+        if (s.whole_end) row[4] = 0;
+        if (s.whole_start) row[6] = 0;
         if (s.has_power) row[5] = s.whole_power ? json(0) : json(s.power);
         segments.push_back(std::move(row));
     }
