@@ -13,6 +13,7 @@ setup(
             'studio._relief_native',
             ['studio/_relief_native.cpp', 'studio/_stock_native.cpp', 'studio/_gcode_native.cpp'],
             language='c++',
+            include_dirs=['native/core/include'],
             optional=os.environ.get('KERFKITE_REQUIRE_NATIVE') != '1',
             extra_compile_args=['/O2', '/fp:precise']
             if sys.platform == 'win32'
