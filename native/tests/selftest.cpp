@@ -1,9 +1,11 @@
 // A small check that needs no Python: number text and one complete program. The full comparison with the
 // reference is validation/native_core_parity.py.
+#include <cmath>
 #include <cstdio>
 #include <string>
 
 #include "kerfkite/cam.hpp"
+#include "kerfkite/leveling.hpp"
 #include "kerfkite/number_text.hpp"
 
 using json = nlohmann::json;
@@ -71,6 +73,37 @@ int main() {
         "paths":[[[0,0],[101,0]]]})") == "X must be between 0 and 100.0", "a point outside the work area");
     expect(message<NotPorted>(R"({"mode":"knife","width":100,"height":50,"feed":600,"power":1,
         "paths":[[[0,0],[1,0]]]})") == "drag-knife paths", "a feature that is not ported is declined, not guessed");
+
+    // Probe levelling: a plan over the job, a tilted plane as the probed surface, and the job following it.
+    const json plan = probe_plan(json{{"bounds", job.bounds}, {"width", 100}, {"height", 50}, {"zero", true}});
+    expect(plan["grid"] == json::parse(R"({"x0":8.0,"y0":8.0,"dx":7.25,"dy":8.0,"columns":3,"rows":4})"), "the probe grid");
+    expect(plan["lines"].size() == 4 + 3 * 12 + 1 && plan["lines"][2] == "M5" && plan["lines"][4] == "G0 X8.000 Y8.000" &&
+               plan["lines"][5] == "G38.2 Z-1.000 F25.0" && plan["lines"][6] == "G10 L20 P1 Z0.000" &&
+               plan["lines"][8] == "G0 X15.250 Y8.000" && plan["order"][3] == json::parse("[2,1]"),
+           "the probing program");
+    json reports = json::array();
+    for (const json &point : plan["points"]) {
+        std::string z;
+        text::fixed(z, -37.5 + 0.01 * point[0].get<double>(), 3);
+        reports.push_back("[PRB:0.000,0.000," + z + ":1]");
+    }
+    const HeightMap surface = height_map_from_probes(json{{"grid", plan["grid"]}, {"order", plan["order"]}, {"reports", reports}});
+    expect(surface.offsets[0] == 0 && std::fabs(surface.offsets[5] - 0.145) < 1e-12 && std::fabs(surface.highest() - 0.145) < 1e-12,
+           "the height map is relative to the first point");
+    const std::vector<std::string> followed = level_program(job.lines, surface, 5);
+    const std::vector<std::string> first_pass(followed.begin() + 9, followed.begin() + 20);
+    const std::vector<std::string> wanted = {
+        "G0 Z5.000", "G0 X10.000 Y10.000", "G1 Z-0.480 F100.0",
+        "G1 X13.500 Y10.000 F600.0 Z-0.445", "G1 X17.000 Y10.000 F600.0 Z-0.410", "G1 X20.500 Y10.000 F600.0 Z-0.375",
+        "G1 X20.500 Y15.000 F600.0 Z-0.375", "G1 X20.500 Y20.000 F600.0 Z-0.375", "G1 X20.500 Y25.000 F600.0 Z-0.375",
+        "G1 X20.500 Y30.000 F600.0 Z-0.375", "G0 Z5.000"};
+    expect(first_pass == wanted && followed.size() == job.lines.size() + 10, "the first pass follows the surface");
+    try {
+        level_program({"G0 Z5.000", "G0 X10.000 Y10.000", "G2 X20.000 Y10.000 I5 J0 F600"}, surface, 5);
+        expect(false, "an arc is refused");
+    } catch (const ValueError &error) {
+        expect(std::string(error.what()).find("only straight moves") != std::string::npos, "an arc is refused");
+    }
 
     std::printf(failures ? "%d checks failed\n" : "PASS native core self-test%.0d\n", failures);
     return failures ? 1 : 0;

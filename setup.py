@@ -11,13 +11,20 @@ setup(
     else [
         Extension(
             'studio._relief_native',
-            ['studio/_relief_native.cpp', 'studio/_stock_native.cpp', 'studio/_gcode_native.cpp'],
+            [
+                'studio/_relief_native.cpp',
+                'studio/_stock_native.cpp',
+                'studio/_gcode_native.cpp',
+                # The native core's levelling module and its Python entry point.
+                'studio/_core_native.cpp',
+                'native/core/src/leveling.cpp',
+            ],
             language='c++',
-            include_dirs=['native/core/include'],
+            include_dirs=['native/core/include', 'native/third_party'],
             optional=os.environ.get('KERFKITE_REQUIRE_NATIVE') != '1',
-            extra_compile_args=['/O2', '/fp:precise']
+            extra_compile_args=['/O2', '/fp:precise', '/std:c++17', '/utf-8']
             if sys.platform == 'win32'
-            else ['-O3', '-g0', '-ffp-contract=off', '-std=c++11'],
+            else ['-O3', '-g0', '-ffp-contract=off', '-std=c++17'],
         )
     ],
 )

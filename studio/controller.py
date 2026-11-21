@@ -45,6 +45,13 @@ class Controller:
         self.drain_after = 0
         self.receive_sequence = self.drain_sequence = 0
         self.progress = 0
+        # Probe reports ([PRB:...]) received since the current or last job started.
+        self.probes = []
+        # The simulator's stock surface, as height above its nominal top at a machine position: a gentle
+        # tilt with a slight bow, so that probing and levelling have something to follow. Work offsets
+        # set with G10 L20 are tracked so that probe reports are in machine coordinates, as on a controller.
+        self.simulated_surface = lambda x, y: 0.0015 * x - 0.001 * y + 0.00001 * (x - 40) ** 2
+        self.simulated_offset = {'x': 0.0, 'y': 0.0, 'z': 0.0}
 
     def ports(self):
         return [{'device': p.device, 'description': p.description} for p in list_ports.comports()]
@@ -62,6 +69,7 @@ class Controller:
                 spindle_type=self.spindle_type,
                 identification=list(self.identification),
                 progress=self.progress,
+                probe_count=len(self.probes),
                 log=list(self.log),
                 active=self.active,
             )
@@ -77,6 +85,8 @@ class Controller:
             self.position_count = 0
             self.spindle_type = None
             self.progress = 0
+            self.probes = []
+            self.simulated_offset = {'x': 0.0, 'y': 0.0, 'z': 0.0}
             self.init_remaining = deque(self.initialization_queries)
             self.initialized = False
             self.identification = []
@@ -176,9 +186,48 @@ class Controller:
             if any(not isinstance(s, str) or '\n' in s or '\r' in s or not s.isascii() or len(s) > 78 for s in lines):
                 raise ValueError('Invalid G-code line')
             self.queue = deque(lines)
+            self.probes = []
             self.total, self.acked, self.progress = len(lines), 0, 0
             self.active = True
             self.state = 'Run'
+
+    def probe_reports(self):
+        """The [PRB:...] reports of the current or last job, in the order they arrived."""
+        with self.lock:
+            return list(self.probes)
+
+    def _simulate(self, line):
+        """Track the simulated position through one line; False when a probe finds no surface."""
+        words = {}
+        for word in line.split()[1:]:
+            if re.fullmatch(r'[XYZABCFLP][+-]?(?:\d+(?:\.\d*)?|\.\d+)', word):
+                words[word[0]] = float(word[1:])
+        axes = {letter.lower(): value for letter, value in words.items() if letter in 'XYZABC'}
+        if not axes:
+            return True
+        position = self.position or {'basis': 'WPos', 'x': 0.0, 'y': 0.0, 'z': 0.0}
+        if line.startswith(('G0 ', 'G1 ')):
+            position.update(axes)
+        elif line.startswith('G10 ') and words.get('L') == 20 and words.get('P') == 1:
+            # The current position takes the given coordinates: the work offset moves, the tool does not.
+            for axis, value in axes.items():
+                if axis in self.simulated_offset:
+                    self.simulated_offset[axis] += position[axis] - value
+                    position[axis] = value
+        elif line.startswith('G38.2 ') and set(axes) == {'z'}:
+            offset = self.simulated_offset
+            machine = [position[axis] + offset[axis] for axis in 'xy']
+            surface = self.simulated_surface(*machine)
+            if axes['z'] + offset['z'] > surface:  # the move ends above the stock: no contact
+                position['z'] = axes['z']
+                self.position = position
+                return False
+            position['z'] = surface - offset['z']
+            report = '[PRB:{:.3f},{:.3f},{:.3f}:1]'.format(*machine, surface)
+            self.probes.append(report)
+            self.log.append(report)
+        self.position = position
+        return True
 
     def command(self, action, **kwargs):
         with self.lock:
@@ -348,6 +397,9 @@ class Controller:
                     # monotonic clock returns the same tick for both messages.
                     self.drain_sequence = self.receive_sequence
                     self._write(b'?')
+        elif line.startswith('[PRB:'):
+            if self.active and len(self.probes) < 1000:
+                self.probes.append(line)
         elif line.startswith(('error:', 'ALARM:')):
             self._fault(line)
         elif line.startswith(('[VER:', '[OPT:', '[FIRMWARE:', '[AXS:', '[MSG:Using machine:')):
@@ -375,16 +427,10 @@ class Controller:
                             if self.queue:
                                 line = self.queue.popleft()
                                 self.log.append(line)
-                                if line.startswith(('G0 ', 'G1 ')):
-                                    for word in line.split()[1:]:
-                                        if re.fullmatch(r'[XYZABC][+-]?(?:\d+(?:\.\d*)?|\.\d+)', word):
-                                            self.position = self.position or {
-                                                'basis': 'WPos',
-                                                'x': 0.0,
-                                                'y': 0.0,
-                                                'z': 0.0,
-                                            }
-                                            self.position[word[0].lower()] = float(word[1:])
+                                if not self._simulate(line):
+                                    # As Grbl does when a G38.2 probe ends without contact.
+                                    self._fault('ALARM:5')
+                                    continue
                                 self.acked += 1
                                 self.progress = min(99, self.acked / self.total * 100)
                             else:

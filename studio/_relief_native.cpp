@@ -113,6 +113,7 @@ PyObject* rounded_value(PyObject*, PyObject*);
 PyObject* plain_points(PyObject*, PyObject*);
 PyObject* plain_depths(PyObject*, PyObject*);
 PyObject* segment_rows(PyObject*, PyObject*);
+PyObject* core_call(PyObject*, PyObject*);
 
 static PyMethodDef methods[]={{"stock_heights",stock_heights,METH_VARARGS,"Compute a bounded stock-removal grid from planar moves."},
     {"gcode_moves",gcode_moves,METH_VARARGS,"Emit the cutting moves of one operation; None when the Python loop must run."},
@@ -122,6 +123,7 @@ static PyMethodDef methods[]={{"stock_heights",stock_heights,METH_VARARGS,"Compu
     {"plain_points",plain_points,METH_VARARGS,"Copy plain in-range XY paths; None when the Python validator must run."},
     {"plain_depths",plain_depths,METH_VARARGS,"Copy plain per-vertex depths; None when the Python validator must run."},
     {"segment_rows",segment_rows,METH_VARARGS,"Unpack a packed segment buffer into list rows."},
+    {"core_call",core_call,METH_VARARGS,"Run a levelling command of the native core: (command, JSON request) -> JSON answer."},
     {"contact",contact,METH_VARARGS,"Compute bounded conservative cutter contact depths from cell maxima."},{nullptr,nullptr,0,nullptr}};
 static PyModuleDef module={PyModuleDef_HEAD_INIT,"_relief_native","Optional CNC Studio relief contact kernel.",-1,methods};
 PyMODINIT_FUNC PyInit__relief_native(void) {return PyModule_Create(&module);}

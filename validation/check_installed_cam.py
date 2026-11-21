@@ -91,3 +91,37 @@ for backend_project in (project, dict(project, path_depths=None, path_powers=Non
 for value in (0.0625, 2.5, -0.0004, 1234.56789, 0.1 + 0.2):
     for decimals in (0, 1, 3, 6, 9):
         assert _relief_native.fixed_text(value, decimals) == format(value, f'.{decimals}f'), (value, decimals)
+
+# Probe levelling exists only in the native core, so its output is pinned here: the same plan, surface
+# and levelled program on every platform a wheel is built for.
+from studio import leveling
+
+assert leveling.available()
+level_job = generate(
+    dict(
+        protocol='grbl',
+        mode='router',
+        width=120,
+        height=80,
+        feed=500,
+        power=12000,
+        depth=0.12,
+        step=0.12,
+        paths=[[[11.3, 9.7], [97.25, 14.1], [83.6, 61.45], [20.05, 55.5], [11.3, 9.7]]],
+    )
+)
+plan = leveling.probe_plan({'bounds': level_job['bounds'], 'width': 120, 'height': 80, 'spacing': 7.5, 'zero': True})
+heights = [
+    -31.4 + 0.0031 * x - 0.0017 * y + 0.00002 * (x - 50) * (x - 50) + 0.00003 * (y - 40) * (y - 40)
+    for x, y in plan['points']
+]
+surface = leveling.height_map(
+    plan, reports=[f'[PRB:{x:.3f},{y:.3f},{z:.3f}:1]' for (x, y), z in zip(plan['points'], heights)]
+)
+levelled = leveling.level(level_job['lines'], surface, max_segment=0.7)['lines']
+digest = sha256('\n'.join(plan['lines'] + levelled).encode() + repr(surface['offsets']).encode()).hexdigest()[:16]
+assert (len(plan['lines']), len(levelled), digest) == (356, 367, 'c8dc676458939e8a'), (
+    len(plan['lines']),
+    len(levelled),
+    digest,
+)
