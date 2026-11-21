@@ -20,6 +20,9 @@ triangles. And the kernel refuses a result it cannot represent on its grid ("fea
 grid"), which happens for some models whose faces almost coincide after a turn. Studio then reports the
 error with the feature or script line; it does not hand the model to the other library, because the
 two facet differently and a model must not change shape from one rebuild to the next.
+
+The kernel is also slower than the library: by a factor of 2 to 6 on most parts through Studio, and more
+on patterns of solids that overlap one another. docs/SOLID-KERNEL.md has the measurements.
 """
 
 import enum
@@ -33,6 +36,10 @@ try:
     from ._relief_native import core_call as _core_call, solid_call as _solid_call
 except ImportError:  # the extension is absent, or was built before the solid kernel was added
     _core_call = _solid_call = None
+try:
+    from ._relief_native import solid_mesh as _solid_mesh
+except ImportError:  # an extension built before meshes could cross as bytes: they cross as text
+    _solid_mesh = None
 
 _kernel_installed = None
 _DEFAULT_SEGMENTS = 48
@@ -307,11 +314,19 @@ class Manifold:
 
     def to_mesh64(self):
         if self._mesh is None:
-            mesh = _solid({'kept': 0}, [self], mesh=True)[0]['mesh']
-            self._mesh = Mesh64(
-                np.array(mesh['vertices'], dtype=np.float64).reshape(-1, 3),
-                np.array(mesh['triangles'], dtype=np.uint32).reshape(-1, 3),
-            )
+            if _solid_mesh is not None:
+                # The same numbers as the 'mesh' of an answer, without writing them as text and reading them back.
+                vertices, triangles = _solid_mesh(self._handle)
+                self._mesh = Mesh64(
+                    np.frombuffer(vertices, dtype=np.float64).reshape(-1, 3).copy(),
+                    np.frombuffer(triangles, dtype=np.uint32).reshape(-1, 3).copy(),
+                )
+            else:
+                mesh = _solid({'kept': 0}, [self], mesh=True)[0]['mesh']
+                self._mesh = Mesh64(
+                    np.array(mesh['vertices'], dtype=np.float64).reshape(-1, 3),
+                    np.array(mesh['triangles'], dtype=np.uint32).reshape(-1, 3),
+                )
         return self._mesh
 
     def slice(self, height=0.0):

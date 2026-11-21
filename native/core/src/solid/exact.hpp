@@ -13,7 +13,6 @@
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
-#include <unordered_map>
 #include <vector>
 
 namespace kerfkite {
@@ -61,36 +60,73 @@ struct I128 {
         const uint64_t h = static_cast<uint64_t>(hi) + static_cast<uint64_t>(o.hi) + (l < lo ? 1 : 0);
         return I128(static_cast<int64_t>(h), l);
     }
-    I128 operator-(const I128 &o) const { return *this + (-o); }
+    I128 operator-(const I128 &o) const {
+        const uint64_t l = lo - o.lo;
+        const uint64_t h = static_cast<uint64_t>(hi) - static_cast<uint64_t>(o.hi) - (lo < o.lo ? 1 : 0);
+        return I128(static_cast<int64_t>(h), l);
+    }
     bool operator==(const I128 &o) const { return hi == o.hi && lo == o.lo; }
     bool operator<(const I128 &o) const { return hi != o.hi ? hi < o.hi : lo < o.lo; }
     I128 abs() const { return hi < 0 ? -*this : *this; }
 
+    // Both products are taken on the two's complement bit patterns, without separating the signs. Read
+    // as unsigned, a negative a stands for a + 2^64, so the unsigned product of the patterns exceeds the
+    // signed one by 2^64 * b when a is negative and by 2^64 * a when b is: those are taken off the high
+    // word. All of it is arithmetic modulo 2^128, which gives the product whenever the product fits.
     static I128 mul(int64_t a, int64_t b) {
-        const bool negative = (a < 0) != (b < 0);
-        const uint64_t ua = a < 0 ? ~static_cast<uint64_t>(a) + 1 : static_cast<uint64_t>(a);
-        const uint64_t ub = b < 0 ? ~static_cast<uint64_t>(b) + 1 : static_cast<uint64_t>(b);
         uint64_t h, l;
-        umul64(ua, ub, h, l);
-        const I128 r(static_cast<int64_t>(h), l);
-        return negative ? -r : r;
+        umul64(static_cast<uint64_t>(a), static_cast<uint64_t>(b), h, l);
+        if (a < 0) h -= static_cast<uint64_t>(b);
+        if (b < 0) h -= static_cast<uint64_t>(a);
+        return I128(static_cast<int64_t>(h), l);
     }
     // The low 128 bits of this * m; exact when the product fits.
     I128 times(int64_t m) const {
-        const bool negative = (hi < 0) != (m < 0);
-        const I128 a = abs();
-        const uint64_t um = m < 0 ? ~static_cast<uint64_t>(m) + 1 : static_cast<uint64_t>(m);
         uint64_t h, l;
-        umul64(a.lo, um, h, l);
-        h += static_cast<uint64_t>(a.hi) * um;
-        const I128 r(static_cast<int64_t>(h), l);
-        return negative ? -r : r;
+        umul64(lo, static_cast<uint64_t>(m), h, l);
+        h += static_cast<uint64_t>(hi) * static_cast<uint64_t>(m);
+        if (m < 0) h -= lo;
+        return I128(static_cast<int64_t>(h), l);
     }
     // Nearest double, for measures (never for decisions).
     double to_double() const {
         const I128 a = abs();
         const double v = static_cast<double>(static_cast<uint64_t>(a.hi)) * 18446744073709551616.0 + static_cast<double>(a.lo);
         return hi < 0 ? -v : v;
+    }
+};
+
+// The product of two non-negative 128-bit integers, for comparing ratios exactly.
+struct U256 {
+    uint64_t w[4];
+    bool operator==(const U256 &o) const { return w[0] == o.w[0] && w[1] == o.w[1] && w[2] == o.w[2] && w[3] == o.w[3]; }
+    static U256 product(const I128 &a, const I128 &b) {
+        const uint64_t a0 = a.lo, a1 = static_cast<uint64_t>(a.hi), b0 = b.lo, b1 = static_cast<uint64_t>(b.hi);
+        uint64_t h00, l00, h01, l01, h10, l10, h11, l11;
+        umul64(a0, b0, h00, l00);
+        umul64(a0, b1, h01, l01);
+        umul64(a1, b0, h10, l10);
+        umul64(a1, b1, h11, l11);
+        U256 r;
+        r.w[0] = l00;
+        // Column 1: h00 + l01 + l10, with its carries into column 2.
+        uint64_t carry = 0;
+        uint64_t s = h00 + l01;
+        carry += s < h00;
+        const uint64_t s1 = s + l10;
+        carry += s1 < s;
+        r.w[1] = s1;
+        // Column 2: h01 + h10 + l11 + carry.
+        uint64_t carry2 = 0;
+        s = h01 + h10;
+        carry2 += s < h01;
+        uint64_t s2 = s + l11;
+        carry2 += s2 < s;
+        const uint64_t s3 = s2 + carry;
+        carry2 += s3 < s2;
+        r.w[2] = s3;
+        r.w[3] = h11 + carry2;
+        return r;
     }
 };
 
@@ -265,6 +301,55 @@ struct BigInt {
     }
 };
 
+// A running sum of products of a 128-bit and a 64-bit integer, exact while it stays below 2^191 in size:
+// three 64-bit words in two's complement. For sums over the triangles of a solid, where a big integer
+// for every term would cost far more than the term.
+struct Sum192 {
+    uint64_t w[3] = {0, 0, 0};
+    void add(const I128 &a, int64_t m) {
+        // |a| * |m| as three words, then its negative if the signs differ, then a three-word addition.
+        const bool negative = (a.hi < 0) != (m < 0);
+        const I128 x = a.abs();
+        const uint64_t um = m < 0 ? ~static_cast<uint64_t>(m) + 1 : static_cast<uint64_t>(m);
+        uint64_t h0, l0, h1, l1;
+        umul64(x.lo, um, h0, l0);
+        umul64(static_cast<uint64_t>(x.hi), um, h1, l1);
+        uint64_t p[3];
+        p[0] = l0;
+        p[1] = h0 + l1;
+        p[2] = h1 + (p[1] < h0 ? 1 : 0);
+        if (negative) {
+            p[0] = ~p[0] + 1;
+            p[1] = ~p[1] + (p[0] == 0 ? 1 : 0);
+            p[2] = ~p[2] + (p[0] == 0 && p[1] == 0 ? 1 : 0);
+        }
+        uint64_t carry = 0;
+        for (int k = 0; k < 3; ++k) {
+            const uint64_t s = w[k] + p[k], t = s + carry;
+            carry = (s < p[k] ? 1 : 0) + (t < s ? 1 : 0);
+            w[k] = t;
+        }
+    }
+    BigInt big() const {
+        const bool negative = (w[2] >> 63) != 0;
+        uint64_t m[3] = {w[0], w[1], w[2]};
+        if (negative) {
+            m[0] = ~m[0] + 1;
+            m[1] = ~m[1] + (m[0] == 0 ? 1 : 0);
+            m[2] = ~m[2] + (m[0] == 0 && m[1] == 0 ? 1 : 0);
+        }
+        BigInt r;
+        for (int k = 0; k < 3; ++k) {
+            r.d[2 * k] = static_cast<uint32_t>(m[k]);
+            r.d[2 * k + 1] = static_cast<uint32_t>(m[k] >> 32);
+        }
+        r.n = 6;
+        while (r.n && !r.d[r.n - 1]) --r.n;
+        r.neg = negative && r.n;
+        return r;
+    }
+};
+
 // A closed interval of doubles that is guaranteed to contain the real result of the operations applied.
 // Each operation is computed in round-to-nearest and then widened by more than the rounding error.
 struct Interval {
@@ -309,11 +394,17 @@ struct Rat {
 
 // A point of an arrangement. Grid points carry their integers; the others index a Rat. The intervals
 // enclose the coordinates and are exact (lo == hi) for grid points.
+//
+// A point where an edge crosses a plane may be pending: it has its place among the points and intervals
+// that certainly enclose it, but its Rat has not been computed (see Pool::line_plane). Its `rat` is then
+// kPendingRat, which is not below zero, so it is never taken for a grid point.
 struct Pt {
     int64_t i[3];
     int rat;
+    int pending;  // the recipe of a pending point, or -1
     Interval c[3];
 };
+constexpr int kPendingRat = 0x7fffffff;
 
 // An integer plane a*x + b*y + c*z = d. For the plane of a grid triangle the normal components are below
 // 2^78 and d below 2^117.
@@ -326,28 +417,94 @@ Plane plane_of(const int64_t *a, const int64_t *b, const int64_t *c);
 // The plane through the segment p-q that contains the direction of coordinate axis k.
 Plane plane_through_edge(const int64_t *p, const int64_t *q, int k);
 // n . p - d, exact (below 2^119 for a triangle's plane and a grid point).
-I128 plane_value(const Plane &pl, const int64_t *p);
+inline I128 plane_value(const Plane &pl, const int64_t *p) {
+    return pl.n[0].times(p[0]) + pl.n[1].times(p[1]) + pl.n[2].times(p[2]) - pl.d;
+}
 
 // Exact predicates on grid points.
-// The sign of det[b-a; c-a; d-a]: positive when d is on the side the normal (b-a)x(c-a) points to.
-int orient3d_grid(const int64_t *a, const int64_t *b, const int64_t *c, const int64_t *d);
-I128 orient3d_value(const int64_t *a, const int64_t *b, const int64_t *c, const int64_t *d);
+// det[b-a; c-a; d-a]: positive when d is on the side the normal (b-a)x(c-a) points to.
+inline I128 orient3d_value(const int64_t *a, const int64_t *b, const int64_t *c, const int64_t *d) {
+    const int64_t ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+    const int64_t vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+    const int64_t wx = d[0] - a[0], wy = d[1] - a[1], wz = d[2] - a[2];
+    // Differences are below 2^38, minors below 2^77, the sum below 2^117.
+    return (I128::mul(vy, wz) - I128::mul(vz, wy)).times(ux) - (I128::mul(vx, wz) - I128::mul(vz, wx)).times(uy) +
+           (I128::mul(vx, wy) - I128::mul(vy, wx)).times(uz);
+}
+inline int orient3d_grid(const int64_t *a, const int64_t *b, const int64_t *c, const int64_t *d) { return orient3d_value(a, b, c, d).sign(); }
 // The sign of the cross product (b-a)x(c-a) in the plane of coordinates u and v.
-int orient2d_grid(const int64_t *a, const int64_t *b, const int64_t *c, int u, int v);
+inline int orient2d_grid(const int64_t *a, const int64_t *b, const int64_t *c, int u, int v) {
+    return (I128::mul(b[u] - a[u], c[v] - a[v]) - I128::mul(b[v] - a[v], c[u] - a[u])).sign();
+}
 
 // The points of one computation. Grid points are unique by position; rational points are unique by
 // value (a rational that is in fact on the grid becomes a grid point).
+// Point ids by the unit cell of the grid they are filed under, several to a cell. It is only ever asked
+// for the ids of one cell, never walked in its own order, so nothing depends on how it is laid out.
+class CellTable {
+public:
+    void add(int64_t x, int64_t y, int64_t z, int id);
+    // Calls visit(id) for each id filed under the cell until one returns true; returns that id, or -1.
+    template <class F>
+    int find(int64_t x, int64_t y, int64_t z, F &&visit) const {
+        if (slots_.empty()) return -1;
+        const size_t mask = slots_.size() - 1;
+        for (size_t s = hash(x, y, z) & mask; slots_[s].id >= 0; s = (s + 1) & mask)
+            if (slots_[s].x == x && slots_[s].y == y && slots_[s].z == z && visit(slots_[s].id)) return slots_[s].id;
+        return -1;
+    }
+
+private:
+    struct Slot {
+        int64_t x, y, z;
+        int id;  // below zero: empty
+    };
+    std::vector<Slot> slots_;
+    size_t used_ = 0;
+    static size_t hash(int64_t x, int64_t y, int64_t z) {
+        uint64_t h = static_cast<uint64_t>(x) * 0x9E3779B97F4A7C15ULL;
+        h ^= static_cast<uint64_t>(y) + 0x9E3779B97F4A7C15ULL + (h << 6) + (h >> 2);
+        h ^= static_cast<uint64_t>(z) + 0x9E3779B97F4A7C15ULL + (h << 6) + (h >> 2);
+        h *= 0xD6E8FEB86659FD93ULL;
+        return static_cast<size_t>(h ^ (h >> 32));
+    }
+};
+
 class Pool {
 public:
     Pool();
     std::vector<Pt> pts;
-    std::vector<Rat> rats;
+    std::vector<Rat> rats;  // of the points that have one; in no order that matters
 
     int add_grid(int64_t x, int64_t y, int64_t z);
     int find_grid(int64_t x, int64_t y, int64_t z) const;  // -1 when absent
     int add_rat(const Rat &r);
-    // Where the line through grid points p and q meets a plane that separates them.
+    // Where the line through grid points p and q meets a plane that separates them; the second form is
+    // given the values of the plane at the two points. The point may be left pending: see exact.cpp.
     int line_plane(int p, int q, const Plane &pl);
+    int line_plane(int p, int q, const I128 &at_p, const I128 &at_q);
+    // The same point for a question that is answered and forgotten (see Arrangement::probe_only): pending,
+    // but not looked up among the points the pool has and not filed, so it may have the value of another
+    // point, or lie on the grid. Predicates give the right answers for it all the same, since they go by
+    // values; only code that takes equal ids to mean equal points must not see it. mark() and release()
+    // drop such points again.
+    int line_plane_loose(int p, int q, const I128 &at_p, const I128 &at_q);
+    struct Mark {
+        size_t points, rats, recipes;
+    };
+    Mark mark() const { return Mark{pts.size(), rats.size(), recipes_.size()}; }
+    void release(const Mark &m) {
+        pts.resize(m.points);
+        rats.resize(m.rats);
+        recipes_.resize(m.recipes);
+    }
+    // Computes the Rat and the intervals of a pending point. Every predicate below does this for itself
+    // where it has to; code that reads `c` or `rats` directly must ask first.
+    void settle(int p) const {
+        if (pts[static_cast<size_t>(p)].pending >= 0) const_cast<Pool *>(this)->compute_pending(p);
+    }
+    // How many points off the grid have been made, pending or not.
+    size_t rational_points() const { return rational_points_; }
     // The common point of three planes; -1 when they have none or more than one.
     int three_planes(const Plane &a, const Plane &b, const Plane &c);
 
@@ -360,25 +517,30 @@ public:
     // The nearest grid point (ties towards +infinity), coordinate by coordinate.
     void round(int p, int64_t out[3]) const;
 
-    size_t exact_fallbacks = 0;  // predicates the intervals could not decide
+    size_t exact_fallbacks = 0;  // predicates evaluated with the integers
+    // For tests: every point computed at once and every predicate evaluated in full, with none of the
+    // shorter ways. The answers must be the same either way.
+    bool plain = false;
+    // line_plane() without leaving anything pending.
+    int line_plane_at_once(int p, int q, const I128 &at_p, const I128 &at_q);
 
 private:
-    struct Key {
-        int64_t x, y, z;
-        bool operator==(const Key &o) const { return x == o.x && y == o.y && z == o.z; }
+    struct Recipe {
+        int p, q;
+        I128 at_p, at_q;
+        bool loose;
     };
-    struct Hash {
-        size_t operator()(const Key &k) const {
-            uint64_t h = static_cast<uint64_t>(k.x) * 0x9E3779B97F4A7C15ULL;
-            h ^= static_cast<uint64_t>(k.y) + 0x9E3779B97F4A7C15ULL + (h << 6) + (h >> 2);
-            h ^= static_cast<uint64_t>(k.z) + 0x9E3779B97F4A7C15ULL + (h << 6) + (h >> 2);
-            return static_cast<size_t>(h);
-        }
-    };
-    std::unordered_map<Key, int, Hash> grid_index_;  // looked up, never iterated
+    CellTable grid_index_;
     // Rational points by the unit cells their coordinate intervals touch (one cell, rarely two an axis):
     // two forms of one point always share a cell, so a new point is compared only with points there.
-    std::unordered_multimap<Key, int, Hash> rat_index_;  // looked up, never iterated
+    CellTable rat_index_;
+    std::vector<Recipe> recipes_;
+    size_t rational_points_ = 0;
+
+    void compute_pending(int p);
+    int existing(const Rat &r, const Interval c[3]);
+    void file(int id);
+    bool enclose_crossing(int p, int q, const I128 &at_p, const I128 &at_q, Pt &pt) const;
 };
 
 // The interval of num / den for den > 0, and the nearest integer to it (ties towards +infinity) with

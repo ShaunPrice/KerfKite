@@ -4,6 +4,7 @@
 #define KERFKITE_SOLID_ARRANGEMENT_HPP
 
 #include <array>
+#include <cstdint>
 #include <vector>
 
 #include "bvh.hpp"
@@ -21,6 +22,12 @@ struct TooFine : ValueError {
     using ValueError::ValueError;
 };
 
+// For tests: true while the kernel is to take none of its shorter ways (points left pending, remembered
+// crossings, double filters, known planes and lines, probing verification) and compute everything in
+// full instead. Every result must be the same, to the last vertex and count, with it on or off; the
+// self-test compares them. It is thread-local and off unless a test turns it on.
+bool &plain_paths();
+
 // Which regions of space are solid, given how many times each operand's surface winds around them.
 enum class Rule { Union, Intersection, Difference, Positive };
 
@@ -32,10 +39,14 @@ struct Operand {
     const Mesh *mesh;  // where to record that, or null
 };
 
-// The result before rounding: vertices are points of the pool.
+// The result before rounding: vertices are points of the pool. `plane` names, for each triangle, a
+// triangle of the arrangement whose plane it lies in; it may be left empty.
+class Planar;
+
 struct ExactMesh {
     std::vector<int> vertex;
     std::vector<Triangle> tri;
+    std::vector<int> plane;
 };
 
 class Arrangement {
@@ -53,9 +64,26 @@ public:
     // Lets intersect() add separating ribbons where faces nearly coincide (see arrangement.cpp). Off for
     // the checks, which must see the mesh as it is.
     void enable_ribbons() { ribbons_enabled_ = true; }
+    // For a question that only asks whether any pair meets: intersect() must then be told to stop at the
+    // first that does. The points where edges cross planes are then made for one pair and dropped after
+    // it, without being looked up among the points the arrangement has (see arrangement.cpp). Nothing
+    // can be resolved from an arrangement used this way.
+    void probe_only() { probe_only_ = !plain_; }
     // After resolve() with Rule::Positive on one operand: every face separates winding 0 from winding 1.
     bool unit_winding() const { return unit_winding_; }
-    void record_simple() const;
+    void record_simple();
+    // Lets load() recognise an operand whose shape was examined against itself before, in this thread, and
+    // found inert (see arrangement.cpp), and lets record_simple() remember the shapes found so this time.
+    void remember_shapes() { remember_shapes_ = !plain_paths(); }
+    // The plane {nx, ny, nz, |n|, d} in doubles, each the nearest to its integer (I128::to_double), and
+    // the side of it a grid point is on when the doubles suffice to be certain: 1, -1, or 2 for "cannot
+    // tell" (see arrangement.cpp).
+    static std::array<double, 5> plane_in_doubles(const Plane &pl);
+    static int side_in_doubles(const double plane[5], const int64_t *p);
+    // Of the loaded triangles: whether two lie in one plane, and the coordinate axis along which the
+    // plane of one is seen without being edge-on (the largest component of its normal).
+    bool same_plane(int a, int b) const;
+    int plane_axis(int tri) const { return axis_[static_cast<size_t>(tri)]; }
     // After load(): the winding number just in front of a triangle (see arrangement.cpp).
     int winding_in_front(int tri);
 
@@ -98,7 +126,55 @@ private:
     std::vector<Box> boxes_;
     std::vector<signed char> axis_, sign_;
     std::vector<char> operand_hit_;
-    Bvh bvh_;
+    // By operand: whether a pair of its own triangles went as far as finding where they cross a plane; how
+    // many pairs of its own triangles had overlapping boxes; and, for an operand recognised as inert, that
+    // number from when it was examined (otherwise -1).
+    std::vector<char> operand_crossed_;
+    std::vector<size_t> own_pairs_;
+    std::vector<long long> inert_pairs_;
+    bool remember_shapes_ = false;
+    // The triangles of one operand, or the ribbons: they are contiguous in tris_. Each has a tree over its
+    // own boxes, built once enough questions have been asked of it to pay for the building; until then a
+    // question is answered by looking at every box. Both ways report the same triangles.
+    struct Span {
+        int first = 0, count = 0;
+        Box box;
+        Bvh tree;
+        bool built = false;
+        int scans = 0;
+    };
+    std::vector<Span> spans_;
+    // The plane of a triangle in doubles (normal, its length, offset), for the choices and measures that
+    // use them and for side_in_doubles(): computed for a triangle when first asked for.
+    std::vector<std::array<double, 5>> normal_;
+    std::vector<char> normal_known_;
+    // Where an edge between two grid points crosses a plane, remembered by the edge and by the ratio of
+    // the plane's values at its two ends (see crossing()).
+    struct Crossing {
+        uint64_t edge;
+        int64_t bucket;
+        I128 low, high;  // the plane's value at the end with the lower id, and at the other
+        int point;
+    };
+    struct CrossingSlot {
+        uint64_t edge;
+        int64_t bucket;
+        int index;  // into crossings_, plus one; 0 in an empty slot
+    };
+    // Where a triangle met the planes it was last intersected with: see ends_in_plane().
+    struct Met {
+        int plane[2];  // a triangle of that plane, or -1
+        int count[2];
+        int point[2][2];
+        int misses;
+    };
+    // Triangles found to lie in one plane are joined here, so that same_plane() computes for a pair of
+    // planes once: by triangle, a triangle of its plane found earlier (itself until one is).
+    mutable std::vector<int> plane_of_;
+    std::vector<int> met_of_;  // by triangle: an index into met_, or -1
+    std::vector<Met> met_;
+    std::vector<Crossing> crossings_;
+    std::vector<CrossingSlot> crossing_table_;  // open addressing
     std::vector<Record> records_;
     std::vector<int> cluster_;  // union-find parent, or empty until the first coplanar overlap
     std::vector<Instance> instances_;
@@ -111,25 +187,40 @@ private:
     std::vector<std::array<int, 2>> winding_;
     bool unit_winding_ = false;
     bool ribbons_enabled_ = false;
+    bool probe_only_ = false;
+    bool plain_ = false;
     std::vector<RibbonEdge> ribbon_edges_;
     size_t real_triangles_ = 0;
 
     bool pair(int i, int j);
-    void near_coplanar(int i, int j);
+    void near_coplanar(int i, int j, const I128 at_j[3], const I128 at_i[3]);
+    template <class F>
+    void overlapping(Span &span, const Box &box, F &&visit);
+    const double *normal(int tri);
+    int crossing(int p, int q, const I128 &at_p, const I128 &at_q);
+    size_t crossing_slot(uint64_t edge, int64_t bucket) const;
     void add_triangle(int a, int b, int c, int operand, int label);
+    void close_span(Span &span);
     void add_ribbons();
     bool corner(int tri, int p) const;
-    int ends(int tri, const int side[3], const Plane &pl, int out[2]);
+    void size_lists();
+    bool may_be_one_plane(int a, int b);
+    int plane_set(int tri) const;
+    bool planes_joined(int a, int b) const;
+    void join_planes(int a, int b) const;
+    int ends(int tri, const int side[3], const I128 value[3], int out[2]);
+    int ends_in_plane(int tri, int plane, const int side[3], const I128 value[3], int out[2]);
     bool inside_closed(int tri, int p) const;
     bool coplanar_overlap(int i, int j) const;
+    bool coplanar_overlap_plain(int i, int j) const;
     bool coplanar_fan_overlap(int i, int j, int shared) const;
     bool report_point(int i, int j, int p);
     bool report_segment(int i, int j, int p, int q);
     int cluster_find(int i);
     void cluster_join(int i, int j);
     void subdivide();
-    void subdivide_one(int tri, size_t first, size_t last);
-    void subdivide_cluster(const std::vector<int> &members, const std::vector<std::pair<size_t, size_t>> &ranges);
+    void subdivide_one(Planar &planar, int tri, size_t first, size_t last);
+    void subdivide_cluster(Planar &planar, const std::vector<int> &members, const std::vector<std::pair<size_t, size_t>> &ranges);
     void build_faces();
     void build_cells();
     void wind();
@@ -141,7 +232,9 @@ private:
 };
 
 // Takes out vertices the surface does not need (simplify.cpp). The surface itself does not change.
-void simplify(const Pool &pool, ExactMesh &mesh);
+// With the arrangement the mesh was extracted from, the planes of its triangles are taken from it
+// (ExactMesh::plane) instead of being worked out from the points again.
+void simplify(const Pool &pool, ExactMesh &mesh, const Arrangement *source = nullptr);
 
 // Rounds the exact result to the grid, checks it, and repairs it if rounding left a defect.
 Solid finish(Arrangement &arrangement, ExactMesh &exact, const char *context, int depth);

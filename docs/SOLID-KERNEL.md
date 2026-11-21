@@ -35,6 +35,8 @@ Every decision about topology (which side of a plane a point is on, whether two 
 
 A constructed point is kept as an exact rational (x, y, z) / w. Beside it the kernel keeps an interval of doubles that is guaranteed to contain each coordinate. A predicate is evaluated on the intervals first; if the interval result excludes zero, that is the sign. Otherwise the predicate is evaluated again with the integers. Either way the sign returned is the exact one, so the intervals affect speed only. A coordinate that happens to be a whole number is kept exactly, so that points in an axis-aligned plane give exact zeros without the integers.
 
+A point where an edge crosses a plane starts with the interval alone: its rational is computed when a predicate cannot decide from the interval, or when the point becomes part of a triangle. Most such points never are. [Performance](#performance) describes this and the other ways the kernel avoids exact work whose answer is already certain, with the error bound of each test in doubles.
+
 Reaching the capacity of `BigInt` raises an internal error; it does not wrap around. The bounds above hold for every input within the coordinate limit.
 
 ## Curved surfaces
@@ -56,7 +58,7 @@ A translation is rounded to the grid and is then exact. A map whose matrix is wh
 
 The kernel computes the **arrangement** of the operands' triangles and reads the result from it. The method is that of mesh arrangements with winding numbers (Zhou, Grinspun, Zorin and Jacobson, *Mesh arrangements for solid geometry*, 2016), written from the published description.
 
-1. **Intersect.** A bounding-box tree finds the pairs of triangles that may meet. Each pair is intersected exactly: where two triangles cross, the segment they share is recorded on both, its ends being grid vertices or exact rational points. Triangles that lie in one plane and overlap are grouped, to be subdivided together.
+1. **Intersect.** A bounding-box tree over each operand finds the pairs of triangles that may meet. Each pair is intersected exactly: where two triangles cross, the segment they share is recorded on both, its ends being grid vertices or exact rational points. Triangles that lie in one plane and overlap are grouped, to be subdivided together.
 2. **Subdivide.** Each triangle with records is triangulated again, so that every recorded point is a vertex and every recorded segment an edge (an incremental triangulation with edge recovery by flips, then Delaunay flips for shape). A group of coplanar triangles is triangulated as one, so that where they overlap they are cut into the *same* pieces. After this step, triangles meet only in whole edges and vertices.
 3. **Cells.** Identical triangles are merged into faces. Around every edge the faces are put in exact angular order, which joins their sides into the regions of space (cells) that the faces bound.
 4. **Winding numbers.** Crossing a face changes, by a known amount, the number of times each operand's surface winds around a point. One exact ray count for each connected piece fixes the winding numbers of every cell.
@@ -174,7 +176,7 @@ The answer always has `volume`, `area`, `bounds`, `centroid`, `vertices`, `trian
 
 JSON appears only in this command (`native/core/src/solid_command.cpp`); the kernel's own interface has none.
 
-**Kept solids.** Studio builds a model one operation at a time and asks about each intermediate solid (its triangle count, its bounds). So that a mesh does not cross as text at every step, the compiled extension has a second entry beside `core_call("solid", request)`: `solid_call(request, kept)` answers with the same JSON and with the solid itself, as an opaque object that Python holds and hands back in the `kept` list of a later request, where the node `{"kept": i}` stands for it. A kept solid shares its mesh, never changes, and remembers what the kernel has established about it (that it has no self-intersection), which a mesh sent back as text would lose. The object is released when Python drops it.
+**Kept solids.** Studio builds a model one operation at a time and asks about each intermediate solid (its triangle count, its bounds). So that a mesh does not cross as text at every step, the compiled extension has a second entry beside `core_call("solid", request)`: `solid_call(request, kept)` answers with the same JSON and with the solid itself, as an opaque object that Python holds and hands back in the `kept` list of a later request, where the node `{"kept": i}` stands for it. A kept solid shares its mesh, never changes, and remembers what the kernel has established about it (that it has no self-intersection), which a mesh sent back as text would lose. The object is released when Python drops it. A third entry, `solid_mesh(solid)`, gives the mesh of a kept solid as two byte strings (64-bit floats x, y, z in millimetres for each vertex, 32-bit numbers a, b, c for each triangle): the numbers of the `mesh` of an answer, without writing thousands of them as text for numpy to read back.
 
 ## Testing
 
@@ -189,6 +191,8 @@ Correctness is shown in two independent ways.
 
 `--stress N SEED` runs N cases of each kind with full verification; `--digest N SEED` prints one hash of every resulting mesh, for comparing compilers.
 
+**The shorter ways against the full computation** (the same self-test). Each way the kernel has of avoiding exact work (see [Performance](#performance)) is checked against the computation it stands in for: the 256-bit product and the three-word sum against the big integer; the flat tables against the standard ones; a tree over part of the boxes against a scan; a pool that leaves crossings pending against one that computes each at once, over requests with crossings on the grid, repeats and points reached two ways (the same ids, the same intervals once computed, the same answer from every predicate); the turn and the plane side decided in doubles against the exact ones, on triples in one line and points on and beside the plane; a probing arrangement against a counting one on triangles that touch. And whole operations are computed twice, with every shorter way taken and with none (`detail::plain_paths()`), and must give the same vertices, triangles and counts. `--plain N SEED` does that for N generated pairs of solids.
+
 **Comparison with the third-party library as an oracle** (`validation/solid_kernel_check.py`). It builds every solid twice, in the oracle and as a request to the kernel, from the same leaves, and compares volume, bounding box, number of bodies and section areas at three heights. Tolerances follow from the grid: a layer of 4 nm for each operation on the area of the leaves. It also runs Studio's own tests for solids, scripts, assemblies and lofts on a stand-in for the library, so that those tests run on the kernel's primitives and every solid they make is compared.
 
 The oracle is not always right, and the check does not take its word where the two differ in volume. It follows the difference down to the operation where it starts and tests that operation by a rule that needs neither side: the union or intersection of a solid with itself is that solid, and a hull contains every point of its operands. A case is set aside only when the rule shows the oracle wrong and the kernel right.
@@ -198,9 +202,10 @@ Results measured on this code (GCC 13.3 and Clang 18.1 on x86-64 Linux):
 | Check | Result |
 | --- | --- |
 | Self-test, as CTest runs it | Passes. |
+| Operations with every shorter way and with none (`--plain 6000 77`) | 18 000 operations: the same vertices, triangles and counts in every one. |
 | Generated cases with every result verified exactly (`--stress 1000 77`) | 6000 cases, 0 failures. 2 refused as too fine, both among the 1000 cases of solids sharing faces and then turned together. |
 | The same under AddressSanitizer and UndefinedBehaviorSanitizer (`--stress 350 23`) | 2100 cases, 0 failures, no report from either sanitizer. |
-| GCC `-O3` against Clang `-O2` (`--digest 700 2026`) | 4200 cases: the hash of every vertex and triangle of every result is equal. 3 refusals in each (2 of the 700 turned-together cases, 1 of the 700 absorption cases). |
+| GCC `-O3` against Clang `-O3` (`--digest 700 2026`) | 4200 cases: the hash of every vertex and triangle of every result is equal. 3 refusals in each (2 of the 700 turned-together cases, 1 of the 700 absorption cases). |
 | The compiler's 128-bit integers against the portable ones (`-DKERFKITE_SOLID_PORTABLE_ARITHMETIC`) | The same hash on the same 4200 cases. |
 | Warnings under `-Wall -Wextra` | None with either compiler. |
 | Primitives against the oracle's own | 42 compared, all within tolerance. |
@@ -217,28 +222,122 @@ The commands, from the repository root with the core built in `build/native`:
 
     build/native/kerfkite_solid_selftest --stress 1000 77
     build/native/kerfkite_solid_selftest --digest 700 2026      # the last field must be equal on every compiler and platform
+    build/native/kerfkite_solid_selftest --plain 6000 77        # every shorter way against none: "0 differ"
+    build/native/kerfkite_solid_bench 5                         # times, and a hash of each model that must not change
+    python validation/benchmark_solid.py                        # the same through Studio, on the kernel and the library
     python validation/solid_kernel_check.py --tool build/native/kerfkite-cam --trees 5000 --seed 1
 
-What these runs do not show: the hash comparison was not made with MSVC, nor on ARM64 or macOS; the differential trees are at most three operations deep, on primitives a few millimetres across; and the sanitizer run covers the generated cases, not the JSON command.
+What these runs do not show: the hash comparison was not made with MSVC, nor on ARM64 or macOS; the differential trees are at most three operations deep, on primitives a few millimetres across; and the sanitizer run covers the generated cases, not the JSON command. The tests in doubles described under [Performance](#performance) were likewise run with GCC and Clang on x86-64 only. They cannot change a result on any platform, because each falls back to the integers when it is not certain; what remains to confirm elsewhere is the digest, as before.
 
 ## Performance
 
-Measured with `kerfkite_solid_selftest --bench` (GCC 13.3, `-O3`, one thread) on the two-core sandbox this was developed in. The machine was shared with other builds. The figures are from a quiet moment; under load every row took about twice as long (the batch union 7 to 8 s).
+The kernel was made several times faster without changing a result: every digest recorded for it is what it was, and so is every answer of the `solid` command on the models measured below, to the last character (their measures, meshes, outlines and the counts of each operation). This section says what was measured, where the time went, what was changed and why none of it can change a result, and what is left.
 
-| Task | Time | Aim |
+### What was measured
+
+Two tools, both in the repository:
+
+- `kerfkite_solid_bench [REPEAT] [FILTER]` (`native/tools/solid_bench.cpp`) builds twelve models on the kernel alone and prints the best time of each with a hash of every vertex and triangle of the result. Built with `-DKERFKITE_SOLID_PROFILE=ON` it also prints the time of each phase (clocks in `core/src/solid/timing.hpp`, compiled into no other build).
+- `validation/benchmark_solid.py` rebuilds the same kind of model through Studio's entry points (`studio.solid_cad.rebuild`, `studio.scad_geometry.build_script`) on the kernel and on the third-party library, each in a fresh interpreter. With `--answers` it hashes every answer the kernel gives on the way instead of timing.
+
+All times are from the two-core sandbox this was developed in, GCC 13.3 at `-O3`, one thread. The machine was shared with other builds, and a run could take half as long again from one minute to the next; each figure is the best of several runs (3 to 7 of a model, 18 to 30 of a model under 50 ms).
+
+The kernel alone:
+
+| Model | Before | After | Triangles out |
+| --- | --- | --- | --- |
+| A plate with one bore | 7.0 ms | 2.9 ms | 400 |
+| The pinned part without its scripted post: five tapered bores, a sphere, a turned rib, a revolved groove, a trim | 857 ms | 172 ms | 12 014 |
+| The pinned part | 992 ms | 202 ms | 13 222 |
+| A plate less 64 bores in a row, each overlapping the next, as one pattern | 5.02 s | 1.34 s | 6448 |
+| A plate less 64 separate bores, as one pattern | 1.35 s | 0.61 s | 24 844 |
+| The same plate cut by one bore after another, 64 operations | 15.1 s | 2.03 s | 24 844 |
+| Two spheres, 48 segments | 21.8 ms | 11.6 ms | 3808 |
+| Two spheres, 96 segments | 78.1 ms | 47.3 ms | 14 544 |
+| A union of 50 turned boxes | 85.9 ms | 41.9 ms | 3406 |
+| A block less 8 slots, 16 bores and a sphere, 21 operations | 491 ms | 83.8 ms | 5746 |
+| A revolved profile with two cuts | 30.4 ms | 12.1 ms | 1672 |
+| A twisted extrusion, bored and trimmed | 29.2 ms | 14.1 ms | 1496 |
+
+The same through Studio, with the third-party library beside it, is under [What differs for a user](#what-differs-for-a-user).
+
+The larger operations that `kerfkite_solid_selftest --bench` times:
+
+| Task | Before | After |
 | --- | --- | --- |
-| Union, difference, intersection of two spheres of 20 448 triangles each, one turned and offset | 0.20 s, 0.15 s, 0.12 s | a few seconds |
-| The same with 39 600 triangles each | 0.38 s, 0.28 s, 0.21 s | |
-| The same with 101 760 triangles each | 1.08 s, 0.96 s, 0.62 s | |
-| Union of a sphere of 20 448 triangles with itself turned about its centre: every triangle crosses several others (78 284 crossing pairs, 197 468 triangles out) | 3.9 s | a few seconds |
-| Batch union of 200 overlapping cylinders (37 600 triangles in, 1532 out) | 4.0 s | a few seconds |
-| Height map of 500 × 500 nodes over a solid of 86 560 triangles | 0.008 s | about a second for 50 000 triangles |
-| One horizontal section of the same solid | 0.0002 s | well under a second |
-| Projection of the same solid | 0.025 s | |
-| Index of the same solid and 200 000 rays | 0.19 s | |
-| Exact self-intersection check of the same solid | 0.18 s | |
+| Union, difference, intersection of two spheres of 20 448 triangles each, one turned and offset | 0.24 s, 0.13 s, 0.12 s | 0.12 s, 0.05 s, 0.03 s |
+| The same with 39 600 triangles each | 0.39 s, 0.32 s, 0.20 s | 0.24 s, 0.08 s, 0.06 s |
+| The same with 101 760 triangles each | 1.02 s, 0.81 s, 0.60 s | 0.65 s, 0.24 s, 0.18 s |
+| Union of a sphere of 20 448 triangles with itself turned about its centre: every triangle crosses several others (78 284 crossing pairs, 197 468 triangles out) | 3.6 s | 1.7 s |
+| Batch union of 200 overlapping cylinders (37 600 triangles in, 1532 out) | 3.9 s | 1.6 s |
+| Height map of 500 × 500 nodes over a solid of 86 560 triangles | 0.008 s | 0.008 s |
+| One horizontal section of the same solid | 0.0003 s | 0.0003 s |
+| Projection of the same solid | 0.025 s | 0.026 s |
+| Index of the same solid and 200 000 rays | 0.19 s | 0.20 s |
+| Exact self-intersection check of the same solid | 0.17 s | 0.17 s |
 
-Time is spent where surfaces cross: an operation costs little for the triangles that stay whole and most for those that are cut. The two slow rows are the ones where nearly every triangle is cut. The batch union is slower than its size suggests because every cylinder overlaps its neighbours and the intermediate results are cut again at each level.
+The last five rows are code this work did not touch; they differ by the noise of the machine. An operation still costs little for the triangles that stay whole and most for those that are cut, so the two slow rows remain the ones where nearly every triangle is cut. Every row is within the aim the kernel was written to: a few seconds for the Boolean rows, about a second for a height map over 50 000 triangles.
+
+### Where the time went
+
+Shares of the time of one build, from the profiled build. "Checking" is the exact check of the rounded result, with everything it runs.
+
+| Phase | Plate with one bore | The pinned part | 64 overlapping bores | 64 bores one by one |
+| --- | --- | --- | --- | --- |
+| Before: finding candidate pairs | 7% | 8% | 2% | 28% |
+| Before: intersecting pairs | 34% | 14% | 11% | 57% |
+| Before: subdividing cut triangles | 22% | 5% | 45% | 1% |
+| Before: removing unneeded vertices | 19% | 13% | 37% | 7% |
+| Before: checking the rounded result | 0% | 49% | 1% | 0% |
+| Before: everything else | 18% | 11% | 4% | 7% |
+| After: finding candidate pairs | 1% | 7% | 1% | 4% |
+| After: intersecting pairs | 14% | 17% | 7% | 50% |
+| After: subdividing cut triangles | 49% | 15% | 65% | 7% |
+| After: removing unneeded vertices | 10% | 19% | 21% | 23% |
+| After: checking the rounded result | 0% | 25% | 1% | 0% |
+| After: everything else | 26% | 17% | 5% | 16% |
+
+Before, four things took most of the time, none of them the geometry a user asked for:
+
+- **Points computed to be thrown away.** A wall of a bore passes through the top face of a plate. That face is many triangles, and for every one of them whose box overlaps the wall's, the kernel worked out where the wall's edges cross the face's plane and where the face triangle's edges cross the wall's plane, with big integers, looked each point up among the points it had, and then found, by putting the points in order along a line, that the two triangles do not meet. The last of 64 cuts of one bore after another made 57 074 such points; the cut itself adds about two hundred vertices to the plate.
+- **Triangles looked up against their own solid.** Every triangle was looked up in one tree over all triangles, and those of its own solid thrown away afterwards. A plate with many holes has long thin triangles on its faces whose boxes overlap thousands of others.
+- **Big integers for answers known in advance.** Whether four points lie in one plane was computed from the points, when the triangles they belong to were already known to come from one plane; whether three points lie in one line, when all three had just been placed on one segment. Those are the cases where the intervals cannot decide, so each went to a determinant of numbers hundreds of bits long.
+- **The check of the rounded result done as a full intersection.** It needs one answer, whether any pair meets, and made and kept every point as if a result were to be built from them.
+
+### What was changed, and why no result can change
+
+The contract is that the kernel gives the same integers as before: the same points with the same ids in the same order, the same triangles, the same counts. Each change below is either a way of finding the same thing in less time, or a test whose answer is known to be the exact one whenever it gives one.
+
+**Crossings remembered.** Where an edge between two grid points crosses a plane depends only on the ratio of the plane's values at the two ends. The first time, the point is made by the pool as before; after that an equal ratio on the same edge returns the same point. Ratios are compared exactly, as 256-bit products. The pool held each value once already, so it would have returned that id itself, after computing the point again. A triangle also remembers the points it has on the last two planes it met, and planes are compared exactly (three corners of one triangle in the plane of the other).
+
+**Crossings left pending.** A crossing takes its id and its place among the points at once, with an enclosure in doubles, and its rational is computed only when a predicate cannot decide from the enclosure or the point becomes part of a triangle. The pool's two rules are kept exactly: a value is held once, and a value on the grid is a grid point. A point is left pending only when its enclosure proves it is off the grid (some coordinate's enclosure holds no whole number) and differs from every point the pool has (no point filed under the same unit cell has intervals meeting it in all three coordinates); otherwise it is computed at once. So every point has the id it had, and the count of points made is what it was. *The enclosure:* the point is a + (b − a)·L with L = s / (s + t), where s and t are the sizes of the plane's values at a and b. Each value is converted to a double within a relative 2^-51 (two rounded conversions and a rounded sum), so the rounded sum and quotient give L within 2^-49. With D = b − a exact, the rounded product and sum are within |D|·(2^-49 + 2^-53) + |x|·2^-53 of the true coordinate x. The enclosure is x ± (|D|·2^-47 + |x|·2^-51), four times that. For coordinates up to 100 m it is at most 0.002 nm wide either side.
+
+**The check only probes.** The arrangement that checks a rounded result is told that only one answer is wanted. Its crossings are made for one pair, without being looked up or filed, and dropped after it. This is exact because the answer for a pair depends on its points through their values alone: it compares them along a line by value, and it asks whether a point is a corner of a triangle by id, where a crossing is never a corner of the triangle whose edge it lies inside. Triangles that only touch the other's plane at one corner are decided from that corner without making the other triangle's crossings. The self-test compares a probing arrangement with a counting one on 59 634 pairs of lattice triangles, 11 747 of which meet.
+
+**One tree for each operand, built when it pays.** Triangles of a solid known to be free of self-intersection are not looked up against one another, and a tree is built only after a dozen questions have been asked of it (before that, every box is looked at). The pairs found are the same set, examined in the same order.
+
+**Turns and sides in doubles first.** Two tests in doubles stand in front of exact predicates. Each computes the value in doubles together with a bound on its error, and answers only when the value is beyond the bound; otherwise the exact computation runs as before.
+
+- *The turn of three points in a plane* (`Planar::filtered_turn`), the sign of A·B − C·D with A = b_u − a_u, B = c_v − a_v, C = b_v − a_v, D = c_u − a_u. Each coordinate is a double m with a radius r (zero for a whole coordinate; half the interval's width plus the rounding of the midpoint otherwise). With u = 2^-53: the true A is within dA = |A|·u + r_a + r_b of the computed one, the true A·B within |A|·dB + |B|·dA + dA·dB of the product of the computed ones, which the rounded product P is within |P|·u of, and the rounded difference within |P − Q|·u of P − Q. The bound is the sum of those, computed with 2u for u and then enlarged by a millionth, which covers the rounding of the bound itself (about twenty operations, each within 2^-53).
+- *The side of a plane a grid point is on* (`Arrangement::side_in_doubles`), the sign of n·p − d. The four numbers of the plane are within 2^-51 of their integers and p is exact, so the computed value is within M·(2^-51 + 4·2^-53) of the true one, M being |n_x p_x| + |n_y p_y| + |n_z p_z| + |d|. The bound is M·2^-49.
+
+Both use only additions, subtractions, multiplications and comparisons of doubles, which IEEE 754 rounds the same way everywhere, and the build forbids contraction into fused operations (`-ffp-contract=off`, `/fp:precise`); no function of the C library is involved. So the same cases are decided in doubles on every platform. That is not needed for the results to agree, because the answer is the exact sign either way; it only means the work done is the same too. The self-test compares each test with the exact predicate on generated points: 900 000 turns, 103 951 of them of three points in one line, and 209 123 sides, 73 445 of them of points on the plane and as many again one grid unit beside it, with coordinates up to the 100 m limit. No decided sign was wrong, and no point on the plane or in the line was decided (110 004 turns and 73 449 sides were left to the exact computation).
+
+**Planes and lines known from where they came.** Every triangle of a result lies in the plane of one loaded triangle, and the kernel now carries that through. Whether two neighbouring triangles are flat across their edge, in removing unneeded vertices and in ordering the faces round an edge, is whether two grid triangles lie in one plane, which takes three small products in place of a determinant of big integers. (If the two planes are one, the fourth point is in the plane of the other three. If they are two, they meet in the line of the shared edge, which the fourth point is not on.) Triangles found to share a plane are joined into sets so that the question is computed once. In the triangulation, a point placed on a segment is recorded as lying on its line, and three points of one segment's line do not turn. Frames for 2D tests within a plane are taken along the largest component of the plane's normal, which is never edge-on; within one plane a turn has the same sign relative to the triangle's own in every frame that is not edge-on, so the choice changes no answer.
+
+**Shapes examined once.** A primitive is not known to be free of self-intersection, so its first operation examines every pair of its own triangles whose boxes overlap: thousands for a cylinder, whose cap triangles all share a corner. For a box, a straight cylinder or a prism nothing comes of it: no pair meets, and no edge passes through the plane of another triangle, so no point is asked for. Such a shape is remembered (the triangles and the vertices relative to the first, compared in full, in a list of at most 48 shapes for each thread), with the number of pairs examined. An operand of a remembered shape is not examined again; the number is added to the count of pairs, so the counts are what they were. Everything the examination decides is exact and unchanged by moving a solid a whole number of grid units. Spheres and tapered cylinders are not remembered: their nearly flat facets are bent a nanometre one way or the other by the grid, and some pairs do ask for a point.
+
+**Less work for the same integers.** 128-bit products are computed on the two's complement bits without separating the signs. Faces, edge uses and the triangles of a solid are put in order by a counting pass on the first key and small sorts within it (the order `std::sort` gives). The node-based hash tables are flat ones; none is ever walked in its own order. Coplanar triangles separated by an edge of one of them are told apart after three turns, and the turns of two triangles are computed once each where the tests asked for them up to three times. One triangulation object serves every triangle of an operation. The centroid is summed in three machine words. A mesh crosses from the kernel to numpy as bytes (`solid_mesh`), with the numbers the text had.
+
+### What is left
+
+Where the kernel still spends its time, and what could be done about it:
+
+- **Many surfaces in one plane.** The 64 overlapping bores spend two thirds of their time triangulating the caps, which all lie in two planes and are cut by one another. The triangulation inserts each point by walking from the last one, and the walk is long where triangles are long and thin. A different order of insertion or a search structure would shorten it, but it would change which of two triangles a point on their common edge is found in, and with it the triangulation where four points lie on a circle. That is a change of output and was left alone. Expected gain: half the time of this case.
+- **Long thin triangles on flat faces.** The faces of a plate with many holes are triangulated by cutting ears, which leaves triangles spanning the plate, and each new cut then finds hundreds of them as candidates. A better-shaped triangulation of flat faces would cut the candidates of later operations several times over (the chain of 64 bores spends half its time on pairs that do not meet), and it too changes output.
+- **Checking the rounded result** is a quarter of the pinned part. Triangles of one flat face are still compared pair by pair; a check of each flat patch as a whole (every triangle keeps its turn and the boundary does not cross itself) would be linear, and needs a proof before it replaces the pairwise one.
+- **The examination of a sphere or a tapered cylinder against itself** (about a third of two spheres) cannot be skipped as an inert shape's can. Marking primitives as free of self-intersection when they are made would save it, and would change the recorded count of pairs examined and, in rare ties, the order of points.
+- **Threads.** The kernel uses one, and none were added. Operations that do not depend on one another (the pairs at one level of a batch union, the features of a pattern) could run on several threads with the same result whatever the scheduling, since no operation's result depends on another's state. That would help batches and patterns only, by at most the number of cores, and it was left out: a chain of features, which is what Studio mostly builds, gains nothing from it, the counts of the last operation are kept for each thread and would have to be gathered in a fixed order, and a gain could not have been measured reliably on two cores shared with other builds. Within one operation the points are numbered in the order the pairs are examined, so the examination itself cannot be split without a second pass that restores the order.
 
 ## How Studio uses the kernel
 
@@ -283,18 +382,24 @@ The kernel refuses a result it cannot represent validly on its grid ("the result
 - **Twisted extrusions.** The side of a twisted extrusion is made of quadrilaterals that are not flat, and the two kernels may split them along different diagonals. The outlines at each layer are the same; the volume between layers is not, and with few slices the difference is large (a 4.5 by 5.7 mm outline turned 30° and tapered in a single slice: 15% above the true volume on the kernel, 24% below it on the library). More slices bring both to the true shape.
 - **Coordinates** are whole nanometres. A value such as `14.649999998509884` is now `14.65`.
 - **Section outlines** have a point at each corner and none along straight sides. The library's sections carry points along straight sides too: a turned box cut through five of its faces gave 10 points there and gives 5 here.
-- **Speed.** The exact checks cost time: the kernel is slower than the library, by a factor of about 5 to 25 on the parts measured below. Parts whose cuts have vertical walls stay fast; tapered or turned tools cost more, because every vertex made by the cut has to be rounded and the result checked.
+- **Speed.** The exact checks cost time: the kernel is slower than the library, by a factor of 2 to 3 on plates with bores, boxes, revolved and extruded parts, 4 to 6 where spheres or tapered and turned tools are cut (every vertex made by such a cut has to be rounded and the result checked), and 14 on a pattern of bores that overlap one another, whose caps are many surfaces in one plane. Before the work described under [Performance](#performance) the factors were about 6 to 45.
 
-Time for one rebuild through Studio, on the two-core sandbox this was developed in (best of three; the machine was shared with another build):
+Time for one rebuild through Studio, on the two-core sandbox this was developed in. The machine was shared with other builds; each figure is the best of 3 to 5 rebuilds (18 to 30 of a model under 50 ms). The models are those of `validation/benchmark_solid.py`, which prints this table.
 
-| Model | Library | Kernel |
-| --- | --- | --- |
-| A plate with one bore | 2 ms | 11 ms |
-| The scripting guide's mounting plate (four holes) | 6 ms | 23 ms |
-| The scripting guide's tapered dial (eight radial holes) | 15 ms | 117 ms |
-| The pinned bracket of the installed check: seven features, a sphere, tapered bores, a turned rib, a revolved groove, a scripted post | 50 ms | 1.3 s |
-| A plate with a row of eight overlapping spheres | 69 ms | 1.7 s |
-| A plate with 64 overlapping bores in one pattern | 0.39 s | 4.4 s |
+| Model | Library | Kernel before | Kernel now | Now, against the library |
+| --- | --- | --- | --- | --- |
+| A plate with one bore | 2 ms | 11 ms | 4 ms | 2.4 |
+| The pinned bracket of the installed check: seven features, a sphere, tapered bores, a turned rib, a revolved groove, a scripted post | 47 ms | 1.23 s | 290 ms | 6.2 |
+| A plate with 64 overlapping bores in one pattern | 124 ms | 5.39 s | 1.78 s | 14 |
+| A plate with 64 separate bores in eight patterns | 558 ms | 8.69 s | 1.60 s | 2.9 |
+| A plate with 24 separate bores, one feature each | 201 ms | 2.35 s | 447 ms | 2.2 |
+| A plate with 60 separate bores, one feature each | 815 ms | 13.3 s | 2.18 s | 2.7 |
+| Two spheres, `$fn = 48` | 4 ms | 29 ms | 14 ms | 3.7 |
+| Two spheres, `$fn = 96` | 12 ms | 110 ms | 53 ms | 4.5 |
+| A union of 50 turned boxes | 19 ms | 123 ms | 49 ms | 2.5 |
+| A block with 21 cuts: slots, tapered bores, cross bores, a sphere | 67 ms | 1.86 s | 345 ms | 5.1 |
+| A revolved profile with two cuts | 5 ms | 33 ms | 13 ms | 2.4 |
+| A twisted extrusion, bored and trimmed | 5 ms | 32 ms | 15 ms | 2.8 |
 
 ### How the switch is tested
 
@@ -328,9 +433,10 @@ The two cases set aside are of the kinds already listed under [Testing](#testing
 - **`from_mesh` checks that a mesh is closed, oriented and without zero-area triangles; it does not look for self-intersections.** They are found, and resolved, the first time the solid takes part in a Boolean operation; `count_self_intersections` reports them on request.
 - **A section of a face that is not exactly flat keeps a point at each crease.** Points inside an exactly flat face are left out; a face turned by an arbitrary angle is flat only to the grid's rounding, and the kernel does not remove points by a tolerance. Studio does, within 2 nm, for the outlines it shows and cuts.
 - **The sphere has about twice the triangles of the third-party library's** for the same segment count, with thin triangles at the poles. A sphere with triangles of even size would be cheaper for the same accuracy.
-- **Speed against the third-party library**: slower by a factor of about 5 to 25 through Studio; see [What differs for a user](#what-differs-for-a-user).
+- **Speed against the third-party library**: slower by a factor of 2 to 6 through Studio on most parts, and 14 on a pattern of overlapping bores; see [What differs for a user](#what-differs-for-a-user) and, for what is left to gain, [Performance](#what-is-left).
 - **No simplification beyond exact removal of unneeded vertices.** Triangles are not merged or re-meshed for quality; long thin triangles remain.
 - **Results near the resolution are valid but may be untidy**: where faces nearly coincide, the result can carry small steps and extra vertices a few nanometres in size.
 - **Convex hull** tests every point against every face: adequate for the sizes Studio allows, quadratic in the worst case.
 - **Batch union time** grows with the amount of overlap; see Performance.
+- **The shapes remembered as examined** (see [Performance](#what-was-changed-and-why-no-result-can-change)) are held for each thread that models, eight megabytes at most, until the thread ends.
 - **Platforms.** The same results on every platform follow from the design: integers decide topology, and the doubles that choose between valid results use only correctly rounded operations (`+ − × ÷`, `sqrt`) in a fixed order, with contraction into fused multiply-adds switched off by the build (`-ffp-contract=off`, `/fp:precise`). GCC and Clang on x86-64 Linux were compared hash for hash, with the compiler's 128-bit type and with the portable one. The comparison with MSVC, and on ARM64 and macOS, is **not** among the results recorded here; `--digest` is the command to make it with. On a platform that evaluates `double` in extended precision (32-bit x87) the results could differ; that is not a supported target.

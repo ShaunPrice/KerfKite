@@ -35,25 +35,28 @@ public:
     std::vector<Node> nodes;
     std::vector<int> items;
 
-    void build(const std::vector<Box> &boxes) {
+    void build(const std::vector<Box> &boxes) { build(boxes, 0, boxes.size()); }
+
+    // A tree over boxes[first] ... boxes[first + n - 1]; the items are indices into `boxes`.
+    void build(const std::vector<Box> &boxes, size_t first, size_t n) {
         nodes.clear();
         items.clear();
-        const size_t n = boxes.size();
         if (!n) return;
-        Box all = boxes[0];
-        for (const Box &b : boxes) all.include(b);
+        Box all = boxes[first];
+        for (size_t i = 1; i < n; ++i) all.include(boxes[first + i]);
         // 21 bits an axis of the doubled centre, relative to the whole.
         int shift = 0;
         for (int k = 0; k < 3; ++k)
             while (((2 * (all.hi[k] - all.lo[k])) >> shift) >= (int64_t(1) << 21)) ++shift;
         std::vector<std::pair<uint64_t, int>> keyed(n);
         for (size_t i = 0; i < n; ++i) {
+            const Box &b = boxes[first + i];
             uint64_t code = 0;
             for (int k = 0; k < 3; ++k) {
-                const uint64_t c = static_cast<uint64_t>((boxes[i].lo[k] + boxes[i].hi[k] - 2 * all.lo[k]) >> shift);
+                const uint64_t c = static_cast<uint64_t>((b.lo[k] + b.hi[k] - 2 * all.lo[k]) >> shift);
                 code |= spread(c) << k;
             }
-            keyed[i] = std::make_pair(code, static_cast<int>(i));
+            keyed[i] = std::make_pair(code, static_cast<int>(first + i));
         }
         std::sort(keyed.begin(), keyed.end());
         items.resize(n);

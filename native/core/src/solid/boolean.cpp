@@ -18,9 +18,10 @@
 // fails after kRepairPasses is refused; an invalid solid is never returned.
 #include <algorithm>
 #include <numeric>
-#include <unordered_map>
 
 #include "arrangement.hpp"
+#include "edgemap.hpp"
+#include "timing.hpp"
 
 namespace kerfkite {
 namespace solid {
@@ -63,6 +64,7 @@ Solid resolve_self_at(std::vector<GridPoint> v, std::vector<Triangle> t, const c
 // Whether the rounded mesh has a defect: see the head of this file. `touched` holds, in order, the grid
 // points that rounding or merging produced; only triangles with a corner at one of them can be wrong.
 bool damaged(const std::vector<GridPoint> &v, const std::vector<Triangle> &t, const std::vector<GridPoint> &touched) {
+    KERFKITE_SOLID_WHOLE_PHASE(Verify);
     std::vector<char> at(v.size());
     for (size_t i = 0; i < v.size(); ++i) at[i] = std::binary_search(touched.begin(), touched.end(), v[i]);
     std::vector<char> flagged(t.size(), 0);
@@ -76,6 +78,7 @@ bool damaged(const std::vector<GridPoint> &v, const std::vector<Triangle> &t, co
     Arrangement check;
     std::vector<Operand> operands(1, Operand{&v, &t, 0, false, nullptr});
     check.load(operands);
+    check.probe_only();
     if (check.intersect(&flagged, true) > 0) return true;
     // One triangle of each shell: the space in front of it must be empty.
     std::vector<uint32_t> parent(v.size());
@@ -109,11 +112,21 @@ bool damaged(const std::vector<GridPoint> &v, const std::vector<Triangle> &t, co
 // The corners of every triangle changed are added to `touched`.
 void flip_caps(const std::vector<GridPoint> &v, std::vector<Triangle> &t, std::vector<GridPoint> &touched) {
     const double kLow = 2.0 * static_cast<double>(1 << coarseness());
-    std::unordered_map<uint64_t, uint32_t> edge;  // looked up, never iterated
-    const auto key = [](uint32_t a, uint32_t b) { return (static_cast<uint64_t>(a) << 32) | b; };
-    edge.reserve(t.size() * 3);
-    for (uint32_t i = 0; i < t.size(); ++i)
-        for (size_t k = 0; k < 3; ++k) edge[key(t[i][k], t[i][(k + 1) % 3])] = i;
+    // Directed edge -> its triangle. Most results have no cap at all, so the table is made when the first
+    // one is found.
+    EdgeMap edge;
+    bool mapped = false;
+    const auto key = [](uint32_t a, uint32_t b) { return EdgeMap::key(a, b); };
+    const auto map_edges = [&] {
+        if (mapped) return;
+        mapped = true;
+        edge.reserve(t.size() * 3);
+        for (uint32_t i = 0; i < t.size(); ++i)
+            for (size_t k = 0; k < 3; ++k) edge.set(key(t[i][k], t[i][(k + 1) % 3]), i);
+    };
+    // Whether each vertex is at a touched point.
+    std::vector<char> at(v.size());
+    for (size_t i = 0; i < v.size(); ++i) at[i] = std::binary_search(touched.begin(), touched.end(), v[i]);
     // The squared height over the longest edge, and which corner starts that edge.
     const auto measure = [&](uint32_t a, uint32_t b, uint32_t c, int &longest) {
         const uint32_t id[3] = {a, b, c};
@@ -137,20 +150,21 @@ void flip_caps(const std::vector<GridPoint> &v, std::vector<Triangle> &t, std::v
         bool changed = false;
         for (uint32_t i = 0; i < t.size(); ++i) {
             const Triangle tri = t[i];
-            if (!std::binary_search(touched.begin(), touched.end(), v[tri[0]]) && !std::binary_search(touched.begin(), touched.end(), v[tri[1]]) &&
-                !std::binary_search(touched.begin(), touched.end(), v[tri[2]]) && std::find(added.begin(), added.end(), v[tri[0]]) == added.end() &&
-                std::find(added.begin(), added.end(), v[tri[1]]) == added.end() && std::find(added.begin(), added.end(), v[tri[2]]) == added.end())
+            if (!at[tri[0]] && !at[tri[1]] && !at[tri[2]] &&
+                (added.empty() || (std::find(added.begin(), added.end(), v[tri[0]]) == added.end() && std::find(added.begin(), added.end(), v[tri[1]]) == added.end() &&
+                                   std::find(added.begin(), added.end(), v[tri[2]]) == added.end())))
                 continue;
             int longest = 0;
             const double height2 = measure(tri[0], tri[1], tri[2], longest);
             if (height2 >= kLow * kLow) continue;
             const uint32_t a = tri[static_cast<size_t>(longest)], b = tri[static_cast<size_t>((longest + 1) % 3)], c = tri[static_cast<size_t>((longest + 2) % 3)];
-            const auto across = edge.find(key(b, a));
-            if (across == edge.end() || across->second == i) continue;
-            const uint32_t j = across->second;
+            map_edges();
+            const uint32_t *across = edge.find(key(b, a));
+            if (!across || *across == i) continue;
+            const uint32_t j = *across;
             const Triangle other = t[j];
             const uint32_t d = other[0] != a && other[0] != b ? other[0] : other[1] != a && other[1] != b ? other[1] : other[2];
-            if (d == c || edge.count(key(c, d)) || edge.count(key(d, c))) continue;
+            if (d == c || edge.has(key(c, d)) || edge.has(key(d, c))) continue;
             int unused = 0;
             const double first = measure(a, d, c, unused), second = measure(d, b, c, unused);
             if (!(std::min(first, second) > height2)) continue;  // no better: leave it
@@ -161,8 +175,8 @@ void flip_caps(const std::vector<GridPoint> &v, std::vector<Triangle> &t, std::v
             t[i] = Triangle{{a, d, c}};
             t[j] = Triangle{{d, b, c}};
             for (size_t k = 0; k < 3; ++k) {
-                edge[key(t[i][k], t[i][(k + 1) % 3])] = i;
-                edge[key(t[j][k], t[j][(k + 1) % 3])] = j;
+                edge.set(key(t[i][k], t[i][(k + 1) % 3]), i);
+                edge.set(key(t[j][k], t[j][(k + 1) % 3]), j);
             }
             for (const uint32_t x : {a, b, c, d}) added.push_back(v[x]);
             changed = true;
@@ -179,7 +193,11 @@ void flip_caps(const std::vector<GridPoint> &v, std::vector<Triangle> &t, std::v
 
 Solid finish(Arrangement &arrangement, ExactMesh &exact, const char *context, int depth) {
     if (exact.tri.empty()) return Solid();
-    simplify(arrangement.pool, exact);
+    {
+        KERFKITE_SOLID_PHASE(Simplify);
+        simplify(arrangement.pool, exact, &arrangement);
+    }
+    KERFKITE_SOLID_PHASE(Round);
     const size_t nv = exact.vertex.size();
     std::vector<GridPoint> v(nv);
     std::vector<char> moved(nv, 0);
@@ -305,6 +323,7 @@ Solid run(const std::vector<detail::Operand> &operands, detail::Rule rule, const
             detail::Arrangement arrangement;
             arrangement.load(operands);
             arrangement.enable_ribbons();
+            arrangement.remember_shapes();
             arrangement.intersect();
             arrangement.record_simple();
             detail::ExactMesh exact;

@@ -8,6 +8,7 @@
 #include <algorithm>
 
 #include "arrangement.hpp"
+#include "timing.hpp"
 
 namespace kerfkite {
 namespace solid {
@@ -15,6 +16,7 @@ namespace solid {
 namespace {
 
 Solid hull_of(std::vector<GridPoint> points) {
+    KERFKITE_SOLID_PHASE(Construct);
     std::sort(points.begin(), points.end());
     points.erase(std::unique(points.begin(), points.end()), points.end());
     const size_t n = points.size();

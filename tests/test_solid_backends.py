@@ -377,6 +377,24 @@ class KernelInterfaceTests(unittest.TestCase):
         self.assertTrue(doubled.merge())
         self.assertAlmostEqual(solid_kernel.Manifold(doubled).volume(), 1 / 6)
 
+    def test_a_mesh_crosses_as_bytes_with_the_numbers_of_the_text(self):
+        # A turned, cut sphere: coordinates that are not round numbers of millimetres.
+        ball = solid_kernel.Manifold.sphere(3.7, 24).rotate([12.5, -40, 77]).translate([0.123456789, -2.5, 1e-6])
+        part = ball - solid_kernel.Manifold.cylinder(9, 1.3, 0.9, 20).translate([0.4, 0.2, -4.5])
+        direct = part.to_mesh64()
+        text = solid_kernel._solid({'kept': 0}, [part], mesh=True)[0]['mesh']
+        self.assertEqual((direct.vert_properties.dtype, direct.tri_verts.dtype), (np.float64, np.uint32))
+        self.assertEqual(direct.vert_properties.tolist(), text['vertices'])
+        self.assertEqual(direct.tri_verts.tolist(), text['triangles'])
+        self.assertTrue(direct.vert_properties.flags.writeable and direct.tri_verts.flags.writeable)
+        # An extension built before meshes crossed as bytes still gives the same arrays, through the text.
+        with mock.patch.object(solid_kernel, '_solid_mesh', None):
+            again = solid_kernel.Manifold.batch_boolean([part], solid_kernel.OpType.Add).to_mesh64()
+        self.assertTrue(np.array_equal(again.vert_properties, direct.vert_properties))
+        self.assertTrue(np.array_equal(again.tri_verts, direct.tri_verts))
+        self.assertEqual((again.vert_properties.dtype, again.tri_verts.dtype), (np.float64, np.uint32))
+        self.assertEqual(solid_kernel.Manifold().to_mesh64().vert_properties.shape, (0, 3))
+
     def test_operators_gaps_and_defaults(self):
         a = solid_kernel.Manifold.cube([2, 2, 2])
         b = a.translate([1, 0, 0])
