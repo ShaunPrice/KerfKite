@@ -142,7 +142,7 @@ inline Solid operator^(const Solid &a, const Solid &b) { return boolean(a, b, Op
 // What the last Boolean operation on this thread did, for tests and tuning.
 struct BooleanStats {
     std::size_t candidate_pairs = 0, intersecting_pairs = 0, split_triangles = 0, coplanar_groups = 0;
-    std::size_t constructed_points = 0, exact_fallbacks = 0, rounded_vertices = 0, repair_passes = 0;
+    std::size_t constructed_points = 0, exact_fallbacks = 0, rounded_vertices = 0, repair_passes = 0, coarser_retries = 0;
 };
 BooleanStats last_boolean_stats();
 

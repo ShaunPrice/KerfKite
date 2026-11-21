@@ -3,17 +3,20 @@
 //
 // Rounding. The arrangement is computed exactly, so before rounding the result is a valid solid whose
 // new vertices are rational points. Each of those is moved to the nearest grid point (less than 0.87 nm
-// away). That can, for features about as fine as the grid, flatten a triangle, push one triangle through
-// another or turn a sliver inside out. So after rounding the kernel checks, exactly:
+// away), and rounded vertices that an edge of at most two grid units joins are merged into one. That
+// can, for features about as fine as the grid, flatten a triangle, push one triangle through another
+// or turn a sliver inside out. So afterwards the kernel checks, exactly:
 //   (a) no triangle with a moved vertex has lost its area,
 //   (b) no triangle with a moved vertex meets any other triangle except in a common vertex or edge,
-//   (c) every connected shell with a moved vertex still encloses volume of the same sign.
+//   (c) for every connected shell with a moved vertex, the space in front of one of its triangles is
+//       empty (an exact ray count), so that no shell has turned inside out or moved through another.
 // Triangles without a moved vertex are faces of the exact arrangement and cannot meet wrongly. If a check
 // fails, the rounded mesh is resolved against itself (the same engine, keeping what is wound a positive
 // number of times) and rounded again. A result that still fails after kRepairPasses is refused; an
 // invalid solid is never returned.
 #include <algorithm>
 #include <numeric>
+#include <unordered_map>
 #include <cstdio>
 #include <cstdlib>
 
@@ -24,7 +27,9 @@ namespace solid {
 
 namespace {
 thread_local BooleanStats g_stats;
-const int kRepairPasses = 8;
+thread_local int g_coarseness = 0;
+const int kRepairPasses = 4;
+const int kCoarsest = 3;
 
 void add_stats(const BooleanStats &s) {
     g_stats.candidate_pairs += s.candidate_pairs;
@@ -40,6 +45,8 @@ BooleanStats last_boolean_stats() { return g_stats; }
 
 namespace detail {
 
+int coarseness() { return g_coarseness; }
+
 namespace {
 
 Solid resolve_self_at(std::vector<GridPoint> v, std::vector<Triangle> t, const char *context, int depth) {
@@ -53,18 +60,24 @@ Solid resolve_self_at(std::vector<GridPoint> v, std::vector<Triangle> t, const c
     return finish(arrangement, exact, context, depth);
 }
 
-// Whether rounding left a defect: see the head of this file.
-bool damaged(const Arrangement &arrangement, const ExactMesh &exact, const std::vector<GridPoint> &v, const std::vector<char> &moved) {
-    const std::vector<Triangle> &t = exact.tri;
+// Whether the rounded mesh has a defect: see the head of this file. `touched` holds, in order, the grid
+// points that rounding or merging produced; only triangles with a corner at one of them can be wrong.
+bool damaged(const std::vector<GridPoint> &v, const std::vector<Triangle> &t, const std::vector<GridPoint> &touched) {
+    std::vector<char> at(v.size());
+    for (size_t i = 0; i < v.size(); ++i) at[i] = std::binary_search(touched.begin(), touched.end(), v[i]);
     std::vector<char> flagged(t.size(), 0);
     for (size_t i = 0; i < t.size(); ++i) {
         const Triangle &tri = t[i];
-        if (!moved[tri[0]] && !moved[tri[1]] && !moved[tri[2]]) continue;
+        if (!at[tri[0]] && !at[tri[1]] && !at[tri[2]]) continue;
         flagged[i] = 1;
         const Plane pl = plane_of(v[tri[0]].data(), v[tri[1]].data(), v[tri[2]].data());
-        if (pl.n[0].zero() && pl.n[1].zero() && pl.n[2].zero()) { if (getenv("KKDEBUG")) fprintf(stderr, "damaged: flat triangle %zu\n", i); return true; }
+        if (pl.n[0].zero() && pl.n[1].zero() && pl.n[2].zero()) { if (getenv("KKDEBUG")) fprintf(stderr, "  damaged: flat %zu\n", i); return true; }
     }
-    // Shells, and the sign of the volume of those that moved.
+    Arrangement check;
+    std::vector<Operand> operands(1, Operand{&v, &t, 0, false, nullptr});
+    check.load(operands);
+    if (check.intersect(&flagged, true) > 0) { if (getenv("KKDEBUG")) fprintf(stderr, "  damaged: pair\n"); return true; }
+    // One triangle of each shell that was touched: the space in front of it must be empty.
     std::vector<uint32_t> parent(v.size());
     std::iota(parent.begin(), parent.end(), 0u);
     const auto find = [&](uint32_t x) {
@@ -75,62 +88,100 @@ bool damaged(const Arrangement &arrangement, const ExactMesh &exact, const std::
         return x;
     };
     for (const Triangle &tri : t)
-        for (int k = 1; k < 3; ++k) {
-            const uint32_t a = find(tri[0]), b = find(tri[static_cast<size_t>(k)]);
+        for (size_t k = 1; k < 3; ++k) {
+            const uint32_t a = find(tri[0]), b = find(tri[k]);
             if (a != b) parent[std::max(a, b)] = std::min(a, b);
         }
-    std::vector<char> shell_moved(v.size(), 0);
+    std::vector<char> shell_touched(v.size(), 0), shell_done(v.size(), 0);
     for (uint32_t i = 0; i < v.size(); ++i)
-        if (moved[i]) shell_moved[find(i)] = 1;
-    std::vector<Interval> before(v.size());
-    std::vector<I128> partial(v.size());
-    std::vector<BigInt> after;
-    std::vector<int> slot(v.size(), -1);
-    std::vector<uint32_t> pending(v.size(), 0);
-    const Pool &pool = arrangement.pool;
-    for (const Triangle &tri : t) {
-        const uint32_t root = find(tri[0]);
-        if (!shell_moved[root]) continue;
-        if (slot[root] < 0) {
-            slot[root] = static_cast<int>(after.size());
-            after.push_back(BigInt());
-        }
-        // Tetrahedra from the shell's lowest vertex, before (intervals) and after (exact).
-        const Pt &o = pool.pts[static_cast<size_t>(exact.vertex[root])];
-        const Pt &a = pool.pts[static_cast<size_t>(exact.vertex[tri[0]])], &b = pool.pts[static_cast<size_t>(exact.vertex[tri[1]])],
-                 &c = pool.pts[static_cast<size_t>(exact.vertex[tri[2]])];
-        const Interval ux = a.c[0] - o.c[0], uy = a.c[1] - o.c[1], uz = a.c[2] - o.c[2];
-        const Interval vx = b.c[0] - o.c[0], vy = b.c[1] - o.c[1], vz = b.c[2] - o.c[2];
-        const Interval wx = c.c[0] - o.c[0], wy = c.c[1] - o.c[1], wz = c.c[2] - o.c[2];
-        before[root] = before[root] + (ux * (vy * wz - vz * wy) - uy * (vx * wz - vz * wx) + uz * (vx * wy - vy * wx));
-        partial[root] = partial[root] + orient3d_value(v[root].data(), v[tri[0]].data(), v[tri[1]].data(), v[tri[2]].data());
-        if (++pending[root] == 256) {
-            after[static_cast<size_t>(slot[root])] = after[static_cast<size_t>(slot[root])] + BigInt(partial[root]);
-            partial[root] = I128();
-            pending[root] = 0;
-        }
+        if (at[i]) shell_touched[find(i)] = 1;
+    for (size_t i = 0; i < t.size(); ++i) {
+        const uint32_t root = find(t[i][0]);
+        if (!shell_touched[root] || shell_done[root]) continue;
+        shell_done[root] = 1;
+        if (check.winding_in_front(static_cast<int>(i)) != 0) { if (getenv("KKDEBUG")) fprintf(stderr, "  damaged: shell\n"); return true; }
     }
-    for (uint32_t i = 0; i < v.size(); ++i) {
-        if (slot[i] < 0) continue;
-        const int now = (after[static_cast<size_t>(slot[i])] + BigInt(partial[i])).sign();
-        const int was = before[i].sign();
-        if (was == 2 || was != now || now == 0) { if (getenv("KKDEBUG")) fprintf(stderr, "damaged: shell sign %d -> %d\n", was, now); return true; }
+    return false;
+}
+
+// After rounding, a triangle with a moved corner may be left as a cap: a corner within a grid unit or two
+// of the opposite edge. Its height is below the resolution of the grid, and the next rounding or a
+// neighbour could turn it over. The edge it leans on is replaced by the other diagonal of the two
+// triangles that share it, which removes the cap and bends the surface by less than its height.
+// The corners of every triangle changed are added to `touched`.
+void flip_caps(const std::vector<GridPoint> &v, std::vector<Triangle> &t, std::vector<GridPoint> &touched) {
+    const double kLow = 2.0 * static_cast<double>(1 << coarseness());
+    std::unordered_map<uint64_t, uint32_t> edge;  // looked up, never iterated
+    const auto key = [](uint32_t a, uint32_t b) { return (static_cast<uint64_t>(a) << 32) | b; };
+    edge.reserve(t.size() * 3);
+    for (uint32_t i = 0; i < t.size(); ++i)
+        for (size_t k = 0; k < 3; ++k) edge[key(t[i][k], t[i][(k + 1) % 3])] = i;
+    // The squared height over the longest edge, and which corner starts that edge.
+    const auto measure = [&](uint32_t a, uint32_t b, uint32_t c, int &longest) {
+        const uint32_t id[3] = {a, b, c};
+        double best = -1;
+        for (int k = 0; k < 3; ++k) {
+            const GridPoint &p = v[id[k]], &q = v[id[(k + 1) % 3]];
+            const double dx = static_cast<double>(q[0] - p[0]), dy = static_cast<double>(q[1] - p[1]), dz = static_cast<double>(q[2] - p[2]);
+            const double length = dx * dx + dy * dy + dz * dz;
+            if (length > best) {
+                best = length;
+                longest = k;
+            }
+        }
+        const double ux = static_cast<double>(v[b][0] - v[a][0]), uy = static_cast<double>(v[b][1] - v[a][1]), uz = static_cast<double>(v[b][2] - v[a][2]);
+        const double wx = static_cast<double>(v[c][0] - v[a][0]), wy = static_cast<double>(v[c][1] - v[a][1]), wz = static_cast<double>(v[c][2] - v[a][2]);
+        const double nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+        return best > 0 ? (nx * nx + ny * ny + nz * nz) / best : 0.0;
+    };
+    std::vector<GridPoint> added;
+    for (int pass = 0; pass < 4; ++pass) {
+        bool changed = false;
+        for (uint32_t i = 0; i < t.size(); ++i) {
+            const Triangle tri = t[i];
+            if (!std::binary_search(touched.begin(), touched.end(), v[tri[0]]) && !std::binary_search(touched.begin(), touched.end(), v[tri[1]]) &&
+                !std::binary_search(touched.begin(), touched.end(), v[tri[2]]) && std::find(added.begin(), added.end(), v[tri[0]]) == added.end() &&
+                std::find(added.begin(), added.end(), v[tri[1]]) == added.end() && std::find(added.begin(), added.end(), v[tri[2]]) == added.end())
+                continue;
+            int longest = 0;
+            const double height2 = measure(tri[0], tri[1], tri[2], longest);
+            if (height2 >= kLow * kLow) continue;
+            const uint32_t a = tri[static_cast<size_t>(longest)], b = tri[static_cast<size_t>((longest + 1) % 3)], c = tri[static_cast<size_t>((longest + 2) % 3)];
+            const auto across = edge.find(key(b, a));
+            if (across == edge.end() || across->second == i) continue;
+            const uint32_t j = across->second;
+            const Triangle other = t[j];
+            const uint32_t d = other[0] != a && other[0] != b ? other[0] : other[1] != a && other[1] != b ? other[1] : other[2];
+            if (d == c || edge.count(key(c, d)) || edge.count(key(d, c))) continue;
+            int unused = 0;
+            const double first = measure(a, d, c, unused), second = measure(d, b, c, unused);
+            if (!(std::min(first, second) > height2)) continue;  // no better: leave it
+            for (size_t k = 0; k < 3; ++k) {
+                edge.erase(key(tri[k], tri[(k + 1) % 3]));
+                edge.erase(key(other[k], other[(k + 1) % 3]));
+            }
+            t[i] = Triangle{{a, d, c}};
+            t[j] = Triangle{{d, b, c}};
+            for (size_t k = 0; k < 3; ++k) {
+                edge[key(t[i][k], t[i][(k + 1) % 3])] = i;
+                edge[key(t[j][k], t[j][(k + 1) % 3])] = j;
+            }
+            for (const uint32_t x : {a, b, c, d}) added.push_back(v[x]);
+            changed = true;
+        }
+        if (!changed) break;
     }
-    // Pairs of triangles, one of which moved.
-    Arrangement check;
-    std::vector<Operand> operands(1, Operand{&v, &t, 0, false, nullptr});
-    check.load(operands);
-    const bool hit = check.intersect(&flagged, true) > 0;
-    if (hit && getenv("KKDEBUG")) { fprintf(stderr, "moved:"); for (size_t i = 0; i < v.size(); ++i) if (moved[i]) fprintf(stderr, " %zu", i); fprintf(stderr, "\n");
-      for (size_t i = 0; i < v.size(); ++i) { const Pt &q = arrangement.pool.pts[exact.vertex[i]]; fprintf(stderr, "  v%zu pool %d rat %d: %.17g %.17g %.17g\n", i, exact.vertex[i], q.rat, q.c[0].lo, q.c[1].lo, q.c[2].lo); } }
-    if (getenv("KKDEBUG")) fprintf(stderr, "damaged: pairs %d (nv %zu nt %zu)\n", (int)hit, v.size(), t.size());
-    return hit;
+    if (added.empty()) return;
+    touched.insert(touched.end(), added.begin(), added.end());
+    std::sort(touched.begin(), touched.end());
+    touched.erase(std::unique(touched.begin(), touched.end()), touched.end());
 }
 
 }  // namespace
 
 Solid finish(Arrangement &arrangement, ExactMesh &exact, const char *context, int depth) {
     if (exact.tri.empty()) return Solid();
+    if (!getenv("KKNOSIMPLIFY")) simplify(arrangement.pool, exact);
     const size_t nv = exact.vertex.size();
     std::vector<GridPoint> v(nv);
     std::vector<char> moved(nv, 0);
@@ -145,14 +196,105 @@ Solid finish(Arrangement &arrangement, ExactMesh &exact, const char *context, in
         }
     }
     g_stats.rounded_vertices += rounded;
-    if (!rounded || !damaged(arrangement, exact, v, moved)) return make_solid(std::move(v), std::move(exact.tri), true, context);
-    if (depth >= kRepairPasses) throw ValueError(std::string(context) + ": the result has features too fine for the 1 nm grid");
+    if (!rounded) return make_solid(std::move(v), std::move(exact.tri), true, context);
+    std::vector<Triangle> t = std::move(exact.tri);
+
+    // Rounded vertices joined by an edge of at most kMerge grid units are one vertex: what lies between
+    // them is below the resolution of the grid. A vertex the operands already had stays where it is.
+    const int64_t scale = int64_t(1) << g_coarseness, kMerge = 2 * scale, kMerge2 = kMerge * kMerge, kMergeSpan = 8 * scale;
+    std::vector<uint32_t> parent(nv);
+    std::iota(parent.begin(), parent.end(), 0u);
+    const auto find = [&](uint32_t x) {
+        while (parent[x] != x) {
+            parent[x] = parent[parent[x]];
+            x = parent[x];
+        }
+        return x;
+    };
+    bool merging = false;
+    for (const Triangle &tri : t)
+        for (size_t k = 0; k < 3; ++k) {
+            const uint32_t a = tri[k], b = tri[(k + 1) % 3];
+            if (!moved[a] && !moved[b]) continue;
+            const int64_t dx = v[a][0] - v[b][0], dy = v[a][1] - v[b][1], dz = v[a][2] - v[b][2];
+            if (dx > kMerge || dx < -kMerge || dy > kMerge || dy < -kMerge || dz > kMerge || dz < -kMerge || dx * dx + dy * dy + dz * dz > kMerge2) continue;
+            const uint32_t ra = find(a), rb = find(b);
+            if (ra != rb) {
+                parent[std::max(ra, rb)] = std::min(ra, rb);
+                merging = true;
+            }
+        }
+    std::vector<GridPoint> touched;
+    for (size_t i = 0; i < nv; ++i)
+        if (moved[i]) touched.push_back(v[i]);
+    if (merging) {
+        // For each group: its extent, and the member to keep (an original vertex if it has one, then the lowest position).
+        std::vector<GridPoint> lo(v), hi(v);
+        std::vector<uint32_t> keep(nv);
+        std::iota(keep.begin(), keep.end(), 0u);
+        for (uint32_t i = 0; i < nv; ++i) {
+            const uint32_t r = find(i);
+            for (size_t k = 0; k < 3; ++k) {
+                lo[r][k] = std::min(lo[r][k], v[i][k]);
+                hi[r][k] = std::max(hi[r][k], v[i][k]);
+            }
+            const uint32_t best = keep[r];
+            if ((moved[best] && !moved[i]) || (moved[best] == moved[i] && v[i] < v[best])) keep[r] = i;
+        }
+        std::vector<GridPoint> merged(v);
+        for (uint32_t i = 0; i < nv; ++i) {
+            const uint32_t r = find(i);
+            if (hi[r][0] - lo[r][0] > kMergeSpan || hi[r][1] - lo[r][1] > kMergeSpan || hi[r][2] - lo[r][2] > kMergeSpan) continue;
+            if (keep[r] != i || r != i) touched.push_back(v[keep[r]]);
+            merged[i] = v[keep[r]];
+        }
+        v.swap(merged);
+    }
+    std::sort(touched.begin(), touched.end());
+    touched.erase(std::unique(touched.begin(), touched.end()), touched.end());
+
+    if (getenv("KKDEBUG")) fprintf(stderr, "finish depth %d nv %zu nt %zu rounded %zu merging %d touched %zu\n", depth, nv, t.size(), rounded, (int)merging, touched.size());
+    if (getenv("KKDUMP")) {
+        char path[200];
+        static int serial = 0;
+        snprintf(path, sizeof path, "%s_%d_d%d.txt", getenv("KKDUMP"), serial++, depth);
+        FILE *f = fopen(path, "w");
+        fprintf(f, "%zu %zu\n", v.size(), t.size());
+        for (size_t i = 0; i < v.size(); ++i) { const Pt &q = arrangement.pool.pts[exact.vertex[i]]; fprintf(f, "%lld %lld %lld %d %.17g %.17g %.17g\n", (long long)v[i][0], (long long)v[i][1], (long long)v[i][2], (int)moved[i], (q.c[0].lo+q.c[0].hi)/2, (q.c[1].lo+q.c[1].hi)/2, (q.c[2].lo+q.c[2].hi)/2); }
+        for (const Triangle &tr : t) fprintf(f, "%u %u %u\n", tr[0], tr[1], tr[2]);
+        fclose(f);
+    }
+    bool sound = true;
+    bool collapsed = false;
+    for (const Triangle &tri : t) collapsed = collapsed || v[tri[0]] == v[tri[1]] || v[tri[1]] == v[tri[2]] || v[tri[0]] == v[tri[2]];
+    if (collapsed) {
+        // Triangles have closed up: join what is left by position.
+        try {
+            weld_and_pair(v, t, context);
+        } catch (const ValueError &e) {
+            if (getenv("KKDEBUG")) fprintf(stderr, "  weld failed: %s\n", e.what());
+            sound = false;
+        }
+        if (sound && t.empty()) return Solid();
+    }
+    if (sound) flip_caps(v, t, touched);
+    if (sound && !damaged(v, t, touched)) return make_solid(std::move(v), std::move(t), true, context);
+    if (depth >= kRepairPasses) throw TooFine(std::string(context) + ": the result has features too fine for the 1 nm grid");
     ++g_stats.repair_passes;
-    return resolve_self_at(std::move(v), std::move(exact.tri), context, depth + 1);
+    return resolve_self_at(std::move(v), std::move(t), context, depth + 1);
 }
 
 Solid resolve_self(std::vector<GridPoint> v, std::vector<Triangle> t, const char *context) {
-    return resolve_self_at(std::move(v), std::move(t), context, 1);
+    struct Reset {
+        ~Reset() { g_coarseness = 0; }
+    } reset;
+    for (g_coarseness = 0;; ++g_coarseness) {
+        try {
+            return resolve_self_at(v, t, context, 1);
+        } catch (const TooFine &) {
+            if (g_coarseness == kCoarsest) throw;
+        }
+    }
 }
 
 }  // namespace detail
@@ -169,14 +311,26 @@ bool apart(const Mesh &a, const Mesh &b) {
 }
 
 Solid run(const std::vector<detail::Operand> &operands, detail::Rule rule, const char *context) {
-    detail::Arrangement arrangement;
-    arrangement.load(operands);
-    arrangement.intersect();
-    arrangement.record_simple();
-    detail::ExactMesh exact;
-    arrangement.resolve(rule, exact);
-    add_stats(arrangement.stats);
-    return detail::finish(arrangement, exact, context, 0);
+    struct Reset {
+        ~Reset() { g_coarseness = 0; }
+    } reset;
+    for (g_coarseness = 0;; ++g_coarseness) {
+        try {
+            detail::Arrangement arrangement;
+            arrangement.load(operands);
+            arrangement.enable_ribbons();
+            arrangement.intersect();
+            arrangement.record_simple();
+            detail::ExactMesh exact;
+            arrangement.resolve(rule, exact);
+            add_stats(arrangement.stats);
+            return detail::finish(arrangement, exact, context, 0);
+        } catch (const detail::TooFine &) {
+            // Sub-resolution features survived: remove them more coarsely and start again.
+            if (g_coarseness == kCoarsest) throw;
+            ++g_stats.coarser_retries;
+        }
+    }
 }
 
 detail::Operand operand(const Mesh &m, int label) { return detail::Operand{&m.v, &m.t, label, m.simple, &m}; }

@@ -58,7 +58,7 @@ void Arrangement::load(const std::vector<Operand> &operands) {
     size_t total = 0;
     for (const Operand &op : operands) total += op.t->size();
     if (total > kMaxTriangles) throw ValueError("The solids of one operation have more than " + std::to_string(kMaxTriangles) + " triangles together");
-    operand_hit_.assign(operands.size(), 0);
+    operand_hit_.assign(operands.size() + 1, 0);
     tris_.reserve(total);
     planes_.reserve(total);
     boxes_.reserve(total);
@@ -67,32 +67,35 @@ void Arrangement::load(const std::vector<Operand> &operands) {
         const Operand &op = operands[o];
         ids.resize(op.v->size());
         for (size_t i = 0; i < ids.size(); ++i) ids[i] = pool.add_grid((*op.v)[i][0], (*op.v)[i][1], (*op.v)[i][2]);
-        for (const Triangle &tri : *op.t) {
-            SoupTriangle s;
-            s.v[0] = ids[tri[0]];
-            s.v[1] = ids[tri[1]];
-            s.v[2] = ids[tri[2]];
-            s.operand = static_cast<int>(o);
-            s.label = op.label;
-            if (s.v[0] == s.v[1] || s.v[1] == s.v[2] || s.v[0] == s.v[2]) continue;
-            const int64_t *a = pool.pts[static_cast<size_t>(s.v[0])].i, *b = pool.pts[static_cast<size_t>(s.v[1])].i, *c = pool.pts[static_cast<size_t>(s.v[2])].i;
-            const Plane pl = plane_of(a, b, c);
-            int axis = 0;
-            if (pl.n[axis].abs() < pl.n[1].abs()) axis = 1;
-            if (pl.n[axis].abs() < pl.n[2].abs()) axis = 2;
-            if (pl.n[axis].zero()) continue;  // no area
-            Box box;
-            for (int k = 0; k < 3; ++k) {
-                box.lo[k] = std::min(a[k], std::min(b[k], c[k]));
-                box.hi[k] = std::max(a[k], std::max(b[k], c[k]));
-            }
-            tris_.push_back(s);
-            planes_.push_back(pl);
-            boxes_.push_back(box);
-            axis_.push_back(static_cast<signed char>(axis));
-            sign_.push_back(static_cast<signed char>(pl.n[axis].sign()));
-        }
+        for (const Triangle &tri : *op.t) add_triangle(ids[tri[0]], ids[tri[1]], ids[tri[2]], static_cast<int>(o), op.label);
     }
+    real_triangles_ = tris_.size();
+}
+
+void Arrangement::add_triangle(int v0, int v1, int v2, int operand, int label) {
+    SoupTriangle s;
+    s.v[0] = v0;
+    s.v[1] = v1;
+    s.v[2] = v2;
+    s.operand = operand;
+    s.label = label;
+    if (v0 == v1 || v1 == v2 || v0 == v2) return;
+    const int64_t *a = pool.pts[static_cast<size_t>(v0)].i, *b = pool.pts[static_cast<size_t>(v1)].i, *c = pool.pts[static_cast<size_t>(v2)].i;
+    const Plane pl = plane_of(a, b, c);
+    int axis = 0;
+    if (pl.n[axis].abs() < pl.n[1].abs()) axis = 1;
+    if (pl.n[axis].abs() < pl.n[2].abs()) axis = 2;
+    if (pl.n[axis].zero()) return;  // no area
+    Box box;
+    for (int k = 0; k < 3; ++k) {
+        box.lo[k] = std::min(a[k], std::min(b[k], c[k]));
+        box.hi[k] = std::max(a[k], std::max(b[k], c[k]));
+    }
+    tris_.push_back(s);
+    planes_.push_back(pl);
+    boxes_.push_back(box);
+    axis_.push_back(static_cast<signed char>(axis));
+    sign_.push_back(static_cast<signed char>(pl.n[axis].sign()));
 }
 
 void Arrangement::record_simple() const {
@@ -104,15 +107,15 @@ std::size_t Arrangement::intersect(const std::vector<char> *flagged, bool stop_a
     bvh_.build(boxes_);
     std::vector<int> found;
     size_t hits = 0;
-    const int n = static_cast<int>(tris_.size());
-    for (int i = 0; i < n; ++i) {
-        if (flagged && !(*flagged)[static_cast<size_t>(i)]) continue;
+    // Examines triangle i against the others; `fresh` marks the triangles being examined in this round, so
+    // that a pair of them is taken once.
+    const auto examine = [&](int i, const std::vector<char> *fresh) {
         found.clear();
         const SoupTriangle &a = tris_[static_cast<size_t>(i)];
-        const bool self = !operands_[static_cast<size_t>(a.operand)].simple;
+        const bool self = a.label == 2 || !operands_[static_cast<size_t>(a.operand)].simple;
         bvh_.query(boxes_, boxes_[static_cast<size_t>(i)], [&](int j) {
             if (j == i) return;
-            if (j < i && (!flagged || (*flagged)[static_cast<size_t>(j)])) return;  // seen from the other side
+            if (j < i && (!fresh || (*fresh)[static_cast<size_t>(j)])) return;  // seen from the other side
             if (tris_[static_cast<size_t>(j)].operand == a.operand && !self) return;
             found.push_back(j);
         });
@@ -121,24 +124,89 @@ std::size_t Arrangement::intersect(const std::vector<char> *flagged, bool stop_a
         if (stats.candidate_pairs > kMaxCandidatePairs) throw ValueError("The solids overlap in too many places for one operation; simplify them or combine fewer at once");
         for (const int j : found) {
             if (!pair(std::min(i, j), std::max(i, j))) continue;
+            const SoupTriangle &b = tris_[static_cast<size_t>(j)];
+            if (a.label == 2 || b.label == 2) continue;  // ribbons are not part of any solid
             ++hits;
-            if (tris_[static_cast<size_t>(j)].operand == a.operand) operand_hit_[static_cast<size_t>(a.operand)] = 1;
+            if (b.operand == a.operand) operand_hit_[static_cast<size_t>(a.operand)] = 1;
             if (stop_at_first) {
-                if (getenv("KKDEBUG")) {
-                    for (int tt : {i, j}) {
-                        const SoupTriangle &q = tris_[static_cast<size_t>(tt)];
-                        fprintf(stderr, " tri %d:", tt);
-                        for (int k = 0; k < 3; ++k) fprintf(stderr, " %d(%lld,%lld,%lld)", q.v[k], (long long)pool.pts[q.v[k]].i[0], (long long)pool.pts[q.v[k]].i[1], (long long)pool.pts[q.v[k]].i[2]);
-                        fprintf(stderr, "\n");
-                    }
-                    for (size_t r = 0; r < records_.size(); ++r) fprintf(stderr, " rec tri %d a %d b %d other %d\n", records_[r].tri, records_[r].a, records_[r].b, records_[r].other);
+                if (getenv("KKDEBUG")) for (int tt : {i, j}) {
+                    const SoupTriangle &q = tris_[static_cast<size_t>(tt)];
+                    fprintf(stderr, " tri %d:", tt);
+                    for (int k = 0; k < 3; ++k) fprintf(stderr, " %d(%lld,%lld,%lld)", q.v[k], (long long)pool.pts[q.v[k]].i[0], (long long)pool.pts[q.v[k]].i[1], (long long)pool.pts[q.v[k]].i[2]);
+                    fprintf(stderr, "\n");
                 }
-                return hits;
+                return true;
             }
         }
+        return false;
+    };
+    const int n = static_cast<int>(tris_.size());
+    for (int i = 0; i < n; ++i) {
+        if (flagged && !(*flagged)[static_cast<size_t>(i)]) continue;
+        if (examine(i, flagged) && stop_at_first) return hits;
+    }
+    if (!ribbon_edges_.empty()) {
+        add_ribbons();
+        bvh_.build(boxes_);
+        std::vector<char> fresh(tris_.size(), 0);
+        for (size_t i = static_cast<size_t>(n); i < tris_.size(); ++i) fresh[i] = 1;
+        for (int i = n; i < static_cast<int>(tris_.size()); ++i) examine(i, &fresh);
     }
     stats.intersecting_pairs += hits;
     return hits;
+}
+
+// Faces that would coincide but for the rounding of their vertices cross at a hair's angle and leave,
+// between them, cracks and fins a fraction of a nanometre thick that are open at the rim: open, they
+// are part of the space around them and cannot be told apart from it. A ribbon is a pair of thin
+// triangles standing on an edge of such a face, 16 grid units to either side of it, across the gap. It
+// belongs to no solid and changes no winding number; all it does is close the rim, so that the crack
+// becomes a cell of its own, which absorb_thin_cells() can then give the state of its surroundings.
+// Ribbons that turn out not to be needed lie inside one cell and leave no trace in the result.
+void Arrangement::near_coplanar(int i, int j) {
+    const double kNear = 8.0 * (1 << coarseness());
+    double reach[2] = {0, 0};
+    for (int which = 0; which < 2; ++which) {
+        const int plane = which ? j : i, other = which ? i : j;
+        const Plane &pl = planes_[static_cast<size_t>(plane)];
+        const double nx = pl.n[0].to_double(), ny = pl.n[1].to_double(), nz = pl.n[2].to_double();
+        const double length = std::sqrt(nx * nx + ny * ny + nz * nz);
+        for (int k = 0; k < 3; ++k) {
+            const double d = std::fabs(plane_value(pl, pool.pts[static_cast<size_t>(tris_[static_cast<size_t>(other)].v[k])].i).to_double()) / length;
+            if (d > reach[which]) reach[which] = d;
+        }
+    }
+    if (std::min(reach[0], reach[1]) > kNear) return;
+    const int axis = axis_[static_cast<size_t>(i)];
+    for (const int t : {i, j}) {
+        const SoupTriangle &tri = tris_[static_cast<size_t>(t)];
+        for (int k = 0; k < 3; ++k) ribbon_edges_.push_back(RibbonEdge{std::min(tri.v[k], tri.v[(k + 1) % 3]), std::max(tri.v[k], tri.v[(k + 1) % 3]), axis});
+    }
+}
+
+void Arrangement::add_ribbons() {
+    const int64_t kHalf = 16 * (int64_t(1) << coarseness());
+    std::sort(ribbon_edges_.begin(), ribbon_edges_.end());
+    ribbon_edges_.erase(std::unique(ribbon_edges_.begin(), ribbon_edges_.end()), ribbon_edges_.end());
+    const int operand = static_cast<int>(operands_.size());
+    for (const RibbonEdge &e : ribbon_edges_) {
+        int64_t a[3], b[3];
+        for (int k = 0; k < 3; ++k) {
+            a[k] = pool.pts[static_cast<size_t>(e.a)].i[k];
+            b[k] = pool.pts[static_cast<size_t>(e.b)].i[k];
+        }
+        if (a[(e.axis + 1) % 3] == b[(e.axis + 1) % 3] && a[(e.axis + 2) % 3] == b[(e.axis + 2) % 3]) continue;  // the edge runs along the axis
+        int64_t up[3] = {0, 0, 0};
+        up[e.axis] = kHalf;
+        const int a_hi = pool.add_grid(a[0] + up[0], a[1] + up[1], a[2] + up[2]), a_lo = pool.add_grid(a[0] - up[0], a[1] - up[1], a[2] - up[2]);
+        const int b_hi = pool.add_grid(b[0] + up[0], b[1] + up[1], b[2] + up[2]), b_lo = pool.add_grid(b[0] - up[0], b[1] - up[1], b[2] - up[2]);
+        // Four triangles, so that the edge itself is an edge of the ribbon.
+        add_triangle(e.a, e.b, b_hi, operand, 2);
+        add_triangle(e.a, b_hi, a_hi, operand, 2);
+        add_triangle(e.a, b_lo, e.b, operand, 2);
+        add_triangle(e.a, a_lo, b_lo, operand, 2);
+    }
+    ribbon_edges_.clear();
 }
 
 bool Arrangement::corner(int tri, int p) const {
@@ -237,7 +305,7 @@ int Arrangement::cluster_find(int i) {
 }
 
 void Arrangement::cluster_join(int i, int j) {
-    if (cluster_.empty()) cluster_.assign(tris_.size(), -1);
+    if (cluster_.size() < tris_.size()) cluster_.resize(tris_.size(), -1);
     const int a = cluster_find(i), b = cluster_find(j);
     if (a != b) cluster_[static_cast<size_t>(std::max(a, b))] = std::min(a, b);
 }
@@ -285,6 +353,7 @@ bool Arrangement::pair(int i, int j) {
         cluster_join(i, j);
         return true;
     }
+    if (ribbons_enabled_ && ta.label != 2 && tb.label != 2 && ta.operand != tb.operand) near_coplanar(i, j);
     int ei[2], ej[2];
     const int nj = ends(j, side_b, planes_[static_cast<size_t>(i)], ej);
     const int ni = ends(i, side_a, planes_[static_cast<size_t>(j)], ei);
@@ -432,7 +501,7 @@ void Arrangement::subdivide() {
     instances_.reserve(n + 4 * records_.size());
     std::vector<std::pair<int, int>> grouped;
     for (size_t i = 0; i < n; ++i) {
-        if (!cluster_.empty() && cluster_[i] >= 0) {
+        if (i < cluster_.size() && cluster_[i] >= 0) {
             grouped.emplace_back(cluster_find(static_cast<int>(i)), static_cast<int>(i));
             continue;
         }
@@ -492,12 +561,15 @@ void Arrangement::build_faces() {
         face.jump[0] = face.jump[1] = 0;
         face.parent = keyed[i].tri;
         face.parent_sign = keyed[i].sign;
+        face.separator = false;
         size_t e = i;
         while (e < keyed.size() && keyed[e].a == keyed[i].a && keyed[e].b == keyed[i].b && keyed[e].c == keyed[i].c) {
-            face.jump[tris_[static_cast<size_t>(keyed[e].tri)].label] += keyed[e].sign;
+            const int label = tris_[static_cast<size_t>(keyed[e].tri)].label;
+            if (label == 2) face.separator = true;
+            else face.jump[label] += keyed[e].sign;
             ++e;
         }
-        if (face.jump[0] || face.jump[1]) faces_.push_back(face);
+        if (face.jump[0] || face.jump[1] || face.separator) faces_.push_back(face);
         i = e;
     }
 }
@@ -546,19 +618,10 @@ void Arrangement::build_cells() {
         const size_t count = e - i;
         Group group{i, count, -1};
         if (count == 1) {
-            if (getenv("KKDEBUG")) {
-                const EdgeUse &u = uses_[i];
-                const Face &fc = faces_[u.face];
-                fprintf(stderr, "open edge %d-%d face %d (%d %d %d) parent %d jump %d %d\n", u.a, u.b, u.face, fc.v[0], fc.v[1], fc.v[2], fc.parent, fc.jump[0], fc.jump[1]);
-                for (int id : {u.a, u.b, u.third}) fprintf(stderr, "   p%d rat %d: %.17g %.17g %.17g\n", id, pool.pts[id].rat, pool.pts[id].c[0].lo, pool.pts[id].c[1].lo, pool.pts[id].c[2].lo);
-                for (size_t t = 0; t < tris_.size(); ++t) { fprintf(stderr, " soup %zu op %d: %d %d %d cluster %d\n", t, tris_[t].operand, tris_[t].v[0], tris_[t].v[1], tris_[t].v[2], cluster_.empty() ? -1 : cluster_[t]); }
-                for (const Record &r : records_) fprintf(stderr, " rec tri %d a %d b %d other %d\n", r.tri, r.a, r.b, r.other);
-                for (const Instance &in : instances_) fprintf(stderr, " inst tri %d: %d %d %d\n", in.tri, in.v[0], in.v[1], in.v[2]);
-                for (size_t q = 0; q < pool.pts.size(); ++q) fprintf(stderr, " pt %zu rat %d: %.17g %.17g %.17g\n", q, pool.pts[q].rat, pool.pts[q].c[0].lo, pool.pts[q].c[1].lo, pool.pts[q].c[2].lo);
-            }
-            throw ValueError("The surface is not closed: an edge has a triangle on one side only");
-        }
-        if (count == 2) {
+            // A free edge: the space goes round it. Proper for a ribbon; for a face of a solid it means the
+            // surface is open, which the winding numbers will show.
+            unite(ahead(uses_[i]), behind(uses_[i]));
+        } else if (count == 2) {
             unite(ahead(uses_[i]), behind(uses_[i + 1]));
             unite(ahead(uses_[i + 1]), behind(uses_[i]));
         } else {
@@ -639,7 +702,7 @@ void Arrangement::reference(int f, int side_out[1], int count[2]) {
         count[0] = count[1] = 0;
         bool degenerate = false;
         const auto visit = [&](int t) {
-            if (degenerate) return;
+            if (degenerate || tris_[static_cast<size_t>(t)].label == 2) return;
             const Plane &pl = planes_[static_cast<size_t>(t)];
             const int at = pool.side(pl, q);
             const int heading = (pl.n[0].times(g[0]) + pl.n[1].times(g[1]) + pl.n[2].times(g[2])).sign();
@@ -679,6 +742,17 @@ void Arrangement::reference(int f, int side_out[1], int count[2]) {
         return;
     }
     defect("no ray direction avoids every edge");
+}
+
+// For a loaded soup triangle of a closed surface: how many times the surface winds around the points
+// just in front of it. 0 in front of every triangle of a valid solid.
+int Arrangement::winding_in_front(int tri) {
+    if (bvh_.nodes.empty()) bvh_.build(boxes_);
+    const SoupTriangle &t = tris_[static_cast<size_t>(tri)];
+    faces_.assign(1, Face{{t.v[0], t.v[1], t.v[2]}, {1, 0}, tri, 1, false});
+    int side[1], count[2];
+    reference(0, side, count);
+    return side[0] == 0 ? count[0] : count[0] - 1;
 }
 
 void Arrangement::wind() {
@@ -723,7 +797,8 @@ void Arrangement::wind() {
                 std::array<int, 2> other_winding = winding_[static_cast<size_t>(cell)];
                 int other;
                 if (front == back) {
-                    throw ValueError("The surface is not closed or not consistently oriented");
+                    if (face.jump[0] || face.jump[1]) throw ValueError("The surface is not closed or not consistently oriented");
+                    continue;
                 } else if (cell == front) {
                     other = back;
                     other_winding[0] += face.jump[0];
@@ -754,8 +829,78 @@ void Arrangement::wind() {
     }
     unit_winding_ = true;
     for (size_t f = 0; f < nf && unit_winding_; ++f) {
+        if (!faces_[f].jump[0] && !faces_[f].jump[1]) continue;
         const int a = winding_[static_cast<size_t>(cell_of_side_[2 * f])][0], b = winding_[static_cast<size_t>(cell_of_side_[2 * f + 1])][0];
         unit_winding_ = (a == 0 && b == 1) || (a == 1 && b == 0);
+    }
+}
+
+// Cells thinner than the grid can resolve take the state (solid or empty) of what surrounds them.
+//
+// Two surfaces that would coincide but for the rounding of their vertices (two faces of solids turned by
+// the same angle, a solid and the result of an earlier operation on it) enclose flakes and cracks a
+// fraction of a nanometre thick. Rounding the result would flatten them or turn them inside out. They are
+// below the resolution of the grid, so they are removed here, where it costs nothing in correctness:
+// the boundary between solid and empty cells is a closed, oriented surface without self-intersections
+// whatever state each cell is given. A cell is thin when three times its volume is less than kThin grid
+// units times its surface area (for a slab that is a thickness of two thirds of kThin). Volumes and areas
+// are measured in doubles, in a fixed order, so the same cells are chosen on every platform.
+void Arrangement::absorb_thin_cells(std::vector<char> &filled) const {
+    const double kThin = 3.0 * (1 << coarseness());
+    const size_t cells = filled.size(), nf = faces_.size();
+    std::vector<double> volume(cells, 0.0), area(cells, 0.0);
+    std::vector<int> origin(cells, -1);
+    std::vector<double> face_area(nf);
+    const auto mid = [&](int p, int k) {
+        const Pt &q = pool.pts[static_cast<size_t>(p)];
+        return (q.c[k].lo + q.c[k].hi) / 2;
+    };
+    for (size_t f = 0; f < nf; ++f) {
+        const Face &face = faces_[f];
+        double a[3], b[3], c[3];
+        for (int k = 0; k < 3; ++k) {
+            a[k] = mid(face.v[0], k);
+            b[k] = mid(face.v[1], k);
+            c[k] = mid(face.v[2], k);
+        }
+        const double ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+        const double nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        face_area[f] = std::sqrt(nx * nx + ny * ny + nz * nz) / 2;
+        for (int s = 0; s < 2; ++s) {
+            const size_t cell = static_cast<size_t>(cell_of_side_[2 * f + static_cast<size_t>(s)]);
+            if (origin[cell] < 0) origin[cell] = face.v[0];
+            const double ox = mid(origin[cell], 0), oy = mid(origin[cell], 1), oz = mid(origin[cell], 2);
+            // The normal points out of the cell behind the face, and into the cell in front of it.
+            const double det = (a[0] - ox) * nx + (a[1] - oy) * ny + (a[2] - oz) * nz;
+            volume[cell] += s == 1 ? det : -det;
+            area[cell] += face_area[f];
+        }
+    }
+    std::vector<char> thin(cells, 0);
+    bool any = false;
+    for (size_t c = 0; c < cells; ++c) {
+        // volume[] holds six times the volume. The unbounded cell of each piece has a negative one.
+        thin[c] = volume[c] > 0 && volume[c] / 2 < kThin * area[c];
+        any = any || thin[c];
+    }
+    if (!any) return;
+    for (int round = 0; round < 8; ++round) {
+        std::vector<double> solid_area(cells, 0.0), empty_area(cells, 0.0);
+        for (size_t f = 0; f < nf; ++f) {
+            const size_t front = static_cast<size_t>(cell_of_side_[2 * f]), back = static_cast<size_t>(cell_of_side_[2 * f + 1]);
+            if (thin[front]) (filled[back] ? solid_area : empty_area)[front] += face_area[f];
+            if (thin[back]) (filled[front] ? solid_area : empty_area)[back] += face_area[f];
+        }
+        bool changed = false;
+        for (size_t c = 0; c < cells; ++c) {
+            if (!thin[c] || solid_area[c] == empty_area[c]) continue;
+            const char state = solid_area[c] > empty_area[c];
+            if (state != filled[c]) {
+                filled[c] = state;
+                changed = true;
+            }
+        }
+        if (!changed) break;
     }
 }
 
@@ -769,12 +914,15 @@ void Arrangement::extract(Rule rule, ExactMesh &out) {
         }
     };
     const size_t nf = faces_.size();
+    std::vector<char> filled(winding_.size());
+    for (size_t c = 0; c < winding_.size(); ++c) filled[c] = solid(winding_[c]);
+    absorb_thin_cells(filled);
     // For each face: -1 when it is not part of the result, else its index there; and whether it is turned over.
     std::vector<int> chosen(nf, -1);
     std::vector<char> turned(nf, 0), front_solid(nf, 0);
     int kept = 0;
     for (size_t f = 0; f < nf; ++f) {
-        const bool front = solid(winding_[static_cast<size_t>(cell_of_side_[2 * f])]), back = solid(winding_[static_cast<size_t>(cell_of_side_[2 * f + 1])]);
+        const bool front = filled[static_cast<size_t>(cell_of_side_[2 * f])] != 0, back = filled[static_cast<size_t>(cell_of_side_[2 * f + 1])] != 0;
         if (front == back) continue;
         chosen[f] = kept++;
         turned[f] = front;  // the outward normal must point away from the solid side

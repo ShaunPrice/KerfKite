@@ -14,6 +14,13 @@ namespace kerfkite {
 namespace solid {
 namespace detail {
 
+// How coarsely features too fine for the grid are removed: 0 normally. An operation whose rounded result
+// cannot be made valid is tried again at 1, 2 and 3, each doubling the sizes below.
+int coarseness();
+struct TooFine : ValueError {
+    using ValueError::ValueError;
+};
+
 // Which regions of space are solid, given how many times each operand's surface winds around them.
 enum class Rule { Union, Intersection, Difference, Positive };
 
@@ -43,14 +50,24 @@ public:
     std::size_t intersect(const std::vector<char> *flagged = nullptr, bool stop_at_first = false);
     // Subdivides, labels and extracts the boundary of the solid region.
     void resolve(Rule rule, ExactMesh &out);
+    // Lets intersect() add separating ribbons where faces nearly coincide (see arrangement.cpp). Off for
+    // the checks, which must see the mesh as it is.
+    void enable_ribbons() { ribbons_enabled_ = true; }
     // After resolve() with Rule::Positive on one operand: every face separates winding 0 from winding 1.
     bool unit_winding() const { return unit_winding_; }
     void record_simple() const;
+    // After load(): the winding number just in front of a triangle (see arrangement.cpp).
+    int winding_in_front(int tri);
 
 private:
     struct SoupTriangle {
         int v[3];
-        int operand, label;
+        int operand, label;  // label 2: a separating ribbon, which bounds cells but belongs to no solid
+    };
+    struct RibbonEdge {
+        int a, b, axis;
+        bool operator<(const RibbonEdge &o) const { return a != o.a ? a < o.a : b != o.b ? b < o.b : axis < o.axis; }
+        bool operator==(const RibbonEdge &o) const { return a == o.a && b == o.b && axis == o.axis; }
     };
     struct Record {
         int tri, a, b, other;  // a == b for a single point
@@ -64,6 +81,7 @@ private:
         int jump[2];     // winding added, per label, on passing from the front to the back
         int parent;      // a soup triangle it lies in
         int parent_sign; // +1 when the canonical orientation is the parent's
+        bool separator;  // has a ribbon instance: kept even when it changes no winding number
     };
     struct EdgeUse {
         int a, b, face, third;
@@ -92,8 +110,14 @@ private:
     std::vector<int> cell_of_side_;
     std::vector<std::array<int, 2>> winding_;
     bool unit_winding_ = false;
+    bool ribbons_enabled_ = false;
+    std::vector<RibbonEdge> ribbon_edges_;
+    size_t real_triangles_ = 0;
 
     bool pair(int i, int j);
+    void near_coplanar(int i, int j);
+    void add_triangle(int a, int b, int c, int operand, int label);
+    void add_ribbons();
     bool corner(int tri, int p) const;
     int ends(int tri, const int side[3], const Plane &pl, int out[2]);
     bool inside_closed(int tri, int p) const;
@@ -112,8 +136,12 @@ private:
     void reference(int face, int side_cell_out[1], int count[2]);
     int ray_side(int q, const int64_t g[3], const int64_t *a, const int64_t *b) const;
     uint32_t side_find(uint32_t s);
+    void absorb_thin_cells(std::vector<char> &filled) const;
     void extract(Rule rule, ExactMesh &out);
 };
+
+// Takes out vertices the surface does not need (simplify.cpp). The surface itself does not change.
+void simplify(const Pool &pool, ExactMesh &mesh);
 
 // Rounds the exact result to the grid, checks it, and repairs it if rounding left a defect.
 Solid finish(Arrangement &arrangement, ExactMesh &exact, const char *context, int depth);
