@@ -60,7 +60,10 @@ using polygon::detail::Int128;
 
 // The most samples of the outlines, as the reference has it.
 const std::size_t kSampleLimit = 12000;
-// The most points of a job, as the generator has it (studio.cam: count * levels > 200000).
+// The generator refuses a job of more than 200,000 points (studio.cam: count * levels > 200000). Here the
+// steps of the pieces are counted as they are made, and a carve has more points than steps, so a carve
+// past this many steps is one the generator would refuse: it is refused here, before it is built. A carve
+// just under it may still be refused by the generator, which counts the points.
 const std::size_t kPointLimit = 200000;
 
 // The length of the segment from a to b in grid units: the square root of an exact whole number.
