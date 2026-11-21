@@ -212,7 +212,12 @@ def exercise(phone, host, port, replace_pairing, encrypted=False):
             if 'mInputShown=true' in phone.run('shell', 'dumpsys', 'input_method'):
                 phone.run('shell', 'input', 'keyevent', 'KEYCODE_BACK')
             phone.tap('Pair', button=True)
-            phone.confirm()
+            if encrypted:
+                # Pocket asks for confirmation only before using plain HTTP.
+                time.sleep(1)
+                assert not phone.find('Use unencrypted HTTP?'), 'Pocket treated the pinned link as plain HTTP.'
+            else:
+                phone.confirm()
             wait_until(
                 lambda: phone.find('Simulator', prefix=True),
                 'The pendant did not show simulator status. Check that the workstation firewall admits the handset on the monitor port.',
