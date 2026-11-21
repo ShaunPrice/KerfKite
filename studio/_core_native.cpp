@@ -81,11 +81,22 @@ PyObject *solid_call(PyObject *, PyObject *args) {
                 Py_DECREF(sequence);
                 return nullptr;
             }
-            kept.push_back(*static_cast<kerfkite::solid::Solid *>(solid));
+            // No C++ exception may leave this function: Python's caller is C.
+            try {
+                kept.push_back(*static_cast<kerfkite::solid::Solid *>(solid));
+            } catch (const std::exception &) {
+                Py_DECREF(sequence);
+                return PyErr_NoMemory();
+            }
         }
         Py_DECREF(sequence);
     }
-    const std::string request(request_text, static_cast<size_t>(request_size));
+    std::string request;
+    try {
+        request.assign(request_text, static_cast<size_t>(request_size));
+    } catch (const std::exception &) {
+        return PyErr_NoMemory();
+    }
     kerfkite::solid::Solid built;
     std::string answer, failure;
     bool rejected = false;
