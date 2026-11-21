@@ -47,7 +47,11 @@ heights from the probe results, and a program corrected to follow that surface. 
 | Ordered multi-operation jobs | Done; each operation must itself be ported. |
 | Controller post-processing (Grbl family, Marlin, LinuxCNC, Mach3, Mach4, UCCNC) | Done. The table is read from `studio/static/protocols.json` at build time. |
 | Probe levelling: probing plan, height map, levelled program (`core/src/leveling.cpp`) | Done. New in the core: there is no Python version, and Studio calls this code through its extension. |
-| Drag-knife paths, ramp and helix entry, holding tabs, drilling | Not yet. Declined with exit status 3. |
+| Drilling at point markers and circular hole outlines, in one plunge or in pecks (`core/src/drilling.cpp`) | Done. The hole list and tool shape that Studio adds for its stock simulation are not in the core's job yet. |
+| Drag-knife paths: the alignment lead-in and the swivel at each corner (`core/src/knife.cpp`) | Done, except a path that returns to a point through steps too short to keep: the reference fails on it, and the core declines it. |
+| Ramp entry on router line jobs (`core/src/router_entry.cpp`) | Done, with or without holding tabs. A helix entry is accepted only on a pocket, so on a line job it is rejected with the reference's message; on a pocket it waits for pockets and is declined (`helical entry into pockets`). |
+| Holding tabs on router line jobs (`core/src/tabs.cpp`) | Done: tab count or explicit positions, tabs across the seam, and every rejection. |
+| Shapely's `LineString.is_simple` and `.length`, which both features ask of each contour (`core/src/simple_line.cpp`) | Done by GEOS's own rules, including its double-double orientation test. A contour whose answer depends on rounding inside GEOS is declined. |
 | Inside and outside offsets (router: tool radius; laser: half the kerf), concentric pockets, hatch and cross-hatch fills (`core/src/operations.cpp`) | Done, with GEOS 3.14.1, the release inside the Shapely wheels the reference uses. Declined in a build without GEOS. |
 | V-carving | Not yet. Declined with exit status 3. |
 | Rotary output, relief, stock simulation, importers, sender, pendant, editors | Not yet. |
@@ -114,10 +118,16 @@ compares the core with the Python reference in the same run:
 * every `studio.cam.generate` call made by the Python test suite;
 * thousands of generated projects with settings replaced by unusual values, so that rejections are compared
   as well as programs, and thousands of closed contours (alone, nested, overlapping, nearly closed) put
-  through the offset, pocket and fill operations.
+  through the offset, pocket and fill operations;
+* thousands of ramp, helix and holding-tab jobs on contours that cross, touch, fold back, nearly close or
+  sit at the edge of the work area, and a few at the limits on lines and vertices.
 
 The reference for lengths and totals is CPython 3.12 or later: earlier versions computed `math.dist` and
 `sum()` differently in the last bit, so the comparison is run with 3.12 or later.
+
+Knife swivels and laser arc leads take their sines, cosines and arc tangents from the platform's maths
+library, as Python does. The core therefore matches the Python on the same machine, while the last bit of
+those points may differ from one platform to another.
 
 Each case must be reproduced exactly, or declined. A different answer fails the check. The share of cases
 reproduced is the measure of progress, and the list of declined features is the work that remains.

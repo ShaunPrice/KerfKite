@@ -13,9 +13,13 @@
 
 #include "kerfkite/number_text.hpp"
 #include "kerfkite/py_math.hpp"
+#include "drilling.hpp"
+#include "knife.hpp"
 #include "laser.hpp"
 #include "operations.hpp"
 #include "project.hpp"
+#include "router_entry.hpp"
+#include "tabs.hpp"
 
 namespace kerfkite {
 
@@ -87,7 +91,7 @@ Job single(const json &project) {
     const bool drilling = is_text(operation, "drill");
     if (router && !entry_plunge && drilling)
         throw ValueError("Use the drill peck setting for drilling; select plunge as the router entry");
-    if (drilling) throw NotPorted("drilling");
+    if (drilling) return drill_job(project, clean);
     if (router && is_text(get(project, "tool_shape"), "drill"))
         throw ValueError("Choose a milling cutter for a contour or pocket; a drill bit is for drilling");
 
@@ -99,16 +103,17 @@ Job single(const json &project) {
             throw ValueError("Per-vertex depth contours require the line operation");
         if (knife) {
             if (!line) throw ValueError("Knife uses contour lines, not pocket/fill operations");
-            throw NotPorted("drag-knife paths");
+            clean = knife_paths(project, clean, width, height);
+        } else {
+            operation_warnings = prepare_operation(project, clean, width, height);  // operations.cpp
         }
-        operation_warnings = prepare_operation(project, clean, width, height);  // operations.cpp
     }
-    if (tabs_enabled) throw NotPorted("holding tabs");
 
     std::vector<std::vector<double>> depths;
+    if (tabs_enabled) holding_tabs(project, clean, depth, depths, operation_warnings);
     const json *depth_paths = get(project, "path_depths");
-    const bool has_depths = !none(depth_paths);
-    if (has_depths) {
+    const bool has_depths = tabs_enabled || !none(depth_paths);
+    if (has_depths && !tabs_enabled) {  // tab heights are the core's own and need no checking
         if (laser || !depth_paths->is_array() || depth_paths->size() != clean.size())
             throw ValueError("Depth paths must match router XY paths");
         depths.reserve(clean.size());
@@ -135,7 +140,9 @@ Job single(const json &project) {
         }
         if (depth <= 0) throw ValueError("No contour cuts below the stock surface");
     }
-    if (router && !entry_plunge) throw NotPorted("ramp and helix entry moves");
+    if (router && !entry_plunge)
+        return entry_job(project, clean, has_depths ? &depths : nullptr, depth, step, safe, feed, plunge, power, width,
+                         height, operation_warnings);
 
     std::vector<std::vector<LaserVertex>> laser_paths;
     bool leads = false;
@@ -195,6 +202,8 @@ Job single(const json &project) {
     const std::string safe_line = "G0 Z" + fixed(safe, 3);
     if (!laser) {
         lines.push_back(safe_line);
+    }
+    if (router) {
         lines.push_back("M3 S" + fixed(power, 0));
         lines.push_back("G4 P2");
     }
@@ -274,6 +283,7 @@ Job single(const json &project) {
     job.warnings = {profile.notes, "Review tool geometry, stock and clearance before running.",
                     "Time estimate excludes travel, plunge, acceleration and spindle startup."};
     job.warnings.insert(job.warnings.begin() + 1, operation_warnings.begin(), operation_warnings.end());
+    if (knife) job.warnings.insert(job.warnings.begin() + 1, KNIFE_WARNING);
     if (profile.family == "rs274")
         job.warnings.push_back(
             "Before loading, clear controller scaling, rotation and local offsets. Set G54 Z zero for the current "
@@ -284,6 +294,8 @@ Job single(const json &project) {
     job.lines = postprocess(lines, protocol, mode, get(project, "dwell_units"));
     job.cut_length = rounded(length, 2);
     job.cut_minutes = rounded(length / cut_feed, 2);
+    // A knife job whose paths all had no travel has nothing to measure; the reference's min() says so.
+    if (knife && clean.empty()) throw ValueError("min() arg is an empty sequence");
     // [min x, min y, max x, max y] over every vertex of what is cut: for a laser, the paths with their leads.
     const auto cover = [&job](double x, double y, bool first) {
         if (first) job.bounds = {x, y, x, y};
@@ -433,6 +445,8 @@ json to_json(const Job &job) {
         // A laser move has no height: the reference writes the integer 0 there, and inside a beam-off gap
         // an integer 0 for the power as well.
         if (s.planar) row[4] = row[6] = 0;
+        if (s.whole_end) row[4] = 0;
+        if (s.whole_start) row[6] = 0;
         if (s.has_power) row[5] = s.whole_power ? json(0) : json(s.power);
         segments.push_back(std::move(row));
     }

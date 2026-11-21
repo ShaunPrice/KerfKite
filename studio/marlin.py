@@ -18,6 +18,9 @@ from serial.tools import list_ports
 class Controller:
     MAX_LINES = 200000
     MAX_RESENDS = 3
+    # Read-only reports asked for once the link is up: identification, soft endstops, stored settings.
+    QUERIES = ('M115', 'M211', 'M503')
+    QUERY_TIMEOUT = 3
 
     def __init__(self, serial_factory=None, timeout=15, boot_delay=2):
         self.factory = serial_factory or serial.Serial
@@ -31,6 +34,9 @@ class Controller:
         self.error = None
         self.position = None
         self.settings = {}
+        # What the firmware reported about itself at connection: M115, M211 and M503 are read, never written.
+        self.readback = {}
+        self.queries = deque()
         self.log = deque(maxlen=80)
         self.queue = deque()
         self.pending = None
@@ -52,6 +58,10 @@ class Controller:
                 error=self.error,
                 position=None,
                 settings={},
+                readback={
+                    key: list(value) if isinstance(value, list) else value for key, value in self.readback.items()
+                },
+                ready=self.ready,
                 progress=self.progress,
                 active=self.active,
                 log=list(self.log),
@@ -78,6 +88,8 @@ class Controller:
             self.error = None
             self.number = self.progress = self.acked = self.total = 0
             self.receive_buffer = b''
+            self.readback = {}
+            self.queries = deque() if port == 'simulator' else deque(self.QUERIES)
             self.ready = self.simulated
             self.state = 'Idle' if self.simulated else 'Connecting'
             if not self.simulated:
@@ -213,6 +225,32 @@ class Controller:
         self._write(self.pending[1])
         self.log.append(f'> N{number} {line}')
 
+    def _note(self, line):
+        """Keep what a reply to M115, M211 or M503 says about the machine."""
+        firmware = re.search(r'FIRMWARE_NAME:(.+?)(?=\s+[A-Z_]+:|$)', line)
+        if firmware:
+            self.readback['firmware'] = firmware.group(1).strip()[:80]
+            machine = re.search(r'MACHINE_TYPE:(\S+)', line)
+            if machine:
+                self.readback['machine_type'] = machine.group(1)[:40]
+        number = r'(-?\d+(?:\.\d*)?)'
+        endstops = re.search(r'Soft endstops:\s*(ON|OFF)', line, re.I)
+        if endstops:
+            self.readback['soft_endstops'] = endstops.group(1).upper() == 'ON'
+            limits = re.search(
+                rf'Min:\s*X{number}\s*Y{number}\s*Z{number}\s*Max:\s*X{number}\s*Y{number}\s*Z{number}', line
+            )
+            if limits:
+                low, high = map(float, limits.groups()[:3]), map(float, limits.groups()[3:])
+                self.readback['travel'] = [round(b - a, 3) for a, b in zip(low, high, strict=True)]
+        rates = re.search(rf'\bM203\s+X{number}\s+Y{number}\s+Z{number}', line)
+        if rates:
+            self.readback['max_feed'] = [round(float(value) * 60, 3) for value in rates.groups()]  # units a second
+
+    def _queries_done(self):
+        self.queries.clear()
+        self.ready, self.state = True, 'Idle'
+
     def _receive(self, line):
         self.log.append(line)
         resend = re.match(r'^(?:Resend:\s*|rs\s+N?)(\d+)\b', line, re.I)
@@ -231,6 +269,8 @@ class Controller:
         if line.lower().startswith('error:'):
             if any(s in line.lower() for s in ('checksum', 'line number', 'no line number')):
                 return  # A matching resend must arrive before the ordinary timeout.
+            if self.pending and self.pending[2] == 'query':
+                return  # A firmware without this report still works; its acknowledgement follows.
             self._fault(line)
             return
         if line.lower().startswith(('!!', 'echo:busy: paused for user')):
@@ -241,6 +281,8 @@ class Controller:
                 self._fault('Unexpected firmware restart')
             return
         if not re.match(r'^ok(?:\s|$)', line, re.I) or not self.pending:
+            if self.pending and self.pending[2] == 'query':
+                self._note(line)
             return
         if self.resend_handshake:
             self.resend_handshake = False
@@ -253,8 +295,11 @@ class Controller:
             return
         kind = self.pending[2]
         self.pending = None
-        if kind == 'init':
-            self.ready, self.state = True, 'Idle'
+        if kind in ('init', 'query'):
+            if self.queries:
+                self._send(self.queries.popleft(), 'query')
+            else:
+                self._queries_done()
         elif kind == 'finish':
             self.active = self.paused = False
             self.progress, self.state = 100, 'Idle'
@@ -273,7 +318,11 @@ class Controller:
                         raw = self.serial.readline(257)
                         self.receive_buffer += raw
                         if len(self.receive_buffer) > 256:
-                            self._fault('Oversized firmware response')
+                            if self.pending and self.pending[2] == 'query':
+                                # An identification line may be long; what was read of it is kept.
+                                self._note(self.receive_buffer.decode('ascii', errors='replace'))
+                            else:
+                                self._fault('Oversized firmware response')
                             self.receive_buffer = b''
                         elif self.receive_buffer.endswith(b'\n'):
                             self._receive(self.receive_buffer.decode('ascii', errors='replace').strip())
@@ -283,6 +332,11 @@ class Controller:
                             initialized = True
                     elif self.pending:
                         self._receive('ok')
+                    if self.pending and self.pending[2] == 'query' and now - self.sent_at > self.QUERY_TIMEOUT:
+                        # The machine is usable without its reports; say so and carry on.
+                        self.log.append('The firmware did not report its settings')
+                        self.pending = None
+                        self._queries_done()
                     if self.pending and now - self.sent_at > self.timeout:
                         self._fault('Acknowledgement/completion timeout')
                     if self.active and not self.paused and not self.pending and self.queue and not self.error:
