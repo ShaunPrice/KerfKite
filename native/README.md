@@ -35,6 +35,15 @@ are the three steps of probe levelling: a probing program over the cutting bound
 heights from the probe results, and a program corrected to follow that surface. Each takes a JSON request
 (`-` reads standard input) and writes a JSON answer. See `docs/PROBE-LEVELING.md`.
 
+    kerfkite-cam gerber LAYER.gbr
+    kerfkite-cam gerber-outline EDGE.gbr [--offset [X,Y]]
+    kerfkite-cam excellon HOLES.drl [--units mm|inch]
+    kerfkite-cam excellon-drills HOLES.drl [--offset [X,Y]]
+
+read circuit board files: a Gerber layer as the objects it draws, a board outline as closed paths, a drill
+file as tools and holes, and its holes as drilling operations. The board file itself is the input, and each
+`--option value` pair is a field of the request. See `docs/PCB.md`.
+
 ## What is ported
 
 | Area | State |
@@ -47,6 +56,7 @@ heights from the probe results, and a program corrected to follow that surface. 
 | Ordered multi-operation jobs | Done; each operation must itself be ported. |
 | Controller post-processing (Grbl family, Marlin, LinuxCNC, Mach3, Mach4, UCCNC) | Done. The table is read from `studio/static/protocols.json` at build time. |
 | Probe levelling: probing plan, height map, levelled program (`core/src/leveling.cpp`) | Done. New in the core: there is no Python version, and Studio calls this code through its extension. |
+| Circuit board import: Gerber layers, Excellon drill files, board outline paths, drilling operations (`core/src/gerber.cpp`, `core/src/excellon.cpp`) | Done. New in the core: there is no Python version. Isolation toolpaths are not generated yet. |
 | Drilling at point markers and circular hole outlines, in one plunge or in pecks (`core/src/drilling.cpp`) | Done. The hole list and tool shape that Studio adds for its stock simulation are not in the core's job yet. |
 | Drag-knife paths: the alignment lead-in and the swivel at each corner (`core/src/knife.cpp`) | Done, except a path that returns to a point through steps too short to keep: the reference fails on it, and the core declines it. |
 | Ramp entry on router line jobs (`core/src/router_entry.cpp`) | Done, with or without holding tabs. A helix entry is accepted only on a pocket, so on a line job it is rejected with the reference's message; on a pocket it waits for pockets and is declined (`helical entry into pockets`). |

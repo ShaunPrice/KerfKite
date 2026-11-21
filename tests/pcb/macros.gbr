@@ -1,0 +1,51 @@
+G04 KerfKite test fixture: one aperture macro for each primitive, with rotation, variables and arithmetic.*
+G04 Written by hand for the test suite. Synthetic data, free to redistribute.*
+%FSLAX46Y46*%
+%MOMM*%
+%AMCIRC*1,1,$1,$2,$3,90*%
+%AMVLINE*20,1,0.5,0,0,2,0,45*%
+%AMCLINE*21,1,2,1,0.5,0.25,30*%
+%AMLLINE*22,1,2,1,0,0,0*%
+%AMOUTL*4,1,3,0,0,1,0,0.5,1,0,0,180*%
+%AMPOLY*5,1,5,0.5,0,2,18*%
+%AMTHERM*7,0,0,2,1.2,0.3,45*%
+%AMDONUT*
+0 A ring with a square notch on its right, to show exposure off*
+1,1,$1,0,0*
+1,0,$2,0,0*
+$3=($1-$2)/4*
+21,0,$3,$3,($1+$2)/4,0,0*%
+%AMEXPR*
+0 Precedence, a unary minus, brackets, and a variable that is never set*
+$4=$1+$2x$3*
+$5=-($1-$2)/2*
+$6=$7+1*
+1,1,$4,$5,$6*%
+%ADD10CIRC,0.8X1X0.5*%
+%ADD11VLINE*%
+%ADD12CLINE*%
+%ADD13LLINE*%
+%ADD14OUTL*%
+%ADD15POLY*%
+%ADD16THERM*%
+%ADD17DONUT,2X1*%
+%ADD18EXPR,1X2X3*%
+D10*
+X0Y0D03*
+D11*
+X10000000Y0D03*
+D12*
+X20000000Y0D03*
+D13*
+X30000000Y0D03*
+D14*
+X0Y10000000D03*
+D15*
+X10000000Y10000000D03*
+D16*
+X20000000Y10000000D03*
+D17*
+X30000000Y10000000D03*
+D18*
+X40000000Y10000000D03*
+M02*

@@ -1,0 +1,19 @@
+M48
+; Written by hand for the test suite. Synthetic data, free to redistribute.
+; FORMAT={2:4/ absolute / inch / suppress leading zeros}
+FMAT,2
+INCH,TZ
+T1C0.0320
+T2C0.0400
+%
+G90
+G05
+T1
+X10000Y5000
+X-2500Y12345
+R3X1000
+T2
+X20000Y-15000
+R2Y-500
+R1X250Y250
+M30

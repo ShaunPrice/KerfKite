@@ -18,6 +18,10 @@ setup(
                 # The native core's levelling module and its Python entry point.
                 'studio/_core_native.cpp',
                 'native/core/src/leveling.cpp',
+                # Circuit board import: Gerber layers and Excellon drill files.
+                'native/core/src/excellon.cpp',
+                'native/core/src/gerber.cpp',
+                'native/core/src/pcb.cpp',
             ],
             language='c++',
             include_dirs=['native/core/include', 'native/third_party'],

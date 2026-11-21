@@ -18,9 +18,9 @@ namespace detail {
 // paths holds the validated contours on entry and the tool paths of the operation on return. The result
 // is the operation's warnings, which the job lists after the controller's note.
 //
-// Reproduced: inside and outside offsets (router: half the tool diameter; laser: half the kerf) and
-// concentric pockets. Declined with NotPorted: hatch fill, V-carving, and every polygon operation in a
-// build without GEOS. Rejections are the reference's, in the reference's order.
+// Reproduced: inside and outside offsets (router: half the tool diameter; laser: half the kerf),
+// concentric pockets, and hatch and cross-hatch fills. Declined with NotPorted: V-carving, and every polygon
+// operation in a build without GEOS. Rejections are the reference's, in the reference's order.
 std::vector<std::string> prepare_operation(const json &project, std::vector<std::vector<std::array<double, 2>>> &paths,
                                            double width, double height);
 

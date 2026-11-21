@@ -1,0 +1,35 @@
+M48
+; DRILL file {KerfKite fixture} date 2026-01-01
+; Written by hand for the test suite. Synthetic data, free to redistribute.
+; FORMAT={-:-/ absolute / metric / decimal}
+; #@! TF.GenerationSoftware,KerfKite,fixture,1
+; #@! TF.FileFunction,Plated,1,2,PTH
+FMAT,2
+METRIC
+; #@! TA.AperFunction,Plated,PTH,ViaDrill
+T1C0.400
+; #@! TA.AperFunction,Plated,PTH,ComponentDrill
+T2C0.800
+T3C1.000
+T4C0.800
+%
+G90
+G05
+T1
+X105.0Y-85.0
+X110.5Y-85.25
+T2
+X120.0Y-90.0
+X122.54
+X125.08Y-90.0
+T3
+G00X130.0Y-100.0
+M15
+G01X134.0Y-100.0
+M16
+G05
+X112.0Y-104.0G85X112.0Y-100.0
+T4
+X104.0Y-106.0
+T0
+M30

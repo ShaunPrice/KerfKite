@@ -1,0 +1,20 @@
+G04 KerfKite test fixture: step-and-repeat of a block that holds dark and clear objects.*
+G04 Written by hand for the test suite. Synthetic data, free to redistribute.*
+%FSLAX33Y33*%
+%MOMM*%
+%ADD10C,1.000*%
+%ADD11C,0.400*%
+%SRX3Y2I5.000J4.000*%
+D10*
+X1000Y1000D03*
+%LPC*%
+D11*
+X1000Y1000D03*
+%LPD*%
+G01*
+X1000Y1000D02*
+X3000Y1000D01*
+%SR*%
+D10*
+X20000Y0D03*
+M02*

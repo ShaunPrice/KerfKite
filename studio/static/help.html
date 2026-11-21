@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#ai-vision">Ai Vision</a> <a href="#android">Android</a> <a href="#assemblies">Assemblies</a> <a href="#branding">Branding</a> <a href="#cad-macros">Cad Macros</a> <a href="#cad-scripting">Cad Scripting</a> <a href="#camera-register">Camera Register</a> <a href="#desktop">Desktop</a> <a href="#developer">Developer</a> <a href="#drilling">Drilling</a> <a href="#fixtures">Fixtures</a> <a href="#geometry">Geometry</a> <a href="#install">Install</a> <a href="#installer-builds">Installer Builds</a> <a href="#labels">Labels</a> <a href="#laser-order">Laser Order</a> <a href="#laser-patterns">Laser Patterns</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#licensing">Licensing</a> <a href="#lightburn-import">Lightburn Import</a> <a href="#machine-setup">Machine Setup</a> <a href="#materials">Materials</a> <a href="#mcp-hosting">Mcp Hosting</a> <a href="#mcp">Mcp</a> <a href="#native">Native</a> <a href="#performance">Performance</a> <a href="#phone-connections">Phone Connections</a> <a href="#platforms">Platforms</a> <a href="#probe-leveling">Probe Leveling</a> <a href="#product">Product</a> <a href="#program-import">Program Import</a> <a href="#protocols">Protocols</a> <a href="#release-review">Release Review</a> <a href="#request-coverage">Request Coverage</a> <a href="#rotary">Rotary</a> <a href="#router-entry">Router Entry</a> <a href="#sbc">Sbc</a> <a href="#simulation">Simulation</a> <a href="#sketch">Sketch</a> <a href="#solid-cad">Solid Cad</a> <a href="#status">Status</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#svg">Svg</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#user-guide">User Guide</a> <a href="#web">Web</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#ai-vision">Ai Vision</a> <a href="#android">Android</a> <a href="#assemblies">Assemblies</a> <a href="#branding">Branding</a> <a href="#cad-macros">Cad Macros</a> <a href="#cad-scripting">Cad Scripting</a> <a href="#camera-register">Camera Register</a> <a href="#desktop">Desktop</a> <a href="#developer">Developer</a> <a href="#drilling">Drilling</a> <a href="#fixtures">Fixtures</a> <a href="#geometry">Geometry</a> <a href="#install">Install</a> <a href="#installer-builds">Installer Builds</a> <a href="#labels">Labels</a> <a href="#laser-order">Laser Order</a> <a href="#laser-patterns">Laser Patterns</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#licensing">Licensing</a> <a href="#lightburn-import">Lightburn Import</a> <a href="#machine-setup">Machine Setup</a> <a href="#materials">Materials</a> <a href="#mcp-hosting">Mcp Hosting</a> <a href="#mcp">Mcp</a> <a href="#native">Native</a> <a href="#pcb">Pcb</a> <a href="#performance">Performance</a> <a href="#phone-connections">Phone Connections</a> <a href="#platforms">Platforms</a> <a href="#probe-leveling">Probe Leveling</a> <a href="#product">Product</a> <a href="#program-import">Program Import</a> <a href="#protocols">Protocols</a> <a href="#release-review">Release Review</a> <a href="#request-coverage">Request Coverage</a> <a href="#rotary">Rotary</a> <a href="#router-entry">Router Entry</a> <a href="#sbc">Sbc</a> <a href="#simulation">Simulation</a> <a href="#sketch">Sketch</a> <a href="#solid-cad">Solid Cad</a> <a href="#status">Status</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#svg">Svg</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#user-guide">User Guide</a> <a href="#web">Web</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
 <p>KerfKite Studio is an open-source CAD/CAM workbench for interchangeable CNC router, laser and drag-knife heads. Design in a browser, simulate a job, and prepare output for a supported controller. The Python application runs locally or as an authenticated HTTPS editor. KerfKite Pocket on Android includes an offline sketch editor and a CNC pendant paired with the Studio server.</p>
 <p><a href="screen-desktop-workspace.png"><img src="screen-desktop-workspace.png" alt="KerfKite’s desktop editor showing wattle, banksia and scarlet gum tags on a shared sheet, with separate layers for the outlines, engraving and lettering" /></a></p>
 <p>Three botanical tags share a sheet. The <strong>Layers</strong> tab separates engraving, lettering and cut outlines.</p>
@@ -1788,11 +1788,472 @@ rotary = generate_rotary(project, options, backend='python')
 <h2>Python-free core</h2>
 <p><code>native/</code> holds the start of the application's move to C++: a C++17 library and the <code>kerfkite-cam</code> command-line tool, which write G-code from a project file with no Python installed. It currently reproduces router line jobs, laser line jobs (leads, power ramps, perforation, holding bridges and raster powers), drilling, drag-knife paths, ordered multi-operation jobs and controller post-processing; everything else is declined, never approximated. <code>native/README.md</code> lists what is ported and how to build it.</p>
 <p>Probe levelling (<code>native/core/src/leveling.cpp</code>) is the first part of the application written only in the core: it has no Python version. The extension compiles that file and exposes it as <code>core_call</code>, which <code>studio/leveling.py</code> wraps; the extension is therefore built as C++17 and includes the vendored JSON header. See <a href="#probe-leveling">Probe levelling</a>.</p>
+<p>Circuit board import (<code>gerber.cpp</code>, <code>excellon.cpp</code>, <code>pcb.cpp</code>) is written the same way, compiled into the extension and wrapped by <code>studio/pcb_import.py</code>. See <a href="#pcb">Circuit boards</a>.</p>
 <p>Offsets, pockets and hatch fills are computed with GEOS 3.14.1, the release inside the Shapely 2.2.0 wheels that the Python code uses, through the same calls with the same arguments (<code>native/core/src/geometry.hpp</code>, <code>native/core/src/operations.cpp</code>). The build fetches the pinned GEOS release and checks its SHA-256; <code>native/README.md</code> gives the options, the build cost and the limits of what has been measured, and <a href="#licensing">Licences</a> covers GEOS's LGPL terms. On Linux x86-64 the generated comparison adds 4,000 contour jobs, of which about 2,400 produce programs (offsets, pockets and fills) and the rest rejections; all are reproduced or declined, none differs.</p>
 <p>The exact number formatting described above now lives in one header, <code>native/core/include/kerfkite/number_text.hpp</code>, used by both the Python extension and the core.</p>
 <p><code>python validation/native_core_parity.py --cli &lt;kerfkite-cam&gt;</code> compares the core with the Python reference: number text, every generator call the test suite makes, and thousands of generated edge cases. A case must be reproduced exactly or declined; a different answer fails. With laser jobs ported, the measurement on Linux x86-64 is: 300,000 numbers and 360,000 distances and sums identical; 124 of 202 recorded suite calls reproduced (61%); 11,225 of 12,000 generated cases reproduced (94%), among them 1,137 laser programs; and no differences. The three benchmark programs written by <code>kerfkite-cam</code> have the same hashes as Python's.</p>
 <p>Drilling (<code>native/core/src/drilling.cpp</code>) and drag-knife paths (<code>native/core/src/knife.cpp</code>) are ported as well. The generated cases gained 4,000 drilling and knife projects. On Linux x86-64, with those two parts: 160 of 205 recorded suite calls reproduced (78%, from 62%); 15,562 of 16,000 generated cases reproduced (97%), among them 1,290 drilling and 1,634 drag-knife programs; and no differences. The one knife case declined is a path that returns to a point through steps too short to keep, where the Python divides by zero. Knife swivels use the platform's <code>atan2</code>, <code>sin</code> and <code>cos</code>, as Python does, so they are compared on each platform against the Python there.</p>
 <p>Ramp entries and holding tabs on router line jobs are reproduced too (<code>native/core/src/router_entry.cpp</code>, <code>tabs.cpp</code>). Before either, the reference asks Shapely whether each contour crosses itself; <code>simple_line.cpp</code> answers by the rules GEOS applies, including its double-double orientation test, and declines the rare contour for which that test and exact arithmetic disagree. A helix entry needs a pocket, so on a line job it is rejected as the reference rejects it. The ramp slope is <code>math.tan</code> of the entry angle, one C library call on each side. With these ported, the measurement on Linux x86-64 is: 161 of 205 recorded suite calls reproduced (79%); 11,432 of the same 12,000 generated cases (95%); and 5,951 of 6,005 ramp, helix and tab cases, among them 3,254 programs, the rest of those declined because they also ask for an offset, a pocket or drilling; no differences.</p>
+</section><section id="pcb"><h1>Circuit boards: Gerber and Excellon import</h1>
+<p>KerfKite reads the two files a board design program exports for manufacture: <strong>Gerber</strong> layers (RS-274X and X2) and <strong>Excellon</strong> drill files. This is the second part of circuit board engraving, after <a href="#probe-leveling">probe levelling</a>.</p>
+<p><strong>Isolation toolpaths are not generated yet.</strong> A copper layer is read into the list of objects it draws, in millimetres, and stops there. Turning that list into copper outlines and offsetting a cutter around them needs polygon union and offsetting, which is the next step. What works today from an imported board:</p>
+<ul>
+<li>a <strong>board outline</strong> layer becomes closed paths for a cut-out line job;</li>
+<li>a <strong>drill file</strong> becomes drilling operations, one group for each drill diameter;</li>
+<li>any layer can be inspected as data: apertures, objects, bounds and warnings.</li>
+</ul>
+<p>There is no panel for this in Studio yet. The importers are reached from the <code>kerfkite-cam</code> tool and from Python (<code>studio.pcb_import</code>). Importing only reads a file: nothing here writes to a controller or starts a job.</p>
+<p>The importers are written once, in the native core (<code>native/core/src/gerber.cpp</code>, <code>excellon.cpp</code>), and have no Python version. From Python they need the compiled KerfKite extension.</p>
+<h2>Commands</h2>
+<pre><code>kerfkite-cam gerber board-F_Cu.gbr                       the layer as JSON
+kerfkite-cam gerber board-F_Cu.gbr --arc-tolerance 0.01
+kerfkite-cam gerber-outline board-Edge_Cuts.gbr --offset [-95,115] --width 300 --height 200
+kerfkite-cam excellon board.drl
+kerfkite-cam excellon board.drl --units inch --integer 2 --decimal 4 --omitted-zeros leading
+kerfkite-cam excellon-drills board.drl --offset [-95,115]
+</code></pre>
+<p>The file is the input (<code>-</code> reads standard input) and the answer is JSON on standard output. Each <code>--option value</code> pair is a field of the request described below. A field that is not known is refused, so that a misspelt option is not passed over. A file that is refused exits with status 2 and the reason on standard error; status 1 is a file that cannot be opened or a usage error.</p>
+<p>From Python:</p>
+<pre><code>from studio import pcb_import
+from studio.cam import generate
+
+outline = pcb_import.outline_paths(pcb_import.read('board-Edge_Cuts.gbr'))
+offset = pcb_import.placement([outline['bounds']], margin=5)      # one offset for every layer
+outline = pcb_import.outline_paths(pcb_import.read('board-Edge_Cuts.gbr'), offset=offset)
+drills = pcb_import.drill_operations(pcb_import.read('board.drl'), offset=offset)
+for operation in drills['operations']:
+    job = generate({**settings, **operation})                     # one job for each drill diameter
+copper = pcb_import.gerber(pcb_import.read('board-F_Cu.gbr'))     # objects only, for now
+</code></pre>
+<p>Every length in an answer is in millimetres, rounded to the nanometre, whatever the units of the file.</p>
+<h2>Placing a board</h2>
+<p>Design programs export a board where it sits on their page, often with negative Y. KerfKite's work area starts at zero. The two conversions take an <code>offset</code> of <code>[X, Y]</code> that is added to every coordinate, and <code>placement</code> gives the offset that brings the lowest corner of one or more <code>bounds</code> to a margin. Use the same offset for every layer of a board, so that the holes stay registered with the outline.</p>
+<p>Given <code>width</code> and <code>height</code>, a conversion checks that the result fits the work area and refuses it otherwise, with the extent it would have.</p>
+<p>Mirroring a layer for the underside of a board is not provided yet.</p>
+<h2>Gerber layers</h2>
+<h3>What is read</h3>
+<table>
+<thead>
+<tr>
+<th>Part of the format</th>
+<th>Handling</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Format statement <code>%FS</code>, units <code>%MO</code></td>
+<td>Required before the first coordinate or aperture. Leading-zero omission is the norm; trailing-zero omission and incremental notation are read, with a warning that they are deprecated.</td>
+</tr>
+<tr>
+<td>Standard apertures <code>C</code>, <code>R</code>, <code>O</code>, <code>P</code></td>
+<td>With an optional round hole. A hole has to fit inside the aperture.</td>
+</tr>
+<tr>
+<td>Aperture macros <code>%AM</code></td>
+<td>Primitives 1 (circle), 20 and 2 (vector line), 21 (centre line), 22 (lower-left line), 4 (outline), 5 (polygon) and 7 (thermal), each with rotation about the macro origin. Variables, <code>+ - x /</code>, unary signs and brackets; a variable that is never set is zero.</td>
+</tr>
+<tr>
+<td><code>D01</code>, <code>D02</code>, <code>D03</code>, <code>G01</code>, <code>G02</code>, <code>G03</code></td>
+<td>Lines, moves, flashes and arcs.</td>
+</tr>
+<tr>
+<td><code>G75</code> multi-quadrant and <code>G74</code> single-quadrant arcs</td>
+<td>In multi-quadrant mode an arc that ends where it starts is a full circle. In single-quadrant mode the centre offsets carry no sign: the centre is the candidate that turns the right way through no more than a quarter turn and fits both ends best, and an arc that ends where it starts has no length.</td>
+</tr>
+<tr>
+<td>Polarity <code>%LPD</code>, <code>%LPC</code></td>
+<td>Kept on every object.</td>
+</tr>
+<tr>
+<td>Regions <code>G36</code> … <code>G37</code></td>
+<td>One object for each contour, arcs flattened. A contour has to close.</td>
+</tr>
+<tr>
+<td>Step-and-repeat <code>%SR</code></td>
+<td>Expanded into copies, along Y first and then X as the specification orders them. A block is closed by <code>%SR*%</code>, by another <code>%SR</code>, or by the end of the file.</td>
+</tr>
+<tr>
+<td>Attributes <code>%TF</code>, <code>%TA</code>, <code>%TO</code>, <code>%TD</code></td>
+<td>File attributes are returned; <code>.FileFunction</code> is also given as <code>file_function</code>. Aperture and object attributes are skipped. Attributes written as comments (<code>G04 #@! TF…</code>) are read too.</td>
+</tr>
+<tr>
+<td>Deprecated but common</td>
+<td><code>G54</code>, <code>G55</code>, <code>G70</code>, <code>G71</code>, <code>G90</code>, <code>G91</code>, <code>M00</code>, <code>M01</code>, several commands between one pair of <code>%</code>, coordinates without <code>D01</code> after a <code>D01</code>, lines drawn with a rectangular aperture, and <code>%IN</code>, <code>%LN</code>, <code>%IPPOS</code>, <code>%ASAXBY</code>, <code>%IR0</code>, <code>%MIA0B0</code>, <code>%OFA0B0</code>, <code>%SFA1B1</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Where an older habit has only one reading, it is read and a warning says so: a line drawn before <code>G01</code>, a line drawn before any position is set (it starts from the origin), coordinates without an operation code.</p>
+<h3>What is declined</h3>
+<p>A file is refused, with the line and the reason, in preference to being read in part. The messages begin <code>Line N:</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Not supported</th>
+<th>Message</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Block apertures</td>
+<td><code>block apertures (%AB) are not supported</code></td>
+</tr>
+<tr>
+<td>Aperture transformations</td>
+<td><code>aperture mirroring (%LM) is not supported</code>, likewise <code>rotation (%LR)</code> and <code>scaling (%LS)</code></td>
+</tr>
+<tr>
+<td>Image transformations</td>
+<td><code>a negative image (%IPNEG) is not supported</code>, <code>swapped axes (%AS)…</code>, <code>image rotation (%IR)…</code>, <code>image mirroring (%MI)…</code>, <code>an image offset (%OF)…</code>, <code>an image scale factor (%SF)…</code></td>
+</tr>
+<tr>
+<td>Moiré macro primitive</td>
+<td><code>aperture macro NAME uses the moire primitive (6), which is not supported</code></td>
+</tr>
+<tr>
+<td>Rectangular holes in standard apertures</td>
+<td><code>aperture D10 has a rectangular hole, which is not supported</code></td>
+</tr>
+<tr>
+<td>Lines drawn with an obround, polygon or macro aperture, or any aperture with a hole; arcs drawn with anything but a circle</td>
+<td><code>a line is drawn with aperture D12 (obround); only a circle or a rectangle may be used</code></td>
+</tr>
+<tr>
+<td>Different digits for X and Y</td>
+<td><code>the format statement gives X and Y different digits, which is not supported</code></td>
+</tr>
+<tr>
+<td>Any other extended command or code</td>
+<td><code>the extended command %KO is not supported</code>, <code>the code G12 is not supported</code></td>
+</tr>
+</tbody>
+</table>
+<p>A file is also refused when it leaves out what it has to state, because the alternative is a guess: no <code>%FS</code> or <code>%MO</code> before coordinates, an arc before <code>G74</code> or <code>G75</code>, a flash or line before an aperture is selected, an aperture or macro that is not defined, an aperture defined twice, a region contour that does not close, coordinates without an operation code other than after <code>D01</code>, an arc whose centre is not the same distance from its two ends (by more than a quarter of the radius), and a file with no <code>M02</code>, which is taken to be truncated.</p>
+<h3>The answer</h3>
+<pre><code>{
+  &quot;format&quot;: &quot;gerber&quot;,
+  &quot;units&quot;: &quot;mm&quot;,                       the units of the file; the answer is always millimetres
+  &quot;coordinate_format&quot;: {&quot;integer&quot;: 4, &quot;decimal&quot;: 6, &quot;omitted_zeros&quot;: &quot;leading&quot;, &quot;notation&quot;: &quot;absolute&quot;},
+  &quot;file_function&quot;: &quot;Copper,L1,Top&quot;,    or null
+  &quot;attributes&quot;: {&quot;.FileFunction&quot;: &quot;Copper,L1,Top&quot;, &quot;.FilePolarity&quot;: &quot;Positive&quot;},
+  &quot;arc_tolerance&quot;: 0.005,
+  &quot;apertures&quot;: [ ... ],
+  &quot;objects&quot;: [ ... ],                  in drawing order
+  &quot;counts&quot;: {&quot;flash&quot;: 5, &quot;line&quot;: 3, &quot;arc&quot;: 1, &quot;region&quot;: 1},
+  &quot;bounds&quot;: [2.0, 4.2, 21.0, 25.0],    or null when nothing dark is drawn
+  &quot;warnings&quot;: [ ... ]
+}
+</code></pre>
+<p>Request fields: <code>text</code> (the file) and optionally <code>arc_tolerance</code> (0.005 mm; 0.0005 to 0.1).</p>
+<p><strong>Apertures</strong>, in order of their D code:</p>
+<pre><code>{&quot;code&quot;: 10, &quot;shape&quot;: &quot;circle&quot;,    &quot;diameter&quot;: 0.25, &quot;hole&quot;: 0.0}
+{&quot;code&quot;: 12, &quot;shape&quot;: &quot;rectangle&quot;, &quot;width&quot;: 1.5, &quot;height&quot;: 1.0, &quot;hole&quot;: 0.0}
+{&quot;code&quot;: 13, &quot;shape&quot;: &quot;obround&quot;,   &quot;width&quot;: 2.0, &quot;height&quot;: 1.0, &quot;hole&quot;: 0.0}
+{&quot;code&quot;: 14, &quot;shape&quot;: &quot;polygon&quot;,   &quot;diameter&quot;: 2.0, &quot;vertices&quot;: 6, &quot;rotation&quot;: 30.0, &quot;hole&quot;: 0.5}
+{&quot;code&quot;: 15, &quot;shape&quot;: &quot;macro&quot;,     &quot;macro&quot;: &quot;RoundRect&quot;, &quot;parts&quot;: [ ... ]}
+</code></pre>
+<p><code>hole</code> is the diameter of a round hole at the centre, or 0. A polygon's <code>diameter</code> is that of the circle through its vertices; with no rotation one vertex lies on the positive X axis, and <code>rotation</code> is in degrees anticlockwise.</p>
+<p>A macro aperture is given as the shapes its definition produces for this aperture's parameters, already evaluated, rotated and in millimetres about the flash point:</p>
+<pre><code>{&quot;shape&quot;: &quot;circle&quot;,  &quot;exposure&quot;: true,  &quot;diameter&quot;: 0.6, &quot;x&quot;: 0.5, &quot;y&quot;: 0.3}
+{&quot;shape&quot;: &quot;polygon&quot;, &quot;exposure&quot;: false, &quot;points&quot;: [[x, y], ...]}        closed: the last point is the first
+</code></pre>
+<p>To build the aperture's image, take the parts in order: a part with <code>exposure</code> true is added to the image, and one with <code>exposure</code> false is cut from what the earlier parts have built. A thermal is given as a disc, a cut disc and two cut bars.</p>
+<p><strong>Objects</strong>:</p>
+<pre><code>{&quot;type&quot;: &quot;flash&quot;,  &quot;polarity&quot;: &quot;dark&quot;, &quot;aperture&quot;: 11, &quot;at&quot;: [5.0, 5.0]}
+{&quot;type&quot;: &quot;line&quot;,   &quot;polarity&quot;: &quot;dark&quot;, &quot;aperture&quot;: 10, &quot;start&quot;: [5.0, 5.0], &quot;end&quot;: [15.0, 5.0]}
+{&quot;type&quot;: &quot;arc&quot;,    &quot;polarity&quot;: &quot;dark&quot;, &quot;aperture&quot;: 10, &quot;start&quot;: [15.0, 10.0], &quot;end&quot;: [10.0, 15.0],
+                   &quot;centre&quot;: [10.0, 10.0], &quot;clockwise&quot;: false, &quot;points&quot;: [[15.0, 10.0], ..., [10.0, 15.0]]}
+{&quot;type&quot;: &quot;region&quot;, &quot;polarity&quot;: &quot;dark&quot;, &quot;points&quot;: [[2.0, 18.0], ..., [2.0, 18.0]]}
+</code></pre>
+<p>An arc is given both ways: as the arc itself (<code>start</code>, <code>end</code>, <code>centre</code>, <code>clockwise</code>) and flattened into <code>points</code>, which run from the start to the end. No chord of the flattened arc lies further than <code>arc_tolerance</code> from the true arc, and there are never fewer than eight chords to a full turn. A region's <code>points</code> are its contour, closed, with any arcs flattened in the same way. A line that starts and ends at one point is a dot of its aperture.</p>
+<p>When an arc's centre is slightly off, so that its two ends are at different distances from it, the flattened radius runs evenly from one to the other and a warning gives the largest difference found (differences under 0.01 mm are not reported).</p>
+<p><code>bounds</code> covers the dark objects with their apertures. A clear object cannot extend the image and is left out of it.</p>
+<p><strong>Polarity.</strong> The copper image is built by taking the objects in order: a dark object adds its shape, and a clear object removes its shape from everything drawn before it. The shape of a flash is its aperture at <code>at</code>; of a line or arc, its aperture swept along the path; of a region, the inside of its contour.</p>
+<h3>Limits</h3>
+<table>
+<thead>
+<tr>
+<th>Limit</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>File size</td>
+<td>16 MiB</td>
+</tr>
+<tr>
+<td>Objects, after step-and-repeat</td>
+<td>100,000</td>
+</tr>
+<tr>
+<td>Points of flattened arcs and region contours together</td>
+<td>500,000</td>
+</tr>
+<tr>
+<td>Apertures</td>
+<td>10,000</td>
+</tr>
+<tr>
+<td>Aperture macros; characters in one macro</td>
+<td>1,000; 65,536</td>
+</tr>
+<tr>
+<td>Shapes and polygon points in one macro aperture</td>
+<td>2,000; 20,000</td>
+</tr>
+<tr>
+<td>Shapes and polygon points in all macro apertures</td>
+<td>50,000; 200,000</td>
+</tr>
+<tr>
+<td>Nested brackets in a macro expression</td>
+<td>32</td>
+</tr>
+<tr>
+<td>Step-and-repeat copies along one axis</td>
+<td>1,000</td>
+</tr>
+<tr>
+<td>Coordinates</td>
+<td>−10,000 to 10,000 mm</td>
+</tr>
+<tr>
+<td>Any aperture dimension</td>
+<td>0 to 1,000 mm</td>
+</tr>
+<tr>
+<td>Characters in one command</td>
+<td>4,096</td>
+</tr>
+<tr>
+<td>Warnings listed</td>
+<td>50</td>
+</tr>
+</tbody>
+</table>
+<p>A step-and-repeat is checked against the object and point limits before any copy is made.</p>
+<h2>Board outline</h2>
+<p><code>gerber-outline</code> (<code>pcb_import.outline_paths</code>) reads a profile layer, such as KiCad's <code>Edge.Cuts</code>, and joins its lines and arcs into closed paths.</p>
+<p>Request fields: <code>text</code>, and optionally <code>tolerance</code> (0.01 mm; 0.000001 to 1), <code>arc_tolerance</code>, <code>offset</code>, <code>width</code> and <code>height</code>.</p>
+<pre><code>{
+  &quot;paths&quot;: [[[8.0, 5.0], [42.0, 5.0], ..., [8.0, 5.0]], ...],   each closed, the largest first
+  &quot;line_width&quot;: 0.1,                    the widest line of the outline; the paths are its centre line
+  &quot;bounds&quot;: [5.0, 5.0, 45.0, 35.0],
+  &quot;warnings&quot;: [ ... ]
+}
+</code></pre>
+<ul>
+<li>The pieces may be drawn in any order and in either direction. Two ends join when they lie within <code>tolerance</code> of each other.</li>
+<li>An outline with a loose end is refused: <code>The board outline is open at X100.004 Y-83.000; the nearest other loose end is 0.004 mm away.</code> Close it in the design, or raise the tolerance if the gap is a drawing error.</li>
+<li>A place where more than two lines meet is refused: <code>The board outline branches at X10.000 Y10.000: 3 lines meet there</code>.</li>
+<li>An edge drawn twice counts once. Flashes, filled regions, clear lines and lines with no length are left out, and a warning says how many.</li>
+<li>More than one closed loop is accepted, with a warning: the largest comes first, and the others may be cut-outs inside it.</li>
+</ul>
+<p>The paths are the outline itself. Use them as <code>paths</code> of a router job; to cut the board out at its true size, choose the outside contour operation so that the cutter runs outside the line.</p>
+<h2>Excellon drill files</h2>
+<h3>What is read</h3>
+<table>
+<thead>
+<tr>
+<th>Part of the format</th>
+<th>Handling</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Header <code>M48</code> … <code>%</code> or <code>M95</code></td>
+<td>A <code>%</code> before <code>M48</code> is accepted. A file with no header is read as a body. A byte order mark before the first line is passed over, in Gerber files too.</td>
+</tr>
+<tr>
+<td>Units</td>
+<td><code>METRIC</code>, <code>INCH</code>, <code>M71</code>, <code>M72</code>.</td>
+</tr>
+<tr>
+<td>Zero suppression</td>
+<td><code>LZ</code> (leading zeros present, trailing omitted) and <code>TZ</code> (the reverse). Coordinates with a decimal point need neither.</td>
+</tr>
+<tr>
+<td>Digits</td>
+<td><code>METRIC,LZ,000.000</code>; comments <code>;FILE_FORMAT=3:3</code> (Altium, EasyEDA) and <code>; FORMAT={3:3/ absolute / metric / suppress leading zeros}</code> (KiCad).</td>
+</tr>
+<tr>
+<td>Tools</td>
+<td><code>T1C0.8</code>, with feed and speed words skipped (<code>T01F00S00C0.3</code>). In the header, or at first use in the body. <code>T0</code> unloads.</td>
+</tr>
+<tr>
+<td>Holes</td>
+<td><code>X…Y…</code>; a missing axis keeps its last value.</td>
+</tr>
+<tr>
+<td>Repeats</td>
+<td><code>R5X1.0</code>: the last hole again, five more times, each a step further on.</td>
+</tr>
+<tr>
+<td>Slots</td>
+<td><code>X…Y…G85X…Y…</code>, and straight routed slots: <code>G00X…Y…</code>, <code>M15</code>, <code>G01X…Y…</code>, <code>M16</code>, <code>G05</code>.</td>
+</tr>
+<tr>
+<td>Plating</td>
+<td><code>;TYPE=PLATED</code>, <code>;TYPE=NON_PLATED</code>, and KiCad's <code>; #@! TF.FileFunction,Plated,…</code> comment.</td>
+</tr>
+<tr>
+<td>Skipped</td>
+<td><code>FMAT,2</code>, <code>ICI,OFF</code>, <code>VER</code>, <code>DETECT</code>, <code>ATC</code>, <code>G90</code>, <code>G40</code>, <code>M47</code> messages, <code>M06</code>, <code>M09</code>, feed and speed lines. An unknown line in the header is skipped with a warning.</td>
+</tr>
+</tbody>
+</table>
+<h3>How the numbers are read</h3>
+<p>Many drill files leave out part of their number format. Each part is taken from the first of these that gives it:</p>
+<ol>
+<li>the request (<code>units</code>, <code>integer</code> and <code>decimal</code>, <code>omitted_zeros</code>);</li>
+<li>the header;</li>
+<li>a format comment;</li>
+<li>for digits and zero suppression only, the default of the format description: 2.4 digits for inches, 3.3 for millimetres, trailing zeros omitted.</li>
+</ol>
+<p><strong>Units are never assumed.</strong> A file that states none is refused: <code>The drill file does not state its units (METRIC, INCH, M71 or M72); give &quot;units&quot; in the request</code>.</p>
+<p>When a default was used and it mattered, the answer carries a warning that names the request field to set, and <code>interpretation</code> always says how the file was read:</p>
+<pre><code>&quot;interpretation&quot;: {
+  &quot;units&quot;: &quot;inch&quot;, &quot;units_from&quot;: &quot;header&quot;,
+  &quot;integer&quot;: 2, &quot;decimal&quot;: 4, &quot;digits_from&quot;: &quot;default&quot;,
+  &quot;omitted_zeros&quot;: &quot;trailing&quot;, &quot;zeros_from&quot;: &quot;default&quot;
+}
+</code></pre>
+<p><code>digits_from</code> and <code>zeros_from</code> are <code>request</code>, <code>header</code>, <code>comment</code>, <code>default</code>, <code>decimal points</code> (every coordinate carried a decimal point, so no format was needed) or <code>unused</code> (no coordinates). <code>omitted_zeros</code> names the zeros that are left out, which is the opposite of the header word: <code>LZ</code> is <code>&quot;trailing&quot;</code>.</p>
+<p>The zero-suppression warning is given only when some coordinate has fewer digits than the format, since otherwise both readings agree. Check the hole positions against the board before drilling whenever a warning is present: a wrong reading moves holes by a factor of ten or more, and the bounds make that easy to see.</p>
+<p>A request that contradicts the header is obeyed, with a warning. A header and a comment that disagree use the header, with a warning. A format that changes after coordinates have been read is refused.</p>
+<h3>What is declined</h3>
+<p>The messages begin <code>Line N</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Not supported</th>
+<th>Message</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Incremental coordinates</td>
+<td><code>selects incremental coordinates (G91), which are not supported</code>, and <code>(ICI)</code></td>
+</tr>
+<tr>
+<td>Format 1</td>
+<td><code>selects a format other than FMAT,2, which is not supported</code></td>
+</tr>
+<tr>
+<td>Routed arcs</td>
+<td><code>routes an arc (G02, G03), which is not supported</code></td>
+</tr>
+<tr>
+<td>Cutter compensation</td>
+<td><code>uses cutter compensation (G41, G42), which is not supported</code></td>
+</tr>
+<tr>
+<td>Canned cycles</td>
+<td><code>uses a canned cycle (G81 to G84), which is not supported</code></td>
+</tr>
+<tr>
+<td>Zero offsets</td>
+<td><code>sets a zero offset (G93), which is not supported</code></td>
+</tr>
+<tr>
+<td>Patterns and step-and-repeat</td>
+<td><code>uses pattern and step-and-repeat codes (M25, M01, M02, M08), which are not supported</code>; <code>repeats a pattern (% in the body), which is not supported</code></td>
+</tr>
+<tr>
+<td>Drilled text</td>
+<td><code>drills text (M97, M98), which is not supported</code></td>
+</tr>
+<tr>
+<td>Anything else in the body</td>
+<td><code>Line 7 is not understood: …</code></td>
+</tr>
+</tbody>
+</table>
+<p>Also refused: a tool that is selected but not defined, a hole before any tool is selected, a tool defined twice with different diameters, a tool with no diameter or one above 100 mm, a routed move without <code>M15</code>, and a file that ends with the routing tool down. A file with no <code>M30</code> is read, with a warning that it may be truncated.</p>
+<h3>The answer</h3>
+<pre><code>{
+  &quot;format&quot;: &quot;excellon&quot;,
+  &quot;units&quot;: &quot;mm&quot;,
+  &quot;interpretation&quot;: { ... },
+  &quot;plated&quot;: true,                       or false, or null when the file does not say
+  &quot;file_function&quot;: &quot;Plated,1,2,PTH&quot;,    or null
+  &quot;tools&quot;: [{&quot;number&quot;: 1, &quot;diameter&quot;: 0.4, &quot;hits&quot;: [[105.0, -85.0], [110.5, -85.25]]}, ...],
+  &quot;slots&quot;: [{&quot;tool&quot;: 3, &quot;diameter&quot;: 1.0, &quot;points&quot;: [[130.0, -100.0], [134.0, -100.0]]}],
+  &quot;counts&quot;: {&quot;hits&quot;: 6, &quot;slots&quot;: 2},
+  &quot;bounds&quot;: [103.6, -106.4, 134.5, -84.8],   of the hole and slot edges, or null
+  &quot;warnings&quot;: [ ... ]
+}
+</code></pre>
+<p>Tools are in the order the file defines them, and each tool's <code>hits</code> are in the order the file drills them. A slot's <code>points</code> are its centre line: two points for a <code>G85</code> slot, two or more for a routed one.</p>
+<h3>Limits</h3>
+<table>
+<thead>
+<tr>
+<th>Limit</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>File size</td>
+<td>8 MiB</td>
+</tr>
+<tr>
+<td>Holes, after repeats</td>
+<td>100,000</td>
+</tr>
+<tr>
+<td>Slots; routed points</td>
+<td>20,000; 100,000</td>
+</tr>
+<tr>
+<td>Tools</td>
+<td>1,000</td>
+</tr>
+<tr>
+<td>Repeat count</td>
+<td>10,000</td>
+</tr>
+<tr>
+<td>Coordinates</td>
+<td>−10,000 to 10,000 mm</td>
+</tr>
+<tr>
+<td>Tool diameter</td>
+<td>above 0, at most 100 mm</td>
+</tr>
+<tr>
+<td>Characters in one line</td>
+<td>1,024</td>
+</tr>
+</tbody>
+</table>
+<h2>Drilling operations</h2>
+<p><code>excellon-drills</code> (<code>pcb_import.drill_operations</code>) turns the holes into operations for the ordinary <a href="#drilling">drilling</a> generator. Request fields: those of <code>excellon</code>, and optionally <code>offset</code>, <code>width</code> and <code>height</code>.</p>
+<pre><code>{
+  &quot;operations&quot;: [
+    {&quot;operation&quot;: &quot;drill&quot;, &quot;tool_shape&quot;: &quot;drill&quot;, &quot;tool_diameter&quot;: 0.4,
+     &quot;paths&quot;: [[[5.0, 25.0], [5.0, 25.0]], [[10.5, 24.75], [10.5, 24.75]]]},
+    {&quot;operation&quot;: &quot;drill&quot;, &quot;tool_shape&quot;: &quot;drill&quot;, &quot;tool_diameter&quot;: 0.8, &quot;paths&quot;: [ ... ]}
+  ],
+  &quot;groups&quot;: [{&quot;tool_diameter&quot;: 0.4, &quot;holes&quot;: 2, &quot;tools&quot;: [1]}, {&quot;tool_diameter&quot;: 0.8, &quot;holes&quot;: 4, &quot;tools&quot;: [2, 4]}],
+  &quot;slots&quot;: [ ... ],                     as above, moved by the offset; not drilled
+  &quot;bounds&quot;: [3.6, 3.6, 25.48, 25.2],    of the edges of the holes these operations drill
+  &quot;interpretation&quot;: { ... },
+  &quot;warnings&quot;: [ ... ]
+}
+</code></pre>
+<p>Each operation is a project fragment: merge it over the job's settings (head, controller, work area, spindle speed, depth, plunge feed, peck depth) and generate it. A hole is a point marker, a path that stays where it starts.</p>
+<ul>
+<li>Holes are grouped by diameter, smallest first. Two tools of the same diameter drill together.</li>
+<li><strong>Each diameter is a separate job.</strong> An ordered job has one tool, so the generator refuses operations with different drills in one job. Change the drill and set work Z again between jobs.</li>
+<li>A group of more than 3,000 holes is split into several operations of the same diameter, which may share one ordered job.</li>
+<li>Slots are not drilled. They are listed with their centre line and width, to be cut as lines with a cutter of that width or smaller.</li>
+<li>Drills finer than 0.01 mm are refused, as the generator would refuse them.</li>
+</ul>
+<h2>How it is checked</h2>
+<p><code>tests/test_pcb_import.py</code> reads small Gerber and Excellon files written by hand for the purpose (<code>tests/pcb/</code>), and compares the answers with coordinates, arcs, macro shapes and areas worked out separately in the test. It covers each feature above, each refusal, the limits, and several hundred randomly damaged copies of the fixtures, every one of which has to be read or refused with a reason. <code>native/tests/selftest.cpp</code> repeats a short form of the checks without Python.</p>
+<p>The importers have been run on the project's own fixtures and on files written to follow the formats that KiCad, Altium, EasyEDA and Eagle export. They have not yet been run on a large collection of boards from those programs. Check an imported board's bounds, hole counts and warnings against the design before cutting.</p>
 </section><section id="performance"><h1>Native CAM and editor verification</h1>
 <p>The Studio 0.6.1 simulator benchmark uses a 256 × 256 height map, a ball end mill and a cylindrical router setup. Three fresh processes per backend generated the same 135,886 planar instructions and the same 136,691 rotary instructions. The largest difference between corresponding stock-preview cells was 2.7 × 10⁻¹⁴ mm. These timings were measured on an Apple Silicon Mac during integration testing.</p>
 <table>
@@ -2139,7 +2600,7 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 <h2>Not yet verified on a machine</h2>
 <p>Levelling is tested against the simulator and by calculation. It has not yet been run on a physical controller. The first run on a machine should be supervised, with a probe that has been tested, a low probe feed and a hand on the reset.</p>
 <h2>Circuit boards</h2>
-<p>Probe levelling is the first part of circuit board engraving. Importing Gerber copper layers and Excellon drill files, and generating isolation, drilling and cut-out toolpaths from them, are not yet in KerfKite. Until then, a board outline or traces drawn or imported as vectors can be engraved and levelled as any router line job.</p>
+<p>Probe levelling is the first part of circuit board engraving. Gerber layers and Excellon drill files can be read, and a board outline and its holes turned into cut-out paths and drilling operations: see <a href="#pcb">Circuit boards</a>. Isolation toolpaths from a copper layer are not yet generated. Until then, traces drawn or imported as vectors can be engraved and levelled as any router line job.</p>
 </section><section id="product"><h1>Feature and acceptance matrix</h1>
 <p>This matrix describes the software workflows covered by the feature guides and simulator. The per-feature guides record accepted inputs and tests. Hardware measurements and tests with vendor controllers are tracked separately.</p>
 <table>
