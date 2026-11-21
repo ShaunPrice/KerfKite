@@ -214,9 +214,8 @@ int main() {
     expect(message<ValueError>(R"({"mode":"plasma"})") == "Choose router, laser or knife", "an unknown head");
     expect(message<ValueError>(R"({"mode":"router","width":100,"height":50,"feed":600,"power":1,
         "paths":[[[0,0],[101,0]]]})") == "X must be between 0 and 100.0", "a point outside the work area");
-    expect(message<NotPorted>(R"({"mode":"knife","width":100,"height":50,"feed":600,"power":1,
-        "paths":[[[9,9],[9.00000009,9],[9.00000018,9],[9,9]]]})") ==
-               "a drag-knife path that returns to a point (the reference fails on it)",
+    expect(message<NotPorted>(R"({"mode":"router","operation":"vcarve","width":100,"height":50,"feed":600,"power":1,
+        "paths":[[[10,10],[30,10],[30,30],[10,30],[10,10]]]})") == "V-carving",
            "a case that is not reproduced is declined, not guessed");
 
     // Drilling: a peck at each marker, with the last peck at the full depth.
@@ -250,6 +249,35 @@ int main() {
            "its summary");
     expect(message<ValueError>(R"({"mode":"knife","width":100,"height":50,"feed":600,"power":1,"knife_offset":2,
         "paths":[[[10,10],[20,10]]]})") == "knife_lead must be between 2.0 and 20", "a lead shorter than the offset");
+
+    // Repeated points on a knife path. A point is kept only when it is further than 0.1 nm from the last
+    // point kept, so no move has zero length. Two steps of 0.09 nm out and one step back are 0.18 nm each
+    // way: the knife turns half round at the far end and half round again where the path closes. (The steps
+    // out used to be dropped and the step back kept, a move of no length, on which the reference failed.)
+    const auto knife_lines = [](const char *paths) {
+        return generate(json::parse(std::string(R"({"mode":"knife","width":100,"height":50,"feed":600,"power":1,
+            "paths":)") + paths + "}")).lines;
+    };
+    const std::vector<std::string> turned = knife_lines("[[[9,9],[9.00000009,9],[9.00000018,9],[9,9]]]");
+    expect(turned.size() == 166 && turned[8] == "G0 X8.250 Y9.000" && turned[10] == "G1 X9.250 Y9.000 F600.0" &&
+               turned[11] == "G1 X9.250 Y9.000 F600.0" && turned[29] == "G1 X9.000 Y8.750 F600.0" &&
+               turned[47] == "G1 X8.750 Y9.000 F600.0" && turned[48] == "G1 X8.750 Y9.000 F600.0" &&
+               turned[66] == "G1 X9.000 Y9.250 F600.0" && turned[84] == "G1 X9.250 Y9.000 F600.0" &&
+               turned[85] == "G0 Z5.000",
+           "a knife path that goes out and back by more than the tolerance");
+    expect(turned == knife_lines("[[[9,9],[9.00000018,9],[9,9]]]"), "the step under the tolerance is not a point of it");
+    // Within the tolerance of the point kept there is no move at all, and exact repeats change nothing.
+    const std::vector<std::string> plain = knife_lines("[[[20,20],[30,25]]]");
+    expect(plain == knife_lines("[[[20,20],[20.00000006,20],[20.00000006,20.00000006],[20,20],[30,25]]]"),
+           "an excursion within the tolerance is dropped");
+    expect(plain == knife_lines("[[[20,20],[20,20],[30,25],[30,25]]]"), "exact repeats are dropped");
+    // Forty steps of 0.05 nm are 2 nm of travel: they are followed, where each used to be dropped.
+    std::string creeping = "[[[30,30]";
+    for (int i = 1; i <= 40; ++i) creeping += ",[" + text::repr(30 + 5e-8 * i) + ",30]";
+    expect(knife_lines((creeping + "]]").c_str()).size() > 10, "many short steps add up to a move");
+    expect(message<ValueError>(R"({"mode":"knife","width":100,"height":50,"feed":600,"power":1,
+        "paths":[[[10,10],[20,10]],[[5,5],[5,5],[5.00000005,5]]]})") == "Knife paths must contain nonzero travel",
+           "a knife path that is a single point is refused");
 
     // A ramp entry: one lap down a closed contour at no more than the entry angle, then a lap at depth.
     const Job ramp = generate(json::parse(R"({"mode":"router","width":100,"height":50,"feed":600,"power":12000,

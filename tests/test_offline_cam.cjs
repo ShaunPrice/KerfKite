@@ -47,6 +47,17 @@ test('knife emits compensated swivel contours without motor commands',()=>{
   assert.throws(()=>generate(sample({mode:'knife',paths:[[[0,0],[1,0]]]})),/Compensated X/);
 });
 
+test('knife drops repeats against the last point kept and refuses a path with no travel',()=>{
+  const lines=paths=>generate(sample({mode:'knife',depth:.1,paths})).lines;
+  // Steps under 0.1 nm that lead back to a point used to leave a move of no length and coordinates that were not
+  // numbers. Out and back further than 0.1 nm is two moves; an excursion within 0.1 nm is none.
+  assert.deepEqual(lines([[[20,20],[20+9e-8,20],[20+1.8e-7,20],[20,20],[30,25]]]),lines([[[20,20],[20+1.8e-7,20],[20,20],[30,25]]]));
+  assert.deepEqual(lines([[[20,20],[20+6e-8,20],[20+6e-8,20+6e-8],[20,20],[30,25]]]),lines([[[20,20],[30,25]]]));
+  assert.deepEqual(lines([[[20,20],[20,20],[30,25],[30,25]]]),lines([[[20,20],[30,25]]]));
+  assert.throws(()=>lines([[[20,20],[20+6e-8,20],[20+6e-8,20+6e-8],[20,20]]]),/Knife paths must contain nonzero travel/);
+  assert.throws(()=>lines([[[20,20],[30,25]],[[5,5],[5,5]]]),/Knife paths must contain nonzero travel/);
+});
+
 test('Marlin router postprocessor uses millisecond dwell only for router',()=>{
   const result=generate(sample({protocol:'marlin'}));
   assert.ok(result.lines.includes('G4 P2000'));

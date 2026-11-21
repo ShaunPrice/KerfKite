@@ -20,7 +20,10 @@
   function knife(paths, offset, lead) {
     let count = 0;
     return paths.map(path => {
-      const p = path.filter((v, i) => !i || distance(path[i-1], v) > 1e-7);
+      // A point is kept only when it is further than 0.1 nm from the last point kept (studio/operations.py
+      // knife_points), so every move that remains has a direction and none has zero length.
+      const p = [];
+      for (const v of path) if (!p.length || distance(p[p.length-1], v) > 1e-7) p.push(v);
       if (p.length < 2) fail('Knife paths must contain nonzero travel');
       const vectors = p.slice(1).map((b, i) => { const a=p[i], d=distance(a,b); return [(b[0]-a[0])/d,(b[1]-a[1])/d]; });
       const [ux,uy]=vectors[0];

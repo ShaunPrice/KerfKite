@@ -709,7 +709,7 @@ def drill_knife_cases(count, seed):
         """A knife path inside the work area: corners of every kind, repeats and steps too short to keep."""
         x, y = rng.uniform(low + 5, high - 5), rng.uniform(15, 35)
         size = rng.choice([1, 2.5, 4])
-        kind = rng.randrange(10) if tidy or rng.random() < 0.6 else rng.randrange(10, 13)
+        kind = rng.randrange(10) if tidy or rng.random() < 0.6 else rng.randrange(10, 14)
         if kind < 3:
             points = [
                 [round(rng.uniform(low + 5, high - 5), rng.randrange(0, 5)), round(rng.uniform(15, 35), rng.randrange(0, 5))]
@@ -726,7 +726,7 @@ def drill_knife_cases(count, seed):
                 [x + size * math.cos(2 * math.pi * i / sides), y + size * math.sin(2 * math.pi * i / sides)]
                 for i in range(sides)
             ]
-        elif kind == 7:  # repeats and near repeats, each compared with the point before it
+        elif kind == 7:  # repeats and near repeats, each compared with the last point kept (0.1 nm apart or less)
             step = rng.choice([1e-8, 9e-8, 1e-7, 1.1e-7, 0])
             points = [[x, y], [x, y], [x + step, y], [x + 2 * step, y], [x + 3, y], [x + 3, y + step], [x + 3, y + 2]]
         elif kind == 8:  # diagonals, and a turn of exactly half a circle
@@ -737,10 +737,17 @@ def drill_knife_cases(count, seed):
                 [[x, 50], [x + size, 50], [x + size, 45]], [[99.5, y], [95, y], [95, y + 3]],
                 [[x, 0.0], [x - size, -0.0], [x - size, 3]], [[x, 0.0], [x + size, -0.0], [x + size, 3]],
             ])  # fmt: skip
-        elif kind == 10:  # no travel at all, so the path is left out
+        elif kind == 10:  # no travel at all: a single point once repeats are dropped, which is refused
             return [[x, y]] * rng.choice([2, 3]) + [[x + 5e-8, y]]
-        elif kind == 11:  # short steps that lead back to the start: the reference divides by zero
-            return [[x, y], [x + 9e-8, y], [x + 1.8e-7, y], [x, y]] + rng.choice([[], [[x + 2, y + 1]]])
+        elif kind == 11:  # short steps out and one step back to the start (the reference once divided by zero)
+            out = rng.choice([9e-8, 9e-8, 6e-8, 4e-8])  # two steps: beyond the tolerance together, or within it
+            return [[x, y], [x + out, y], [x + 2 * out, y], [x, y]] + rng.choice([[], [[x + 2, y + 1]]])
+        elif kind == 13:  # many steps each too short to keep, wandering or creeping away from the point kept
+            points = [[x, y]]
+            for _ in range(rng.randrange(2, 30)):
+                step, turn = rng.choice([3e-8, 6e-8, 9.9e-8, 1.01e-7]), rng.uniform(0, 7)
+                points.append([points[-1][0] + step * math.cos(turn), points[-1][1] + step * math.sin(turn)])
+            return points + rng.choice([[], [[x, y]], [[x + 2, y + 1]], [[x + 2, y + 1], [x, y]]])
         else:  # a lead-in or a swivel that leaves the work area
             return rng.choice([[[0.5, y], [3, y]], [[99.9, y], [95, y], [95, y + 3]], [[x, 49.9], [x + size, 49.9]]])
         if kind != 9 and rng.random() < 0.45:

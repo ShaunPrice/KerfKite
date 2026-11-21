@@ -148,12 +148,41 @@ def hatch(g, spacing, angle=0):
     return result
 
 
+# Two points of a drag-knife path nearer than this (0.1 nm) are one point.
+KNIFE_REPEAT = 1e-7
+
+
+def knife_points(path):
+    """The points of a drag-knife path with repeats left out.
+
+    The blade of a drag knife trails its pivot, so the pivot path is built from the direction of each move,
+    and a move of no length has no direction. A point is therefore kept only when it is further than
+    KNIFE_REPEAT from the last point kept. Every move that remains is longer than that, so each has a
+    direction, and the path cut is never further than KNIFE_REPEAT from the path drawn.
+
+    Each point used to be compared with the point before it in the drawing, kept or not. Steps too short to
+    keep could then lead back to the point last kept, which left a move of no length and a division by
+    zero; and any number of such steps, however far they led, were dropped. A path with no step between
+    zero and KNIFE_REPEAT long is read exactly as it was.
+    """
+    kept = [path[0]]
+    for point in path[1:]:
+        if math.dist(kept[-1], point) > KNIFE_REPEAT:
+            kept.append(point)
+    return kept
+
+
 def knife(paths, offset, lead):
+    """Pivot paths for a drag knife: an alignment lead-in, and a swivel about the blade tip at each corner.
+
+    A path that is a single point once repeats are dropped has no direction to cut in. It is refused, as
+    the browser's offline CAM refuses it; it used to be left out without a word.
+    """
     result = []
     for path in paths:
-        p = [path[0]] + [b for a, b in zip(path, path[1:]) if math.dist(a, b) > 1e-7]
+        p = knife_points(path)
         if len(p) < 2:
-            continue
+            raise ValueError('Knife paths must contain nonzero travel')
         vectors = [((b[0] - a[0]) / math.dist(a, b), (b[1] - a[1]) / math.dist(a, b)) for a, b in zip(p, p[1:])]
         ux, uy = vectors[0]
         q = [
