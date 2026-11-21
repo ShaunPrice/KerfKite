@@ -70,7 +70,7 @@ constexpr Coord kMaxCoordinate = Coord(1) << 37;
 // The largest offset distance and shape size, in grid units: about 34 m.
 constexpr Coord kMaxDistance = Coord(1) << 35;
 // The most edges one operation works on at once, counting those it creates where edges cross.
-constexpr std::size_t kMaxEdges = 16000000;
+constexpr std::size_t kMaxEdges = 8000000;
 // The most shapes an Artwork takes.
 constexpr std::size_t kMaxShapes = 4000000;
 

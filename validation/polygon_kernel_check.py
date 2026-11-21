@@ -70,6 +70,7 @@ class Kernel:
         self.dump = open(dump, 'w') if dump else None
         self.seconds = 0.0
         self.requests = 0
+        self.rounds = 0  # the most rounds of splitting the kernel has needed for any request
 
     def answers(self, requests):
         with tempfile.NamedTemporaryFile('w', suffix='.jsonl', delete=False) as file:
@@ -81,18 +82,19 @@ class Kernel:
         finally:
             os.unlink(file.name)
         self.seconds += time.perf_counter() - started
-        self.requests += len(requests)
         if done.returncode != 0:
             raise SystemExit(f'kerfkite-cam failed ({done.returncode}): {done.stderr[-3000:]}')
         rows = done.stdout.splitlines()
         if len(rows) != len(requests):
             raise SystemExit('kerfkite-cam did not answer every request')
+        self.requests += len(requests)
         return rows
 
     def run(self, requests):
         if not requests:
             return []
-        rows = self.answers(requests)
+        rows = self.answers(requests + [{'op': 'statistics'}])
+        self.rounds = max(self.rounds, json.loads(rows.pop())['ok']['rounds'])
         if self.dump:
             for request, row in zip(requests, rows):
                 self.dump.write(json.dumps(request) + '\n' + row + '\n')
@@ -295,7 +297,9 @@ def tangle(rng, most=2):
     scale = random_scale(rng)
     rings = []
     for _ in range(rng.randint(1, most)):
-        ring = [[round(rng.uniform(-scale, scale)), round(rng.uniform(-scale, scale))] for _ in range(rng.randint(3, 14))]
+        ring = [
+            [round(rng.uniform(-scale, scale)), round(rng.uniform(-scale, scale))] for _ in range(rng.randint(3, 14))
+        ]
         ring = [p for i, p in enumerate(ring) if p != ring[i - 1]]
         if len(ring) >= 3:
             rings.append(ring)
@@ -316,13 +320,19 @@ def awkward(rng):
 
     kind = rng.randrange(13)
     if kind == 0:  # two squares sharing an edge, or nearly
-        return [square(0, 0, 10 * s), [[10 * s + j(), j()], [20 * s, 0], [20 * s, 10 * s], [10 * s + j(), 10 * s + j()]]]
+        return [
+            square(0, 0, 10 * s),
+            [[10 * s + j(), j()], [20 * s, 0], [20 * s, 10 * s], [10 * s + j(), 10 * s + j()]],
+        ]
     if kind == 1:  # a slot and the bar that exactly fits it
         slot = [[0, 0], [30 * s, 0], [30 * s, 30 * s], [20 * s, 30 * s], [20 * s, 10 * s], [10 * s, 10 * s]]
         slot += [[10 * s, 30 * s], [0, 30 * s]]
         return [slot, [[10 * s, 10 * s + j()], [20 * s, 10 * s + j()], [20 * s, 40 * s], [10 * s, 40 * s]]]
     if kind == 2:  # squares touching at a corner
-        return [square(0, 0, 10 * s), [[10 * s + j(), 10 * s + j()], [20 * s, 10 * s], [20 * s, 20 * s], [10 * s, 20 * s]]]
+        return [
+            square(0, 0, 10 * s),
+            [[10 * s + j(), 10 * s + j()], [20 * s, 10 * s], [20 * s, 20 * s], [10 * s, 20 * s]],
+        ]
     if kind == 3:  # a sliver a few units high across a square
         sliver = [[-10 * s, 50 * s], [110 * s, 50 * s + rng.randint(1, 3)], [110 * s, 50 * s - rng.randint(0, 3)]]
         return [square(0, 0, 100 * s), sliver]
@@ -351,7 +361,11 @@ def awkward(rng):
         ring = star(rng, 0, 0, 20 * s, 9)
         return [ring, list(ring), list(reversed(ring))][: rng.randint(2, 3)]
     if kind == 9:  # nested squares with coincident sides
-        return [square(0, 0, 30 * s), square(0, 0, 20 * s), [[10 * s, 0], [30 * s, 0], [30 * s, 10 * s], [10 * s, 10 * s]]]
+        return [
+            square(0, 0, 30 * s),
+            square(0, 0, 20 * s),
+            [[10 * s, 0], [30 * s, 0], [30 * s, 10 * s], [10 * s, 10 * s]],
+        ]
     if kind == 10:  # long thin triangles fanned from one vertex
         return [[[0, 0], [1000 * s, i * 2 + j()], [1000 * s, i * 2 + 1]] for i in range(rng.randint(2, 7))]
     if kind == 11:  # a ring that touches itself at a vertex: two triangles tip to tip
@@ -431,7 +445,9 @@ def check_boolean(kernel, report, rng, count):
             group['cases'] += 1
             group['area'] = max(group['area'], max(errors) / slack)
             if max(errors) > slack:
-                report.fail('area identities', f'off by {max(errors):.3e} mm2 (allowed {slack:.3e})', requests[index * 4])
+                report.fail(
+                    'area identities', f'off by {max(errors):.3e} mm2 (allowed {slack:.3e})', requests[index * 4]
+                )
 
 
 def check_normalise(kernel, report, rng, count):
@@ -526,7 +542,6 @@ def check_offset_distance(report, name, request, mine, source, distance):
         return
     group['cases'] += 1
     d = abs(distance)
-    group['limit'] = max(group['limit'], OUTER * d + OFFSET_GRID)
     edge = source.boundary
     nearest, furthest = math.inf, 0.0
     for polygon in mine.geoms:
@@ -535,8 +550,11 @@ def check_offset_distance(report, name, request, mine, source, distance):
             points = coords + [((ax + bx) / 2, (ay + by) / 2) for (ax, ay), (bx, by) in zip(coords, coords[1:])]
             distances = shapely.distance(shapely.points(points), edge)
             nearest, furthest = min(nearest, float(distances.min())), max(furthest, float(distances.max()))
-    group['distance'] = max(group['distance'], d - nearest, furthest - d)
-    group['area'] = max(group['area'], (furthest - d - OFFSET_GRID) / (OUTER * d))
+    # Reported: the most by which a point is short of the distance, in units against the rounding allowed;
+    # and the most by which one is beyond it, as a share of the arc allowance and the rounding.
+    group['limit'] = OFFSET_GRID
+    group['distance'] = max(group['distance'], d - nearest)
+    group['area'] = max(group['area'], (furthest - d) / (OUTER * d + OFFSET_GRID))
     if nearest < d - OFFSET_GRID:
         what = f'a boundary point is {d - nearest:.4g} units nearer the source than the distance {d:.6g}'
         report.fail(name, what, request)
@@ -633,7 +651,8 @@ def compare_offset(report, name, request, mine, source, distance, reference=None
         apart = shapely.hausdorff_distance(mine.boundary, reference.boundary, densify=0.25)
     if difference.area <= allowed and apart <= tolerance:
         group['area'] = max(group['area'], difference.area / allowed)
-        group['distance'] = max(group['distance'], apart / tolerance)
+        group['distance'] = max(group['distance'], apart / tolerance)  # as a share of the tolerance
+        group['limit'] = 1.0
     else:
         group['thin'] += 1
     return True
@@ -653,7 +672,9 @@ def check_offset(kernel, report, rng, count):
         distance = min(2e10, max(20, round(size * 10 ** rng.uniform(-2.5, 0.3)))) * rng.choice([1, -1])
         cases.append((rings, distance))
     cases = resolved(kernel, report, 'offset', cases)
-    requests = [{'op': 'offset', 'rings': rings, 'distance': distance / UNITS, 'check': True} for rings, _, distance in cases]
+    requests = [
+        {'op': 'offset', 'rings': rings, 'distance': distance / UNITS, 'check': True} for rings, _, distance in cases
+    ]
     back = []
     for (_, source, distance), request, answer in zip(cases, requests, kernel.run(requests)):
         name = 'offset out' if distance > 0 else 'offset in'
@@ -676,7 +697,6 @@ def check_offset(kernel, report, rng, count):
             continue
         returned = region_of(answer['ok'])
         allowance = abs(distance) * (OUTER + 1 - math.cos(STEP / 4)) + 2 * OFFSET_GRID
-        group['limit'] = max(group['limit'], allowance)
         if distance > 0:
             bracketed = thin(source.buffer(-allowance, quad_segs=2 * SEGMENTS).difference(returned), OFFSET_GRID)
         else:
@@ -700,7 +720,6 @@ def check_pocket(kernel, report, rng, count):
         for rings, _, first, step in cases
     ]
     for (_, source, first, step), request, answer in zip(cases, requests, kernel.run(requests)):
-        group = report.group('pocket passes')
         if 'ok' not in answer:
             report.fail('pocket passes', 'refused: ' + str(answer), request)
             continue
@@ -711,7 +730,9 @@ def check_pocket(kernel, report, rng, count):
                 report.fail('pocket passes', f'pass {number} is not valid', request)
                 break
             # Each pass against the inset of the source by the whole depth: one rounding more a pass.
-            if not compare_offset(report, 'pocket passes', request, region_of(item), source, -depth, rounding=OFFSET_GRID + number):
+            if not compare_offset(
+                report, 'pocket passes', request, region_of(item), source, -depth, rounding=OFFSET_GRID + number
+            ):
                 break
             depth += step
         else:
@@ -813,7 +834,9 @@ def artwork_shapes(rng):
         elif kind == 3:
             points = [[x, y]]
             for _ in range(rng.randint(0, 5)):
-                points.append([round(points[-1][0] + rng.uniform(-5, 5), 3), round(points[-1][1] + rng.uniform(-5, 5), 3)])
+                points.append(
+                    [round(points[-1][0] + rng.uniform(-5, 5), 3), round(points[-1][1] + rng.uniform(-5, 5), 3)]
+                )
             if rng.random() < 0.2:
                 points.append(points[0])
             shape.update(type='stroke', points=points, width=round(rng.uniform(0.05, 1.5), 3))
@@ -948,7 +971,11 @@ def same_rings(report, name, request, mine, reference, tolerance):
     slack = 4 * tolerance * max(group[2] for group in wanted)
     ties = any(q[0] - sum(q[1]) - (p[0] - sum(p[1])) <= 2 * slack for p, q in zip(wanted, wanted[1:]))
     for (area, holes, _), (other_area, other_holes, _) in zip(own, wanted):
-        if len(holes) != len(other_holes) or abs(area - other_area) > slack or any(abs(a - b) > slack for a, b in zip(holes, other_holes)):
+        if (
+            len(holes) != len(other_holes)
+            or abs(area - other_area) > slack
+            or any(abs(a - b) > slack for a, b in zip(holes, other_holes))
+        ):
             if not ties:  # polygons of nearly equal area may properly come in either order
                 report.fail(name, 'the rings are the reference\'s but in another order', request)
             break
@@ -1032,7 +1059,9 @@ def check_cam(kernel, report, rng, count):
                     else:
                         report.fail(name, f'the reference refuses with {message}; the kernel finds room', request)
             elif message == 'Operation produced no toolpaths':
-                rows = [part for _, answer in answers[index][1:] for parts in answer['ok']['segments'] for part in parts]
+                rows = [
+                    part for _, answer in answers[index][1:] for parts in answer['ok']['segments'] for part in parts
+                ]
                 if any(math.dist(*part) > 1e-6 for part in rows):
                     report.fail(name, 'the reference finds no hatch rows; the kernel finds some', request)
             else:
@@ -1042,7 +1071,9 @@ def check_cam(kernel, report, rng, count):
             if near_degenerate(paths, UNITS):
                 group['thin'] += 1
             else:
-                report.fail(name, f'the kernel refuses the contours with {composed}; the reference accepts them', request)
+                report.fail(
+                    name, f'the kernel refuses the contours with {composed}; the reference accepts them', request
+                )
             continue
         work = answers[index][1:]
         if operation in ('outside', 'inside'):
@@ -1050,7 +1081,9 @@ def check_cam(kernel, report, rng, count):
             region = operations.region(paths)
             result = region.buffer(distance, quad_segs=SEGMENTS)
             answer = work[0][1]['ok']
-            if compare_offset(report, name + ': region', request, region_of(answer), scaled(region), distance * UNITS, scaled(result)):
+            if compare_offset(
+                report, name + ': region', request, region_of(answer), scaled(region), distance * UNITS, scaled(result)
+            ):
                 tolerance = offset_tolerance(radius * UNITS) / UNITS
                 if not same_rings(report, name, request, answer['outlines'], reference, tolerance):
                     group['thin'] += 1  # a ring more or less; the regions agree, so it is thinner than the tolerance
@@ -1062,17 +1095,38 @@ def check_cam(kernel, report, rng, count):
             rings, number = [], 0
             while not inset.is_empty and number < len(passes):
                 rounding = OFFSET_GRID + number
-                ok = compare_offset(report, name + ': passes', request, region_of(passes[number]), scaled(region), -depth * UNITS, scaled(inset), rounding)
+                ok = compare_offset(
+                    report,
+                    name + ': passes',
+                    request,
+                    region_of(passes[number]),
+                    scaled(region),
+                    -depth * UNITS,
+                    scaled(inset),
+                    rounding,
+                )
                 if not ok:
                     break
                 rings.extend(passes[number]['outlines'])
-                inset, depth, number = inset.buffer(-project['stepover'], quad_segs=SEGMENTS), depth + project['stepover'], number + 1
+                inset, depth, number = (
+                    inset.buffer(-project['stepover'], quad_segs=SEGMENTS),
+                    depth + project['stepover'],
+                    number + 1,
+                )
             else:
                 # One of the two may make a last pass that the other finds empty, if it is thin enough.
-                last = scaled(inset) if not inset.is_empty else region_of(passes[number]) if number < len(passes) else Polygon()
+                last = (
+                    scaled(inset)
+                    if not inset.is_empty
+                    else region_of(passes[number])
+                    if number < len(passes)
+                    else Polygon()
+                )
                 if not thin(last, 4 * offset_tolerance(depth * UNITS)) or len(passes) > number + 1:
                     report.fail(name, f'{len(passes)} passes; the reference makes a different number', request)
-                elif len(rings) == len(reference) and not same_rings(report, name, request, rings, reference, offset_tolerance(depth * UNITS) / UNITS):
+                elif len(rings) == len(reference) and not same_rings(
+                    report, name, request, rings, reference, offset_tolerance(depth * UNITS) / UNITS
+                ):
                     group['thin'] += 1
         else:
             check_fill(report, name, request, operations.region(paths), work, reference)
@@ -1110,6 +1164,22 @@ def check_fill(report, name, request, region, work, reference):
         report.fail(name, f'hatch rows total {length:.6f} mm; the region allows {least:.6f} to {most:.6f}', request)
 
 
+LEGEND = """
+cases     results compared (for pocket and cam passes, one for each pass)
+thin      accepted although not within the limit: what differs is nowhere wider than the tolerance (a
+          sliver, a sharp corner of an offset, a hatch row along an edge)
+refused   cases the reference refuses; the kernel must refuse them with the same message
+area      the worst area of difference from GEOS as a share of what is allowed (boundary length times the
+          tolerance); for `...: distance` rows, the worst overshoot of the offset distance as a share of
+          the arc allowance; for `GEOS buffer: distance`, GEOS's own worst error as a multiple of what the
+          chords of its arcs explain
+distance  the worst Hausdorff distance from GEOS's result in grid units (nanometres), beside its limit;
+          for offset, pocket and cam rows as a share of the tolerance (limit 1); for `...: distance` rows
+          the worst shortfall from the offset distance in grid units
+stray     the furthest the kernel's boundary is from GEOS's in any case, thin ones included: where two
+          edges run nearly along each other, a sliver under a unit wide between them is kept by one
+          library and lost by the other for as far as the edges run"""
+
 GROUPS = {
     'boolean': (check_boolean, 1.0),
     'normalise': (check_normalise, 1.0),
@@ -1117,7 +1187,7 @@ GROUPS = {
     'offset': (check_offset, 1.0),
     'pocket': (check_pocket, 0.1),
     'clip': (check_clip, 0.5),
-    'artwork': (check_artwork, 0.2),
+    'artwork': (check_artwork, 0.05),
     'cam': (check_cam, 0.6),
 }
 
@@ -1142,7 +1212,9 @@ def replay(cli, dump):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--cli', required=True, type=Path, help='the kerfkite-cam executable')
-    parser.add_argument('--cases', type=int, default=4000, help='cases in a full-size group; costlier groups take a share')
+    parser.add_argument(
+        '--cases', type=int, default=4000, help='cases in a full-size group; costlier groups take a share'
+    )
     parser.add_argument('--seed', type=int, default=20261121)
     parser.add_argument('--only', help='comma-separated groups: ' + ', '.join(GROUPS))
     parser.add_argument('--dump', type=Path, help='write every request and answer to this file')
@@ -1164,16 +1236,15 @@ def main():
             check(kernel, report, rng, min(250, total - done))
         print(f'{name}: {total} cases in {time.perf_counter() - started:.1f} s', flush=True)
     print()
-    print(f'{"check":<26}{"cases":>8}{"thin":>7}{"refused":>8}{"area/allowed":>14}{"worst distance":>16}{"limit":>12}{"stray":>10}')
+    print(f'{"check":<26}{"cases":>8}{"thin":>7}{"refused":>8}{"area":>9}{"distance":>11}{"limit":>8}{"stray":>12}')
     for name, group in report.groups.items():
-        numbers = f'{group["area"]:>14.3f}{group["distance"]:>16.4g}{group["limit"]:>12.4g}{group["stray"]:>10.4g}'
+        numbers = f'{group["area"]:>9.3f}{group["distance"]:>11.4g}{group["limit"]:>8.4g}{group["stray"]:>12.4g}'
         print(f'{name:<26}{group["cases"]:>8}{group["thin"]:>7}{group["refused"]:>8}{numbers}')
-    if os.environ.get('KK_STRAYS'):
-        for name, values in report.strays.items():
-            values.sort()
-            print(name, 'stray percentiles 50/90/99/99.9/max:', [round(values[min(len(values) - 1, int(len(values) * q))], 3) for q in (0.5, 0.9, 0.99, 0.999, 1)], 'over 1.5:', sum(v > 1.5 for v in values), 'over 3:', sum(v > 3 for v in values))
-    print('\nDistances and limits are in grid units (nanometres).')
-    print(f'{kernel.requests} requests, kernel time {kernel.seconds:.1f} s; {len(report.failures)} failures')
+    print(LEGEND)
+    print(
+        f'{kernel.requests} requests, kernel time {kernel.seconds:.1f} s, at most {kernel.rounds} rounds of splitting'
+    )
+    print(f'{len(report.failures)} failures')
     return 1 if report.failures else 0
 
 

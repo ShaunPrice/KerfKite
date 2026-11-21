@@ -14,6 +14,8 @@
 //   artwork       {"shapes": [...], "offsets": [...]}     dark and clear shapes in order, then contours
 //   inspect       {"rings"}                               per ring: whether it is simple, its signed area
 //   locate        {"rings", "points"}                     "inside", "boundary" or "outside" for each point
+//   statistics    {}                                      "rounds": the most rounds of splitting any request
+//                                                         of this run has needed
 //
 // "segments" (edges in a quarter turn) and "tolerance" (millimetres) set how arcs are drawn. A region is
 // answered as {"polygons": [{"shell": [...], "holes": [[...]]}], "area": square millimetres}, with

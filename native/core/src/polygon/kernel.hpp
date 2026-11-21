@@ -260,6 +260,10 @@ class Arrangement {
     int rounds_ = 0;
 };
 
+// The most rounds of splitting any arrangement has needed since the program started, for tests and
+// measurements: a round that finds nothing to split is the last, so a simple case takes one or two.
+int resolve_rounds();
+
 inline bool filled(std::int32_t winding, FillRule rule) {
     return rule == FillRule::EvenOdd ? (winding & 1) != 0 : rule == FillRule::NonZero ? winding != 0 : winding > 0;
 }

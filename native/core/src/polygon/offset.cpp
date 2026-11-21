@@ -20,7 +20,6 @@
 // trigonometry, so the vertices are the same on every platform.
 #include <cmath>
 
-#include "kerfkite/cam.hpp"
 #include "kernel.hpp"
 
 namespace kerfkite {

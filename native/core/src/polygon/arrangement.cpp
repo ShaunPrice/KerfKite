@@ -14,9 +14,9 @@
 #include "kernel.hpp"
 
 #include <array>
+#include <atomic>
 #include <set>
 
-#include "kerfkite/cam.hpp"
 
 namespace kerfkite {
 namespace polygon {
@@ -26,6 +26,9 @@ namespace {
 
 // Rounds of splitting before giving up. Tests record how many are used: see docs/POLYGON-KERNEL.md.
 constexpr int kMaxRounds = 200;
+
+// The most rounds any resolve() has taken since the program started: see resolve_rounds().
+std::atomic<int> most_rounds{0};
 
 struct Split {
     std::uint32_t edge;
@@ -284,7 +287,11 @@ void Arrangement::resolve() {
         edges_.erase(out, edges_.end());
     }
     merge();
+    for (int seen = most_rounds.load(); rounds_ > seen && !most_rounds.compare_exchange_weak(seen, rounds_);) {
+    }
 }
+
+int resolve_rounds() { return most_rounds.load(); }
 
 void Arrangement::wind() {
     below_.assign(edges_.size(), std::array<std::int32_t, 2>{0, 0});

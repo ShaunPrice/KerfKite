@@ -1,5 +1,4 @@
 // Regions, Boolean operations and the union of many shapes, all through the arrangement.
-#include "kerfkite/cam.hpp"
 #include "kernel.hpp"
 
 namespace kerfkite {

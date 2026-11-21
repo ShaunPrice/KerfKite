@@ -5,6 +5,7 @@
 
 #include "kerfkite/cam.hpp"
 #include "kerfkite/polygon.hpp"
+#include "kernel.hpp"
 
 namespace kerfkite {
 
@@ -197,6 +198,7 @@ json polygon_call(const std::string &command, const json &request) {
         }
         return json{{"where", where}};
     }
+    if (op == "statistics") return json{{"rounds", polygon::detail::resolve_rounds()}};
     throw ValueError("Unknown polygon operation: " + op);
 }
 

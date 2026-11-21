@@ -367,6 +367,33 @@ static void order() {
     expect(paths[4][0] == PointMm{30, 0} && paths[4].front() == paths[4].back(), "the largest polygon last, closed");
 }
 
+// The largest coordinates: the arithmetic is exact to the limit, and beyond it input is refused.
+static void limits() {
+    const Coord edge = kMaxCoordinate;
+    expect(to_grid(to_mm(edge)) == edge && to_grid(to_mm(-edge)) == -edge, "the largest coordinate converts both ways");
+    const Ring wide = {{-edge, -edge}, {edge, -edge + 1}, {edge - 3, edge}};
+    const Ring tall = {{-edge, edge}, {-edge + 5, -edge}, {edge, edge - 7}};
+    const PolygonSet a = region(wide), b = region(tall);
+    const PolygonSet u = unite(a, b), n = intersect(a, b), x = exclusive_or(a, b);
+    expect(is_valid(u) && is_valid(n) && is_valid(x) && !n.empty(), "triangles across the whole range");
+    // Areas of the order of 1e11 square millimetres, each exact to about 1e-5 in a double.
+    const double slack = 8.0 * to_mm(edge) * 6e-6 + 1e-3;
+    expect(close_to(area(u) + area(n), area(a) + area(b), slack) && close_to(area(x), area(u) - area(n), slack), "areas at the limit of the range");
+    absorb(u), absorb(n), absorb(x);
+    const PolygonSet corner = region(Ring{{edge - 5000000, edge - 5000000}, {edge, edge - 5000000}, {edge, edge}, {edge - 5000000, edge}});
+    const PolygonSet grown = offset(corner, to_mm(kMaxDistance));
+    expect(is_valid(grown) && subtract(corner, grown).empty() && offset(corner, -2.5).empty() && offset(corner, -2.4).size() == 1, "offsets at the corner of the range");
+    absorb(grown);
+    const LineClipper clipper(u);
+    const std::vector<Segment> parts = clipper.clip({-edge, -edge}, {edge, edge});
+    expect(!parts.empty() && parts.front()[0] == Point{-edge, -edge}, "a line across the whole range");
+    const Coord beyond = detail::kHardLimit + 1;
+    expect(rejects([&] { normalise({Ring{{0, 0}, {beyond, 0}, {0, 5}}}, FillRule::NonZero); }) && rejects([&] { is_simple(Ring{{0, 0}, {5, 0}, {0, -beyond}}); }) &&
+               rejects([&] { clipper.clip({0, 0}, {beyond, 1}); }),
+           "coordinates beyond the limit are refused");
+    expect(rejects([] { ArcOptions bad; bad.segments_per_quarter = 0; disc(0, 0, 1, bad); }) && rejects([] { ArcOptions bad; bad.tolerance = -1; disc(0, 0, 1, bad); }), "arc settings out of range are refused");
+}
+
 // Properties of generated cases. Everything a result is checked against is computed here, exactly.
 static void generated() {
     using namespace kerfkite::polygon::detail;
@@ -474,7 +501,6 @@ static void generated() {
                "hatch rows cover the area, case " + std::to_string(round));
     }
     expect(worst_rounds <= 8, "resolving took " + std::to_string(worst_rounds) + " rounds");
-    std::printf("generated cases: resolving took at most %d rounds\n", worst_rounds);
 
     // Edges at fine angles through nearly one point, on a grid of a few units: the hardest thing to resolve.
     Arrangement knot;
@@ -595,14 +621,16 @@ int main(int argc, char **argv) {
         offsets();
         lines();
         order();
+        limits();
         generated();
         if (argc > 1 && std::strcmp(argv[1], "--bench") == 0) bench();
     } catch (const std::exception &error) {
         std::printf("FAIL an exception: %s\n", error.what());
         ++failures;
     }
+    std::printf("resolving took at most %d rounds\n", detail::resolve_rounds());
     // The same on every compiler and processor, and with either 128-bit integer.
-    const std::uint64_t recorded = 0x93d1eb6e180871aeULL;
+    const std::uint64_t recorded = 0xd1e20f175ce1c906ULL;
     std::printf("digest %016llx\n", static_cast<unsigned long long>(digest));
     expect(digest == recorded, "the generated results differ from the recorded digest");
     std::printf(failures ? "polygon self-test FAILED\n" : "polygon self-test passed\n");
