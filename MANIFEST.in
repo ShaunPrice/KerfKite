@@ -3,4 +3,5 @@ recursive-include tests *.py *.cjs *.js
 recursive-include docs *.md
 recursive-include validation *.py *.cjs *.js *.cpp
 include studio/_relief_native.cpp studio/_stock_native.cpp studio/_gcode_native.cpp
-include native/core/include/kerfkite/number_text.hpp
+recursive-include native/core *.hpp *.cpp *.in
+include native/third_party/nlohmann/json.hpp native/third_party/nlohmann/LICENSE.MIT

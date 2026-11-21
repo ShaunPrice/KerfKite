@@ -84,7 +84,7 @@ $('preview').onclick=task(generateDesignPreview);
 $('export').onclick=task(()=>{if(!preview||previewProject!==JSON.stringify(machiningProject()))throw Error('Generate a current preview first');download('engraving.nc',preview.lines.join('\n')+'\n');});
 function scrub(){if(!preview)return;const n=Math.max(1,Math.ceil(preview.segments.length*Number($('scrub').value)/100));const s=preview.segments[n-1],circle=document.createElementNS(NS,'circle');circle.setAttribute('cx',s[2]);circle.setAttribute('cy',Number($('height').value)-s[3]);circle.setAttribute('r','1.7');circle.setAttribute('fill','#c77829');$('playhead').replaceChildren(circle);}$('scrub').oninput=scrub;
 $('connect').onclick=task(async()=>{await api('connect',{port:$('port').value,protocol:$('protocol').value});message('Connection requested');});$('disconnect').onclick=task(()=>api('disconnect',{}));
-$('run').onclick=task(async()=>{if(!preview||previewProject!==JSON.stringify(machiningProject()))throw Error('Generate a current preview first');if(!$('confirmed').checked)throw Error('Confirm machine setup first');const p=machiningProject();await api('run',{project:p,...reviewedRunOptions(p),confirmed:true});$('confirmed').checked=false;message('Job submitted; monitor the controller status');});
+$('run').onclick=task(async()=>{if(!preview||previewProject!==JSON.stringify(machiningProject()))throw Error('Generate a current preview first');if(!$('confirmed').checked)throw Error('Confirm machine setup first');const p=machiningProject();await api('run',{project:p,...reviewedRunOptions(p),...(window.KerfKiteLeveling?.runOptions()||{}),confirmed:true});$('confirmed').checked=false;message('Job submitted; monitor the controller status');});
 for(const b of document.querySelectorAll('[data-command]'))b.onclick=task(async()=>{const action=b.dataset.command;if(['home','zero','unlock'].includes(action)&&!confirm(`${b.textContent} on the connected controller?`))return;await api('command',{action});});
 for(const b of document.querySelectorAll('[data-jog]'))b.onclick=task(()=>{const[axis,sign]=b.dataset.jog.split(',');return api('command',{action:'jog',axis,distance:Number(sign)*Number($('jogDistance').value),feed:Number($('jogFeed').value)});});
 $('demo').onclick=()=>{objects=[{name:'Workshop badge',paths:[[[30,30],[130,30],[130,90],[30,90],[30,30]],[[40,40],[120,40],[120,80],[40,80],[40,40]]]},{name:'Diamond',paths:[[[80,48],[105,60],[80,72],[55,60],[80,48]]]}];selected=0;invalidate();draw();};
@@ -275,6 +275,7 @@ $('armPhone').onclick=task(async()=>{
   if(armInFlight)throw Error('An arm request is already in progress.');
   if(!preview||previewProject!==JSON.stringify(machiningProject()))throw Error('Generate a current preview first');
   if(!$('confirmed').checked)throw Error('Confirm setup first');
+  window.KerfKiteLeveling?.requireWorkstationStart();
   const project=machiningProject(),snapshot=preview,document=previewProject,generation=pageGeneration;
   armInFlight=true;
   cancelPhoneArm();

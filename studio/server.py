@@ -4,6 +4,7 @@ import atexit
 import secrets
 from flask import Flask, jsonify, request, send_from_directory, g
 from .windows_support import require_supported_windows
+from . import leveling
 from .cam import generate, number
 from .design_api import register_design_routes
 from .device import DeviceController as Controller
@@ -15,6 +16,11 @@ from .protocols import get_protocol
 
 # The only fields a controller command may carry; jog is the one action with arguments.
 COMMAND_FIELDS = frozenset(('action', 'axis', 'distance', 'feed'))
+# Probe settings the workstation may pass through to the probing plan.
+PROBE_FIELDS = ('spacing', 'margin', 'clearance', 'depth', 'feed', 'plate')
+# A probe line is acknowledged only when its motion ends, so it has to end well inside the
+# acknowledgement timeout of the transport.
+PROBE_SECONDS = 10
 
 
 def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_monitor=None):
@@ -44,6 +50,9 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
             '/api/run',
             '/api/command',
             '/api/head',
+            '/api/level/probe',
+            '/api/level/collect',
+            '/api/level/clear',
         ):
             ctl.lock.acquire()
             g.machine_lock = True
@@ -89,6 +98,7 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
             stock_wire_v1=True,
             phone_arm_challenge=True,
             rotary_stream=True,
+            probe_leveling=leveling.available(),
             hardware_enabled=allow_hardware,
         )
 
@@ -189,6 +199,107 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
             )
         return generate_rotary(project, data['rotary'])
 
+    # Probe levelling. The probing plan and the surface measured with it are kept here, for one placement
+    # of the stock: anything that can move work zero or the tool length forgets them.
+    level = {'plan': None, 'surface': None}
+
+    def forget_level():
+        level['plan'] = level['surface'] = None
+
+    def levelling_project(data):
+        project = data.get('project')
+        if not isinstance(project, dict):
+            raise ValueError('Supply a design project')
+        if project.get('mode') != 'router':
+            raise ValueError('Probe levelling applies to router jobs')
+        if project.get('rotary') or 'rotary' in data:
+            raise ValueError('Probe levelling does not apply to rotary jobs')
+        if get_protocol(project.get('protocol', 'grbl')).family != 'grbl':
+            raise ValueError('Probe levelling needs a Grbl-family controller (G38.2)')
+        return project
+
+    def levelled(job, project, status):
+        surface = level['surface']
+        if surface is None:
+            raise ValueError('Probe the stock surface before running a levelled job')
+        result = leveling.level(job['lines'], surface)
+        if not status.get('simulated'):
+            lowest = min((min(segment[4], segment[6]) for segment in job['segments']), default=0.0)
+            stock = number(project.get('stock_thickness'), 'Stock thickness', 0.01, 200)
+            if -(lowest + min(surface['offsets'])) > stock:
+                raise ValueError('Levelled cut exceeds entered stock thickness')
+        return result['lines']
+
+    def level_state():
+        plan, surface = level['plan'], level['surface']
+        return dict(
+            available=leveling.available(),
+            plan=plan and dict(grid=plan['grid'], points=plan['points'], probed=ctl.status().get('probe_count', 0)),
+            surface=surface and dict(surface, lowest=min(surface['offsets']), highest=max(surface['offsets'])),
+        )
+
+    @app.get('/api/level')
+    def level_status():
+        return jsonify(level_state())
+
+    @app.post('/api/level/probe')
+    def level_probe():
+        data = payload()
+        if data.get('confirmed') is not True:
+            raise ValueError(
+                'Confirm that the probe is connected and tested, the spindle is stopped and work zero is set at the stock surface'
+            )
+        project = levelling_project(data)
+        job = generate(project)
+        validate_machine(project, job)
+        plan = leveling.probe_plan(
+            dict(
+                {key: data[key] for key in PROBE_FIELDS if key in data},
+                bounds=job['bounds'],
+                width=project['width'],
+                height=project['height'],
+                zero=True,
+            )
+        )
+        if (plan['clearance'] + plan['depth']) / plan['feed'] * 60 > PROBE_SECONDS:
+            raise ValueError(
+                f'Each probe must finish within {PROBE_SECONDS} seconds; raise the probe feed or lower the clearance and depth'
+            )
+        jobs.disarm()
+        forget_level()
+        ctl.start(plan['lines'])
+        level['plan'] = plan
+        return jsonify(ok=True, **level_state())
+
+    @app.post('/api/level/collect')
+    def level_collect():
+        data = payload()
+        plan = level['plan']
+        if plan is None:
+            raise ValueError('Probe the stock surface first')
+        status = ctl.status()
+        if status.get('active'):
+            raise ValueError('Probing is still running')
+        if status.get('error'):
+            raise ValueError('Probing did not finish: ' + str(status['error']))
+        reports = ctl.probe_reports()
+        if len(reports) != len(plan['points']):
+            raise ValueError(f'Probing stopped after {len(reports)} of {len(plan["points"])} points; probe again')
+        level['surface'] = leveling.height_map(plan, reports=reports, limit=data.get('limit'))
+        return jsonify(ok=True, **level_state())
+
+    @app.post('/api/level/clear')
+    def level_clear():
+        forget_level()
+        return jsonify(ok=True, **level_state())
+
+    @app.post('/api/level/program')
+    def level_program():
+        data = payload()
+        project = levelling_project(data)
+        job = generate(project)
+        return jsonify(lines=levelled(job, project, {'simulated': True}))
+
     @app.post('/api/arm')
     def arm_phone():
         data = payload()
@@ -234,6 +345,7 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
                 'Physical ports are disabled. Start with --enable-hardware only after completing machine setup and commissioning; otherwise use Simulator.'
             )
         jobs.invalidate_controls()
+        forget_level()
         if hasattr(ctl, 'select_protocol'):
             ctl.select_protocol(data.get('protocol', 'grbl'))
         ctl.connect(port)
@@ -242,6 +354,7 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
     @app.post('/api/disconnect')
     def disconnect():
         jobs.invalidate_controls()
+        forget_level()
         ctl.disconnect()
         return jsonify(ok=True)
 
@@ -254,11 +367,16 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
         data = payload()
         if data.get('confirmed') is not True:
             raise ValueError('Confirm work zero, tool and clear work area')
+        if not isinstance(data.get('leveled', False), bool):
+            raise ValueError('Levelled must be true or false')
         job = prepared(data)
-        validate_machine(data['project'], job)
+        status = validate_machine(data['project'], job)
+        lines = job['lines']
+        if data.get('leveled'):
+            lines = levelled(job, levelling_project(data), status)
         jobs.disarm()
-        ctl.start(job['lines'])
-        return jsonify(ok=True)
+        ctl.start(lines)
+        return jsonify(ok=True, lines=len(lines))
 
     @app.post('/api/head')
     def apply_head():
@@ -267,6 +385,7 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
         if mode not in ('router', 'laser', 'knife') or data.get('confirmed') is not True:
             raise ValueError('Confirm the mounted head before applying mode')
         jobs.disarm()
+        forget_level()
         state = ctl.status()
         if not state.get('connected') or state.get('active') or state.get('state') != 'Idle':
             raise ValueError('Head mode changes require an idle connected controller')
@@ -296,6 +415,8 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
             jobs.invalidate_controls()
         elif action not in ('hold', 'resume'):
             jobs.disarm()
+        if action in ('reset', 'home', 'unlock', 'zero'):
+            forget_level()  # work zero may no longer be where the surface was probed
         ctl.command(**data)
         return jsonify(ok=True)
 

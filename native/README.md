@@ -24,6 +24,14 @@ program was written, 2 when the project was rejected (the message is the one Stu
 project needs a feature that is not ported yet. `--json` writes the whole job: lines, preview segments, cut
 length and time, bounds and warnings.
 
+    kerfkite-cam probe-plan request.json
+    kerfkite-cam height-map request.json
+    kerfkite-cam level request.json
+
+are the three steps of probe levelling: a probing program over the cutting bounds of a job, the surface
+heights from the probe results, and a program corrected to follow that surface. Each takes a JSON request
+(`-` reads standard input) and writes a JSON answer. See `docs/PROBE-LEVELING.md`.
+
 ## What is ported
 
 | Area | State |
@@ -35,6 +43,7 @@ length and time, bounds and warnings.
 | Python's `math.dist` and `sum()` arithmetic (`core/include/kerfkite/py_math.hpp`) | Done, to the last bit, as CPython 3.12 and later compute them. |
 | Ordered multi-operation jobs | Done; each operation must itself be ported. |
 | Controller post-processing (Grbl family, Marlin, LinuxCNC, Mach3, Mach4, UCCNC) | Done. The table is read from `studio/static/protocols.json` at build time. |
+| Probe levelling: probing plan, height map, levelled program (`core/src/leveling.cpp`) | Done. New in the core: there is no Python version, and Studio calls this code through its extension. |
 | Drag-knife paths, ramp and helix entry, holding tabs, drilling | Not yet. Declined with exit status 3. |
 | Offset, pocket and fill operations | Not yet. These need a geometry library (GEOS, which the Python code reaches through Shapely). |
 | Rotary output, relief, stock simulation, importers, sender, pendant, editors | Not yet. |

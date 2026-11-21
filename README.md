@@ -72,7 +72,7 @@ For phone control, open **Control → Phone pendant** on the Studio workstation 
 
 ## Workshop tools
 
-* **Router.** Create a single hole or drilling pattern, choose a peck depth, place holding tabs directly on a compensated contour, and use ramp or helical entry on eligible toolpaths. [Drilling](docs/DRILLING.md) · [Router entry](docs/ROUTER-ENTRY.md)
+* **Router.** Create a single hole or drilling pattern, choose a peck depth, place holding tabs directly on a compensated contour, and use ramp or helical entry on eligible toolpaths. For thin engraving such as circuit boards, probe the stock on a Grbl-family controller and run the job following the measured surface. [Drilling](docs/DRILLING.md) · [Router entry](docs/ROUTER-ENTRY.md) · [Probe levelling](docs/PROBE-LEVELING.md)
 * **Laser and layout.** Place perforations or holding bridges, choose straight or curved leads, move layout groups and snap to a grid or visible vertices. [Laser patterns](docs/LASER-PATTERNS.md) · [Layout tools](docs/GEOMETRY.md)
 * **Lettering and labels.** Engrave centreline lettering with Workshop Mono, select installed fonts where supported, and create numbered text, Code 39 or QR labels with a live proof. [Production labels](docs/LABELS.md)
 * **CAD, import and camera.** Edit dimension-driven Bézier sketches, loft between two sections, inspect vector PDF pages, import compound SVG paths at physical scale and fit radial lens correction to measured targets. [Solid CAD](docs/SOLID-CAD.md) · [Sketches](docs/SKETCH.md) · [Import guide](docs/PROGRAM-IMPORT.md) · [Camera setup](docs/CAMERA-REGISTER.md)

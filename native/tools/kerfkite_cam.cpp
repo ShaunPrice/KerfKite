@@ -1,6 +1,9 @@
 // kerfkite-cam: G-code from a Studio project without Python.
 //
 //   kerfkite-cam generate PROJECT.json [-o PROGRAM.nc] [--json]
+//   kerfkite-cam probe-plan REQUEST.json     a probing program for the cutting bounds of a job
+//   kerfkite-cam height-map REQUEST.json     the surface heights from the probe results
+//   kerfkite-cam level REQUEST.json          a program corrected to follow that surface
 //   kerfkite-cam batch CASES.jsonl
 //   kerfkite-cam numbers
 //   kerfkite-cam arithmetic
@@ -22,6 +25,7 @@
 #include <vector>
 
 #include "kerfkite/cam.hpp"
+#include "kerfkite/leveling.hpp"
 #include "kerfkite/number_text.hpp"
 #include "kerfkite/py_math.hpp"
 
@@ -31,6 +35,7 @@ namespace {
 
 int usage() {
     std::cerr << "usage: kerfkite-cam generate PROJECT.json [-o PROGRAM.nc] [--json]\n"
+                 "       kerfkite-cam probe-plan|height-map|level REQUEST.json\n"
                  "       kerfkite-cam batch CASES.jsonl\n"
                  "       kerfkite-cam numbers < VALUES\n";
     return 1;
@@ -94,6 +99,25 @@ int generate(int argc, char **argv) {
         return 3;
     } catch (const json::exception &error) {
         std::cerr << "kerfkite-cam: the project is not valid JSON: " << error.what() << "\n";
+        return 1;
+    }
+}
+
+// A levelling command: the request is a JSON file (or - for standard input), the answer JSON on standard output.
+int request(const std::string &command, const std::string &path) {
+    std::string text;
+    if (!read(path, text)) {
+        std::cerr << "kerfkite-cam: cannot read " << path << "\n";
+        return 1;
+    }
+    try {
+        std::cout << kerfkite::call(command, json::parse(text)).dump() << "\n";
+        return 0;
+    } catch (const kerfkite::ValueError &error) {
+        std::cerr << error.what() << "\n";
+        return 2;
+    } catch (const json::exception &error) {
+        std::cerr << "kerfkite-cam: the request is not valid JSON: " << error.what() << "\n";
         return 1;
     }
 }
@@ -174,6 +198,7 @@ int main(int argc, char **argv) {
     const std::string command = argv[1];
     if (command == "generate") return generate(argc, argv);
     if (command == "batch" && argc == 3) return batch(argv[2]);
+    if ((command == "probe-plan" || command == "height-map" || command == "level") && argc == 3) return request(command, argv[2]);
     if (command == "numbers" && argc == 2) return numbers();
     if (command == "arithmetic" && argc == 2) return arithmetic();
     return usage();
