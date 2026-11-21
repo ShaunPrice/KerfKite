@@ -60,6 +60,10 @@ add_test(NAME geometry COMMAND kerfkite_geometry_selftest)
 add_executable(kerfkite_solid_selftest tests/solid_selftest.cpp)
 target_link_libraries(kerfkite_solid_selftest PRIVATE kerfkite_core)
 add_test(NAME solid COMMAND kerfkite_solid_selftest)
+# Generated Boolean cases, with a digest of every result. The digest is recorded, so each platform and
+# compiler the checks run on has to produce the same solids to the last vertex.
+add_test(NAME solid_same_everywhere COMMAND kerfkite_solid_selftest --digest 150 2026)
+set_tests_properties(solid_same_everywhere PROPERTIES PASS_REGULAR_EXPRESSION "0 failed.*digest d606943f815a575d")
 add_executable(kerfkite_polygon_selftest tests/polygon_selftest.cpp)
 target_link_libraries(kerfkite_polygon_selftest PRIVATE kerfkite_core)
 add_test(NAME polygon COMMAND kerfkite_polygon_selftest)
