@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#ai-vision">Ai Vision</a> <a href="#android">Android</a> <a href="#assemblies">Assemblies</a> <a href="#branding">Branding</a> <a href="#cad-macros">Cad Macros</a> <a href="#cad-scripting">Cad Scripting</a> <a href="#camera-register">Camera Register</a> <a href="#desktop">Desktop</a> <a href="#developer">Developer</a> <a href="#drilling">Drilling</a> <a href="#fixtures">Fixtures</a> <a href="#geometry">Geometry</a> <a href="#install">Install</a> <a href="#installer-builds">Installer Builds</a> <a href="#labels">Labels</a> <a href="#laser-order">Laser Order</a> <a href="#laser-patterns">Laser Patterns</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#licensing">Licensing</a> <a href="#lightburn-import">Lightburn Import</a> <a href="#machine-setup">Machine Setup</a> <a href="#materials">Materials</a> <a href="#mcp-hosting">Mcp Hosting</a> <a href="#mcp">Mcp</a> <a href="#native">Native</a> <a href="#pcb">Pcb</a> <a href="#performance">Performance</a> <a href="#phone-connections">Phone Connections</a> <a href="#platforms">Platforms</a> <a href="#probe-leveling">Probe Leveling</a> <a href="#product">Product</a> <a href="#program-import">Program Import</a> <a href="#protocols">Protocols</a> <a href="#release-review">Release Review</a> <a href="#request-coverage">Request Coverage</a> <a href="#rotary">Rotary</a> <a href="#router-entry">Router Entry</a> <a href="#sbc">Sbc</a> <a href="#simulation">Simulation</a> <a href="#sketch">Sketch</a> <a href="#solid-cad">Solid Cad</a> <a href="#status">Status</a> <a href="#supply-chain">Supply Chain</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#svg">Svg</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#user-guide">User Guide</a> <a href="#web">Web</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#ai-vision">Ai Vision</a> <a href="#android">Android</a> <a href="#assemblies">Assemblies</a> <a href="#branding">Branding</a> <a href="#cad-macros">Cad Macros</a> <a href="#cad-scripting">Cad Scripting</a> <a href="#camera-register">Camera Register</a> <a href="#desktop">Desktop</a> <a href="#developer">Developer</a> <a href="#drilling">Drilling</a> <a href="#fixtures">Fixtures</a> <a href="#geometry">Geometry</a> <a href="#install">Install</a> <a href="#installer-builds">Installer Builds</a> <a href="#labels">Labels</a> <a href="#laser-order">Laser Order</a> <a href="#laser-patterns">Laser Patterns</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#licensing">Licensing</a> <a href="#lightburn-import">Lightburn Import</a> <a href="#machine-setup">Machine Setup</a> <a href="#materials">Materials</a> <a href="#mcp-hosting">Mcp Hosting</a> <a href="#mcp">Mcp</a> <a href="#native">Native</a> <a href="#pcb">Pcb</a> <a href="#performance">Performance</a> <a href="#phone-connections">Phone Connections</a> <a href="#platforms">Platforms</a> <a href="#polygon-kernel">Polygon Kernel</a> <a href="#probe-leveling">Probe Leveling</a> <a href="#product">Product</a> <a href="#program-import">Program Import</a> <a href="#protocols">Protocols</a> <a href="#release-review">Release Review</a> <a href="#request-coverage">Request Coverage</a> <a href="#rotary">Rotary</a> <a href="#router-entry">Router Entry</a> <a href="#sbc">Sbc</a> <a href="#simulation">Simulation</a> <a href="#sketch">Sketch</a> <a href="#solid-cad">Solid Cad</a> <a href="#status">Status</a> <a href="#supply-chain">Supply Chain</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#svg">Svg</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#user-guide">User Guide</a> <a href="#web">Web</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
 <p>KerfKite Studio is an open-source CAD/CAM workbench for interchangeable CNC router, laser and drag-knife heads. Design in a browser, simulate a job, and prepare output for a supported controller. The Python application runs locally or as an authenticated HTTPS editor. KerfKite Pocket on Android includes an offline sketch editor and a CNC pendant paired with the Studio server.</p>
 <p><a href="screen-desktop-workspace.png"><img src="screen-desktop-workspace.png" alt="KerfKite’s desktop editor showing wattle, banksia and scarlet gum tags on a shared sheet, with separate layers for the outlines, engraving and lettering" /></a></p>
 <p>Three botanical tags share a sheet. The <strong>Layers</strong> tab separates engraving, lettering and cut outlines.</p>
@@ -2510,6 +2510,537 @@ sh start.sh --port 8765
 <pre><code class="language-sh">.venv/bin/python scripts/simulate_studio.py --json pi-result.json
 </code></pre>
 <p>The report identifies the completed cases. Actual machine travel, cutter and laser calibration, clamping and material response need commissioning on the target machine.</p>
+</section><section id="polygon-kernel"><h1>The polygon kernel</h1>
+<p>KerfKite's own two-dimensional polygon library: regions with holes, Boolean operations, round offsets, line
+clipping and the union of very many shapes. It is part of the native core (<code>native/core/src/polygon/</code>,
+interface in <code>native/core/include/kerfkite/polygon.hpp</code>) and depends on nothing but the C++17 standard
+library. It was written for KerfKite from the published methods named under <a href="#sources">Sources</a>, not taken
+or translated from another library.</p>
+<p><strong>It is not yet what the application uses.</strong> Inside and outside offsets, pockets and hatch fills still go
+through GEOS (<code>native/core/src/operations.cpp</code>) and, in Studio, through Shapely. The kernel is built and
+tested beside them, with or without GEOS in the build, and can be tried through <code>kerfkite-cam polygon</code>.
+<a href="#switching-the-operations-over">Switching the operations over</a> lists what replaces what.</p>
+<h2>What it does</h2>
+<table>
+<thead>
+<tr>
+<th>Need</th>
+<th>Function</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The region of closed contours under even-odd fill, as <code>studio.operations.region</code> builds it</td>
+<td><code>compose</code></td>
+</tr>
+<tr>
+<td>The region of any rings (crossing, overlapping, repeated) under even-odd, non-zero or positive fill</td>
+<td><code>normalise</code></td>
+</tr>
+<tr>
+<td>Union, intersection, difference, symmetric difference of regions with holes</td>
+<td><code>combine</code>, <code>unite</code>, <code>intersect</code>, <code>subtract</code>, <code>exclusive_or</code></td>
+</tr>
+<tr>
+<td>The union of many regions at once</td>
+<td><code>unite_all</code></td>
+</tr>
+<tr>
+<td>A region grown or shrunk by a distance, with round joins</td>
+<td><code>offset</code></td>
+</tr>
+<tr>
+<td>A disc, a rectangle, an obround, a polyline drawn with a round pen</td>
+<td><code>disc</code>, <code>rectangle</code>, <code>obround</code>, <code>stroke</code></td>
+</tr>
+<tr>
+<td>Dark and clear shapes in drawing order, as a photoplotter file draws them</td>
+<td><code>Artwork</code></td>
+</tr>
+<tr>
+<td>Straight segments cut to a region (hatch rows)</td>
+<td><code>LineClipper</code></td>
+</tr>
+<tr>
+<td>Area, bounds, orientation, point location, whether a ring is simple, whether a region is valid</td>
+<td><code>area</code>, <code>signed_area</code>, <code>bounds</code>, <code>orientation</code>, <code>locate</code>, <code>is_simple</code>, <code>is_valid</code></td>
+</tr>
+<tr>
+<td>The rings of a region in the order and directions the application cuts them</td>
+<td><code>outlines</code></td>
+</tr>
+</tbody>
+</table>
+<p>Not provided: Voronoi diagrams (V-carving still needs them), curves other than circular arcs drawn as straight
+edges, and anything in three dimensions.</p>
+<h2>The grid</h2>
+<p>Every vertex is a pair of 64-bit integers counting nanometres (1e-6 mm). A millimetre value is multiplied by
+1e6 and rounded to the nearest whole number on the way in, halves upwards, and a result is divided by 1e6
+on the way out, so every coordinate of a result is a whole number of nanometres.</p>
+<p>Whether a point is left or right of a line, whether two edges cross, which ring contains which: every such
+decision is made with exact integer arithmetic in 128 bits. No tolerance is compared anywhere to decide the
+shape of a result. The compiler's 128-bit integer is used where there is one; where there is not (MSVC) the
+same arithmetic is done from 64-bit pieces (<code>wide.hpp</code>). The two give the same results, and the self-test is
+built both ways.</p>
+<h3>Rounding</h3>
+<p>A point that has to be constructed, where two edges cross, is not on the grid in general. It is rounded to
+the nearest grid point, and both edges are bent through that point; so is every other edge that passes
+within half a unit of it. A vertex that lies exactly on an edge, and the ends of a length two edges share,
+split the edge where they are, and nothing moves. Bending an edge can make it meet another that it missed
+before, so the pieces are looked at again, round after round, until a round finds nothing: the edges then
+meet only at shared end points, as exact arithmetic confirms and not as a rule of thumb assumes. This is
+snap rounding, repeated until it is stable.</p>
+<p>An edge is never bent towards a vertex that was already there. An edge and a vertex may therefore end
+closer than a unit and still exactly apart, each bend moves an edge by at most 0.71 nm, and a result put
+through the kernel again comes back vertex for vertex.</p>
+<p>What this means for a result:</p>
+<ul>
+<li>It is always a valid region. Shared edges, collinear overlaps, touching vertices, slivers, rings that
+touch themselves, repeated points and features of a few nanometres are ordinary input.</li>
+<li>An edge of a result lies within about a nanometre of where exact arithmetic would put it. In the
+comparison with GEOS the limit used is 3 nm; in a sample of 9,830 Boolean results the kernel's boundary
+was within 0.71 nm of GEOS's in 99% and within 1 nm in 99.8%, the rest being slivers, as follows.</li>
+<li>A sliver thinner than a nanometre may vanish, and where two edges run nearly along each other the sliver
+between them may be kept or lost for as far as they run.</li>
+<li>A simple case takes one round or two, the second finding nothing. The most seen in any test is
+4. The limit is 200 rounds, after which the kernel refuses the input rather than run on; no
+input has come near it, but that none can is not proved.</li>
+</ul>
+<h2>Regions and Boolean operations</h2>
+<p>All of them are one procedure (<code>arrangement.cpp</code>):</p>
+<ol>
+<li>Every ring gives edges, each recording by how much the winding number of its operand rises across it.</li>
+<li>The edges are resolved as described under <a href="#rounding">Rounding</a>. Pairs of edges near each other are
+found with a grid of buckets, with a finer grid inside any crowded bucket.</li>
+<li>A sweep from left to right gives the winding number of each operand on both sides of every edge.</li>
+<li>An edge with the inside on one side only is boundary. What &quot;inside&quot; means is the only difference
+between the operations and the fill rules.</li>
+<li>Boundary edges are followed into closed walks, always turning so as to stay on one face of the inside. A
+walk that passes a vertex twice is cut there into simple rings. Counter-clockwise rings are outer rings
+and clockwise rings are holes; a second sweep finds the outer ring of each hole.</li>
+</ol>
+<h2>Offsets</h2>
+<p>Growing a region by <code>d</code> is the union of the region with the strip swept by each edge and the sector round
+each corner that turns away from the outside. The kernel builds those pieces on the grid as fans of
+triangles round the vertices of the region, and checks each triangle, exactly, to be counter-clockwise or
+flat. The boundaries of the region and of all the pieces add up to one closed curve for each ring, and
+because no piece winds negatively the winding number of that curve at a point is the number of pieces over
+the point, plus one inside the region. The grown region is therefore exactly where the winding number is
+positive. No loop of the curve has to be recognised and cut out, and a feature smaller than the tool cannot
+turn inside out. Shrinking is growing the outside.</p>
+<p>An offset is therefore the exact union (or difference) of polygons that are themselves on the grid, and is
+always a valid region. Its accuracy is that of those polygons:</p>
+<ul>
+<li>It is never short of the distance by more than the rounding (a few nanometres).</li>
+<li>Round joins are drawn <strong>outside</strong> the true arc: a run of tangents to the circle, each turning from the
+last by at most 1.0625 steps, a step being a quarter turn divided by <code>segments_per_quarter</code>. The corners
+of the run lie outside the true arc by at most <code>d * (1 / cos(0.53125 * step) - 1)</code>, which at the default
+of 32 segments is 0.00034 <code>d</code>: half a micrometre for a 3.175 mm cutter. GEOS draws chords inside the arc,
+short by up to 0.00030 <code>d</code>. For tool paths the kernel's choice is the safe one: the tool is never nearer
+the work than its radius.</li>
+<li><code>ArcOptions::tolerance</code> sets the allowance in millimetres instead, and the number of segments then
+follows from each radius.</li>
+<li>A corner that turns by less than a step is a single mitred point. Offsetting a result again therefore adds
+no vertices to its arcs, and the passes of a pocket do not drift: pass 40 is the inset of the contour by
+the whole depth, to the same allowance as pass 1.</li>
+<li>An offset smaller than one grid unit returns the region unchanged.</li>
+</ul>
+<p>Directions for arcs come from rotating by a fixed step, from halving an angle with square roots, and from
+the series for one sine and cosine. No trigonometric function of the platform's library is called.</p>
+<p>Discs, obrounds and the ends and joins of strokes are drawn the same way, so a disc is never smaller than
+its diameter.</p>
+<h2>Line clipping</h2>
+<p><code>LineClipper::clip(a, b)</code> gives the parts of the segment from <code>a</code> to <code>b</code> that lie in the region or along its
+boundary, in order from <code>a</code>. The boundary edges that cross the line are found exactly and ordered along it by
+comparing their positions as exact fractions (256-bit products). A vertex lying exactly on the line has no
+side, so crossings are counted twice, with such vertices taken as left of the line and as right of it, and
+the parts found either way are joined: a line along an edge of the region is a part, and a line that only
+touches a corner gives nothing. Each end of a part is then rounded to the grid.</p>
+<p>The ends of the segment itself are grid points, so a hatch row asked for at an arbitrary height or angle is
+moved by up to half a nanometre. Where such a row meets an edge at a shallow angle its end slides along the
+edge by correspondingly more; it stays on the row and at the boundary.</p>
+<h2>The order of a result</h2>
+<ul>
+<li>Outer rings run counter-clockwise, holes clockwise.</li>
+<li>A ring does not repeat its first vertex and starts at its smallest vertex, comparing x and then y.</li>
+<li>A vertex on the straight line between its neighbours is dropped, unless another ring touches there, in
+which case both rings keep it.</li>
+<li>The holes of a polygon are in the order of their first vertices, and the polygons of a region in the order
+of the first vertices of their outer rings; rings with the same first vertex are ordered by their following
+vertices.</li>
+<li>Two rings may touch at single points. They never cross or share a length of edge, no ring touches itself,
+and the interior of each polygon is connected.</li>
+</ul>
+<p><code>outlines</code> re-orders a region for the application, as <code>studio.operations.outlines</code> does: polygons by area,
+smallest first, and for each its holes and then its outer ring, every ring closed by repeating its first
+vertex. It gives outer rings clockwise and holes counter-clockwise, the directions GEOS has given until now,
+so the direction of cut does not change.</p>
+<h2>Limits</h2>
+<table>
+<thead>
+<tr>
+<th>Limit</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Coordinates</td>
+<td>2^37 units either side of the origin, about 137 m. The application's work area is within 10 m.</td>
+</tr>
+<tr>
+<td>Offset distances and shape sizes</td>
+<td>up to 2^35 units, about 34 m; shapes at least 2 units across</td>
+</tr>
+<tr>
+<td>Edges in one operation, counting those made where edges cross</td>
+<td>8,000,000</td>
+</tr>
+<tr>
+<td>Shapes in an <code>Artwork</code></td>
+<td>4,000,000; they are united as they arrive in steps of at most 2,000,000 edges</td>
+</tr>
+<tr>
+<td>Arc segments</td>
+<td>1 to 1,024 a quarter turn</td>
+</tr>
+<tr>
+<td>Rounds of resolving</td>
+<td>200</td>
+</tr>
+</tbody>
+</table>
+<p>Input beyond a limit, or not finite, throws <code>kerfkite::ValueError</code>. Nothing recurses in proportion to the
+size of the input.</p>
+<h2>Results are the same everywhere</h2>
+<p>Integer arithmetic is exact. The floating-point arithmetic that places offset and arc vertices uses only
+addition, subtraction, multiplication, division and square root, which IEEE 754 rounds correctly, and its
+results are rounded to the grid. The bucket grid uses floating point too, but only to decide which pairs of
+edges are examined, which cannot change a result.</p>
+<p>Two things could still make a platform differ, and the self-test's recorded digest exists to catch them:</p>
+<ul>
+<li><strong>Fused multiply-add.</strong> A compiler allowed to contract <code>a * b + c</code> rounds once where the source rounds
+twice. The build passes <code>-ffp-contract=off</code> or <code>/fp:precise</code>, as the rest of the core requires, and the
+kernel repeats that with a pragma where a compiler honours one.</li>
+<li><strong>Extended precision.</strong> A compiler that evaluates <code>double</code> in 80-bit registers (32-bit x86 without SSE2)
+is not supported.</li>
+</ul>
+<p>Measured: GCC 13 and Clang 18 on x86-64 give byte-identical answers to the 133,602 requests of the full
+comparison with GEOS, and the same digest with either 128-bit integer, at <code>-O2</code> and at <code>-O3 -march=native</code>.
+A build with fused multiply-add deliberately allowed (<code>-march=native -ffp-contract=fast</code>) also gave the
+same digest, which shows that the test's cases do not turn on it, not that none can. ARM64 and MSVC have not
+been compiled or run: the kernel is written to the standard and the portable integer is exercised here, but
+the first build on each is the test. The continuous build (<code>.github/workflows/native-core.yml</code>) runs CTest
+on them, and a different result would fail the digest there.</p>
+<h2>How it is tested</h2>
+<p><code>native/tests/polygon_selftest.cpp</code>, run by CTest twice (<code>polygon</code>, and <code>polygon_portable_int128</code> with the
+kernel's own 128-bit integer), needs no Python and no other library:</p>
+<ul>
+<li>exact answers for small cases of every operation, for the arithmetic, and at the limits of the range;</li>
+<li>for 400 generated pairs of regions, from a few nanometres to tens of millimetres across: every result is
+valid; <code>|A or B| + |A and B| = |A| + |B|</code>, <code>|A xor B| = |A or B| - |A and B|</code> and
+<code>|A - B| = |A| - |A and B|</code>; a region united or intersected with itself is itself; the operations give the
+same answer with their operands exchanged; every vertex of an offset is at the offset distance from the
+source boundary, never nearer by more than 3 units and further only by the arc allowance; an offset and
+its source are nested; hatch rows lie in the region, end at its boundary, and their lengths times the
+spacing give its area;</li>
+<li>a knot of slivers through one point, artwork of 3,000 dark and clear shapes with three contours round
+it, and a pocket followed until nothing is left;</li>
+<li>a digest of every generated result, compared with the value recorded in the test.</li>
+</ul>
+<p><code>tests/test_polygon_kernel.py</code> checks the same properties through <code>kerfkite-cam polygon</code> when the tool has
+been built (<code>KERFKITE_CAM</code>, or <code>build/native</code>).</p>
+<p><code>validation/polygon_kernel_check.py</code> compares the kernel with Shapely 2.2.0 (GEOS 3.14.1):</p>
+<pre><code>python validation/polygon_kernel_check.py --cli build/native/kerfkite-cam --cases 12000
+</code></pre>
+<p>It generates cases on the grid and gives GEOS the grid coordinates themselves, so both see the same input:
+random polygons with holes, nested and overlapping sets, rectangles on a lattice with shared edges and
+exact fits, polygons a few units across, rings that cross themselves, and constructions made to be awkward
+(slivers, bars through one point, combs, repeated rings, rings that touch themselves, coordinates at the
+edge of the work area), from tens of nanometres to metres. Results are compared by the area of their
+symmetric difference and by the Hausdorff distance between their boundaries, against tolerances that follow
+from the grid and the arc allowance. A difference that is nowhere wider than the tolerance is accepted and
+counted separately as <code>thin</code>. For offsets the deciding test is containment between two offsets made the
+slow, sure way (the region with a disc swept along every edge added or taken away), because GEOS's own
+polygon buffer is not exact: its distance from the true offset is measured in the same run, and was up to
+681 times what the chords of its arcs explain (about a fifth of the offset distance; the case examined was
+a straight edge drawn across a notch where two arcs meet). GEOS's overlay is not exact either: one case in
+a further 2,000 was a sliver two units wide that GEOS's own symmetric difference misreported, which the
+script settles with exact rational arithmetic on the input.</p>
+<p>The run of 21 November 2026 (GCC 13, seed 20261121; 133,602 requests to the kernel) had no failures:</p>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Cases</th>
+<th>Thin</th>
+<th>Refused alike</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Union, intersection, difference, symmetric difference against GEOS</td>
+<td>12,000 each</td>
+<td>945, 638, 2,391, 2,660</td>
+<td></td>
+</tr>
+<tr>
+<td>The area identities of those four</td>
+<td>12,000</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>The region of arbitrary rings under each fill rule</td>
+<td>12,000</td>
+<td>434</td>
+<td></td>
+</tr>
+<tr>
+<td>A result united with itself is itself, vertex for vertex</td>
+<td>12,000</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>compose</code> against <code>studio.operations.region</code></td>
+<td>6,000</td>
+<td>45</td>
+<td>2,283</td>
+</tr>
+<tr>
+<td>Lines cut to a region</td>
+<td>37,817 lines, 6,000 regions</td>
+<td>5,493</td>
+<td></td>
+</tr>
+<tr>
+<td>Offsets outwards and inwards, between swept offsets</td>
+<td>3,033 and 2,924</td>
+<td>221 and 241</td>
+<td></td>
+</tr>
+<tr>
+<td>The offset distance measured from the result, with no oracle</td>
+<td>4,386</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Offset and back brackets the source</td>
+<td>4,386</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Pocket passes against the inset of the source by the whole depth</td>
+<td>6,940 passes, 800 pockets</td>
+<td>2,319</td>
+<td></td>
+</tr>
+<tr>
+<td>Artwork of 1 to 25 dark and clear shapes; two contours round each</td>
+<td>300; 596</td>
+<td>49; 150</td>
+<td></td>
+</tr>
+<tr>
+<td>Application: outside and inside offsets (regions, then rings in order and direction)</td>
+<td>900 and 914</td>
+<td>153 and 188</td>
+<td>87 and 156</td>
+</tr>
+<tr>
+<td>Application: pockets, pass by pass</td>
+<td>896 pockets, 4,456 passes</td>
+<td>526 passes, 9 pockets</td>
+<td>186</td>
+</tr>
+<tr>
+<td>Application: hatch fills</td>
+<td>890</td>
+<td>291</td>
+<td>100</td>
+</tr>
+</tbody>
+</table>
+<p><code>Thin</code> cases are accepted and counted, not hidden. For Boolean results they are slivers no wider than the
+tolerance that one library keeps and the other loses (30% of the generated pairs are a set of rings and the
+same set moved by a few nanometres, which is nothing but slivers). For offsets and pocket passes the kernel
+lay between the two swept offsets in every case; <code>thin</code> there means it was further from GEOS's polygon
+buffer than the tolerance, at a sharp corner or where that buffer is itself off. For hatch fills it means
+that some row ran along an edge or grazed a corner, so that the two did not cut the same parts, while the
+kernel's rows lay in the region and covered what its width allows. For application pockets, 9 are pockets
+the reference refuses for exceeding 100,000 vertices and the kernel completes within the limit.</p>
+<p>Measured without any oracle in that run: no point of an offset boundary was nearer the source than the
+distance by more than 1.3 nm, and none further than the arc allowance and 4 nm. Resolving took at most 4
+rounds.</p>
+<p>The script also replays a recorded run through another build and compares the answers byte for byte
+(<code>--replay</code>). The Clang 18 build gave the same bytes for all 133,602 requests. A build with
+AddressSanitizer and UndefinedBehaviorSanitizer (GCC 13) ran the self-test and 52,100 of the requests, from
+every group but pockets, with no report and the same bytes.</p>
+<h2>Measured speed</h2>
+<p>On the development sandbox (2 shared cores, x86-64, GCC 13 <code>-O2</code>), <code>kerfkite_polygon_selftest --bench</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Case</th>
+<th>Time</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A pocket: a contour of 2,000 vertices shrunk by 1.5 mm and then 50 times by 0.8 mm (27,482 vertices of tool path)</td>
+<td>0.07 s</td>
+</tr>
+<tr>
+<td>The union of 50,000 discs, rectangles, obrounds and strokes that overlap their neighbours (1.2 million edges in, 10 polygons of 220,956 vertices out)</td>
+<td>3.2 s</td>
+</tr>
+<tr>
+<td>That image grown by 0.1 mm for an isolation contour</td>
+<td>0.7 s</td>
+</tr>
+<tr>
+<td>A hatch of the contour: 2,001 rows, 117,679 parts</td>
+<td>0.15 s</td>
+</tr>
+</tbody>
+</table>
+<p>These are the best of three runs. The machine was shared while they were taken and the other runs were up
+to 45% slower (the union took 3.2 s, 3.6 s and 4.6 s).</p>
+<h2>Known weaknesses</h2>
+<ul>
+<li>Termination of the resolving rounds is observed, not proved; the limit of 200 rounds turns a failure to
+settle into a refusal.</li>
+<li>Time grows with the number of edges and crossings. The worst case met is one where every edge crosses
+every other: a polygon of 343 sides shrunk by exactly its radius, so that all its offset edges pass
+through the centre (59,000 crossings), took 0.25 s.</li>
+<li>A shape with a neck or sliver thinner than a nanometre can come apart or lose the sliver, and an offset of
+it then lacks what the sliver would have added.</li>
+<li>The limit of 100,000 vertices on a pocket in <code>studio/operations.py</code> was set for GEOS, which draws every
+arc again at every pass. The kernel's passes have far fewer vertices (4,057 against 156,384 for one
+generated pocket of 29 passes), so some pockets the reference refuses will be accepted.</li>
+<li>Only x86-64 with GCC and Clang has been run. See <a href="#results-are-the-same-everywhere">above</a>.</li>
+<li><code>is_valid</code> does not check that the interior of a polygon is connected. (Results of the kernel are; the
+comparison with GEOS, whose validity test does check it, found none that was not.)</li>
+</ul>
+<h2>Switching the operations over</h2>
+<p>Each call <code>studio/operations.py</code> makes to Shapely, and <code>native/core/src/operations.cpp</code> makes to the GEOS
+layer, and what replaces it:</p>
+<table>
+<thead>
+<tr>
+<th>Reference (Shapely)</th>
+<th>Core today (<code>geometry::</code>)</th>
+<th>Kernel (<code>polygon::</code>)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Polygon(path)</code></td>
+<td><code>context.polygon(path)</code></td>
+<td><code>ring_from_mm(path)</code></td>
+</tr>
+<tr>
+<td><code>p.is_valid</code></td>
+<td><code>polygon.valid()</code></td>
+<td><code>is_simple(ring)</code></td>
+</tr>
+<tr>
+<td><code>p.area &lt; 1e-9</code></td>
+<td><code>polygon.area() &lt; 1e-9</code></td>
+<td><code>std::fabs(signed_area(ring)) &lt; 1e-9</code></td>
+</tr>
+<tr>
+<td><code>GeometryCollection()</code>, then <code>result.symmetric_difference(p)</code> for each contour</td>
+<td><code>empty_collection()</code>, <code>symmetric_difference</code></td>
+<td><code>compose(rings)</code> once, for all contours</td>
+</tr>
+<tr>
+<td><code>result.is_empty</code></td>
+<td><code>result.empty()</code></td>
+<td><code>region.empty()</code></td>
+</tr>
+<tr>
+<td><code>g.buffer(d, quad_segs=32)</code></td>
+<td><code>context.buffer(g, d, style)</code></td>
+<td><code>offset(region, d)</code></td>
+</tr>
+<tr>
+<td><code>inset.buffer(-step, quad_segs=32)</code> until empty</td>
+<td>the same</td>
+<td><code>offset(inset, -step)</code> until <code>empty()</code></td>
+</tr>
+<tr>
+<td><code>outlines(result)</code></td>
+<td><code>geometry::outlines(result)</code></td>
+<td><code>outlines(region)</code></td>
+</tr>
+<tr>
+<td><code>affinity.rotate(g, -angle).bounds</code></td>
+<td><code>rotate</code>, <code>bounds()</code></td>
+<td>turn the vertices of the region (<code>ring_to_mm</code>) by <code>-angle</code> and take their extremes; the kernel does not turn regions</td>
+</tr>
+<tr>
+<td><code>rotated.intersection(LineString(row))</code>, <code>lines(...)</code>, <code>affinity.rotate(line, angle)</code></td>
+<td><code>intersection</code>, <code>lines</code>, <code>rotate</code></td>
+<td>turn the two ends of the row by <code>+angle</code>, <code>to_grid</code> them, and <code>LineClipper(region).clip(a, b)</code>: the parts are already in the region's frame, in order along the row</td>
+</tr>
+<tr>
+<td><code>line.length &gt; 1e-6</code></td>
+<td><code>line.length()</code></td>
+<td>the length of the part</td>
+</tr>
+<tr>
+<td><code>shapely.errors.GEOSException</code></td>
+<td><code>geometry::Error</code>, declined</td>
+<td>does not arise; <code>ValueError</code> only for input beyond the limits</td>
+</tr>
+</tbody>
+</table>
+<p><code>kerfkite-cam polygon</code> with <code>&quot;op&quot;: &quot;compose&quot;</code> is <code>studio.operations.region</code> with its three messages, and the
+<code>cam</code> group of the validation script makes inside, outside, pocket and fill jobs from kernel calls in exactly
+this way and compares them with <code>studio.operations</code>.</p>
+<p>Where the kernel's tool paths will differ from GEOS's, and why that is acceptable:</p>
+<ul>
+<li><strong>Coordinates</strong> are whole nanometres. The G-code is written to at most a few decimal places.</li>
+<li><strong>Where a ring starts</strong>: at its smallest vertex, where GEOS starts wherever its algorithm happens to.
+Direction is unchanged (outer rings clockwise, holes counter-clockwise from <code>outlines</code>).</li>
+<li><strong>Arc vertices</strong>: the same number for a square corner (32 a quarter turn), in different places, just
+outside the true arc instead of just inside. The tool path is the documented allowance further from the
+work at round corners, never nearer.</li>
+<li><strong>The order of the holes of one polygon</strong> and of polygons of exactly equal area: the kernel's defined
+order, where GEOS's is an accident of its algorithm.</li>
+<li><strong>Vertices on straight runs</strong> are dropped.</li>
+<li><strong>Pockets</strong>: the same passes. The last pass, when it is thinner than the tolerance, can exist in one and
+not in the other. The kernel's passes have far fewer vertices, since it does not draw an arc again at every
+pass, so the reference's limit of 100,000 vertices is reached much later.</li>
+<li><strong>Hatch rows</strong>: the same rows to within 3 nm, except rows that run along an edge or graze a corner, which
+the two cut differently by nature. A row that only touches a corner is nothing to GEOS; moved to the grid
+it can cut one to four nanometres off the corner, which passes the reference's test of <code>&gt; 1e-6</code> mm. A
+port may prefer to drop parts shorter than a few grid units.</li>
+<li><strong>Contours refused</strong>: a contour that touches itself or has no area is refused with the reference's
+message. The two can disagree only on a contour whose self-contact or emptiness is a matter of less than
+the grid.</li>
+</ul>
+<p>Because the output is no longer GEOS's to the byte, <code>validation/native_core_parity.py</code> cannot compare these
+four operations byte for byte with the Python reference once the core uses the kernel. Either the comparison
+for them becomes the tolerance comparison of <code>validation/polygon_kernel_check.py</code>, or Studio calls the
+kernel through the extension so that there is again one implementation.</p>
+<h2>Sources</h2>
+<p>The kernel was written from the general, published descriptions of these methods and from first
+principles, without reading the source of GEOS, JTS, Clipper, Boost.Polygon, CGAL or any other geometry
+library while writing it:</p>
+<ul>
+<li>winding numbers and fill rules for regions bounded by arbitrary closed curves;</li>
+<li>plane sweep over non-crossing segments (Bentley and Ottmann's ordering of segments along a sweep line);</li>
+<li>snap rounding (Greene and Yao; Hobby; Guibas and Marimont) and iterated snap rounding (Halperin and
+Packer): rounding crossings to a grid and bending every segment that passes through a rounded pixel;</li>
+<li>the Minkowski sum of a polygon and a disc as a union of swept edges and corner sectors, and the winding
+number of the curve bounding them (the convolution view of Guibas, Ramshaw and Stolfi);</li>
+<li>the crossing-number test for a point in a polygon, and symbolic perturbation for a vertex on a line.</li>
+</ul>
 </section><section id="probe-leveling"><h1>Probe levelling</h1>
 <p>A thin engraving needs its depth held to a few hundredths of a millimetre. Isolation routing on a circuit board is the usual case: the copper is about 0.035 mm thick, and a board clamped to a spoilboard is seldom flatter than a tenth. Probe levelling measures the stock surface on a grid with the controller's probe input, then runs the job with every cutting move following that surface.</p>
 <p>It applies to router jobs on Grbl-family controllers (Grbl 1.1, grblHAL, FluidNC, xPRO V5), which probe with <code>G38.2</code>. Laser, drag-knife and rotary jobs are not levelled.</p>
@@ -3378,7 +3909,7 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 <tr>
 <td>GEOS 3.14.1 (LGPL 2.1), fetched at build time by pinned hash</td>
 <td>Offsets, pockets and hatch fills</td>
-<td><strong>Replace now.</strong> An in-house polygon kernel is being written. GEOS then stays only as a test oracle, off by default, and is not shipped.</td>
+<td><strong>Being replaced.</strong> The in-house polygon kernel is written and tested (<a href="#polygon-kernel">Polygon kernel</a>); the operations are being moved onto it. GEOS then stays only as a test oracle, off by default, and is not shipped.</td>
 </tr>
 <tr>
 <td>JSON for Modern C++ 3.11.3 (MIT), one vendored header</td>

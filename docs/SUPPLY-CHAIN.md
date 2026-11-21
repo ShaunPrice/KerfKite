@@ -17,7 +17,7 @@ KerfKite prefers its own code to third-party components. The aim is a smaller su
 
 | Component | Use | Plan |
 | --- | --- | --- |
-| GEOS 3.14.1 (LGPL 2.1), fetched at build time by pinned hash | Offsets, pockets and hatch fills | **Replace now.** An in-house polygon kernel is being written. GEOS then stays only as a test oracle, off by default, and is not shipped. |
+| GEOS 3.14.1 (LGPL 2.1), fetched at build time by pinned hash | Offsets, pockets and hatch fills | **Being replaced.** The in-house polygon kernel is written and tested ([Polygon kernel](POLYGON-KERNEL.md)); the operations are being moved onto it. GEOS then stays only as a test oracle, off by default, and is not shipped. |
 | JSON for Modern C++ 3.11.3 (MIT), one vendored header | Reading projects and writing answers | **Replaced.** The core reads and writes JSON with its own code (`kerfkite::Json`), and the vendored header is gone. The old library was the test oracle while the replacement was written. |
 
 ## KerfKite Pocket (Android)

@@ -1,0 +1,40 @@
+// The polygon kernel as a command taking and returning JSON, for testing it from outside the core:
+// "polygon". kerfkite/polygon.hpp is the interface the core itself uses.
+//
+// A request is {"op": ...} with rings as lists of [x, y] in millimetres. "fill" names how rings that
+// overlap are read: "evenodd" (the default), "nonzero" or "positive".
+//
+//   normalise     {"rings"}                               the region of the rings
+//   compose       {"paths"}                               as studio.operations.region: closed, simple
+//                                                         contours combined by even-odd, or its message
+//   union, intersection, difference, xor   {"a", "b"}     two sets of rings, each read with "fill"
+//   offset        {"rings", "distance"}                   grown or shrunk by a distance, round joins
+//   pocket        {"rings", "first", "step"}              shrunk by first, then by step until nothing is left
+//   clip-lines    {"rings", "lines": [[[x, y], [x, y]]]}  each line cut to the region
+//   artwork       {"shapes": [...], "offsets": [...]}     dark and clear shapes in order, then contours
+//   inspect       {"rings"}                               per ring: whether it is simple, its signed area
+//   locate        {"rings", "points"}                     "inside", "boundary" or "outside" for each point
+//   statistics    {}                                      "rounds": the most rounds of splitting any request
+//                                                         of this run has needed
+//
+// "segments" (edges in a quarter turn) and "tolerance" (millimetres) set how arcs are drawn. A region is
+// answered as {"polygons": [{"shell": [...], "holes": [[...]]}], "area": square millimetres}, with
+// "valid" added when the request has "check": true and, with "outlines": true, "outlines": the rings in
+// the order and directions the application cuts them (polygon::outlines).
+#ifndef KERFKITE_POLYGON_COMMAND_HPP
+#define KERFKITE_POLYGON_COMMAND_HPP
+
+#include <string>
+
+#include "kerfkite/json.hpp"
+
+namespace kerfkite {
+
+// Whether polygon_call answers this command.
+bool polygon_command(const std::string &command);
+
+kerfkite::Json polygon_call(const std::string &command, const kerfkite::Json &request);
+
+}  // namespace kerfkite
+
+#endif

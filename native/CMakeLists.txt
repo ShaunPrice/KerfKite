@@ -36,6 +36,10 @@ if(KERFKITE_GEOS_TARGET)
   target_link_libraries(kerfkite_core PRIVATE ${KERFKITE_GEOS_TARGET})
 endif()
 
+# KerfKite's own polygon kernel: standard library only, and no part of it needs GEOS.
+target_sources(kerfkite_core PRIVATE core/src/polygon/arrangement.cpp core/src/polygon/boolean.cpp core/src/polygon/clip.cpp
+  core/src/polygon/command.cpp core/src/polygon/measure.cpp core/src/polygon/offset.cpp)
+
 add_executable(kerfkite-cam tools/kerfkite_cam.cpp)
 target_link_libraries(kerfkite-cam PRIVATE kerfkite_core)
 
@@ -49,3 +53,14 @@ add_test(NAME json COMMAND kerfkite_json_selftest)
 add_executable(kerfkite_geometry_selftest tests/geometry_selftest.cpp)
 target_link_libraries(kerfkite_geometry_selftest PRIVATE kerfkite_core)
 add_test(NAME geometry COMMAND kerfkite_geometry_selftest)
+add_executable(kerfkite_polygon_selftest tests/polygon_selftest.cpp)
+target_link_libraries(kerfkite_polygon_selftest PRIVATE kerfkite_core)
+add_test(NAME polygon COMMAND kerfkite_polygon_selftest)
+# The same check with the kernel's own 128-bit integer in place of the compiler's, which is what a compiler
+# without one (MSVC) uses. Both must give the recorded digest.
+add_executable(kerfkite_polygon_selftest_portable tests/polygon_selftest.cpp core/src/polygon/arrangement.cpp
+  core/src/polygon/boolean.cpp core/src/polygon/clip.cpp core/src/polygon/measure.cpp core/src/polygon/offset.cpp)
+target_compile_definitions(kerfkite_polygon_selftest_portable PRIVATE KERFKITE_POLYGON_PORTABLE_INT128)
+target_include_directories(kerfkite_polygon_selftest_portable PRIVATE core/include third_party)
+target_compile_options(kerfkite_polygon_selftest_portable PRIVATE $<TARGET_PROPERTY:kerfkite_core,INTERFACE_COMPILE_OPTIONS>)
+add_test(NAME polygon_portable_int128 COMMAND kerfkite_polygon_selftest_portable)

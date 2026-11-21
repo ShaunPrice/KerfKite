@@ -8,6 +8,8 @@
 //   kerfkite-cam gerber-outline FILE [--tolerance MM] [--offset [X,Y]]   a profile layer as closed paths
 //   kerfkite-cam excellon FILE [--units mm|inch] [--integer N --decimal N] [--omitted-zeros leading|trailing]
 //   kerfkite-cam excellon-drills FILE [--offset [X,Y]]       the holes as drilling operations, by diameter
+//   kerfkite-cam polygon REQUEST.json        the polygon kernel: see kerfkite/polygon_command.hpp
+//   kerfkite-cam polygon-batch CASES.jsonl   one polygon request a line, each answered {"ok": ...} or {"error": ...}
 //   kerfkite-cam batch CASES.jsonl
 //   kerfkite-cam numbers
 //   kerfkite-cam arithmetic
@@ -41,6 +43,7 @@ int usage() {
     std::cerr << "usage: kerfkite-cam generate PROJECT.json [-o PROGRAM.nc] [--json]\n"
                  "       kerfkite-cam probe-plan|height-map|level REQUEST.json\n"
                  "       kerfkite-cam gerber|gerber-outline|excellon|excellon-drills FILE [--option VALUE ...]\n"
+                 "       kerfkite-cam polygon REQUEST.json | polygon-batch CASES.jsonl\n"
                  "       kerfkite-cam batch CASES.jsonl\n"
                  "       kerfkite-cam numbers < VALUES\n";
     return 1;
@@ -182,6 +185,29 @@ int batch(const std::string &path) {
     return 0;
 }
 
+// Requests to the polygon kernel, one a line, for validation/polygon_kernel_check.py.
+int polygon_batch(const std::string &path) {
+    std::ifstream cases(path, std::ios::binary);
+    if (!cases) {
+        std::cerr << "kerfkite-cam: cannot read " << path << "\n";
+        return 1;
+    }
+    std::string line;
+    while (std::getline(cases, line)) {
+        if (line.empty()) continue;
+        json answer;
+        try {
+            answer = json{{"ok", kerfkite::call("polygon", json::parse(line))}};
+        } catch (const kerfkite::ValueError &error) {
+            answer = json{{"error", error.what()}};
+        } catch (const std::exception &error) {
+            answer = json{{"invalid", error.what()}};
+        }
+        std::cout << answer.dump() << "\n";
+    }
+    return 0;
+}
+
 int numbers() {
     std::string hex;
     int decimals;
@@ -234,7 +260,9 @@ int main(int argc, char **argv) {
     const std::string command = argv[1];
     if (command == "generate") return generate(argc, argv);
     if (command == "batch" && argc == 3) return batch(argv[2]);
-    if ((command == "probe-plan" || command == "height-map" || command == "level") && argc == 3) return request(command, argv[2]);
+    if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "polygon") && argc == 3)
+        return request(command, argv[2]);
+    if (command == "polygon-batch" && argc == 3) return polygon_batch(argv[2]);
     if ((command == "gerber" || command == "gerber-outline" || command == "excellon" || command == "excellon-drills") && argc >= 3)
         return board(command, argc, argv);
     if (command == "numbers" && argc == 2) return numbers();
