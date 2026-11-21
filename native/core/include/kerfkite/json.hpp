@@ -25,6 +25,7 @@
 #ifndef KERFKITE_JSON_HPP
 #define KERFKITE_JSON_HPP
 
+#include <limits>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -317,13 +318,20 @@ private:
     std::string get_as(std::string *) const { return text(); }
     template <class T, std::enable_if_t<std::is_integral<T>::value && !std::is_same<T, bool>::value, int> = 0>
     T get_as(T *) const {
-        switch (type_) {
-        case Type::number_integer:
-            return static_cast<T>(value_.integer);
-        case Type::number_unsigned:
-            return static_cast<T>(value_.unsigned_integer);
-        default:
-            break;
+        // A whole number is given only if it fits the type asked for: a silent wrap would turn, say, -1 into
+        // a very large count.
+        if (type_ == Type::number_integer) {
+            const int64_t whole = value_.integer;
+            const bool fits = std::is_signed<T>::value
+                                  ? static_cast<int64_t>(static_cast<T>(whole)) == whole
+                                  : whole >= 0 && static_cast<uint64_t>(static_cast<T>(whole)) == static_cast<uint64_t>(whole);
+            if (!fits) wrong("a whole number that fits");
+            return static_cast<T>(whole);
+        }
+        if (type_ == Type::number_unsigned) {
+            const uint64_t whole = value_.unsigned_integer;
+            if (whole > static_cast<uint64_t>(std::numeric_limits<T>::max())) wrong("a whole number that fits");
+            return static_cast<T>(whole);
         }
         // A float, cut towards zero; one that does not fit the type asked for is refused.
         if (std::is_signed<T>::value) {

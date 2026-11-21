@@ -480,7 +480,7 @@ void Json::write_to(std::string &out) const {
         out.append("null");
         break;
     case Type::discarded:
-        out.append("<discarded>");
+        out.append("null");  // the answer of a failed parse holds no value; what is written stays valid JSON
         break;
     case Type::boolean:
         out.append(value_.boolean ? "true" : "false");

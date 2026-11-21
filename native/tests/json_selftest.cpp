@@ -648,6 +648,12 @@ static void values() {
                throws<json::type_error>([&] { parsed["t"].get<int>(); }) && throws<json::type_error>([&] { parsed["n"].get_ref<const std::string &>(); }) &&
                throws<json::type_error>([&] { parsed["l"].get<std::vector<double>>(); }) && throws<json::type_error>([&] { parsed["z"].get<int>(); }) &&
                throws<json::type_error>([] { json(1e30).get<int64_t>(); }) && throws<json::type_error>([] { json(-1.5).get<uint64_t>(); }) &&
+               throws<json::type_error>([] { json(-1).get<size_t>(); }) && throws<json::type_error>([] { json(-1).get<uint64_t>(); }) &&
+               throws<json::type_error>([] { json(300).get<unsigned char>(); }) &&
+               throws<json::type_error>([] { json(uint64_t(1) << 63).get<int64_t>(); }) &&
+               throws<json::type_error>([] { json(int64_t(1) << 40).get<int>(); }) && json(255).get<unsigned char>() == 255 &&
+               json(-128).get<signed char>() == -128 && json(uint64_t(7)).get<int>() == 7 &&
+               json::parse("[1", nullptr, false).dump() == "null" &&
                throws<json::type_error>([] { json(3e9).get<int>(); }) && throws<json::type_error>([] { json(std::nan("")).get<int>(); }),
            "get refuses what the value is not, and a float that does not fit a whole number");
     expect(parsed.is_object() && parsed["l"].is_array() && parsed["s"].is_string() && parsed["t"].is_boolean() && parsed["z"].is_null() &&
