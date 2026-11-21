@@ -179,7 +179,7 @@ def run(page):
     loc('#pcb-drill').set_input_files([])
     loc('#pcb-side').select_option('bottom')
     expect(loc('#pcb-register')).to_be_checked()
-    expect(loc('#pcb-margin')).to_be_disabled()
+    expect(loc('#pcb-corner-x')).to_be_disabled()
     loc('#pcb-review').click()
     expect(loc('#pcb-summary')).to_contain_text('Placed mirrored about X25, with offset X-95 Y115')
     expect(loc('#pcb-warnings')).to_contain_text('The underside is mirrored about X25.000')

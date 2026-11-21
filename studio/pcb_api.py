@@ -73,8 +73,8 @@ def board(payload):
 
     payload: 'copper', 'outline' and 'drill' are the texts of the files, any of them absent. 'side' is 'top'
     or 'bottom'; the underside is mirrored about 'mirror_x', by default the middle of the placed outline.
-    'offset' places the board, by default so that the outline's lowest corner is 'margin' (5 mm) from the
-    work origin. 'tool_width', or 'v_bit' {tip_width, angle, depth}, with 'passes', 'overlap', 'direction',
+    'offset' places the board, by default so that the outline's lowest corner is 'margin' (5 mm, or [X, Y])
+    from the work origin. 'tool_width', or 'v_bit' {tip_width, angle, depth}, with 'passes', 'overlap', 'direction',
     'order' and 'arc_tolerance' set the isolation; 'clip' cuts it to the outline. 'drill_format' states the
     drill file's units, integer and decimal digits and omitted_zeros where the file does not.
     """
@@ -143,8 +143,15 @@ def board(payload):
     if payload.get('offset') is not None:
         offset = _pair(payload['offset'], 'offset')
     else:
-        margin = _number(payload.get('margin', 5), 'Margin', 0, 1000)
-        offset = [round(margin - reference[0], 6), round(margin - reference[1], 6)]
+        # One distance for both axes, or [X, Y]: where the lowest corner of the reference goes.
+        margin = payload.get('margin', 5)
+        if isinstance(margin, list):
+            if len(margin) != 2:
+                raise ValueError('Give the margin as one distance or as [X, Y]')
+            corner = [_number(margin[0], 'Margin X', 0, 1000), _number(margin[1], 'Margin Y', 0, 1000)]
+        else:
+            corner = [_number(margin, 'Margin', 0, 1000)] * 2
+        offset = [round(corner[0] - reference[0], 6), round(corner[1] - reference[1], 6)]
     mirror_x = None
     if side == 'bottom':
         if payload.get('mirror_x') is not None:

@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const Pcb=require('../../studio/static/pcb-board.js');
 const {generate}=require('../../studio/static/offline-cam.js');
 
-const values=overrides=>({side:'top',margin:5,width:300,height:180,registered:null,kind:'v',tip:0.1,angle:30,depth:0.1,toolWidth:0.2,
+const values=overrides=>({side:'top',cornerX:5,cornerY:7.5,width:300,height:180,registered:null,kind:'v',tip:0.1,angle:30,depth:0.1,toolWidth:0.2,
   passes:1,overlapPercent:20,arcTolerance:0.005,direction:'climb',clip:false,units:'',zeros:'',integer:null,decimal:null,
   drillDepth:1.8,cutter:1.5,cutDepth:1.8,cutStep:0.6,peck:0,pointAngle:118,...overrides});
 const square=(x,y,s)=>[[x,y],[x+s,y],[x+s,y+s],[x,y+s],[x,y]];
@@ -30,14 +30,15 @@ test('the width a V-bit cuts is its tip plus the cone on both sides',()=>{
 test('the request states the tool, the placement and only the drill format that was entered',()=>{
   const files={copper:'G04*',outline:'G04*',drill:'M48'};
   const body=Pcb.request(files,values());
-  assert.deepEqual(body,{copper:'G04*',outline:'G04*',drill:'M48',side:'top',width:300,height:180,margin:5,
+  assert.deepEqual(body,{copper:'G04*',outline:'G04*',drill:'M48',side:'top',width:300,height:180,margin:[5,7.5],
     v_bit:{tip_width:0.1,angle:30,depth:0.1},passes:1,overlap:0.2,arc_tolerance:0.005});
   const stated=Pcb.request(files,values({kind:'width',toolWidth:0.25,passes:3,overlapPercent:35,direction:'conventional',clip:true,units:'inch',zeros:'trailing',integer:2,decimal:4}));
   assert.equal(stated.tool_width,0.25);assert.equal(stated.v_bit,undefined);
   assert.deepEqual([stated.passes,stated.overlap,stated.direction,stated.clip],[3,0.35,'conventional',true]);
   assert.deepEqual(stated.drill_format,{units:'inch',omitted_zeros:'trailing',integer:2,decimal:4});
   // Only the files that were chosen are sent, and a drill file alone needs no tool.
-  assert.deepEqual(Pcb.request({copper:'',outline:null,drill:'M48'},values({depth:null,tip:null})),{drill:'M48',side:'top',width:300,height:180,margin:5});
+  assert.deepEqual(Pcb.request({copper:'',outline:null,drill:'M48'},values({depth:null,tip:null})),{drill:'M48',side:'top',width:300,height:180,margin:[5,7.5]});
+  assert.throws(()=>Pcb.request(files,values({cornerY:null})),/Board corner Y must be a number/);
   assert.throws(()=>Pcb.request({},values()),/Choose a copper layer/);
   assert.throws(()=>Pcb.request({copper:'x'.repeat(4*1024*1024+1)},values()),/4 MiB/);
   const large='x'.repeat(3*1024*1024);
@@ -53,7 +54,7 @@ test('the request states the tool, the placement and only the drill format that 
 
 test('a second import registers with the board already in the design',()=>{
   const registered={offset:[-95,115],outline_bounds:[5,5,45,35]};
-  const under=Pcb.request({copper:'G04*'},values({side:'bottom',registered,margin:99}));
+  const under=Pcb.request({copper:'G04*'},values({side:'bottom',registered,cornerX:99}));
   assert.deepEqual(under.offset,[-95,115]);assert.equal(under.mirror_x,25);assert.equal(under.margin,undefined);
   // With the outline in the request the server finds the mirror line itself.
   assert.equal(Pcb.request({copper:'G04*',outline:'G04*'},values({side:'bottom',registered})).mirror_x,undefined);

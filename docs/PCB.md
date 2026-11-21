@@ -21,7 +21,7 @@ The first part of this document is the guide to making a board in Studio. The re
 1. Set the work area and the controller under **CAM** as for any job.
 2. Open **Projects**, **Circuit board**. Choose the copper layer, the board outline and the drill file. Any of the three may be left out.
 3. Choose the **side**. **Top** is cut as the files draw it. **Underside, mirrored** is for the bottom copper: see [Both sides](#both-sides).
-4. The board is placed with the lowest corner of its outline at the **margin** from the work origin. Leave room for the cut-out cutter.
+4. **Board corner X** and **Y** place the board: the lowest corner of its outline goes that far from the work origin. Leave room for the cut-out cutter.
 5. Set the engraving tool and choose **Review board**.
 
 The review lists what was read from each file and every warning, and draws the copper, the outline and the holes on the canvas. Nothing has been added to the design yet. Change a setting and review again as often as needed. **Add to design** then adds the board as ordinary objects: one layer for each tool, with Output off.
@@ -517,7 +517,7 @@ The polygon kernel works in whole nanometres with exact integer arithmetic, and 
 
 ## Studio's route
 
-`POST /api/pcb-import` takes the files of one side of a board as text and answers with all of the above, placed. Fields: `copper`, `outline`, `drill` (any may be absent); `side` (`"top"` or `"bottom"`); `offset`, or `margin` (5) to place the outline's lowest corner; `mirror_x` (the bottom side only; by default the middle of the placed outline); `width` and `height`; `tool_width`, or `v_bit` as `{"tip_width", "angle", "depth"}`; `passes`, `overlap`, `direction`, `order`, `arc_tolerance`; `clip` (true to clip to the outline); and `drill_format` as `{"units", "integer", "decimal", "omitted_zeros"}`. Each file may be up to 4 MiB. A field that is not known is refused.
+`POST /api/pcb-import` takes the files of one side of a board as text and answers with all of the above, placed. Fields: `copper`, `outline`, `drill` (any may be absent); `side` (`"top"` or `"bottom"`); `offset`, or `margin` (5; one distance or `[X, Y]`) to place the outline's lowest corner; `mirror_x` (the bottom side only; by default the middle of the placed outline); `width` and `height`; `tool_width`, or `v_bit` as `{"tip_width", "angle", "depth"}`; `passes`, `overlap`, `direction`, `order`, `arc_tolerance`; `clip` (true to clip to the outline); and `drill_format` as `{"units", "integer", "decimal", "omitted_zeros"}`. Each file may be up to 4 MiB. A field that is not known is refused.
 
 The answer has `side`, `offset`, `mirror_x`, `bounds`, `copper` (the isolation answer), `outline` (the outline answer), `drill` (the drilling answer with `plated`, `file_function` and `counts` added) and `warnings` about the files together. The underside needs the outline, or the `mirror_x` and `offset` of the first import, and is refused without. `/api/session` has `pcb_import: true` when the route can answer.
 

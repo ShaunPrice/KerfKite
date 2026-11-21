@@ -13,8 +13,9 @@ panel.innerHTML=`<h3>Circuit board</h3>
 <label>Copper layer · Gerber<input id="pcb-copper" type="file"></label>
 <label>Board outline · Gerber<input id="pcb-outline" type="file"></label>
 <label>Drill file · Excellon<input id="pcb-drill" type="file"></label>
-<div class="pair"><label>Side<select id="pcb-side"><option value="top">Top</option><option value="bottom">Underside, mirrored</option></select></label>
-<label>Margin from work origin · mm<input id="pcb-margin" type="number" value="5" min="0" max="1000" step=".5"></label></div>
+<label>Side<select id="pcb-side"><option value="top">Top</option><option value="bottom">Underside, mirrored</option></select></label>
+<div class="pair"><label>Board corner X · mm<input id="pcb-corner-x" type="number" value="5" min="0" max="1000" step=".5"></label>
+<label>Board corner Y · mm<input id="pcb-corner-y" type="number" value="5" min="0" max="1000" step=".5"></label></div>
 <label class="check" id="pcb-register-label" hidden><input type="checkbox" id="pcb-register" checked> Register with the board already in this design</label>
 <details open><summary>Engraving tool</summary>
 <label>Tool<select id="pcb-kind"><option value="v">V-bit</option><option value="width">Width of cut stated</option></select></label>
@@ -93,7 +94,7 @@ function showStages(){
   const list=boards(),rows=CNCDesignLayers.layers(),stageIds=list.flatMap(board=>board.layers).filter(id=>rows.some(row=>row.id===id));
   $('pcb-stages').hidden=!stageIds.length&&!list.length;
   $('pcb-register-label').hidden=!list.length;
-  $('pcb-margin').disabled=list.length>0&&$('pcb-register').checked;
+  for(const id of ['pcb-corner-x','pcb-corner-y'])$(id).disabled=list.length>0&&$('pcb-register').checked;
   $('pcb-stage-list').replaceChildren(...stageIds.map(id=>{
     const row=rows.find(r=>r.id===id),line=document.createElement('div'),button=document.createElement('button');
     line.className='buttons';
@@ -123,7 +124,7 @@ async function fileText(id){
 }
 function values(){
   const registered=boards()[0]&&$('pcb-register').checked?boards()[0]:null;
-  return {side:$('pcb-side').value,margin:value('pcb-margin'),width:Number($('width').value),height:Number($('height').value),registered,
+  return {side:$('pcb-side').value,cornerX:value('pcb-corner-x'),cornerY:value('pcb-corner-y'),width:Number($('width').value),height:Number($('height').value),registered,
     kind:$('pcb-kind').value,tip:value('pcb-tip'),angle:value('pcb-angle'),depth:value('pcb-depth'),toolWidth:value('pcb-width'),
     passes:value('pcb-passes'),overlapPercent:value('pcb-overlap'),arcTolerance:value('pcb-arc'),direction:$('pcb-direction').value,clip:$('pcb-clip').checked,
     units:$('pcb-units').value,zeros:$('pcb-zeros').value,integer:value('pcb-integer'),decimal:value('pcb-decimal'),

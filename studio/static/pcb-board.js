@@ -42,7 +42,7 @@
       // the same outline.
       body.offset=[board.offset[0],board.offset[1]];
       if(v.side==='bottom'&&!body.outline&&board.outline_bounds)body.mirror_x=round6((board.outline_bounds[0]+board.outline_bounds[2])/2);
-    }else body.margin=number(v.margin,'Margin',0,1000);
+    }else body.margin=[number(v.cornerX,'Board corner X',0,1000),number(v.cornerY,'Board corner Y',0,1000)];
     if(body.copper){
       const depth=number(v.depth,'Engraving depth',0.01,10);
       if(v.kind==='v')body.v_bit={tip_width:number(v.tip,'Tip width',0,10),angle:number(v.angle,'V-bit angle',10,170),depth};
