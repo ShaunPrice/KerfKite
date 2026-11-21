@@ -10,7 +10,9 @@ Three comparisons, all against values computed by Python in this run:
    with more care than the plain formulas.
 2. Recorded jobs: every studio.cam.generate call the test suite makes, replayed through the native core.
 3. Generated edge cases: projects with one to three settings replaced by unusual values, so that the
-   reference's error messages are compared as well as its programs.
+   reference's error messages are compared as well as its programs. A third as many again are closed
+   contours for the polygon operations (offsets, pockets and hatch fills), which the core computes with
+   GEOS as the reference does through Shapely.
    Ramp, helix and holding-tab jobs have their own generator (entry_tab_cases), with contours that cross,
    touch, fold back or nearly close, and are counted separately.
 
@@ -284,6 +286,170 @@ def generated_cases(count, seed):
                     project['path_depths'].append([0, -1])
             else:
                 project['mode'] = rng.choice(['router', 'laser', 'knife', 'router'])
+        yield project
+
+
+# The GEOS release the core builds (native/cmake/geos.cmake).
+CORE_GEOS = '3.14.1'
+
+
+def polygon_cases(count, seed):
+    """Closed contours for the polygon operations: inside and outside offsets, pockets, fills.
+
+    Rectangles, regular and irregular polygons, alone, nested (holes under even-odd fill), overlapping
+    and repeated; closed exactly, closed only to within the tolerance, or left open. Tool sizes run from
+    ones that fit to ones that do not, and some contours sit close enough to the edge of the work area
+    for the compensated path to leave it, so that the reference's rejections are compared as well.
+    """
+    rng = random.Random(seed)
+
+    def contour(cx, cy, size, places):
+        kind = rng.choice([0, 0, 1, 1, 2, 2, 2, 3, 4]) if rng.random() < 0.96 else 5
+        if kind == 0:  # rectangle
+            w, h = size * rng.uniform(0.4, 1), size * rng.uniform(0.4, 1)
+            points = [[cx - w, cy - h], [cx + w, cy - h], [cx + w, cy + h], [cx - w, cy + h]]
+        elif kind == 1:  # regular polygon, up to a fine circle
+            n = rng.choice([3, 5, 6, 8, 24, 90])
+            turn = rng.uniform(0, 1)
+            points = [
+                [cx + size * math.cos(turn + 2 * math.pi * i / n), cy + size * math.sin(turn + 2 * math.pi * i / n)]
+                for i in range(n)
+            ]
+        elif kind == 2:  # star-shaped: simple, with sharp and reflex corners
+            n = rng.randrange(4, 14)
+            angles = sorted(rng.uniform(0, 2 * math.pi) for _ in range(n))
+            points = [
+                [cx + size * r * math.cos(a), cy + size * r * math.sin(a)]
+                for a, r in ((a, rng.uniform(0.25, 1)) for a in angles)
+            ]
+        elif kind == 3:  # an L with a narrow leg, which an inside offset can split or remove
+            leg = size * rng.choice([0.05, 0.15, 0.4])
+            points = [[cx - size, cy - size], [cx + size, cy - size], [cx + size, cy - size + leg], [cx - size + leg, cy - size + leg], [cx - size + leg, cy + size], [cx - size, cy + size]]  # fmt: skip
+        elif kind == 4:  # two lobes joined by a neck
+            neck = size * rng.choice([0.02, 0.1, 0.3])
+            points = [[cx - size, cy - size / 2], [cx - neck, cy - size / 2], [cx - neck, cy - neck], [cx + neck, cy - neck], [cx + neck, cy - size / 2], [cx + size, cy - size / 2], [cx + size, cy + size / 2], [cx + neck, cy + size / 2], [cx + neck, cy + neck], [cx - neck, cy + neck], [cx - neck, cy + size / 2], [cx - size, cy + size / 2]]  # fmt: skip
+        else:  # arbitrary points: often self-crossing, which the reference refuses
+            points = [
+                [cx + rng.uniform(-size, size), cy + rng.uniform(-size, size)] for _ in range(rng.randrange(3, 7))
+            ]
+        if rng.random() < 0.3:
+            points.reverse()
+        if places is not None:
+            points = [[round(x, places), round(y, places)] for x, y in points]
+        close = rng.random()
+        if close < 0.94:
+            points.append(list(points[0]))
+        elif close < 0.975:  # closed to within the tolerance but not exactly: Shapely adds a vertex
+            points.append([points[0][0] + rng.choice([1e-7, -4e-7, 0]), points[0][1] + rng.choice([5e-7, -1e-9])])
+        elif close < 0.99:  # just outside the tolerance
+            points.append([points[0][0] + 2e-6, points[0][1]])
+        return points
+
+    for _ in range(count):
+        width, height = rng.choice([(100, 50), (100, 50), (300, 200), (40.5, 30)])
+        places = rng.choice([None, None, 1, 2, 3])
+        margin = rng.choice([0.5, 2, 8, 8, 8])
+        operation = rng.choice(['inside', 'outside', 'inside', 'outside', 'pocket', 'pocket', 'pocket'])
+        laser = rng.random() < 0.4
+        if laser:  # the offset is half the kerf, and a region can be hatched
+            operation = rng.choice(['inside', 'outside', 'inside', 'outside', 'fill', 'fill', 'fill'])
+        # Pockets and fills write many moves for their area, so they stay small.
+        size = rng.uniform(
+            3 if operation == 'pocket' else 1.5,
+            min(min(width, height) / 2 - margin, {'pocket': 6, 'fill': 10}.get(operation, 30)),
+        )
+        if size > 15 and rng.random() < 0.3:
+            places = 0
+        cx = rng.uniform(margin + size, width - margin - size)
+        cy = rng.uniform(margin + size, height - margin - size)
+        paths = [contour(cx, cy, size, places)]
+        layout = rng.choice([0, 0, 1, 2, 2, 3, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5])
+        if layout == 0:  # a hole
+            paths.append(contour(cx, cy, size * rng.uniform(0.1, 0.6), places))
+        elif layout == 1:  # a hole with an island in it
+            paths.append(contour(cx, cy, size * 0.6, places))
+            paths.append(contour(cx, cy, size * 0.2, places))
+        elif layout == 2:  # overlapping contours
+            paths.append(
+                contour(
+                    cx + size * rng.uniform(-0.6, 0.6),
+                    cy + size * rng.uniform(-0.6, 0.6),
+                    size * rng.uniform(0.3, 0.9),
+                    places,
+                )
+            )
+        elif layout == 3 and rng.random() < 0.2:  # the same contour twice, which cancels
+            paths.append([list(point) for point in paths[0]])
+        elif layout == 4:  # separate parts, some of equal area
+            part = min(size / 2.5, 6)
+            paths = [
+                [[x, y], [x + part, y], [x + part, y + part * rng.choice([1, 1, 0.5])], [x, y + part], [x, y]]
+                for x, y in (
+                    (cx - size + i * part * 1.2, cy - size + j * part * 1.2) for i in range(2) for j in range(2)
+                )
+            ]
+            rng.shuffle(paths)
+        project = dict(
+            mode='router', protocol=rng.choice(['grbl', 'grbl', 'linuxcnc', 'marlin', 'mach3']),
+            width=width, height=height, feed=rng.choice([600, 1200.5]), power=rng.choice([12000, 800]),
+            depth=rng.choice([1, 0.3, 1.2]), step=rng.choice([0.5, 1]), paths=paths,
+            operation=operation,
+        )  # fmt: skip
+        if project['protocol'] in ('linuxcnc', 'mach3'):
+            project['dwell_units'] = rng.choice(['seconds', 'milliseconds'])
+        if rng.random() < 0.7:
+            project['tool_diameter'] = rng.choice(
+                [0.01, 0.4, 1, 1, 1, 2, 2, 2, 3, 3, 3.175, 3.175, 6, 6.35, 12.7, 45, 100]
+            )
+            if rng.random() < 0.08:
+                project['tool_diameter'] = rng.choice([0.005, 101, '3', ' 1.5 ', True, None, 'wide', [3]])
+        if project['operation'] == 'pocket':
+            if rng.random() < 0.8:
+                project['stepover'] = rng.choice([0.4, 0.5, 0.5, 0.75, 1, 1.5, 3])
+                if rng.random() < 0.08:
+                    project['stepover'] = rng.choice([0.01, 0.005, '0.6', None, False, 100.5])
+            if isinstance(project.get('tool_diameter', 3.175), (int, float)) and rng.random() < 0.85:
+                project['tool_diameter'] = rng.choice([1, 1, 1.5, 2, 2, 3])
+                if 'stepover' in project and rng.random() < 0.9:
+                    project['stepover'] = rng.choice([0.25, 0.4, 0.5, 0.5, 0.75])
+                    if project['stepover'] > project['tool_diameter'] / 2 and rng.random() < 0.9:
+                        project['stepover'] = project['tool_diameter'] / 2
+        if operation == 'pocket' and rng.random() < 0.8:
+            project['step'] = project['depth']
+        if laser:
+            project['mode'] = 'laser' if rng.random() < 0.95 else 'knife'
+            project['protocol'] = rng.choice(['grbl', 'grbl', 'fluidnc', 'grblhal'])
+            project.pop('dwell_units', None)
+            if rng.random() < 0.75:
+                project['kerf'] = rng.choice([0, 0.0, -0.0, 0.05, 0.1, 0.2, 0.25, 1, 5])
+                if rng.random() < 0.08:
+                    project['kerf'] = rng.choice([5.01, -0.1, '0.3', True, None, 'thin'])
+            if rng.random() < 0.3:
+                project['passes'] = rng.choice([1, 2, 3])
+            for key, choices in (('lead_in', [0.5, 2]), ('lead_out', [0.5, 1.5]), ('ramp_in', [0.4, 2]), ('laser_pattern', ['perforate', 'bridges']), ):  # fmt: skip
+                if rng.random() < 0.08:
+                    project[key] = rng.choice(choices)
+            if operation == 'fill' or rng.random() < 0.05:
+                for key, choices in (('interval', [0.2, 0.25, 0.5, 0.5, 1, 2, 2, 20, 0.02, 0.01, '1']), ('hatch_angle', [0, 0.0, -0.0, 30, 45, 90, 90.0, 180, 270, 360, -90, -17.5, 33.3, 1e-9, 361, '45']), ('crosshatch', [True, True, False, 1, 0, 0.0, 'yes', '', [], [0], {}, None])):  # fmt: skip
+                    if rng.random() < 0.6:
+                        project[key] = rng.choice(choices)
+            if rng.random() < 0.05:
+                project['path_powers'] = [[100 for _ in path] for path in paths]
+        for key, choices in (
+            ('tabs', [{'width': 3, 'height': 0.5, 'count': 2}, False, None]), ('router_entry', ['plunge', 'ramp', 'helix']),
+            ('tool_shape', ['flat', 'ball', 'drill']), ('path_depths', [None, [[-1 for _ in path] for path in paths]]),
+            ('operation', ['line', 'drill', 'engrave', 'vcarve', 'vcarve', 'fill', 'pocket', None, 5]), ('stock_thickness', [1]),
+        ):  # fmt: skip
+            if rng.random() < 0.04:
+                project[key] = rng.choice(choices)
+        if rng.random() < 0.08:
+            # An ordered job: a pocket or an offset and then another contour operation, with one tool.
+            first = {key: project.pop(key) for key in ('paths', 'operation')}
+            second = dict(
+                paths=[[list(point) for point in path] for path in paths[:1]],
+                operation=rng.choice(['outside', 'inside', 'line']),
+            )
+            project['operations'] = [first, second]
         yield project
 
 
@@ -695,6 +861,14 @@ def main():
 
     from native_core_recorder import reference
     from studio.cam import generate
+    import shapely
+
+    if shapely.geos_version_string != CORE_GEOS:
+        # Polygon results are only expected to match when both sides use the same GEOS release.
+        print(
+            f'NOTE the reference has GEOS {shapely.geos_version_string} (Shapely {shapely.__version__}); the core'
+            f' builds GEOS {CORE_GEOS}, which Shapely 2.2.0 carries, so offsets, pockets and fills may differ'
+        )
 
     with tempfile.TemporaryDirectory() as scratch:
         cases = Path(scratch) / 'cases.jsonl'
@@ -720,6 +894,10 @@ def main():
                 lines.setdefault(line, 'suite')
         suite = len(lines)
         for project in itertools.chain(generated_cases(args.generated, 87), drill_knife_cases(args.generated // 3, 89)):
+            line, _ = reference(generate, project)
+            if line is not None:
+                lines.setdefault(line, 'generated')
+        for project in polygon_cases(args.generated // 3, 89):
             line, _ = reference(generate, project)
             if line is not None:
                 lines.setdefault(line, 'generated')

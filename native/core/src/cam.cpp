@@ -16,6 +16,7 @@
 #include "drilling.hpp"
 #include "knife.hpp"
 #include "laser.hpp"
+#include "operations.hpp"
 #include "project.hpp"
 #include "router_entry.hpp"
 #include "tabs.hpp"
@@ -95,6 +96,7 @@ Job single(const json &project) {
         throw ValueError("Choose a milling cutter for a contour or pocket; a drill bit is for drilling");
 
     // studio.operations.prepare: the line operation leaves the paths as they are.
+    std::vector<std::string> operation_warnings;
     const bool line = is_text_or_absent(operation, "line");
     if (!line || knife) {
         if (!none(get(project, "path_depths")))
@@ -103,10 +105,9 @@ Job single(const json &project) {
             if (!line) throw ValueError("Knife uses contour lines, not pocket/fill operations");
             clean = knife_paths(project, clean, width, height);
         } else {
-            throw NotPorted("offset, pocket and fill operations");
+            operation_warnings = prepare_operation(project, clean, width, height);  // operations.cpp
         }
     }
-    std::vector<std::string> operation_warnings;  // the reference's operation_warnings
 
     std::vector<std::vector<double>> depths;
     if (tabs_enabled) holding_tabs(project, clean, depth, depths, operation_warnings);
