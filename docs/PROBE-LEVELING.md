@@ -83,4 +83,4 @@ Levelling is tested against the simulator and by calculation. It has not yet bee
 
 ## Circuit boards
 
-Probe levelling is the first part of circuit board engraving. Importing Gerber copper layers and Excellon drill files, and generating isolation, drilling and cut-out toolpaths from them, are not yet in KerfKite. Until then, a board outline or traces drawn or imported as vectors can be engraved and levelled as any router line job.
+Probe levelling is the first part of circuit board engraving. Gerber layers and Excellon drill files can be read, and a board outline and its holes turned into cut-out paths and drilling operations: see [Circuit boards](PCB.md). Isolation toolpaths from a copper layer are not yet generated. Until then, traces drawn or imported as vectors can be engraved and levelled as any router line job.

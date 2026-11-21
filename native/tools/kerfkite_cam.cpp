@@ -4,6 +4,10 @@
 //   kerfkite-cam probe-plan REQUEST.json     a probing program for the cutting bounds of a job
 //   kerfkite-cam height-map REQUEST.json     the surface heights from the probe results
 //   kerfkite-cam level REQUEST.json          a program corrected to follow that surface
+//   kerfkite-cam gerber FILE [--arc-tolerance MM]            a Gerber layer as drawn objects in millimetres
+//   kerfkite-cam gerber-outline FILE [--tolerance MM] [--offset [X,Y]]   a profile layer as closed paths
+//   kerfkite-cam excellon FILE [--units mm|inch] [--integer N --decimal N] [--omitted-zeros leading|trailing]
+//   kerfkite-cam excellon-drills FILE [--offset [X,Y]]       the holes as drilling operations, by diameter
 //   kerfkite-cam batch CASES.jsonl
 //   kerfkite-cam numbers
 //   kerfkite-cam arithmetic
@@ -36,6 +40,7 @@ namespace {
 int usage() {
     std::cerr << "usage: kerfkite-cam generate PROJECT.json [-o PROGRAM.nc] [--json]\n"
                  "       kerfkite-cam probe-plan|height-map|level REQUEST.json\n"
+                 "       kerfkite-cam gerber|gerber-outline|excellon|excellon-drills FILE [--option VALUE ...]\n"
                  "       kerfkite-cam batch CASES.jsonl\n"
                  "       kerfkite-cam numbers < VALUES\n";
     return 1;
@@ -122,6 +127,37 @@ int request(const std::string &command, const std::string &path) {
     }
 }
 
+// A circuit board command: the board file itself is the input, and each --option VALUE pair becomes a
+// field of the request (--arc-tolerance 0.01 is "arc_tolerance": 0.01). The answer is JSON on standard output.
+int board(const std::string &command, int argc, char **argv) {
+    std::string text;
+    if (!read(argv[2], text)) {
+        std::cerr << "kerfkite-cam: cannot read " << argv[2] << "\n";
+        return 1;
+    }
+    json request{{"text", text}};
+    for (int i = 3; i < argc; i += 2) {
+        std::string key = argv[i];
+        if (key.size() < 3 || key.compare(0, 2, "--") != 0 || i + 1 >= argc) return usage();
+        key.erase(0, 2);
+        for (char &c : key)
+            if (c == '-') c = '_';
+        // A value that reads as JSON is a number or a list; anything else is text.
+        const json value = json::parse(argv[i + 1], nullptr, false);
+        request[key] = value.is_discarded() ? json(argv[i + 1]) : value;
+    }
+    try {
+        std::cout << kerfkite::call(command, request).dump() << "\n";
+        return 0;
+    } catch (const kerfkite::ValueError &error) {
+        std::cerr << error.what() << "\n";
+        return 2;
+    } catch (const json::exception &error) {
+        std::cerr << "kerfkite-cam: " << error.what() << "\n";
+        return 1;
+    }
+}
+
 int batch(const std::string &path) {
     std::ifstream cases(path, std::ios::binary);
     if (!cases) {
@@ -199,6 +235,8 @@ int main(int argc, char **argv) {
     if (command == "generate") return generate(argc, argv);
     if (command == "batch" && argc == 3) return batch(argv[2]);
     if ((command == "probe-plan" || command == "height-map" || command == "level") && argc == 3) return request(command, argv[2]);
+    if ((command == "gerber" || command == "gerber-outline" || command == "excellon" || command == "excellon-drills") && argc >= 3)
+        return board(command, argc, argv);
     if (command == "numbers" && argc == 2) return numbers();
     if (command == "arithmetic" && argc == 2) return arithmetic();
     return usage();
