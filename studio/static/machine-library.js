@@ -7,7 +7,9 @@
     for(const key of ['width','height'])if(!check(raw[key],1,2000))throw Error('Enter X and Y travel between 1 and 2,000 mm.');
     if(raw.zTravel!==null&&!check(raw.zTravel,.1,2000))throw Error('Enter measured Z travel in mm or leave it blank.');
     const protocol=CNCProtocols.get(raw.protocol).id;
-    return {name:raw.name.trim(),width:raw.width,height:raw.height,zTravel:raw.zTravel,protocol};
+    // A profile made from a controller's own report remembers which machine it describes.
+    const source=typeof raw.source==='string'&&raw.source&&raw.source.length<=120?{source:raw.source}:{};
+    return {name:raw.name.trim(),width:raw.width,height:raw.height,zTravel:raw.zTravel,protocol,...source};
   }
   if(typeof module!=='undefined'&&module.exports)module.exports={validate};
   if(typeof document==='undefined')return;
@@ -20,7 +22,7 @@
     <label>Z travel · mm (optional)<input id="machine-z" type="number" min=".1" max="2000" step="any"></label></div>
     <label>Design dialect<select id="machine-dialect"></select></label>
     <div class="buttons"><button id="machine-save">Save as new profile</button><button id="machine-update">Update selected profile</button>
-    <button id="machine-export">Export profile</button><button id="machine-import">Import profile</button><button id="machine-forget">Remove from library</button></div>
+    <button id="machine-read">Set up from controller</button><button id="machine-export">Export profile</button><button id="machine-import">Import profile</button><button id="machine-forget">Remove from library</button></div>
     <input id="machine-file" type="file" accept=".json" hidden><p id="machine-info" role="status"></p>`;
   $('profileHint').after(panel);
   const el=id=>$('machine-'+id), select=$('profile');
@@ -68,6 +70,52 @@
     store(isUpdate?profiles.map(p=>p.id===id?item:p):[...profiles,item]);projectCopy=null;options();select.value=id;
     apply(item);previousId=id;el('info').textContent='Profile saved and applied to this project.';
   }
+  // Set the workspace from what the connected controller reports about its machine (/api/machine).
+  // The report is read, never written: the controller's own settings are left alone.
+  function adopt(d){
+    const env=d.environment||{},done=[],text=value=>String(Math.round(value*1000)/1000);
+    if(env.width&&env.height){
+      let item=profiles.find(p=>p.source===d.identity);
+      const known=!!item;
+      if(!item)item={id:'user-'+crypto.randomUUID(),...validate({name:d.name,width:env.width,height:env.height,zTravel:env.z_travel??null,protocol:env.protocol,source:d.identity})};
+      // A machine this project is already set up for keeps whatever was changed since.
+      if(!known||select.value!==item.id){
+        checkBed(item);
+        if(!known)store([...profiles,item]);
+        projectCopy=null;options();select.value=item.id;apply(item);previousId=item.id;
+      }
+      done.push((known?'Recognised ':'New machine: ')+item.name+(item.zTravel===null?'':', Z travel '+text(item.zTravel)+' mm'));
+    }
+    for(const [id,label,limit] of [['power','Speed or power',env.power_max],['feed','Feed',env.feed_max],['plunge','Plunge feed',env.plunge_max]]){
+      const input=$(id);if(!limit||!input)continue;
+      input.max=limit;
+      if(Number(input.value)>limit){input.value=text(limit);input.dispatchEvent(new Event('change',{bubbles:true}));done.push(label+' lowered to the controller limit of '+text(limit));}
+    }
+    if(typeof env.laser_mode==='boolean'&&env.laser_mode!==($('mode').value==='laser')){
+      $('mode').value=env.laser_mode?'laser':'router';$('mode').dispatchEvent(new Event('change',{bubbles:true}));
+      done.push('Head set to '+(env.laser_mode?'laser':'router')+' to match the controller');
+    }
+    const summary=[done.length?done.join('. ')+'.':'The controller reported no workspace size.',
+      d.reported.length?'Reported: '+d.reported.join(', ')+'.':'',
+      d.missing.length?'Not reported, set by hand: '+d.missing.join(', ')+'.':'',...d.warnings.map(w=>w+'.')].filter(Boolean).join(' ');
+    el('info').textContent=summary;return summary;
+  }
+  async function readMachine(asked){
+    const d=await api('machine');
+    if(!d.available){if(asked)throw Error(d.reason);return d.waiting;}
+    message(adopt(d));return false;
+  }
+  el('read').onclick=task(()=>readMachine(true));
+  // The first time a controller is connected and has reported its settings, the workspace follows it.
+  let handled=false,reading=false,settle=0;
+  // Each Connect is a new machine until it has answered; the pause lets the request reach the server first.
+  $('connect').addEventListener('click',()=>{handled=false;settle=Date.now()+1500;});
+  if(!offline)setInterval(async()=>{
+    if(!latest?.connected){handled=false;return;}
+    if(handled||reading||Date.now()<settle||latest.simulated||!window.studioSession?.machine_readback)return;
+    reading=true;
+    try{handled=!(await readMachine(false));}catch(error){handled=true;message(error.message,true);}finally{reading=false;}
+  },1000);
   el('save').onclick=task(()=>save(false));el('update').onclick=task(()=>save(true));
   el('export').onclick=task(()=>download('machine-profile.json',JSON.stringify({format:'kerfkite-machine/1',profile:read()},null,2),'application/json'));
   el('import').onclick=()=>el('file').click();

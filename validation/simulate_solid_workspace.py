@@ -187,6 +187,7 @@ def main():
                 from assembly_laser_workflow import run as assembly_laser
                 from simulate_exchange_workspace import run as exchange
                 from probe_leveling_workflow import run as probe_leveling
+                from machine_setup_workflow import run as machine_setup
 
                 # Each lesson can modify the example or viewport.
                 for lesson in (
@@ -215,6 +216,7 @@ def main():
                     svg_import,
                     machining_lessons,
                     probe_leveling,
+                    machine_setup,
                 ):
                     with browser.new_context(viewport={"width": 1440, "height": 980}, accept_downloads=True) as context:
                         workshop = context.new_page()

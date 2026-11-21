@@ -18,6 +18,7 @@ class Controller:
         self.init_remaining = deque()
         self.initialized = False
         self.identification = []
+        self.banner = None  # the firmware's start-up line, when one was received
         self.position_count = 0
         self.spindle_type = None
         self.serial = None
@@ -68,6 +69,8 @@ class Controller:
                 position_count=self.position_count,
                 spindle_type=self.spindle_type,
                 identification=list(self.identification),
+                banner=self.banner,
+                ready=self.ready,
                 progress=self.progress,
                 probe_count=len(self.probes),
                 log=list(self.log),
@@ -90,6 +93,7 @@ class Controller:
             self.init_remaining = deque(self.initialization_queries)
             self.initialized = False
             self.identification = []
+            self.banner = None
             self.simulated = port == 'simulator'
             self.ready = self.simulated
             self.state = 'Idle' if self.simulated else 'Connecting'
@@ -406,6 +410,7 @@ class Controller:
             self.identification.append(line)
             self.identification = self.identification[-8:]
         elif line.startswith(('Grbl', 'FluidNC')):
+            self.banner = line[:80]
             self.settings.clear()
             self.identification.clear()
             self.position_count = 0

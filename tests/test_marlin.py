@@ -160,6 +160,7 @@ class MarlinTests(unittest.TestCase):
     def test_real_factory_handshake_fragmented_read_timeout(self):
         fake = FakeSerial()
         c = Controller(serial_factory=lambda *a, **k: fake, timeout=60, boot_delay=0)
+        c.QUERIES = ()  # the handshake alone; the machine reports have their own tests
         self.addCleanup(c.disconnect)
         with patch.object(c, 'ports', return_value=[{'device': 'fake'}]):
             c.connect('fake')
