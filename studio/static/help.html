@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#ai-vision">Ai Vision</a> <a href="#android">Android</a> <a href="#assemblies">Assemblies</a> <a href="#branding">Branding</a> <a href="#cad-macros">Cad Macros</a> <a href="#cad-scripting">Cad Scripting</a> <a href="#camera-register">Camera Register</a> <a href="#desktop">Desktop</a> <a href="#developer">Developer</a> <a href="#drilling">Drilling</a> <a href="#fixtures">Fixtures</a> <a href="#geometry">Geometry</a> <a href="#install">Install</a> <a href="#installer-builds">Installer Builds</a> <a href="#labels">Labels</a> <a href="#laser-order">Laser Order</a> <a href="#laser-patterns">Laser Patterns</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#licensing">Licensing</a> <a href="#lightburn-import">Lightburn Import</a> <a href="#machine-setup">Machine Setup</a> <a href="#materials">Materials</a> <a href="#mcp-hosting">Mcp Hosting</a> <a href="#mcp">Mcp</a> <a href="#native">Native</a> <a href="#pcb">Pcb</a> <a href="#performance">Performance</a> <a href="#phone-connections">Phone Connections</a> <a href="#platforms">Platforms</a> <a href="#probe-leveling">Probe Leveling</a> <a href="#product">Product</a> <a href="#program-import">Program Import</a> <a href="#protocols">Protocols</a> <a href="#release-review">Release Review</a> <a href="#request-coverage">Request Coverage</a> <a href="#rotary">Rotary</a> <a href="#router-entry">Router Entry</a> <a href="#sbc">Sbc</a> <a href="#simulation">Simulation</a> <a href="#sketch">Sketch</a> <a href="#solid-cad">Solid Cad</a> <a href="#status">Status</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#svg">Svg</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#user-guide">User Guide</a> <a href="#web">Web</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>KerfKite Studio Help</title><style>body{font:16px/1.65 system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#203744;background:#f5f8fa}nav{display:flex;gap:12px;flex-wrap:wrap;padding:18px;background:#e4edf1}a{color:#176a9a}section{margin:60px 0;border-top:1px solid #ccd7de}img{max-width:100%}pre{overflow:auto;padding:16px;background:#e4edf1}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd7de}</style><h1>KerfKite Studio Help</h1><nav><a href="#readme">Readme</a> <a href="#ai-vision">Ai Vision</a> <a href="#android">Android</a> <a href="#assemblies">Assemblies</a> <a href="#branding">Branding</a> <a href="#cad-macros">Cad Macros</a> <a href="#cad-scripting">Cad Scripting</a> <a href="#camera-register">Camera Register</a> <a href="#desktop">Desktop</a> <a href="#developer">Developer</a> <a href="#drilling">Drilling</a> <a href="#fixtures">Fixtures</a> <a href="#geometry">Geometry</a> <a href="#install">Install</a> <a href="#installer-builds">Installer Builds</a> <a href="#labels">Labels</a> <a href="#laser-order">Laser Order</a> <a href="#laser-patterns">Laser Patterns</a> <a href="#laser-workshop">Laser Workshop</a> <a href="#licensing">Licensing</a> <a href="#lightburn-import">Lightburn Import</a> <a href="#machine-setup">Machine Setup</a> <a href="#materials">Materials</a> <a href="#mcp-hosting">Mcp Hosting</a> <a href="#mcp">Mcp</a> <a href="#native">Native</a> <a href="#pcb">Pcb</a> <a href="#performance">Performance</a> <a href="#phone-connections">Phone Connections</a> <a href="#platforms">Platforms</a> <a href="#probe-leveling">Probe Leveling</a> <a href="#product">Product</a> <a href="#program-import">Program Import</a> <a href="#protocols">Protocols</a> <a href="#release-review">Release Review</a> <a href="#request-coverage">Request Coverage</a> <a href="#rotary">Rotary</a> <a href="#router-entry">Router Entry</a> <a href="#sbc">Sbc</a> <a href="#simulation">Simulation</a> <a href="#sketch">Sketch</a> <a href="#solid-cad">Solid Cad</a> <a href="#status">Status</a> <a href="#supply-chain">Supply Chain</a> <a href="#surfaces-step">Surfaces Step</a> <a href="#svg">Svg</a> <a href="#template-catalogue">Template Catalogue</a> <a href="#troubleshooting">Troubleshooting</a> <a href="#user-guide">User Guide</a> <a href="#web">Web</a> </nav><section id="readme"><h1>KerfKite Studio</h1>
 <p>KerfKite Studio is an open-source CAD/CAM workbench for interchangeable CNC router, laser and drag-knife heads. Design in a browser, simulate a job, and prepare output for a supported controller. The Python application runs locally or as an authenticated HTTPS editor. KerfKite Pocket on Android includes an offline sketch editor and a CNC pendant paired with the Studio server.</p>
 <p><a href="screen-desktop-workspace.png"><img src="screen-desktop-workspace.png" alt="KerfKite’s desktop editor showing wattle, banksia and scarlet gum tags on a shared sheet, with separate layers for the outlines, engraving and lettering" /></a></p>
 <p>Three botanical tags share a sheet. The <strong>Layers</strong> tab separates engraving, lettering and cut outlines.</p>
@@ -3346,6 +3346,230 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 </ul>
 <p>The <a href="#android">Android pendant</a> pairs with the machine-side Studio server. The <a href="#phone-connections">connection guide</a> covers Wi-Fi, Bluetooth tethering and USB tethering. See the <a href="#geometry">geometry guide</a> for the 2D Trim &amp; Join workflow.</p>
 <p>The keyboard CAD workspace supports editable 2D and 3D scripts, reusable parameterized macros and viewport commands. The assistant workshop exposes the same editor through MCP, with optional adapters for a paired machine and hosted files. <a href="#cad-scripting">Keyboard CAD</a> · <a href="#cad-macros">Macro programming</a> · <a href="#mcp">Assistant setup</a> · <a href="#rotary">Rotary engraving</a></p>
+</section><section id="supply-chain"><h1>Third-party components and the plan for each</h1>
+<p>KerfKite prefers its own code to third-party components. The aim is a smaller supply chain and tighter control of what ships. This register lists every third-party component the product uses, what it is used for, and what is planned for it. <a href="#licensing">Licensing</a> holds the licence texts and notices; this document holds the decisions.</p>
+<h2>The rule</h2>
+<ol>
+<li><strong>Write it ourselves</strong> when the function is within reach: file formats, geometry, parsers, protocol handling, user interface code.</li>
+<li><strong>Exceptions</strong>, where our own code would raise risk and not lower it:
+<ul>
+<li>cryptography and TLS;</li>
+<li>the operating system's own interfaces, compilers and build tools;</li>
+<li>data that is not code, such as fonts.</li>
+</ul>
+</li>
+<li><strong>Whatever third-party code remains</strong> is vendored in the repository or pinned by cryptographic hash, is never fetched unpinned while building something that ships, and has its licence recorded.</li>
+<li><strong>A third-party library may serve as a test oracle</strong> in development and in the checks, to compare our code against. An oracle is never part of anything that ships.</li>
+<li><strong>When a Python part is ported to C++, the port uses our own code</strong>, not a C++ library that happens to do the same job as the Python one.</li>
+</ol>
+<h2>Native core (C++)</h2>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Use</th>
+<th>Plan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GEOS 3.14.1 (LGPL 2.1), fetched at build time by pinned hash</td>
+<td>Offsets, pockets and hatch fills</td>
+<td><strong>Replace now.</strong> An in-house polygon kernel is being written. GEOS then stays only as a test oracle, off by default, and is not shipped.</td>
+</tr>
+<tr>
+<td>JSON for Modern C++ 3.11.3 (MIT), one vendored header</td>
+<td>Reading projects and writing answers</td>
+<td><strong>Replace next.</strong> The core needs a small part of JSON: parse, navigate, and write numbers as it already formats them itself.</td>
+</tr>
+</tbody>
+</table>
+<h2>KerfKite Pocket (Android)</h2>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Use</th>
+<th>Plan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ZXing core 3.5.3 (Apache 2.0), from Maven</td>
+<td>Reading the pairing QR code</td>
+<td><strong>Replace later.</strong> The app reads one kind of symbol for one purpose; a decoder for that case is a contained piece of work. Until then the version stays pinned.</td>
+</tr>
+<tr>
+<td>Android Gradle Plugin, Gradle, Android Build Tools</td>
+<td>Building the app</td>
+<td>Keep: build tools. Versions are pinned.</td>
+</tr>
+</tbody>
+</table>
+<h2>Studio editor (browser code, vendored in <code>studio/static/vendor/</code>)</h2>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Use</th>
+<th>Plan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>qrcodegen (MIT)</td>
+<td>Drawing the pairing QR code</td>
+<td><strong>Replace later.</strong> Small; a QR encoder for short byte strings.</td>
+</tr>
+<tr>
+<td>opentype.js 2.0.0 (MIT), with tiny-inflate</td>
+<td>Reading font outlines for the text tool</td>
+<td><strong>Replace later</strong>, with a reader for the outline tables the text tool uses.</td>
+</tr>
+<tr>
+<td>Cormorant Garamond, Lora, Montserrat (OFL)</td>
+<td>Fonts</td>
+<td>Keep: data, not code.</td>
+</tr>
+</tbody>
+</table>
+<p>The rest of the editor is KerfKite's own JavaScript.</p>
+<h2>Studio (Python), to be retired as the C++ port proceeds</h2>
+<p>Each of these goes when the part that uses it is ported, under rule 5.</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Use</th>
+<th>Plan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Shapely 2.2.0, which carries GEOS</td>
+<td>Polygon work in ten modules: CAM operations, entry moves, sketch profiles, imports, solid text, exchange</td>
+<td><strong>Replace.</strong> The CAM operations move to the in-house kernel first; the other modules follow as they are ported.</td>
+</tr>
+<tr>
+<td>NumPy</td>
+<td>Arrays in seven modules: relief, stock simulation and others</td>
+<td>Replace on porting; plain arrays in C++.</td>
+</tr>
+<tr>
+<td>pyserial</td>
+<td>The serial link to the controller</td>
+<td>Replace on porting the sender: the serial port through each operating system's own interface.</td>
+</tr>
+<tr>
+<td>Flask, with Werkzeug, Jinja2, Click, itsdangerous, MarkupSafe, blinker</td>
+<td>The local web server behind the editor</td>
+<td>Replace on porting the server: a small local HTTP server of our own.</td>
+</tr>
+<tr>
+<td>ezdxf, with pyparsing, fonttools, typing-extensions</td>
+<td>DXF import and export</td>
+<td>Replace on porting: a reader and writer for the DXF entities Studio handles.</td>
+</tr>
+<tr>
+<td>pypdf</td>
+<td>Vector import from PDF</td>
+<td>Replace on porting. A sizeable piece: objects, compressed streams and drawing operators.</td>
+</tr>
+<tr>
+<td>manifold3d</td>
+<td>Solid modelling: unions, differences and intersections of 3D shapes</td>
+<td><strong>Decision needed.</strong> A robust 3D solid kernel is a much larger undertaking than the 2D one. Keep until the 2D kernel has proved the approach, then decide.</td>
+</tr>
+<tr>
+<td>Pillow</td>
+<td>Used only by packaging and guide-building scripts, not by Studio when it runs</td>
+<td><strong>Quick win:</strong> move it from the installed dependencies to a build-time requirement, after confirming the installers still build.</td>
+</tr>
+<tr>
+<td>cadquery-ocp (Open Cascade, LGPL), optional</td>
+<td>STEP import and export</td>
+<td><strong>Decision needed.</strong> Writing a STEP and B-rep kernel is not realistic. Keep it optional, as now, or drop STEP.</td>
+</tr>
+<tr>
+<td>cheroot and cryptography, optional</td>
+<td>The hosted editor, and the encrypted pendant link</td>
+<td>Keep cryptography: rule 2. In a native application the operating system's own TLS can take its place.</td>
+</tr>
+<tr>
+<td>fastmcp, pydantic, playwright, optional</td>
+<td>The MCP service</td>
+<td>Replace on porting the service; the browser driver goes when the editor no longer needs driving.</td>
+</tr>
+<tr>
+<td>Python and setuptools</td>
+<td>The runtime and packaging</td>
+<td>Retired when the port is complete.</td>
+</tr>
+</tbody>
+</table>
+<h2>Desktop launcher and installers</h2>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Use</th>
+<th>Plan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Go standard library</td>
+<td>The launcher</td>
+<td>Keep: it is the language's own library, with no other packages.</td>
+</tr>
+<tr>
+<td>uv, downloaded by pinned SHA-256 for each platform</td>
+<td>Installing the Python environment on first run</td>
+<td>Goes when Python goes. Until then it stays pinned by hash.</td>
+</tr>
+<tr>
+<td>The locked Python packages, each pinned by hash (<code>packaging/desktop/requirements.lock</code>)</td>
+<td>The installed environment</td>
+<td>As for each package above.</td>
+</tr>
+</tbody>
+</table>
+<h2>Build and checks</h2>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Use</th>
+<th>Plan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GitHub Actions: checkout, setup-python, upload-artifact, cache</td>
+<td>The checks</td>
+<td>Keep, and pin each by commit hash; they are pinned by version tag today.</td>
+</tr>
+<tr>
+<td>ruff, pytest, pytest-cov</td>
+<td>Development only</td>
+<td>Keep: they do not ship.</td>
+</tr>
+<tr>
+<td>CMake and the platform compilers</td>
+<td>Building</td>
+<td>Keep: build tools.</td>
+</tr>
+</tbody>
+</table>
+<h2>The editor in the C++ application</h2>
+<p>The plan for the port had left open whether the C++ application would use Qt 6 for its editor. Under this rule Qt would become the largest third-party component in the product. The alternative that fits the rule is to keep the existing editor, which is already KerfKite's own code, and serve it from the core's own local HTTP server. This is a decision for the owner and is not yet made.</p>
+<h2>Order of work</h2>
+<ol>
+<li>The polygon kernel, replacing GEOS in the core and Shapely in the CAM operations.</li>
+<li>The JSON reader and writer in the core.</li>
+<li>Pillow out of the installed dependencies; GitHub Actions pinned by hash.</li>
+<li>The remaining items as their parts are ported.</li>
+</ol>
 </section><section id="surfaces-step"><h1>Surface modelling and STEP exchange</h1>
 <p>In <strong>3D CAD</strong>, open <strong>Surfaces and STEP</strong> below the solid viewport. The Studio server supplies the modelling kernel. A filesystem project retains its geometry when moved to a server. All Studio coordinates are millimetres.</p>
 <h2>Shape a practice surface</h2>
