@@ -17,7 +17,7 @@ KerfKite prefers its own code to third-party components. The aim is a smaller su
 
 | Component | Use | Plan |
 | --- | --- | --- |
-| GEOS 3.14.1 (LGPL 2.1), fetched at build time by pinned hash | Offsets, pockets and hatch fills | **Being replaced.** The in-house polygon kernel is written and tested ([Polygon kernel](POLYGON-KERNEL.md)); the operations are being moved onto it. GEOS then stays only as a test oracle, off by default, and is not shipped. |
+| GEOS 3.14.1 (LGPL 2.1), formerly fetched at build time by pinned hash | Offsets, pockets and hatch fills | **Replaced.** The in-house polygon kernel computes them ([Polygon kernel](POLYGON-KERNEL.md)). GEOS is gone from the native build, with its build files and options; nothing is fetched while building, and the core contains no third-party code. GEOS remains only inside Shapely, in Studio's Python (below) and as the oracle of the validation scripts, which are not shipped in the core. |
 | JSON for Modern C++ 3.11.3 (MIT), one vendored header | Reading projects and writing answers | **Replaced.** The core reads and writes JSON with its own code (`kerfkite::Json`), and the vendored header is gone. The old library was the test oracle while the replacement was written. |
 
 ## KerfKite Pocket (Android)
@@ -43,7 +43,7 @@ Each of these goes when the part that uses it is ported, under rule 5.
 
 | Component | Use | Plan |
 | --- | --- | --- |
-| Shapely 2.2.0, which carries GEOS | Polygon work in ten modules: CAM operations, entry moves, sketch profiles, imports, solid text, exchange | **Replace.** The CAM operations move to the in-house kernel first; the other modules follow as they are ported. |
+| Shapely 2.2.0, which carries GEOS | Polygon work in ten modules: CAM operations, entry moves, sketch profiles, imports, solid text, exchange | **Being replaced.** Offsets, pockets and hatch fills now run on the in-house kernel, through the compiled extension. Shapely stays for now as their fallback where the extension is not installed (the portable wheel), as the reference the kernel is compared with in the checks, and in the other modules (V-carving, router entry clearance, sketch profiles, imports, text, exchange) until each is ported. |
 | NumPy | Arrays in seven modules: relief, stock simulation and others | Replace on porting; plain arrays in C++. |
 | pyserial | The serial link to the controller | Replace on porting the sender: the serial port through each operating system's own interface. |
 | Flask, with Werkzeug, Jinja2, Click, itsdangerous, MarkupSafe, blinker | The local web server behind the editor | Replace on porting the server: a small local HTTP server of our own. |
@@ -82,7 +82,7 @@ Where a component cannot be replaced, its licence comes with it. The way to keep
 
 | Part | What it contains | Third-party inside | Licence position |
 | --- | --- | --- | --- |
-| Core and `kerfkite-cam`: CAM, the geometry and solid kernels, file formats, levelling | KerfKite's own code | None, once GEOS and the JSON library are replaced | MIT, with no third-party obligations |
+| Core and `kerfkite-cam`: CAM, the geometry and solid kernels, file formats, levelling | KerfKite's own code | None: GEOS and the JSON library have been replaced | MIT, with no third-party obligations |
 | Editor application | KerfKite's own code, linked dynamically to Qt | Qt 6 (LGPL 3) | The code stays MIT. A distributed package must meet the LGPL for Qt: the notice and licence text, Qt's source or an offer of it, and the means to replace the Qt libraries. A commercial Qt licence is the alternative. |
 | STEP add-on, optional | A thin wrapper | Open Cascade (LGPL 2.1 with its exception) | Installed separately. Its package meets the LGPL for Open Cascade; nothing else in the product is affected. |
 | Encrypted links | The pendant listener and hosted editor | A cryptography library, or the operating system's own TLS | The library's permissive licence; notices only |
@@ -102,8 +102,8 @@ Every part of the product reaches a user through an installer, so each part, and
 | Part | What the installer puts in place | State |
 | --- | --- | --- |
 | Studio and its Python environment | The launcher, the locked Python packages, and the compiled extension for the platform. Probe levelling and circuit-board import live in that extension, so they arrive with it. | Installed today; the installer check exercises it. |
-| The in-house kernels (2D polygons, 3D solids, JSON) | Nothing separate: they are compiled into the core and the extension. | Arrive with the extension once each is switched in. |
-| `kerfkite-cam`, the command-line tool | The program for the platform. | **Not installed yet.** To be added once GEOS is out of it, so that it carries no third-party code. |
+| The in-house kernels (2D polygons, 3D solids, JSON) | Nothing separate: they are compiled into the core and the extension. | Arrive with the extension once each is switched in. The JSON code and the polygon kernel are; the installed-wheel check runs offsets, a pocket and a fill through the kernel and compares the programs with a recorded digest. |
+| `kerfkite-cam`, the command-line tool | The program for the platform. | **Not installed yet.** GEOS is out of it and it carries no third-party code; adding it to the installers is what remains. |
 | The editor of the C++ application | The program, and the Qt libraries it uses as separate files beside it, with Qt's notice, licence text and source offer. | To be built; the installer work is part of that stage, not after it. |
 | STEP add-on | Open Cascade and its wrapper, as a component the user chooses, with its notice and licence text. | Installed today as an option; the installer check has a STEP run. |
 | Encrypted links | The cryptography library for the platform. | Installed today. |
@@ -118,6 +118,6 @@ Rules for this:
 
 ## Order of work
 
-1. The polygon kernel, replacing GEOS in the core and Shapely in the CAM operations.
+1. The polygon kernel, replacing GEOS in the core and Shapely in the CAM operations. Done for the core and for Studio with its compiled extension; the other Shapely users in Studio follow.
 3. Pillow out of the installed dependencies.
 4. The remaining items as their parts are ported.

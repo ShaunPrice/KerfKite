@@ -1,10 +1,54 @@
-"""Polygon CAM and drag-knife preparation. Geometry stays separate from G-code."""
+"""Polygon CAM and drag-knife preparation. Geometry stays separate from G-code.
 
+Inside and outside offsets, pockets and hatch fills are computed by the native core's polygon kernel
+(native/core/src/operations.cpp) whenever the compiled extension is installed. That is the code the
+kerfkite-cam tool runs, so Studio and the tool cut the same paths. The settings are still checked here,
+with the messages and in the order they always had.
+
+Without the extension (the portable wheel) the same operations are computed with Shapely, as they were
+before the kernel. The two give the same regions; their vertices differ by far less than a machine can
+resolve, and the kernel's pockets have fewer of them. KERFKITE_POLYGON_BACKEND=shapely selects the Shapely
+code where the extension is installed, and =kernel refuses to run without the extension.
+"""
+
+import json
 import math
+import os
 from numbers import Real
 from shapely.geometry import Polygon, LineString, GeometryCollection, MultiPoint
 from shapely.ops import voronoi_diagram
 from shapely import affinity
+
+try:
+    from ._relief_native import core_call as _core_call
+except ImportError:  # the extension is absent, or was built before the core was added
+    _core_call = None
+
+_kernel_installed = None
+
+
+def kernel_available():
+    """Whether the compiled extension carries the native core's polygon operations."""
+    global _kernel_installed
+    if _kernel_installed is None:
+        try:
+            # An extension built before the operations were added answers "Unknown command".
+            _kernel_installed = _core_call is not None and bool(
+                _core_call('operation', '{"op": "region", "paths": [[[0, 0], [1, 0], [0, 1], [0, 0]]]}')
+            )
+        except (ValueError, RuntimeError):
+            _kernel_installed = False
+    return _kernel_installed
+
+
+def polygon_backend():
+    """'kernel' when the native core computes offsets, pockets and fills, 'shapely' when Shapely does."""
+    wanted = os.environ.get('KERFKITE_POLYGON_BACKEND', 'auto')
+    if wanted not in ('auto', 'kernel', 'shapely'):
+        raise ValueError('KERFKITE_POLYGON_BACKEND must be auto, kernel or shapely')
+    if wanted == 'kernel' and not kernel_available():
+        raise ValueError('The polygon kernel is not installed: build the compiled KerfKite extension')
+    return 'kernel' if wanted != 'shapely' and kernel_available() else 'shapely'
 
 
 def value(data, key, default, lo, hi):
@@ -35,12 +79,23 @@ def _point(point):
     )
 
 
-def region(paths):
+def _contours(paths):
     # Paths arrive from request bodies and imported files: reject anything that is not a list of XY points.
     if not isinstance(paths, (list, tuple)) or not all(
         isinstance(path, (list, tuple)) and all(map(_point, path)) for path in paths
     ):
         raise ValueError('Contours must be lists of finite XY points')
+
+
+def _kernel(op, paths, **settings):
+    """An operation of the native core on closed contours: its tool paths, or its message as ValueError."""
+    _contours(paths)
+    request = dict(settings, op=op, paths=[[[float(x), float(y)] for x, y in path] for path in paths])
+    return json.loads(_core_call('operation', json.dumps(request, allow_nan=False)))['paths']
+
+
+def region(paths):
+    _contours(paths)
     result = GeometryCollection()
     for path in paths:
         if len(path) < 4 or math.dist(path[0], path[-1]) > 1e-6:
@@ -124,6 +179,39 @@ def knife(paths, offset, lead):
     return result
 
 
+def _settings(project, op, mode, warnings):
+    """The checked settings of an offset, pocket or fill as the core's request, and the operation's warnings.
+
+    The checks, their order and their messages are the same whichever code computes the geometry.
+    """
+    if op in ('outside', 'inside'):
+        radius = (
+            value(project, 'tool_diameter', 3.175, 0.01, 100) / 2
+            if mode == 'router'
+            else value(project, 'kerf', 0.1, 0, 5) / 2
+        )
+        warnings.append(
+            'Compensation follows even-odd regions; nested contours become holes. Features smaller than the cutter may be inaccessible.'
+        )
+        return dict(op='offset', distance=radius if op == 'outside' else -radius)
+    if op == 'pocket':
+        if mode != 'router':
+            raise ValueError('Pocketing requires router mode')
+        radius = value(project, 'tool_diameter', 3.175, 0.01, 100) / 2
+        step = value(project, 'stepover', 1, 0.01, 100)
+        if step > radius:
+            raise ValueError('Pocket stepover cannot exceed cutter radius (50% diameter)')
+        warnings.append('Concentric pocket clearing preserves islands. Narrow residual features may remain.')
+        if project.get('router_entry', 'plunge') == 'plunge':
+            warnings.append('Plunge entry requires a centre-cutting tool.')
+        return dict(op='pocket', radius=radius, step=step)
+    if mode != 'laser':
+        raise ValueError('Hatch fill requires laser mode')
+    interval = value(project, 'interval', 0.2, 0.02, 20)
+    angle = value(project, 'hatch_angle', 0, -360, 360)
+    return dict(op='fill', interval=interval, angle=angle, crosshatch=bool(project.get('crosshatch')))
+
+
 def prepare(project, paths):
     op = project.get('operation', 'line')
     mode = project.get('mode')
@@ -145,29 +233,35 @@ def prepare(project, paths):
                 'Knife alignment lead-in marks material before each contour. Test blade offset and corner swivels on scrap.'
             ],
         )
+    kernel = polygon_backend() == 'kernel'
+    if kernel and op in ('outside', 'inside', 'pocket', 'fill'):
+        try:
+            request = _settings(project, op, mode, warnings)
+        except ValueError:
+            _kernel('region', paths)  # a contour that cannot be used is reported before a setting, as below
+            raise
+        paths = _kernel(paths=paths, **request)
+        if not paths:
+            raise ValueError('Operation produced no toolpaths')
+        return paths, None, warnings
+    if kernel:
+        # The core's reading of the contours stands, and its order of checks, as kerfkite-cam has them. Only
+        # V-carving goes on to Shapely.
+        _kernel('region', paths)
+        if op != 'vcarve':
+            raise ValueError('Unsupported operation')
+        if mode != 'router':
+            raise ValueError('V-carving requires router mode')
     g = region(paths)
     if op in ('outside', 'inside'):
-        radius = (
-            value(project, 'tool_diameter', 3.175, 0.01, 100) / 2
-            if mode == 'router'
-            else value(project, 'kerf', 0.1, 0, 5) / 2
-        )
-        offset = radius if op == 'outside' else -radius
+        offset = _settings(project, op, mode, warnings)['distance']
         result = g.buffer(offset, quad_segs=32)
         if result.is_empty:
             raise ValueError('Tool does not fit inside these contours')
         paths = outlines(result)
-        warnings.append(
-            'Compensation follows even-odd regions; nested contours become holes. Features smaller than the cutter may be inaccessible.'
-        )
     elif op == 'pocket':
-        if mode != 'router':
-            raise ValueError('Pocketing requires router mode')
-        radius = value(project, 'tool_diameter', 3.175, 0.01, 100) / 2
-        step = value(project, 'stepover', 1, 0.01, 100)
-        if step > radius:
-            raise ValueError('Pocket stepover cannot exceed cutter radius (50% diameter)')
-        inset = g.buffer(-radius, quad_segs=32)
+        request = _settings(project, op, mode, warnings)
+        inset = g.buffer(-request['radius'], quad_segs=32)
         if inset.is_empty:
             raise ValueError('Cutter cannot enter this pocket')
         paths = []
@@ -175,18 +269,12 @@ def prepare(project, paths):
             paths.extend(outlines(inset))
             if sum(map(len, paths)) > 100000:
                 raise ValueError('Pocket exceeds vertex limit')
-            inset = inset.buffer(-step, quad_segs=32)
-        warnings.append('Concentric pocket clearing preserves islands. Narrow residual features may remain.')
-        if project.get('router_entry', 'plunge') == 'plunge':
-            warnings.append('Plunge entry requires a centre-cutting tool.')
+            inset = inset.buffer(-request['step'], quad_segs=32)
     elif op == 'fill':
-        if mode != 'laser':
-            raise ValueError('Hatch fill requires laser mode')
-        interval = value(project, 'interval', 0.2, 0.02, 20)
-        angle = value(project, 'hatch_angle', 0, -360, 360)
-        paths = hatch(g, interval, angle)
-        if project.get('crosshatch'):
-            paths += hatch(g, interval, angle + 90)
+        request = _settings(project, op, mode, warnings)
+        paths = hatch(g, request['interval'], request['angle'])
+        if request['crosshatch']:
+            paths += hatch(g, request['interval'], request['angle'] + 90)
     elif op == 'vcarve':
         if mode != 'router':
             raise ValueError('V-carving requires router mode')

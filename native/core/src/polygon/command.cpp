@@ -5,6 +5,7 @@
 
 #include "kerfkite/cam.hpp"
 #include "kerfkite/polygon.hpp"
+#include "../operations.hpp"
 #include "kernel.hpp"
 
 namespace kerfkite {
@@ -94,22 +95,12 @@ json answer(const PolygonSet &region, const json &request) {
     return out;
 }
 
-// studio.operations.region, with its messages.
+// studio.operations.region, with its messages: the code the operations themselves use.
 PolygonSet compose_paths(const json &value) {
     if (!value.is_array()) throw ValueError("Contours must be lists of finite XY points");
-    std::vector<Ring> contours;
-    for (const json &item : value) {
-        const PathMm contour = path(item);
-        const double gap_x = contour.empty() ? 0 : contour.front()[0] - contour.back()[0], gap_y = contour.empty() ? 0 : contour.front()[1] - contour.back()[1];
-        if (contour.size() < 4 || std::sqrt(gap_x * gap_x + gap_y * gap_y) > 1e-6)
-            throw ValueError("This operation needs closed contours");
-        const Ring ring = ring_from_mm(contour);
-        if (!is_simple(ring) || std::fabs(signed_area(ring)) < 1e-9) throw ValueError("Repair self-crossing or zero-area contours before CAM");
-        contours.push_back(ring);
-    }
-    const PolygonSet region = compose(contours);
-    if (region.empty()) throw ValueError("Contours cancel under even-odd fill");
-    return region;
+    std::vector<PathMm> contours;
+    for (const json &item : value) contours.push_back(path(item));
+    return ::kerfkite::detail::contour_region(contours);
 }
 
 json artwork(const json &request) {

@@ -7,6 +7,10 @@ on:
       - native/**
       - validation/native_core_parity.py
       - validation/native_core_recorder.py
+      # The reference computes offsets, pockets and fills through the extension, which is built from these.
+      - studio/operations.py
+      - studio/_core_native.cpp
+      - setup.py
       - .github/workflows/native-core.yml
 permissions:
   contents: read
@@ -22,22 +26,11 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - name: Install the Python reference
+      - name: Install the Python reference with its compiled extension
+        # Offsets, pockets and fills are compared through the extension, so it must have been built.
         run: python -m pip install -e ".[dev]"
-      - name: Use the Shapely release whose GEOS the core builds
-        # The core compiles GEOS 3.14.1 (native/cmake/geos.cmake). Shapely 2.2.0 wheels contain that release;
-        # with another GEOS the reference's polygons can differ from the core's.
-        run: python -m pip install "shapely==2.2.0"
-      - name: Identify the runner image
-        id: image
-        shell: bash
-        run: echo "version=${ImageOS:-unknown}-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
-      - name: Keep the GEOS download and build between runs
-        # Only a time saving: without it GEOS is fetched and compiled again, with the same result.
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: build/native/_deps
-          key: geos-${{ matrix.runner }}-${{ steps.image.outputs.version }}-${{ hashFiles('native/cmake/geos.cmake') }}
+        env:
+          KERFKITE_REQUIRE_NATIVE: "1"
       - name: Build the native core
         run: |
           cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release

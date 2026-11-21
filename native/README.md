@@ -6,17 +6,22 @@ first stage of moving the application to C++: the core first, the editors last.
 The Python package remains the reference until the core reproduces all of it. A part of the Python code is
 removed only when its C++ replacement gives the same output to the byte on every case that can be compared.
 
+Polygon geometry is the one exception, by the project owner's decision. Offsets, pockets and hatch fills
+have a single implementation, this core's own polygon kernel, which Studio's Python calls through its
+compiled extension. They are shown to be right by geometry (invariants, and a comparison with Shapely by
+tolerance), not by matching another library's vertices.
+
 ## Build
 
     cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release
     cmake --build build/native --config Release
     ctest --test-dir build/native -C Release
 
-A C++17 compiler and CMake 3.16 or later are the only requirements. There is nothing to install: the
-first configuration downloads the GEOS 3.14.1 release, checks its SHA-256 and builds it with the core (see
-[GEOS](#geos)). `-DKERFKITE_WITH_GEOS=OFF` builds without it and without a network; the polygon operations
-are then declined. Apart from GEOS, which is being replaced separately, the core has no third-party
-source.
+A C++17 compiler and CMake 3.16 or later are the only requirements. There is nothing to install and
+nothing is downloaded: the core contains no third-party code. (Earlier revisions fetched and built GEOS for
+the polygon operations; the core's own polygon kernel has replaced it, and the `KERFKITE_WITH_GEOS`,
+`KERFKITE_SYSTEM_GEOS`, `KERFKITE_GEOS_SHARED` and `KERFKITE_GEOS_URL` options no longer exist.) On Linux
+x86-64 with two processor cores the whole build takes under a minute.
 
 JSON is read and written by the core's own code (`core/include/kerfkite/json.hpp`, `core/src/json.cpp`):
 all of RFC 8259 on input, numbers that stay whole numbers or floats as they were written, object names in
@@ -59,6 +64,12 @@ answers a request to the core's own polygon kernel (`"op"`: `union`, `intersecti
 `normalise`, `compose`, `offset`, `pocket`, `clip-lines`, `artwork`, `inspect`, `locate`), with rings in
 millimetres. It is there to test the kernel from outside; see [The polygon kernel](#the-polygon-kernel).
 
+    kerfkite-cam operation request.json
+
+answers the request Studio's Python makes for an offset, a pocket or a fill once it has checked the
+settings (`core/include/kerfkite/operation_command.hpp`): closed contours in, tool paths out. `generate`
+runs the same code for a whole project.
+
 ## What is ported
 
 | Area | State |
@@ -77,69 +88,20 @@ millimetres. It is there to test the kernel from outside; see [The polygon kerne
 | Ramp entry on router line jobs (`core/src/router_entry.cpp`) | Done, with or without holding tabs. A helix entry is accepted only on a pocket, so on a line job it is rejected with the reference's message; on a pocket it waits for pockets and is declined (`helical entry into pockets`). |
 | Holding tabs on router line jobs (`core/src/tabs.cpp`) | Done: tab count or explicit positions, tabs across the seam, and every rejection. |
 | Shapely's `LineString.is_simple` and `.length`, which both features ask of each contour (`core/src/simple_line.cpp`) | Done by GEOS's own rules, including its double-double orientation test. A contour whose answer depends on rounding inside GEOS is declined. |
-| Inside and outside offsets (router: tool radius; laser: half the kerf), concentric pockets, hatch and cross-hatch fills (`core/src/operations.cpp`) | Done, with GEOS 3.14.1, the release inside the Shapely wheels the reference uses. Declined in a build without GEOS. |
-| The core's own polygon kernel (`core/src/polygon/`, `core/include/kerfkite/polygon.hpp`) | Done and tested beside GEOS; **not yet what the operations above use**. See [The polygon kernel](#the-polygon-kernel). |
+| Inside and outside offsets (router: tool radius; laser: half the kerf), concentric pockets, hatch and cross-hatch fills (`core/src/operations.cpp`) | Done, on the core's own polygon kernel. This is the only implementation: Studio calls it through its extension (`studio/operations.py`), and keeps Shapely only as the fallback where the extension is not installed. |
+| The core's own polygon kernel (`core/src/polygon/`, `core/include/kerfkite/polygon.hpp`) | Done. See [The polygon kernel](#the-polygon-kernel). |
 | V-carving | Not yet. Declined with exit status 3. |
 | Rotary output, relief, stock simulation, importers, sender, pendant, editors | Not yet. |
 
 A request the core cannot fully reproduce is declined at the point where the Python code would enter the
 missing branch. The core never writes a program for a case it does not reproduce.
 
-## GEOS
-
-The Python code does its polygon work through Shapely, which is a wrapper around the GEOS library. The
-core calls GEOS directly, through the small layer in `core/src/geometry.hpp`, and makes the same calls
-with the same arguments. For the results to be the same bytes the library must be the same release:
-Shapely 2.2.0, which the desktop installer pins, carries **GEOS 3.14.1**, so that is the release the core
-builds. `shapely.geos_version_string` shows what a Python environment has; the comparison is only
-meaningful when it says 3.14.1.
-
-`cmake/geos.cmake` fetches the upstream release tarball (from the GitHub release, then from
-download.osgeo.org; both are the same file), checks its SHA-256 and adds it to the build. GEOS is compiled
-by its own build files as an optimised build, which is how the Shapely wheels are made, so it gets the
-flags its authors set: `-O3 -ffp-contract=off` on GCC and Clang, `/O2 /fp:precise` on MSVC. Its tests,
-benchmarks, tools and documentation are not built. The source is not copied into this repository.
-
-| Option | Default | Effect |
-| --- | --- | --- |
-| `KERFKITE_WITH_GEOS` | `ON` | `OFF` leaves GEOS out. Offsets, pockets and fills are declined, as V-carving is. |
-| `KERFKITE_SYSTEM_GEOS` | `OFF` | Link an installed GEOS found with `CMAKE_PREFIX_PATH`. It must be exactly 3.14.1; another version stops the configuration. |
-| `KERFKITE_GEOS_SHARED` | `OFF` | Build GEOS as shared libraries placed beside `kerfkite-cam` instead of linking it into the program. |
-| `KERFKITE_GEOS_URL` | empty | A local copy or mirror of `geos-3.14.1.tar.bz2`, used instead of downloading. It must have the pinned SHA-256. |
-
-GEOS is LGPL 2.1; `docs/LICENSING.md` says what that asks of anyone who distributes a program containing
-it, and `third_party/geos/` holds the licence text.
-
-Measured on Linux x86-64 with two processor cores: building GEOS adds about three and a half minutes to
-the first build (about 20 seconds without it), nothing to later builds, and takes `kerfkite-cam` from
-0.5 MB to 4.6 MB (0.4 MB to 3.6 MB with symbols stripped). Built as shared libraries, GEOS is 5.5 MB
-beside a 0.6 MB program.
-
-What has been shown and what has not. On Linux x86-64 the core's GEOS, compiled here with GCC 13 and again
-with Clang 18, gave the same vertices as the wheel's GEOS, compiled by its maintainers with GCC 14, on
-every case compared: beyond the 4,000 contour jobs the comparison runs each time, about 70,000 more with
-the GCC build and 11,000 with the Clang build.
-That is evidence that the compiler does not matter on that platform, not proof for the others. On
-macOS, Windows and Linux ARM64 the wheel's GEOS and the core's are again built by different compilers and
-possibly different C++ standard libraries. Both use the system's mathematics library, and both are built
-without floating-point contraction, so the same results are expected, but only the comparison run on each
-platform can show it. The GEOS functions whose results the output depends on are:
-
-* `GEOSBufferWithParams_r` (offsets and pockets; uses sine and cosine for the rounded corners),
-* `GEOSSymDifference_r` (the even-odd region) and `GEOSIntersection_r` (hatch rows),
-* `GEOSisValid_r`, `GEOSArea_r`, `GEOSLength_r`, `GEOSisEmpty_r` and `GEOSGeom_getExtent_r`,
-* and the order in which GEOS returns polygons, holes and ring vertices, which the core keeps.
-
-If a platform differs, the comparison reports the first differing case; the fix is then to decline the
-operation on that platform, not to accept a different program.
-
 ## The polygon kernel
 
-`core/src/polygon/` is KerfKite's own polygon library, written to take the place of GEOS in the core:
-regions with holes, Boolean operations, round offsets, line clipping, and the union of very many shapes
-with dark and clear polarity, which printed-circuit isolation needs. It uses the C++17 standard library and
-nothing else, and is built whether GEOS is in the build or not. `docs/POLYGON-KERNEL.md` is its full
-description; in short:
+`core/src/polygon/` is KerfKite's own polygon library, which took the place of GEOS in the core: regions
+with holes, Boolean operations, round offsets, line clipping, and the union of very many shapes with dark
+and clear polarity, which printed-circuit isolation needs. It uses the C++17 standard library and nothing
+else. `docs/POLYGON-KERNEL.md` is its full description; in short:
 
 * Vertices are whole nanometres. Every decision about the shape of a result is exact integer arithmetic in
   128 bits (the compiler's type, or the kernel's own where there is none). A crossing is rounded to the
@@ -155,18 +117,27 @@ description; in short:
 * A result has a defined order: outer rings counter-clockwise, holes clockwise, each ring from its smallest
   vertex, polygons and holes by their first vertices.
 
-The operations of this core still call GEOS. Replacing those calls is the next step, and the document lists
-each call with its replacement and the ways the tool paths will differ (where a ring starts, where the
-vertices of an arc fall, the order of the holes of one polygon). The output will then no longer be GEOS's to
-the byte, so the comparison below will have to treat offsets, pockets and fills by tolerance, as
-`validation/polygon_kernel_check.py` does.
+`core/src/operations.cpp` builds the four operations on it. The contours of a job are placed on the grid
+and combined by the even-odd rule; an offset is `offset()`; a pocket is `offset()` again and again until
+nothing is left; a fill clips rows to the region with `LineClipper`. A grid coordinate `n` leaves the
+kernel as the double `n / 1e6`, one correctly rounded division, so the doubles the generator formats are
+the same on every platform; the program writes three decimals, a thousand grid steps. Hatch rows are turned
+by a sine and cosine computed from a fixed series, not by the C library, and a piece of a row shorter than
+0.001 mm is dropped, because a stroke shorter than the program's last decimal cannot be cut (the Shapely
+code kept pieces down to 0.000001 mm).
+
+Compared with the paths GEOS gave, the same regions are cut, with vertices in other places: rings start at
+their left-most vertex, the corners of an arc lie just outside the true arc where GEOS's lay just
+inside, vertices on straight runs are dropped, and a pocket has far fewer vertices because an arc is not
+drawn again at every pass. `docs/POLYGON-KERNEL.md` gives the measured differences.
 
     ctest --test-dir build/native -R polygon
     python validation/polygon_kernel_check.py --cli build/native/kerfkite-cam
 
 The first runs the kernel's self-test, with the compiler's 128-bit integer and with the kernel's own. The
-second compares the kernel with Shapely by tolerance over generated cases, including the four operations
-made from kernel calls against `studio.operations`.
+second compares the kernel with Shapely by tolerance over generated cases; its `cam` group runs
+`studio.operations.prepare` on the kernel and on its Shapely fallback for each generated job and compares
+the tool paths, and checks that this tool and the extension answer alike to the last bit.
 
 ## How it is checked
 
@@ -192,6 +163,14 @@ those points may differ from one platform to another.
 
 Each case must be reproduced exactly, or declined. A different answer fails the check. The share of cases
 reproduced is the measure of progress, and the list of declined features is the work that remains.
+
+For offsets, pockets and fills the reference calls this core's kernel through the compiled extension, so
+the geometry of the operation is shared and cannot differ. Those jobs still compare everything round it:
+the checks of the settings and their order, the order of cutting, leads, tabs, ramp entries on the offset
+contours, laser power, post-processing and the totals. The comparison says which reference it is using.
+Without the extension the reference would fall back to Shapely, whose vertices differ, so the comparison
+stops; `--without-polygon-operations` runs it with those jobs left out, and says so in its result.
+`validation/polygon_kernel_check.py` is the check of the geometry itself.
 
 `.github/workflows/native-core.yml` runs the build, the self-test and this comparison on macOS (Apple
 silicon and Intel), Windows, and Linux (x86-64 and ARM64).
