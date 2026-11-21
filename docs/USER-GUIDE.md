@@ -122,7 +122,7 @@ Leaf/berry occlusion in the newer botanical artwork is applied to actual vector 
 | Outside / inside | Compensates closed valid contours using cutter radius or laser kerf. Nested contours use even-odd holes. A tool may not reach narrow features. |
 | Pocket | Concentric router clearing around preserved islands. Stepover is limited to half cutter diameter. Plunge entry needs a suitable centre-cutting tool; inaccessible corners can remain. |
 | Laser hatch fill | Scans an even-odd region at the specified interval/angle, with optional crosshatch. |
-| V-carve | Sampled medial-axis paths with V-angle, depth and cutter-diameter limits. Fine detail and wide-area clearing need inspection. |
+| V-carve | Sampled medial-axis paths with V-angle, depth and cutter-diameter limits. The cut stays one sampling step (**V detail sampling**) short of every wall. With the compiled extension the pieces are joined into longer paths and cut in an order with little travel. Fine detail and wide-area clearing need inspection. |
 | Vinyl drag knife | Offset pivot paths, alignment leads and corner swivels, with powered outputs off. The alignment lead marks material before each contour. |
 
 Assign current operation settings to a selected object when objects need different operations or feeds. Object order becomes operation order; output can be disabled per object. Continuous jobs reject changes of head, protocol or cutter geometry. Make separate reviewed jobs for tool changes. Saving a material/tool preset records your entered settings; it does not calibrate feeds, cutter dimensions or machine limits.

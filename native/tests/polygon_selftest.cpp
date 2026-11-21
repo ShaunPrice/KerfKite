@@ -4,7 +4,8 @@
 // anything differently would be caught. validation/polygon_kernel_check.py compares with GEOS.
 //
 //   kerfkite_polygon_selftest           the checks
-//   kerfkite_polygon_selftest --bench   timings of the two cases named in docs/POLYGON-KERNEL.md as well
+//   kerfkite_polygon_selftest --bench   timings of the cases named in docs/POLYGON-KERNEL.md as well
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -669,6 +670,372 @@ static void generated() {
     expect(passes > 10 && passes < 200, "a pocket ends, after " + std::to_string(passes) + " passes");
 }
 
+// ---- Voronoi diagrams of points ---------------------------------------------------------------------
+
+// The in-circle test worked out another way, for coordinates small enough that the whole determinant fits
+// 128 bits: the points are moved so that a is the origin, and the determinant expanded along its first
+// column and not its last.
+static int small_in_circle(const Point &a, const Point &b, const Point &c, const Point &d) {
+    using namespace kerfkite::polygon::detail;
+    const Coord bx = b.x - a.x, by = b.y - a.y, cx = c.x - a.x, cy = c.y - a.y, dx = d.x - a.x, dy = d.y - a.y;
+    const Int128 b2 = multiply(bx, bx) + multiply(by, by), c2 = multiply(cx, cx) + multiply(cy, cy), d2 = multiply(dx, dx) + multiply(dy, dy);
+    // | bx by b2 ; cx cy c2 ; dx dy d2 |, which is negative when d is inside the circle through a, b, c.
+    const Int128 det = Int128(bx) * (Int128(cy) * d2 - Int128(dy) * c2) - Int128(cx) * (Int128(by) * d2 - Int128(dy) * b2) +
+                       Int128(dx) * (Int128(by) * c2 - Int128(cy) * b2);
+    return -sign(det);
+}
+
+// A second digest, for triangulations and Voronoi edges: recorded like the first.
+static std::uint64_t voronoi_digest = 1469598103934665603ULL;
+static void absorb_voronoi(std::uint64_t value) {
+    for (int i = 0; i < 8; ++i) {
+        voronoi_digest ^= (value >> (8 * i)) & 0xff;
+        voronoi_digest *= 1099511628211ULL;
+    }
+}
+
+struct TriangulationCounts {
+    std::size_t points = 0, triangles = 0, edges = 0, hull = 0, voronoi = 0;
+};
+
+// Every property a Delaunay triangulation has, checked exactly, and the Voronoi edges against the
+// definition. `small` says the coordinates fit the independent in-circle test above; every point is then
+// tested against every triangle, and otherwise against the triangles across each edge, which is equivalent.
+static TriangulationCounts check_triangulation(const std::vector<Point> &given, bool small, const std::string &what) {
+    using namespace kerfkite::polygon::detail;
+    const Triangulation t = delaunay(given);
+    TriangulationCounts counts;
+    const std::size_t n = t.points.size();
+    counts.points = n, counts.triangles = t.triangles.size(), counts.edges = t.edges.size();
+    bool fine = true;
+    const auto must = [&](bool condition, const char *reason) {
+        if (!condition && fine) expect(false, what + ": " + reason);
+        fine = fine && condition;
+    };
+    // Every point once, in order.
+    std::vector<Point> sorted = given;
+    std::sort(sorted.begin(), sorted.end());
+    sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
+    must(sorted == t.points, "the points are the distinct points given, in order");
+    if (n < 2) {
+        must(t.triangles.empty() && t.edges.empty(), "fewer than two points have no edge");
+        return counts;
+    }
+    bool flat = true;
+    for (const Point &p : t.points) flat = flat && orient(t.points[0], t.points[1], p) == 0;
+    // Triangles turn to the left, start at their smallest point and come in order.
+    for (std::size_t i = 0; i < t.triangles.size(); ++i) {
+        const std::array<std::uint32_t, 3> &tri = t.triangles[i];
+        must(tri[0] < tri[1] && tri[0] < tri[2] && tri[1] < n && tri[2] < n, "a triangle starts at its smallest point");
+        must(orient(t.points[tri[0]], t.points[tri[1]], t.points[tri[2]]) > 0, "a triangle runs counter-clockwise");
+        if (i) must(t.triangles[i - 1] < tri, "the triangles are in order");
+        if (small && n <= 400)
+            for (const Point &p : t.points) must(small_in_circle(t.points[tri[0]], t.points[tri[1]], t.points[tri[2]], p) <= 0, "a point lies inside a triangle's circle");
+    }
+    // Edges: in order, each naming triangles that hold it on the proper side.
+    std::vector<int> touched(n, 0), sides(t.triangles.size(), 0);
+    const auto apex = [&](std::uint32_t triangle, std::uint32_t a, std::uint32_t b) {
+        for (const std::uint32_t corner : t.triangles[triangle])
+            if (corner != a && corner != b) return corner;
+        return a;
+    };
+    for (std::size_t i = 0; i < t.edges.size(); ++i) {
+        const Triangulation::Edge &e = t.edges[i];
+        must(e.a < e.b && e.b < n, "an edge runs from its smaller point");
+        if (i) must(t.edges[i - 1].a < e.a || (t.edges[i - 1].a == e.a && t.edges[i - 1].b < e.b), "the edges are in order");
+        touched[e.a] = touched[e.b] = 1;
+        const Point &a = t.points[e.a], &b = t.points[e.b];
+        std::uint32_t left = e.a, right = e.a;
+        if (e.left != kNoTriangle) {
+            left = apex(e.left, e.a, e.b), ++sides[e.left];
+            must(left != e.a && orient(a, b, t.points[left]) > 0, "the triangle on the left of an edge is on its left");
+        }
+        if (e.right != kNoTriangle) {
+            right = apex(e.right, e.a, e.b), ++sides[e.right];
+            must(right != e.a && orient(a, b, t.points[right]) < 0, "the triangle on the right of an edge is on its right");
+        }
+        // The local test: the corner across an edge is not inside the circle of the triangle this side.
+        if (e.left != kNoTriangle && e.right != kNoTriangle) {
+            must(in_circle(a, b, t.points[left], t.points[right]) <= 0, "the corner across an edge lies inside the circle");
+            if (small) must(small_in_circle(a, b, t.points[left], t.points[right]) <= 0, "the corner across an edge lies inside the circle (second method)");
+        }
+        if ((e.left == kNoTriangle) != (e.right == kNoTriangle)) {
+            ++counts.hull;
+            // A hull edge has every point on its triangle's side or on its line.
+            for (const Point &p : t.points) must(e.left != kNoTriangle ? orient(a, b, p) >= 0 : orient(a, b, p) <= 0, "a point lies outside a hull edge");
+        } else if (e.left == kNoTriangle) {
+            must(flat, "an edge without a triangle among points that are not on one line");
+        }
+        absorb_voronoi(e.a), absorb_voronoi(e.b), absorb_voronoi(e.left), absorb_voronoi(e.right);
+    }
+    for (const int side : sides) must(side == 3, "a triangle does not have three edges");
+    for (const int seen : touched) must(seen == 1, "a point is in no edge");
+    // Euler's formula with the face outside counted: points - edges + (triangles + 1) = 2.
+    must(n + t.triangles.size() + 1 == t.edges.size() + 2, "Euler's formula");
+    if (flat) {
+        must(t.triangles.empty() && t.edges.size() == n - 1, "points on one line make a chain");
+        for (std::size_t i = 0; i < t.edges.size(); ++i) must(t.edges[i].a == i && t.edges[i].b == i + 1, "the chain joins neighbours");
+    } else {
+        // With h points on the hull: 2n - 2 - h triangles and 3n - 3 - h edges, so the hull is complete.
+        must(t.triangles.size() == 2 * n - 2 - counts.hull && t.edges.size() == 3 * n - 3 - counts.hull, "the counts of a complete triangulation");
+        // The corners of the convex hull, found by the kernel's own hull, are all on hull edges.
+        std::vector<int> on_hull(n, 0);
+        for (const Triangulation::Edge &e : t.edges)
+            if ((e.left == kNoTriangle) != (e.right == kNoTriangle)) on_hull[e.a] = on_hull[e.b] = 1;
+        for (const Point &corner : convex_hull(t.points))
+            must(on_hull[static_cast<std::size_t>(std::lower_bound(t.points.begin(), t.points.end(), corner) - t.points.begin())] == 1, "a corner of the convex hull is missing");
+    }
+
+    // Voronoi edges in a box a little larger than the points.
+    Point low = t.points[0], high = t.points[0];
+    for (const Point &p : t.points) low.x = std::min(low.x, p.x), low.y = std::min(low.y, p.y), high.x = std::max(high.x, p.x), high.y = std::max(high.y, p.y);
+    const Coord margin = std::max<Coord>(3, (high.x - low.x + high.y - low.y) / 7);
+    low.x = std::max(low.x - margin, -kMaxCoordinate), low.y = std::max(low.y - margin, -kMaxCoordinate);
+    high.x = std::min(high.x + margin, kMaxCoordinate), high.y = std::min(high.y + margin, kMaxCoordinate);
+    const std::vector<VoronoiEdge> edges = voronoi_edges(t, low, high);
+    counts.voronoi = edges.size();
+    const auto squared = [](const Point &p, const Point &q) { return to_double(multiply(p.x - q.x, p.x - q.x) + multiply(p.y - q.y, p.y - q.y)); };
+    for (std::size_t i = 0; i < edges.size(); ++i) {
+        const VoronoiEdge &e = edges[i];
+        must(e.ends[0] < e.ends[1], "a Voronoi edge runs from its smaller end");
+        if (i) must(edges[i - 1].ends[0] < e.ends[0] || (edges[i - 1].ends[0] == e.ends[0] && !(e.ends[1] < edges[i - 1].ends[1])), "the Voronoi edges are in order");
+        must(e.sites[0] < e.sites[1] && e.sites[1] < n, "a Voronoi edge names its two points");
+        for (const Point &end : e.ends) {
+            must(end.x >= low.x && end.x <= high.x && end.y >= low.y && end.y <= high.y, "a Voronoi edge leaves the box");
+            // Each end is as near its two points as any point is, but for the rounding of the end: moving a
+            // point by 0.71 units changes its distance to a site by at most as much.
+            const double own = std::sqrt(squared(end, t.points[e.sites[0]])), other = std::sqrt(squared(end, t.points[e.sites[1]]));
+            must(std::fabs(own - other) <= 1.5, "an end of a Voronoi edge is not equally far from its two points");
+            if (n <= 400)
+                for (const Point &p : t.points) must(std::sqrt(squared(end, p)) >= own - 1.5, "a third point is nearer an end of a Voronoi edge");
+        }
+        absorb_voronoi(static_cast<std::uint64_t>(e.ends[0].x)), absorb_voronoi(static_cast<std::uint64_t>(e.ends[0].y));
+        absorb_voronoi(static_cast<std::uint64_t>(e.ends[1].x)), absorb_voronoi(static_cast<std::uint64_t>(e.ends[1].y));
+        absorb_voronoi(e.sites[0]), absorb_voronoi(e.sites[1]);
+    }
+    return counts;
+}
+
+// Whole points of the circle x^2 + y^2 = 1105^2 (1105 = 5 * 13 * 17), from the Pythagorean triples whose
+// hypotenuse divides it: 108 of them, exactly on one circle.
+static std::vector<Point> circle_points() {
+    std::vector<Point> out;
+    const Coord pairs[][2] = {{2, 1}, {3, 2}, {4, 1}, {8, 1}, {7, 4}, {9, 2}, {7, 6}, {14, 5}, {11, 10}, {33, 4}, {32, 9}, {31, 12}, {24, 23}};
+    for (const auto &pair : pairs) {
+        const Coord m = pair[0], k = pair[1], d = m * m + k * k, x = (m * m - k * k) * (1105 / d), y = 2 * m * k * (1105 / d);
+        for (const Coord sx : {-1, 1})
+            for (const Coord sy : {-1, 1}) out.push_back({sx * x, sy * y}), out.push_back({sx * y, sy * x});
+    }
+    out.push_back({1105, 0}), out.push_back({-1105, 0}), out.push_back({0, 1105}), out.push_back({0, -1105});
+    return out;
+}
+
+static void voronoi_diagrams() {
+    using namespace kerfkite::polygon::detail;
+    // The in-circle test: inside, outside, on the circle, clockwise corners, and the same far from the origin
+    // and at the largest coordinates, where the determinant needs more than 128 bits.
+    const Point a{0, 0}, b{4, 0}, c{0, 4};
+    expect(in_circle(a, b, c, {1, 1}) == 1 && in_circle(a, b, c, {5, 5}) == -1 && in_circle(a, b, c, {4, 4}) == 0 && in_circle(a, c, b, {1, 1}) == -1,
+           "a point inside, outside and on a circle");
+    const Coord far = kMaxCoordinate - 5, wide = Coord(1) << 36;
+    expect(in_circle({far, far}, {far + 4, far}, {far, far + 4}, {far + 1, far + 1}) == 1 && in_circle({-far, -far}, {-far + 4, -far}, {-far, -far + 4}, {-far + 4, -far + 4}) == 0,
+           "the in-circle test far from the origin");
+    expect(in_circle({-wide, -wide}, {wide, -wide}, {wide, wide}, {-wide, wide}) == 0 && in_circle({-wide, -wide}, {wide, -wide}, {wide, wide}, {-wide + 1, wide}) == 1 &&
+               in_circle({-wide, -wide}, {wide, -wide}, {wide, wide}, {-wide, wide + 1}) == -1,
+           "the in-circle test of a square 137 m across, one unit either side of its circle");
+    Random random(41);
+    bool agree = true, shifted = true;
+    for (int i = 0; i < 20000; ++i) {
+        Point p[4];
+        const Coord reach = i % 3 == 0 ? 6 : i % 3 == 1 ? 1000 : 500000;
+        for (Point &q : p) {
+            q.x = random.between(-reach, reach);
+            q.y = random.between(-reach, reach);
+        }
+        const int wanted = small_in_circle(p[0], p[1], p[2], p[3]);
+        agree = agree && in_circle(p[0], p[1], p[2], p[3]) == wanted && in_circle(p[1], p[0], p[2], p[3]) == -wanted && in_circle(p[1], p[2], p[0], p[3]) == wanted;
+        // Moved to the edge of the range, where the sums of products pass 2^128, the answer is the same.
+        const Coord mx = kMaxCoordinate - reach, my = -(kMaxCoordinate - reach);
+        shifted = shifted && in_circle({p[0].x + mx, p[0].y + my}, {p[1].x + mx, p[1].y + my}, {p[2].x + mx, p[2].y + my}, {p[3].x + mx, p[3].y + my}) == wanted;
+        // Made 2^16 times larger the determinant is 2^64 times larger, with the same sign.
+        const Coord scale = Coord(1) << 16;
+        shifted = shifted && in_circle({p[0].x * scale, p[0].y * scale}, {p[1].x * scale, p[1].y * scale}, {p[2].x * scale, p[2].y * scale}, {p[3].x * scale, p[3].y * scale}) == wanted;
+    }
+    expect(agree, "the in-circle test agrees with the determinant taken another way");
+    expect(shifted, "the in-circle test is the same moved to the edge of the range and made 65,536 times larger");
+    expect(sign(wide_product(multiply(-3, 5), multiply(7, 11))) == -1 && sign(wide_product(Int128(0), multiply(-7, 11))) == 0 &&
+               sign(wide_product(multiply(far, far), multiply(far, far)) + wide_product(multiply(-far, far), multiply(far, far))) == 0 &&
+               sign(wide_product(multiply(far, far), multiply(far, far)) + wide_product(multiply(-far, far), multiply(far, far - 1))) == 1 &&
+               sign(wide_product(multiply(far, far), multiply(far, far - 1)) + wide_product(multiply(-far, far), multiply(far, far))) == -1,
+           "sums of products of 150 bits");
+
+    // Small cases with known answers.
+    {
+        const Triangulation none = delaunay({}), one = delaunay({{5, 5}, {5, 5}});
+        expect(none.points.empty() && none.edges.empty() && one.points.size() == 1 && one.edges.empty() && voronoi_edges(one, {0, 0}, {9, 9}).empty(), "no points, and one point twice");
+        const Triangulation two = delaunay({{10, 0}, {0, 0}});
+        const std::vector<VoronoiEdge> between = voronoi_edges(two, {-4, -6}, {20, 8});
+        expect(two.edges.size() == 1 && two.triangles.empty() && between.size() == 1 && between[0].ends[0] == Point{5, -6} && between[0].ends[1] == Point{5, 8},
+               "two points: their bisector, cut to the box");
+        expect(voronoi_edges(two, {6, -6}, {20, 8}).empty() && voronoi_edges(two, {5, -6}, {5, 8}).size() == 1 && voronoi_edges(two, {20, 8}, {-4, -6}).empty(),
+               "a bisector outside the box, along its edge, and a box with no extent");
+        // Three points on a line: two bisectors, and no edge between the outer two.
+        const Triangulation line = delaunay({{0, 0}, {4, 4}, {10, 10}});
+        const std::vector<VoronoiEdge> bisectors = voronoi_edges(line, {0, 0}, {10, 10});
+        expect(line.triangles.empty() && line.edges.size() == 2 && bisectors.size() == 2 && bisectors[0].ends[0] == Point{0, 4} && bisectors[0].ends[1] == Point{4, 0} &&
+                   bisectors[1].ends[0] == Point{4, 10} && bisectors[1].ends[1] == Point{10, 4},
+               "three points on a line");
+        // A right triangle: its circle is centred on the middle of the long side, and the three edges leave from there.
+        const Triangulation corner = delaunay({{0, 0}, {8, 0}, {0, 6}});
+        const std::vector<VoronoiEdge> rays = voronoi_edges(corner, {-10, -10}, {20, 20});
+        bool meet = rays.size() == 3;
+        for (const VoronoiEdge &ray : rays) meet = meet && (ray.ends[0] == Point{4, 3} || ray.ends[1] == Point{4, 3});
+        expect(corner.triangles.size() == 1 && corner.triangles[0] == (std::array<std::uint32_t, 3>{0, 2, 1}) && meet, "a triangle: three edges from the centre of its circle");
+        // A centre that is not a grid point is rounded to the nearest, halves upwards: (0,0), (3,0), (0,3) have
+        // their centre at (1.5, 1.5), and (0,0), (2,0), (1,3) at (1, 4/3).
+        const std::vector<VoronoiEdge> halves = voronoi_edges(delaunay({{0, 0}, {3, 0}, {0, 3}}), {-9, -9}, {9, 9});
+        bool rounded = halves.size() == 3;
+        for (const VoronoiEdge &ray : halves) rounded = rounded && (ray.ends[0] == Point{2, 2} || ray.ends[1] == Point{2, 2});
+        const std::vector<VoronoiEdge> thirds = voronoi_edges(delaunay({{0, 0}, {2, 0}, {1, 3}}), {-9, -9}, {9, 9});
+        rounded = rounded && thirds.size() == 3;
+        for (const VoronoiEdge &ray : thirds) rounded = rounded && (ray.ends[0] == Point{1, 1} || ray.ends[1] == Point{1, 1});
+        expect(rounded, "a centre between grid points is rounded to the nearest, halves upwards");
+        // A square: four corners on one circle. Two triangles, whichever diagonal, and the edge between them
+        // has no length, so the diagram is the four edges from the centre and nothing else.
+        const Triangulation four = delaunay({{0, 0}, {10, 0}, {10, 10}, {0, 10}});
+        const std::vector<VoronoiEdge> cross = voronoi_edges(four, {-5, -5}, {15, 15});
+        bool centred = cross.size() == 4;
+        for (const VoronoiEdge &ray : cross) centred = centred && (ray.ends[0] == Point{5, 5} || ray.ends[1] == Point{5, 5});
+        expect(four.triangles.size() == 2 && four.edges.size() == 5 && centred, "four corners of a square: four edges from the centre");
+        // A thin triangle has its centre far away: 2^37 units up for these three. The edges are cut to the box.
+        const std::vector<VoronoiEdge> thin = voronoi_edges(delaunay({{-(Coord(1) << 19), 0}, {0, 1}, {Coord(1) << 19, 0}}), {-(Coord(1) << 19), -100}, {Coord(1) << 19, 100});
+        const Coord quarter = Coord(1) << 18;
+        expect(thin.size() == 2 && thin[0].ends[0] == Point{-quarter, -100} && thin[0].ends[1] == Point{-quarter, 100} && thin[1].ends[0] == Point{quarter, -100} &&
+                   thin[1].ends[1] == Point{quarter, 100},
+               "a centre far outside the box");
+        expect(rejects([] { delaunay({{kMaxCoordinate + 1, 0}, {0, 0}}); }) && rejects([&] { voronoi_edges(two, {0, 0}, {0, kMaxCoordinate + 1}); }), "points and boxes beyond the range are refused");
+    }
+
+    // Generated sets, with the degenerate ones a V-carve gives: samples along straight walls (on one line),
+    // rectangles and lattices (on one circle), repeated points.
+    const std::vector<Point> circle = circle_points();
+    TriangulationCounts total;
+    std::size_t flat_sets = 0;
+    for (int round = 0; round < 260; ++round) {
+        const int kind = round % 10;
+        const int count = 2 + static_cast<int>(random.next() % (round % 20 == 19 ? 900 : 90));
+        std::vector<Point> points;
+        bool small = true;
+        if (kind == 0) {  // scattered
+            for (int i = 0; i < count; ++i) {
+                const Coord x = random.between(-400000, 400000);
+                points.push_back({x, random.between(-400000, 400000)});
+            }
+        } else if (kind == 1) {  // a lattice with gaps and repeats
+            for (int i = 0; i < count; ++i) {
+                const Coord x = random.between(0, 7) * 1000;
+                points.push_back({x, random.between(0, 7) * 1000});
+            }
+        } else if (kind == 2) {  // on one line, at any slope
+            const Coord dx = random.between(-9, 9);
+            const Coord dy = dx == 0 ? 1 + random.between(0, 5) : random.between(-9, 9);
+            for (int i = 0; i < count; ++i) {
+                const Coord k = random.between(-300, 300);
+                points.push_back({k * dx, k * dy});
+            }
+        } else if (kind == 3) {  // on one circle, sometimes with its centre and a few others
+            for (int i = 0; i < count; ++i) points.push_back(circle[random.next() % circle.size()]);
+            if (round % 20 < 10) points.push_back({0, 0});
+            if (round % 30 < 10) {
+                const Coord x = random.between(-1300, 1300);
+                points.push_back({x, random.between(-1300, 1300)});
+            }
+        } else if (kind == 4) {  // the samples of a rectangle's outline, as a V-carve takes them
+            const Coord w = random.between(1, 30), h = random.between(1, 30), step = random.between(1, 4) * 250;
+            for (Coord i = 0; i <= w; ++i) points.push_back({i * step, 0}), points.push_back({i * step, h * step});
+            for (Coord j = 0; j <= h; ++j) points.push_back({0, j * step}), points.push_back({w * step, j * step});
+        } else if (kind == 5) {  // a few units apart
+            for (int i = 0; i < count; ++i) {
+                const Coord x = random.between(-3, 3);
+                points.push_back({x, random.between(-3, 3)});
+            }
+        } else if (kind == 6) {  // two parallel walls and a slanted one
+            for (int i = 0; i < count; ++i) points.push_back({i * 500, 0}), points.push_back({i * 500 + 250, 3000}), points.push_back({i * 300, 9000 + i * 400});
+        } else if (kind == 7) {  // clusters far apart
+            for (int i = 0; i < count; ++i) {
+                const Coord cx = random.between(-2, 2) * 100000, cy = random.between(-2, 2) * 100000;
+                const Coord x = cx + random.between(-20, 20);
+                points.push_back({x, cy + random.between(-20, 20)});
+            }
+        } else if (kind == 8) {  // at the edge of the range: the 256-bit sums at their largest
+            small = false;
+            const Coord most = (Coord(1) << 20) - 1, fine = (Coord(1) << 17) - 1;
+            for (int i = 0; i < count; ++i) {
+                const Coord x = random.between(-most, most) * (fine + 1);
+                const Coord y = random.between(-most, most) * (fine + 1);
+                const Coord within = random.between(0, fine);
+                points.push_back({x + within, y + random.between(0, fine)});
+            }
+            if (round % 20 == 8)
+                for (const Point &p : circle) points.push_back({p.x * (Coord(1) << 26), p.y * (Coord(1) << 26)});
+        } else {  // a lattice far from the origin, turned: the same shape as kind 1 with large coordinates
+            small = false;
+            for (int i = 0; i < count; ++i) {
+                const Coord u = random.between(0, 9), v = random.between(0, 9);
+                points.push_back({kMaxCoordinate - 100000000 + 3000000 * u - 4000000 * v, -kMaxCoordinate + 100000000 + 4000000 * u + 3000000 * v});
+            }
+        }
+        const TriangulationCounts counts = check_triangulation(points, small, "generated points " + std::to_string(round));
+        total.points += counts.points, total.triangles += counts.triangles, total.edges += counts.edges, total.hull += counts.hull, total.voronoi += counts.voronoi;
+        if (counts.triangles == 0) ++flat_sets;
+        // The order the points are given in does not matter, nor does moving them all.
+        if (round % 4 == 0 && small) {
+            std::vector<Point> again(points.rbegin(), points.rend());
+            const Triangulation first = delaunay(points), second = delaunay(again);
+            bool same = first.triangles == second.triangles && first.edges.size() == second.edges.size();
+            const Coord mx = kMaxCoordinate / 2 + 12345, my = -kMaxCoordinate / 2 - 54321;
+            for (Point &p : again) p.x += mx, p.y += my;
+            const Triangulation moved = delaunay(again);
+            same = same && moved.triangles == first.triangles && moved.edges.size() == first.edges.size();
+            for (std::size_t i = 0; same && i < first.edges.size(); ++i)
+                same = first.edges[i].a == moved.edges[i].a && first.edges[i].b == moved.edges[i].b && first.edges[i].left == moved.edges[i].left && first.edges[i].right == moved.edges[i].right;
+            expect(same, "a triangulation depends on the order of the points given, or on where they are, case " + std::to_string(round));
+        }
+    }
+    expect(total.triangles > 20000 && flat_sets >= 26 && total.voronoi > 20000, "the generated points make triangulations of every kind");
+    std::printf("triangulations: %zu points, %zu triangles, %zu edges (%zu on hulls), %zu Voronoi edges; %zu sets on one line\n", total.points, total.triangles,
+                total.edges, total.hull, total.voronoi, flat_sets);
+
+    // The distance to a boundary, against the plain sum over every edge.
+    BoundaryDistance nothing{PolygonSet()};
+    expect(std::isinf(nothing.to({0, 0})), "an empty region has no boundary");
+    const PolygonSet frame = subtract(region(square(0, 0, 10)), region(square(3, 3, 4)));
+    const BoundaryDistance to_frame(frame);
+    expect(to_frame.to({1500000, 5000000}) == 1500000 && to_frame.to({5000000, 5000000}) == 2000000 && to_frame.to({0, 0}) == 0 && to_frame.to({-3000000, -4000000}) == 5000000 &&
+               to_frame.to({13000000, 5000000}) == 3000000 && to_frame.to({8500000, 8500000}) == 1500000,
+           "distances to the walls of a frame, inside, in the hole and outside");
+    double worst = 0;
+    for (int round = 0; round < 40; ++round) {
+        const Coord scale = Coord(1) << (8 + round % 18);
+        // Each drawn in its own statement: compilers evaluate the arguments of one call in different orders.
+        const int sides = 5 + static_cast<int>(random.next() % 200);
+        const PolygonSet large = region(blob(random, 0, 0, scale, sides));
+        const PolygonSet little = region(blob(random, scale / 2, scale / 3, scale / 2, 7));
+        const PolygonSet shape = unite(large, little);
+        const BoundaryDistance wall(shape);
+        for (int i = 0; i < 200; ++i) {
+            const Coord x = random.between(-2 * scale, 2 * scale);
+            const Point p{x, random.between(-2 * scale, 2 * scale)};
+            const double got = wall.to(p), plain = distance_to_boundary(shape, p);
+            worst = std::max(worst, std::fabs(got - plain) / std::max(1.0, plain));
+            std::uint64_t bits;
+            std::memcpy(&bits, &got, sizeof bits);
+            absorb_voronoi(bits);
+        }
+    }
+    expect(worst < 1e-9, "the distance to a boundary agrees with the sum over every edge");
+}
+
 static double seconds_since(const std::chrono::steady_clock::time_point &start) {
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
 }
@@ -722,6 +1089,35 @@ static void bench() {
     std::size_t parts = 0;
     for (Coord y = -100000000; y <= 100000000; y += 100000) parts += clipper.clip({-101000000, y}, {101000000, y}).size();
     std::printf("hatch: 2,001 rows across the contour, %zu parts: %.2f s\n", parts, seconds_since(start));
+
+    // 4. Voronoi diagrams: scattered points, and the samples of walls (a comb of 40 teeth sampled every half
+    //    millimetre, which is points on lines and on circles throughout).
+    for (const int count : {1000, 12000, 100000}) {
+        std::vector<Point> points;
+        for (int i = 0; i < count; ++i) {
+            const Coord x = random.between(0, 200000000);
+            points.push_back({x, random.between(0, 150000000)});
+        }
+        start = std::chrono::steady_clock::now();
+        const Triangulation t = delaunay(points);
+        const double triangulated = seconds_since(start);
+        const std::vector<VoronoiEdge> edges = voronoi_edges(t, {0, 0}, {200000000, 150000000});
+        std::printf("voronoi: %d scattered points, %zu triangles, %zu edges: %.4f s (%.4f s of it the triangulation)\n", count, t.triangles.size(), edges.size(), seconds_since(start), triangulated);
+    }
+    for (const int count : {1000, 12000}) {
+        std::vector<Point> points;
+        const Coord step = 500000, teeth = 40, tall = (count / teeth - 6) / 2;
+        for (Coord tooth = 0; tooth < teeth; ++tooth) {
+            const Coord x = tooth * 6 * step;
+            for (Coord j = 0; j < tall; ++j) points.push_back({x, j * step}), points.push_back({x + 3 * step, j * step});
+            for (Coord i = 0; i < 3; ++i) points.push_back({x + i * step, tall * step}), points.push_back({x + (3 + i) * step, 0});
+        }
+        start = std::chrono::steady_clock::now();
+        const Triangulation t = delaunay(points);
+        const double triangulated = seconds_since(start);
+        const std::vector<VoronoiEdge> edges = voronoi_edges(t, {0, 0}, {teeth * 6 * step, tall * step});
+        std::printf("voronoi: %zu samples of walls, %zu triangles, %zu edges: %.4f s (%.4f s of it the triangulation)\n", t.points.size(), t.triangles.size(), edges.size(), seconds_since(start), triangulated);
+    }
 }
 
 int main(int argc, char **argv) {
@@ -737,6 +1133,7 @@ int main(int argc, char **argv) {
         order();
         limits();
         generated();
+        voronoi_diagrams();
         if (argc > 1 && std::strcmp(argv[1], "--bench") == 0) bench();
     } catch (const std::exception &error) {
         std::printf("FAIL an exception: %s\n", error.what());
@@ -747,6 +1144,10 @@ int main(int argc, char **argv) {
     const std::uint64_t recorded = 0xf3d117d67084a0ecULL;
     std::printf("digest %016llx\n", static_cast<unsigned long long>(digest));
     expect(digest == recorded, "the generated results differ from the recorded digest");
+    // Triangulations, Voronoi edges and distances: recorded in the same way.
+    const std::uint64_t recorded_voronoi = 0x166506ac31b9b39cULL;
+    std::printf("voronoi digest %016llx\n", static_cast<unsigned long long>(voronoi_digest));
+    expect(voronoi_digest == recorded_voronoi, "the generated triangulations differ from the recorded digest");
     std::printf(failures ? "polygon self-test FAILED\n" : "polygon self-test passed\n");
     return failures ? 1 : 0;
 }

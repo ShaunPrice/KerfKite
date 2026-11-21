@@ -23,16 +23,21 @@ setup(
                 'native/core/src/excellon.cpp',
                 'native/core/src/gerber.cpp',
                 'native/core/src/pcb.cpp',
-                # Offsets, pockets and fills, where a helix enters a pocket, and the polygon kernel they are built on.
+                # Offsets, pockets and fills, where a helix enters a pocket, V-carving, and the polygon kernel they
+                # are built on.
                 'native/core/src/operations.cpp',
                 'native/core/src/pocket_entry.cpp',
+                'native/core/src/vcarve.cpp',
                 # Isolation toolpaths for circuit boards, on the same kernel.
                 'native/core/src/isolation.cpp',
                 'native/core/src/polygon/arrangement.cpp',
                 'native/core/src/polygon/boolean.cpp',
                 'native/core/src/polygon/clip.cpp',
+                'native/core/src/polygon/distance.cpp',
                 'native/core/src/polygon/measure.cpp',
                 'native/core/src/polygon/offset.cpp',
+                # The Delaunay triangulation and Voronoi diagram of points, which V-carving follows.
+                'native/core/src/polygon/voronoi.cpp',
                 # The polygon kernel's own command: the 2D drawings of Studio's script engine.
                 'native/core/src/polygon/command.cpp',
                 # The solid kernel behind Studio's 3D modelling, and its command.

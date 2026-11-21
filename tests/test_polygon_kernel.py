@@ -6,6 +6,10 @@ it; hatch rows lie in the region and their lengths times the spacing give its ar
 small cases are in native/tests/polygon_selftest.cpp, and validation/polygon_kernel_check.py compares the
 kernel with Shapely.
 
+Delaunay triangulations are checked exactly in Python's whole numbers (no point inside any triangle's
+circle, the hull complete, every point present, Euler's formula), Voronoi edges against Shapely's, and the
+distance to a boundary against Shapely's.
+
 The tool is taken from KERFKITE_CAM, or from build/native as the build instructions leave it; without it
 the tests are skipped.
 """
@@ -216,6 +220,172 @@ class PolygonKernel(unittest.TestCase):
         self.assertEqual(answers[3]['ok']['area'], 96)
         self.assertIn('beyond the range', answers[4]['error'])
         self.assertEqual(answers[5], {'error': 'Unknown polygon operation: nothing'})
+
+
+def grid(point):
+    """A point in whole nanometres, as the kernel holds it."""
+    return (round(point[0] * 1e6), round(point[1] * 1e6))
+
+
+def side(a, b, c):
+    return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+
+def in_circle(a, b, c, d):
+    """Positive when d is inside the circle through a, b and c, which run counter-clockwise: exact, in
+    Python's whole numbers."""
+    ax, ay, bx, by, cx, cy = a[0] - d[0], a[1] - d[1], b[0] - d[0], b[1] - d[1], c[0] - d[0], c[1] - d[1]
+    return (
+        (ax * ax + ay * ay) * (bx * cy - by * cx)
+        + (bx * bx + by * by) * (cx * ay - cy * ax)
+        + (cx * cx + cy * cy) * (ax * by - ay * bx)
+    )
+
+
+def point_sets(rng, count):
+    """Points of the kinds a V-carve meets: scattered, on lattices, on one line, on one circle, repeated."""
+    on_circle = [
+        (sx * x, sy * y)
+        for a, b in ((16, 63), (25, 60), (33, 56), (39, 52), (0, 65), (63, 16), (60, 25), (56, 33), (52, 39))
+        for x, y in ((a, b), (b, a))
+        for sx in (1, -1)
+        for sy in (1, -1)
+    ]
+    for index in range(count):
+        kind, n = index % 7, rng.randrange(1, 70)
+        if kind == 0:
+            yield [[rng.uniform(0, 50), rng.uniform(0, 50)] for _ in range(n)]
+        elif kind == 1:  # a lattice, with repeats
+            yield [[rng.randrange(0, 6) * 0.5, rng.randrange(0, 6) * 0.5] for _ in range(n)]
+        elif kind == 2:  # on one line
+            dx, dy = rng.choice([(0.5, 0), (0, 0.25), (0.25, 0.75), (-0.3, 0.1)])
+            yield [[10 + k * dx, 10 + k * dy] for k in rng.sample(range(-200, 200), n)]
+        elif kind == 3:  # on one circle, with and without its centre
+            yield [[x * 0.001, y * 0.001] for x, y in rng.sample(on_circle, min(n, len(on_circle)))] + (
+                [[0, 0]] if index % 2 else []
+            )
+        elif kind == 4:  # the samples of a rectangle's outline
+            w, h = rng.randrange(1, 9), rng.randrange(1, 9)
+            yield (
+                [[i * 0.5, 0] for i in range(2 * w + 1)]
+                + [[i * 0.5, h] for i in range(2 * w + 1)]
+                + [[0, j * 0.5] for j in range(2 * h + 1)]
+                + [[w, j * 0.5] for j in range(2 * h + 1)]
+            )
+        elif kind == 5:  # a few nanometres apart
+            yield [[rng.randrange(-3, 4) * 1e-6, rng.randrange(-3, 4) * 1e-6] for _ in range(n)]
+        else:  # far apart and close together at once
+            yield [[rng.choice([0, 1, 2, 1e-6, 2e-6, 100]), rng.choice([0, 1, 5e-6, 100, -100])] for _ in range(n)]
+
+
+@unittest.skipUnless(CLI, 'kerfkite-cam is not built: set KERFKITE_CAM or build native/ into build/native')
+class VoronoiDiagrams(unittest.TestCase):
+    def test_triangulations_are_delaunay_and_complete(self):
+        sets = list(point_sets(random.Random(5), 210))
+        for points, answer in zip(sets, ask([{'op': 'delaunay', 'points': points} for points in sets])):
+            done = answer['ok']
+            at = [grid(point) for point in done['points']]
+            triangles, edges = done['triangles'], done['edges']
+            self.assertEqual(at, sorted(set(grid(point) for point in points)))
+            for triangle in triangles:
+                a, b, c = (at[i] for i in triangle)
+                self.assertGreater(side(a, b, c), 0)
+                # No point is inside the circle through the corners of any triangle.
+                self.assertFalse([d for d in at if in_circle(a, b, c, d) > 0])
+            n = len(at)
+            if n < 2:
+                self.assertEqual((triangles, edges), ([], []))
+                continue
+            # Euler's formula, counting the face outside, and every point in some edge.
+            self.assertEqual(n - len(edges) + len(triangles) + 1, 2)
+            self.assertEqual({i for edge in edges for i in edge[:2]}, set(range(n)))
+            if all(side(at[0], at[1], point) == 0 for point in at):
+                self.assertEqual(
+                    (len(triangles), [edge[:2] for edge in edges]), (0, [[i, i + 1] for i in range(n - 1)])
+                )
+                continue
+            hull = [edge for edge in edges if (edge[2] is None) != (edge[3] is None)]
+            for a, b, left, right in hull:
+                turns = [side(at[a], at[b], point) for point in at]
+                self.assertTrue(all(t >= 0 for t in turns) if left is not None else all(t <= 0 for t in turns))
+            # With h points on the hull a complete triangulation has 2n - 2 - h triangles and 3n - 3 - h edges.
+            self.assertEqual((len(triangles), len(edges)), (2 * n - 2 - len(hull), 3 * n - 3 - len(hull)))
+            self.assertFalse([edge for edge in edges if edge[2] is None and edge[3] is None])
+
+    def test_voronoi_edges_are_those_shapely_finds(self):
+        from shapely.geometry import MultiPoint, box
+        from shapely.ops import voronoi_diagram
+        import shapely
+
+        rng = random.Random(7)
+        sets = [
+            [[round(rng.uniform(0, 40), 6), round(rng.uniform(0, 30), 6)] for _ in range(rng.randrange(3, 120))]
+            for _ in range(40)
+        ]
+        frame = [[-5, -5], [45, 35]]
+        answers = ask([{'op': 'voronoi', 'points': points, 'box': frame} for points in sets])
+        for points, answer in zip(sets, answers):
+            ours = shapely.linestrings([edge['ends'] for edge in answer['ok']['edges']])
+            theirs = voronoi_diagram(MultiPoint(points), envelope=box(-60, -60, 100, 90), edges=True).intersection(
+                box(-5, -5, 45, 35)
+            )
+            theirs = shapely.get_parts(theirs)
+            theirs = theirs[shapely.length(theirs) > 1e-5]
+            # The same edges: the same total length, and every end of one diagram on an edge of the other.
+            self.assertAlmostEqual(float(shapely.length(ours).sum()), float(shapely.length(theirs).sum()), delta=1e-4)
+            for some, others in ((ours, theirs), (theirs, ours)):
+                ends = shapely.points(shapely.get_coordinates(some))
+                self.assertLess(
+                    float(
+                        shapely.STRtree(others).query_nearest(ends, return_distance=True, all_matches=False)[1].max()
+                    ),
+                    1e-5,
+                )
+            # Each edge lies between its two sites: its ends are equally far from both, to the rounding.
+            at = answer['ok']['points']
+            for edge in answer['ok']['edges']:
+                for end in edge['ends']:
+                    near, far = (math.dist(end, at[i]) for i in edge['sites'])
+                    self.assertAlmostEqual(near, far, delta=3e-6)
+
+    def test_degenerate_points_give_the_diagram_without_edges_of_no_length(self):
+        square = [[0, 0], [10, 0], [10, 10], [0, 10]]
+        line = [[0, 0], [4, 4], [10, 10], [4, 4]]
+        answers = ask(
+            [
+                {'op': 'voronoi', 'points': square, 'box': [[-5, -5], [15, 15]]},
+                {'op': 'voronoi', 'points': line, 'box': [[0, 0], [10, 10]]},
+                {'op': 'voronoi', 'points': [[1, 1]], 'box': [[0, 0], [10, 10]]},
+                {'op': 'voronoi', 'points': [[0, 0], [3e-6, 0], [0, 3e-6]], 'box': [[-1, -1], [1, 1]]},
+                {'op': 'voronoi', 'points': [[0, 0], [1e9, 0]], 'box': [[-1, -1], [1, 1]]},
+            ]
+        )
+        # Four corners on one circle: four edges from the centre, and nothing between the two triangles.
+        ends = [edge['ends'] for edge in answers[0]['ok']['edges']]
+        self.assertEqual(len(ends), 4)
+        self.assertTrue(all([5.0, 5.0] in pair for pair in ends))
+        # Three points on a line, one given twice: two parallel bisectors.
+        self.assertEqual(
+            [edge['ends'] for edge in answers[1]['ok']['edges']], [[[0.0, 4.0], [4.0, 0.0]], [[4.0, 10.0], [10.0, 4.0]]]
+        )
+        self.assertEqual(answers[2]['ok']['edges'], [])
+        # A centre between grid points is rounded to the nearest, halves upwards: (1.5, 1.5) nm becomes (2, 2).
+        self.assertTrue(all([2e-6, 2e-6] in edge['ends'] for edge in answers[3]['ok']['edges']))
+        self.assertIn('beyond the range', answers[4]['error'])
+
+    def test_the_distance_to_a_boundary_is_shapelys(self):
+        from shapely.geometry import Point, Polygon
+
+        rng = random.Random(9)
+        requests, shapes = [], []
+        for _ in range(30):
+            shell, hole = blob(rng, 20, 20, 15, rng.randint(5, 60)), blob(rng, 20, 20, 3, rng.randint(3, 9))
+            points = [[round(rng.uniform(0, 40), 6), round(rng.uniform(0, 40), 6)] for _ in range(60)]
+            requests.append({'op': 'distance', 'rings': [shell, hole], 'points': points})
+            shapes.append((Polygon(shell, [hole]), points))
+        for (shape, points), answer in zip(shapes, ask(requests)):
+            for point, distance in zip(points, answer['ok']['distances']):
+                self.assertAlmostEqual(distance, Point(point).distance(shape.boundary), delta=1e-9)
 
 
 if __name__ == '__main__':

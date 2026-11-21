@@ -1,4 +1,5 @@
-// 128-bit signed integers for the exact predicates of the polygon kernel. Internal.
+// 128-bit signed integers for the exact predicates of the polygon kernel, and the 256-bit sums of their
+// products that the in-circle test needs. Internal.
 //
 // Coordinates are below 2^39 in magnitude, so a difference is below 2^40, a cross or dot product of two
 // differences below 2^81, and such a product times another difference below 2^121. All of that is exact
@@ -139,40 +140,83 @@ inline Int128 round_divide(Int128 n, Int128 d) {
     return floor_divide(n + n + d, d + d);
 }
 
+// The product of the magnitudes of two 128-bit values in four 64-bit pieces, the least significant first.
+inline void multiply_magnitudes(const Int128 &x, const Int128 &y, std::uint64_t out[4]) {
+    const Int128 mx = x < Int128(0) ? Int128(0) - x : x, my = y < Int128(0) ? Int128(0) - y : y;
+    const std::uint64_t x0 = low_half(mx), x1 = high_half(mx), y0 = low_half(my), y1 = high_half(my);
+    std::uint64_t h00, l00, h01, l01, h10, l10, h11, l11;
+    multiply_64(x0, y0, h00, l00);
+    multiply_64(x0, y1, h01, l01);
+    multiply_64(x1, y0, h10, l10);
+    multiply_64(x1, y1, h11, l11);
+    out[0] = l00;
+    std::uint64_t carry = 0;
+    out[1] = h00 + l01;
+    carry += out[1] < h00 ? 1 : 0;
+    out[1] += l10;
+    carry += out[1] < l10 ? 1 : 0;
+    std::uint64_t next = 0;
+    out[2] = h01 + h10;
+    next += out[2] < h01 ? 1 : 0;
+    out[2] += l11;
+    next += out[2] < l11 ? 1 : 0;
+    out[2] += carry;
+    next += out[2] < carry ? 1 : 0;
+    out[3] = h11 + next;
+}
+
 // The sign of a * b - c * d, where the products may need 256 bits.
 inline int compare_products(const Int128 &a, const Int128 &b, const Int128 &c, const Int128 &d) {
     const int left = sign(a) * sign(b), right = sign(c) * sign(d);
     if (left != right) return left > right ? 1 : -1;
     if (left == 0) return 0;
-    const auto product = [](const Int128 &x, const Int128 &y, std::uint64_t out[4]) {
-        const Int128 mx = x < Int128(0) ? Int128(0) - x : x, my = y < Int128(0) ? Int128(0) - y : y;
-        const std::uint64_t x0 = low_half(mx), x1 = high_half(mx), y0 = low_half(my), y1 = high_half(my);
-        std::uint64_t h00, l00, h01, l01, h10, l10, h11, l11;
-        multiply_64(x0, y0, h00, l00);
-        multiply_64(x0, y1, h01, l01);
-        multiply_64(x1, y0, h10, l10);
-        multiply_64(x1, y1, h11, l11);
-        out[0] = l00;
-        std::uint64_t carry = 0;
-        out[1] = h00 + l01;
-        carry += out[1] < h00 ? 1 : 0;
-        out[1] += l10;
-        carry += out[1] < l10 ? 1 : 0;
-        std::uint64_t next = 0;
-        out[2] = h01 + h10;
-        next += out[2] < h01 ? 1 : 0;
-        out[2] += l11;
-        next += out[2] < l11 ? 1 : 0;
-        out[2] += carry;
-        next += out[2] < carry ? 1 : 0;
-        out[3] = h11 + next;
-    };
     std::uint64_t p[4], q[4];
-    product(a, b, p);
-    product(c, d, q);
+    multiply_magnitudes(a, b, p);
+    multiply_magnitudes(c, d, q);
     for (int i = 3; i >= 0; --i)
         if (p[i] != q[i]) return (p[i] > q[i]) == (left > 0) ? 1 : -1;
     return 0;
+}
+
+// A signed integer of 256 bits in two's complement, the least significant 64-bit piece first. It holds
+// sums of products of two 128-bit values: the in-circle test of a Delaunay triangulation is the sign of
+// three such products added, which for coordinate differences below 2^40 stays below 2^165. The same
+// code runs on every compiler, with or without a 128-bit type.
+struct Int256 {
+    std::uint64_t piece[4] = {0, 0, 0, 0};
+};
+
+// The exact product of two 128-bit values.
+inline Int256 wide_product(const Int128 &x, const Int128 &y) {
+    Int256 out;
+    multiply_magnitudes(x, y, out.piece);
+    if ((x < Int128(0)) != (y < Int128(0))) {
+        // Minus the magnitude: every bit turned over, and one added. (Minus zero is zero.)
+        std::uint64_t carry = 1;
+        for (std::uint64_t &piece : out.piece) {
+            piece = ~piece + carry;
+            carry = (carry && piece == 0) ? 1 : 0;
+        }
+    }
+    return out;
+}
+
+// The sum, which the caller knows fits 256 bits.
+inline Int256 operator+(const Int256 &a, const Int256 &b) {
+    Int256 out;
+    std::uint64_t carry = 0;
+    for (int i = 0; i < 4; ++i) {
+        const std::uint64_t part = a.piece[i] + carry;
+        const std::uint64_t over = part < carry ? 1 : 0;
+        out.piece[i] = part + b.piece[i];
+        carry = over + (out.piece[i] < part ? 1 : 0);
+    }
+    return out;
+}
+
+inline int sign(const Int256 &v) {
+    if (v.piece[3] >> 63) return -1;
+    return (v.piece[0] | v.piece[1] | v.piece[2] | v.piece[3]) != 0 ? 1 : 0;
 }
 
 }  // namespace detail

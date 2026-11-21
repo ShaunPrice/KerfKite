@@ -41,6 +41,12 @@ inline Int128 dot(Coord ax, Coord ay, Coord bx, Coord by) { return multiply(ax, 
 // 1 when c is to the left of the line from a to b, -1 to the right, 0 on it.
 inline int orient(const Point &a, const Point &b, const Point &c) { return sign(cross(a, b, c)); }
 
+// 1 when d is inside the circle through a, b and c, which run counter-clockwise, -1 when it is outside and
+// 0 when the four lie on one circle: the sign of a determinant of the fourth degree, taken exactly in 256
+// bits. For a, b and c running clockwise the sign is the other way, and for three on a line it tells
+// which side of the line d is on.
+int in_circle(const Point &a, const Point &b, const Point &c, const Point &d);
+
 // Twice the signed area of a ring.
 Int128 twice_area(const Ring &ring);
 

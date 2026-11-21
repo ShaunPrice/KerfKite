@@ -22,6 +22,13 @@
 //   artwork       {"shapes": [...], "offsets": [...]}     dark and clear shapes in order, then contours
 //   inspect       {"rings"}                               per ring: whether it is simple, its signed area
 //   locate        {"rings", "points"}                     "inside", "boundary" or "outside" for each point
+//   delaunay      {"points"}                              the Delaunay triangulation: "points" (distinct, in
+//                                                         order), "triangles" [a, b, c] and "edges"
+//                                                         [a, b, left triangle, right triangle], null on the hull
+//   voronoi       {"points", "box": [[x, y], [x, y]]}     the Voronoi edges of the points cut to the box:
+//                                                         "points" and "edges" [{"ends", "sites"}]
+//   distance      {"rings", "points"}                     the distance in millimetres from each point to the
+//                                                         boundary of the region
 //   statistics    {}                                      "rounds": the most rounds of splitting any request
 //                                                         of this run has needed
 //

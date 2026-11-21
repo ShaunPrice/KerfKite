@@ -6,10 +6,10 @@ first stage of moving the application to C++: the core first, the editors last.
 The Python package remains the reference until the core reproduces all of it. A part of the Python code is
 removed only when its C++ replacement gives the same output to the byte on every case that can be compared.
 
-Polygon geometry is the one exception, by the project owner's decision. Offsets, pockets and hatch fills
-have a single implementation, this core's own polygon kernel, which Studio's Python calls through its
-compiled extension. They are shown to be right by geometry (invariants, and a comparison with Shapely by
-tolerance), not by matching another library's vertices.
+Polygon geometry is the one exception, by the project owner's decision. Offsets, pockets, hatch fills and
+V-carving have a single implementation, this core's own polygon kernel, which Studio's Python calls through
+its compiled extension. They are shown to be right by geometry (invariants, and a comparison with Shapely
+by tolerance), not by matching another library's vertices.
 
 ## Build
 
@@ -63,7 +63,7 @@ file as tools and holes, its holes as drilling operations, and a copper layer as
 
 answers a request to the core's own polygon kernel (`"op"`: `union`, `intersection`, `difference`, `xor`,
 `normalise`, `compose`, `offset`, `hull`, `circle`, `transform`, `rotate`, `pocket`, `clip-lines`, `artwork`,
-`inspect`, `locate`), with rings in millimetres. It tests the kernel from outside, and it is the command
+`inspect`, `locate`, `delaunay`, `voronoi`, `distance`), with rings and points in millimetres. It tests the kernel from outside, and it is the command
 Studio's CAD scripts draw with; see [The polygon kernel](#the-polygon-kernel).
 
     kerfkite-cam operation request.json
@@ -71,7 +71,9 @@ Studio's CAD scripts draw with; see [The polygon kernel](#the-polygon-kernel).
 answers the request Studio's Python makes for an offset, a pocket or a fill once it has checked the
 settings (`core/include/kerfkite/operation_command.hpp`): closed contours in, tool paths out. Its `helix`
 operation answers where a helix may descend into a pocket: contours and the first point of each pass in, a
-centre and a start angle out. `generate` runs the same code for a whole project.
+centre and a start angle out. Its `vcarve` operation carves the contours with a V-bit: contours, sampling
+interval, bit angle, depth and tool radius in, paths and the depth at each of their points out. `generate`
+runs the same code for a whole project.
 
 ## What is ported
 
@@ -96,11 +98,16 @@ centre and a start angle out. `generate` runs the same code for a whole project.
 | Inside and outside offsets (router: tool radius; laser: half the kerf), concentric pockets, hatch and cross-hatch fills (`core/src/operations.cpp`) | Done, on the core's own polygon kernel. This is the only implementation: Studio calls it through its extension (`studio/operations.py`), and keeps Shapely only as the fallback where the extension is not installed. |
 | The core's own polygon kernel (`core/src/polygon/`, `core/include/kerfkite/polygon.hpp`) | Done. See [The polygon kernel](#the-polygon-kernel). |
 | 3D solid modelling (`core/include/kerfkite/solid.hpp`, `core/src/solid/`) | Done as a kernel and a `solid` command. New in the core, and the only implementation of KerfKite's own: Studio's 3D CAD calls it through its extension (`studio/solid_kernel.py`), and keeps a third-party library only as the fallback where the extension is not installed. See `docs/SOLID-KERNEL.md`. |
-| V-carving | Not yet. Declined with exit status 3. |
+| The Delaunay triangulation and Voronoi diagram of points, and the distance from a point to a region's boundary (`core/src/polygon/voronoi.cpp`, `distance.cpp`) | Done, in the polygon kernel: exact tests in 128 and 256 bits, O(n log n), points on one line and on one circle as ordinary input. |
+| V-carving (`core/src/vcarve.cpp`) | Done, on the kernel's Voronoi diagram: the sampled medial axis of the reference, with its allowance of one sampling interval. This is the only implementation: Studio calls it through its extension (`studio/operations.py`), and keeps Shapely only as the fallback where the extension is not installed. No function of the C library but `sqrt` is behind a carve, so it is the same on every platform. |
 | Rotary output, relief, stock simulation, importers, sender, pendant, editors | Not yet. |
 
-A request the core cannot fully reproduce is declined at the point where the Python code would enter the
-missing branch. The core never writes a program for a case it does not reproduce.
+Every operation of a job (lines, drilling, knife paths, offsets, pockets, fills, V-carving, entries and
+tabs) is now ported, so no job is declined for its operation. A request the core cannot fully reproduce is
+still declined, never approximated: a number written in non-ASCII digits or beyond the range of a double; a
+contour whose self-crossing test turns on rounding inside GEOS, or needs more work than the core allows;
+and a few degenerate contours under tabs and ramps (a segment of no length, a tab that starts before the
+seam). The core never writes a program for a case it does not reproduce.
 
 ## Solid kernel
 
@@ -148,6 +155,11 @@ else. `docs/POLYGON-KERNEL.md` is its full description; in short:
   platform. The self-test compares a digest of its results with a recorded value.
 * A result has a defined order: outer rings counter-clockwise, holes clockwise, each ring from its smallest
   vertex, polygons and holes by their first vertices.
+* `delaunay` and `voronoi_edges` give the Delaunay triangulation of grid points and the edges of its dual
+  Voronoi diagram: divide and conquer on a quad-edge structure in O(n log n), with the side-of-line test
+  in 128 bits and the in-circle test in 256, both exact, so points on one line and four or more on one
+  circle need no special care. A Voronoi vertex is worked out as an exact fraction and rounded to the
+  nearest grid point, halves upwards. 12,000 points, the most a V-carve samples, take 0.03 s.
 
 `core/src/operations.cpp` builds the four operations on it. The contours of a job are placed on the grid
 and combined by the even-odd rule; an offset is `offset()`; a pocket is `offset()` again and again until
@@ -162,6 +174,15 @@ Compared with the paths GEOS gave, the same regions are cut, with vertices in ot
 their left-most vertex, the corners of an arc lie just outside the true arc where GEOS's lay just
 inside, vertices on straight runs are dropped, and a pocket has far fewer vertices because an arc is not
 drawn again at every pass. `docs/POLYGON-KERNEL.md` gives the measured differences.
+
+`core/src/vcarve.cpp` builds V-carving on the kernel. The outlines of the region are sampled every
+sampling interval; the Voronoi edges of the samples are cut to the region with `LineClipper`; each piece is
+divided into steps, and at each point the bit goes as deep as a circle of radius `min(tool radius,
+distance to the wall - interval)` allows, the distance coming from `BoundaryDistance` and the tangent of
+the bit's half angle from the kernel's series. Pieces that share an end are joined into longer paths, and
+the paths are ordered so that each starts near where the last ended. At every point the cut is an interval
+short of the nearest wall, and in the middle of every move at least half an interval, which the self-test
+measures with a distance function of its own and `tests/test_vcarve.py` with Shapely.
 
     ctest --test-dir build/native -R polygon
     python validation/polygon_kernel_check.py --cli build/native/kerfkite-cam
@@ -189,7 +210,10 @@ compares the core with the Python reference in the same run:
 * thousands of ramp, helix and holding-tab jobs on contours that cross, touch, fold back, nearly close or
   sit at the edge of the work area, and a few at the limits on lines and vertices;
 * thousands of pockets entered by a helix: many shapes, with and without islands, as one pocket or several,
-  for a range of cutters, depths, helix radii and entry angles, and a few at the limit on lines.
+  for a range of cutters, depths, helix radii and entry angles, and a few at the limit on lines;
+* thousands of V-carves: words of block letters, shapes with holes, thin strokes, flat areas, round shapes
+  and stars, for sampling intervals, bit angles, depths, step-downs and tool diameters over their ranges and
+  beyond them, and a few at the limits on samples and points.
 
 The reference for lengths and totals is CPython 3.12 or later: earlier versions computed `math.dist` and
 `sum()` differently in the last bit, so the comparison is run with 3.12 or later.
@@ -198,7 +222,8 @@ Knife swivels, laser arc leads and the points of a helical entry take their sine
 arc tangents from the platform's maths library, as Python does. The core therefore matches the Python on
 the same machine, while the last bit of those points may differ from one platform to another. The centre
 of a helix does not: it is worked out with `+ - * /` alone, and the self-test compares a digest of the
-centres it places with a recorded value.
+centres it places with a recorded value. Nor does a V-carve: its paths and depths use `sqrt` and no other
+function of the library, and the self-test compares a digest of them with a recorded value as well.
 
 Each case must be reproduced exactly, or declined. A different answer fails the check. The share of cases
 reproduced is the measure of progress, and the list of declined features is the work that remains.
@@ -210,7 +235,10 @@ contours, laser power, post-processing and the totals. The place of a helix in a
 same way (`core/src/pocket_entry.cpp`); the helix built there, its feed to the pass and the limits on it
 are compared. That every helix keeps the cutter clear of the walls is checked on its own, by distance from
 the contours as drawn: in the self-test with code of its own, and in `tests/test_router_entry.py` with
-Shapely as the measure. The comparison says which reference it is using.
+Shapely as the measure. The paths and depths of a V-carve are shared in the same way
+(`core/src/vcarve.cpp`); the levels, the program and the totals built on them are compared, and that the
+bit never cuts outside the outline is checked on its own, in the self-test and with Shapely in
+`tests/test_vcarve.py` and `validation/vcarve_check.py`. The comparison says which reference it is using.
 Without the extension the reference would fall back to Shapely, whose vertices differ, so the comparison
 stops; `--without-polygon-operations` runs it with those jobs left out, and says so in its result.
 `validation/polygon_kernel_check.py` is the check of the geometry itself.

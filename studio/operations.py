@@ -6,12 +6,17 @@ kerfkite-cam tool runs, so Studio and the tool cut the same paths. The settings 
 with the messages and in the order they always had.
 
 The place where a helix descends into a pocket is found by the same kernel (kernel_pocket_entries, for
-studio/router_entry.py).
+studio/router_entry.py), and so are the paths and depths of a V-carve (kernel_vcarve,
+native/core/src/vcarve.cpp), which follow the kernel's own Voronoi diagram of points sampled along the
+outlines.
 
 Without the extension (the portable wheel) the same operations are computed with Shapely, as they were
 before the kernel. The two give the same regions; their vertices differ by far less than a machine can
-resolve, and the kernel's pockets have fewer of them. KERFKITE_POLYGON_BACKEND=shapely selects the Shapely
-code where the extension is installed, and =kernel refuses to run without the extension.
+resolve, and the kernel's pockets have fewer of them. A V-carve follows the same sampled medial axis either
+way, but the kernel starts its samples elsewhere on each outline, joins the pieces into longer paths and
+puts them in an order with little travel, where the Shapely code lifts the tool between every two pieces.
+KERFKITE_POLYGON_BACKEND=shapely selects the Shapely code where the extension is installed, and =kernel
+refuses to run without the extension.
 """
 
 import json
@@ -133,6 +138,46 @@ def kernel_pocket_entries(source, seams, bit_radius, radius):
     return [tuple(entry) for entry in answer['entries']]
 
 
+_vcarve_installed = None
+
+
+def kernel_vcarve_available():
+    """Whether the compiled extension carries the native core's V-carving."""
+    global _vcarve_installed
+    if _vcarve_installed is None:
+        try:
+            # An extension built before this was added answers "Unknown operation".
+            _vcarve_installed = kernel_available() and bool(
+                kernel_vcarve([[[0, 0], [9, 0], [9, 9], [0, 9], [0, 0]]], 0.5, 60, 1, 3)[0]
+            )
+        except (ValueError, RuntimeError):
+            _vcarve_installed = False
+    return _vcarve_installed
+
+
+def kernel_vcarve(paths, resolution, angle, max_depth, radius, samples=False):
+    """The native core's V-carve of closed contours: (paths, depths), a depth for every point of each path.
+
+    The bit has the whole angle `angle` in degrees and the given radius; the outlines are sampled every
+    `resolution` millimetres and nothing is cut deeper than max_depth. This is the code kerfkite-cam runs
+    (native/core/src/vcarve.cpp); its messages come back as ValueError. With samples, the points the core
+    took along the outlines come back as a third value, for checking the carve against them.
+    """
+    _contours(paths)
+    request = dict(
+        op='vcarve',
+        paths=[[[float(x), float(y)] for x, y in path] for path in paths],
+        resolution=float(resolution),
+        angle=float(angle),
+        depth=float(max_depth),
+        radius=float(radius),
+    )
+    if samples:
+        request['samples'] = True
+    answer = json.loads(_core_call('operation', json.dumps(request, allow_nan=False)))
+    return (answer['paths'], answer['depths'], answer['samples']) if samples else (answer['paths'], answer['depths'])
+
+
 def region(paths):
     _contours(paths)
     result = GeometryCollection()
@@ -247,6 +292,62 @@ def knife(paths, offset, lead):
     return result
 
 
+VCARVE_WARNING = 'Sampled medial-axis V-carve with conservative sampling allowance; fine detail and wide-area flat clearing require inspection.'
+
+
+def _vcarve_settings(project, mode):
+    """The checked settings of a V-carve, in the order and with the messages they always had."""
+    if mode != 'router':
+        raise ValueError('V-carving requires router mode')
+    return dict(
+        resolution=value(project, 'v_resolution', 0.5, 0.1, 5),
+        angle=value(project, 'v_angle', 60, 10, 170),
+        max_depth=value(project, 'depth', 1, 0.01, 50),
+        radius=value(project, 'tool_diameter', 6, 0.1, 100) / 2,
+    )
+
+
+def outline_samples(rings, resolution):
+    """Points along closed outlines, at equal steps of at most `resolution` from the first point of each."""
+    samples = []
+    for path in rings:
+        line = LineString(path)
+        n = math.ceil(line.length / resolution)
+        if len(samples) + n > 12000:
+            raise ValueError('V-carve outline too complex; increase sampling interval')
+        samples.extend([line.interpolate(line.length * i / n) for i in range(n)])
+    return samples
+
+
+def sampled_medial_axis(g, samples, resolution, angle, max_depth, radius):
+    """The Shapely V-carve of a region: (paths, depths), one path for each piece of the sampled medial axis.
+
+    samples are points along the region's outlines (outline_samples). Their Voronoi diagram is cut to the
+    region, and each piece is cut to the depth at which the bit just fits between the walls, less an
+    allowance of one resolution. This is the fallback for an installation without the compiled extension,
+    and the oracle the kernel's V-carve is tested against: tests/test_vcarve.py and
+    validation/vcarve_check.py give it the samples the kernel took.
+    """
+    edges = voronoi_diagram(MultiPoint(samples), edges=True).intersection(g)
+    paths = []
+    depths = []
+    for edge in lines(edges):
+        if edge.length < resolution * 0.1:
+            continue
+        n = max(1, math.ceil(edge.length / resolution))
+        coords = []
+        zs = []
+        for i in range(n + 1):
+            pt = edge.interpolate(edge.length * i / n)
+            r = min(radius, max(0, pt.distance(g.boundary) - resolution))
+            coords.append([pt.x, pt.y])
+            zs.append(-min(max_depth, r / math.tan(math.radians(angle / 2))))
+        if min(zs) < -1e-4:
+            paths.append(coords)
+            depths.append(zs)
+    return paths, depths
+
+
 def _settings(project, op, mode, warnings):
     """The checked settings of an offset, pocket or fill as the core's request, and the operation's warnings.
 
@@ -312,14 +413,22 @@ def prepare(project, paths):
         if not paths:
             raise ValueError('Operation produced no toolpaths')
         return paths, None, warnings
+    if kernel and op == 'vcarve' and kernel_vcarve_available():
+        try:
+            request = _vcarve_settings(project, mode)
+        except ValueError:
+            _kernel('region', paths)  # as above: the contours are reported before the mode or a setting
+            raise
+        paths, depths = kernel_vcarve(paths, **request)
+        if not paths:
+            raise ValueError('Operation produced no toolpaths')
+        return paths, depths, [VCARVE_WARNING]
     if kernel:
         # The core's reading of the contours stands, and its order of checks, as kerfkite-cam has them. Only
-        # V-carving goes on to Shapely.
+        # V-carving with an extension built before the core had it goes on to Shapely.
         _kernel('region', paths)
         if op != 'vcarve':
             raise ValueError('Unsupported operation')
-        if mode != 'router':
-            raise ValueError('V-carving requires router mode')
     g = region(paths)
     if op in ('outside', 'inside'):
         offset = _settings(project, op, mode, warnings)['distance']
@@ -344,40 +453,11 @@ def prepare(project, paths):
         if request['crosshatch']:
             paths += hatch(g, request['interval'], request['angle'] + 90)
     elif op == 'vcarve':
-        if mode != 'router':
-            raise ValueError('V-carving requires router mode')
         # Discrete medial-axis approximation from densely sampled boundaries.
-        resolution = value(project, 'v_resolution', 0.5, 0.1, 5)
-        angle = value(project, 'v_angle', 60, 10, 170)
-        max_depth = value(project, 'depth', 1, 0.01, 50)
-        radius = value(project, 'tool_diameter', 6, 0.1, 100) / 2
-        samples = []
-        for path in outlines(g):
-            line = LineString(path)
-            n = math.ceil(line.length / resolution)
-            if len(samples) + n > 12000:
-                raise ValueError('V-carve outline too complex; increase sampling interval')
-            samples.extend([line.interpolate(line.length * i / n) for i in range(n)])
-        edges = voronoi_diagram(MultiPoint(samples), edges=True).intersection(g)
-        paths = []
-        depths = []
-        for edge in lines(edges):
-            if edge.length < resolution * 0.1:
-                continue
-            n = max(1, math.ceil(edge.length / resolution))
-            coords = []
-            zs = []
-            for i in range(n + 1):
-                pt = edge.interpolate(edge.length * i / n)
-                r = min(radius, max(0, pt.distance(g.boundary) - resolution))
-                coords.append([pt.x, pt.y])
-                zs.append(-min(max_depth, r / math.tan(math.radians(angle / 2))))
-            if min(zs) < -1e-4:
-                paths.append(coords)
-                depths.append(zs)
-        warnings.append(
-            'Sampled medial-axis V-carve with conservative sampling allowance; fine detail and wide-area flat clearing require inspection.'
-        )
+        request = _vcarve_settings(project, mode)
+        samples = outline_samples(outlines(g), request['resolution'])
+        paths, depths = sampled_medial_axis(g, samples, **request)
+        warnings.append(VCARVE_WARNING)
     else:
         raise ValueError('Unsupported operation')
     if not paths:
