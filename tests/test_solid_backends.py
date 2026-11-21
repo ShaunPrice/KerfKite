@@ -167,6 +167,8 @@ SPHERE_SCRIPTS = [
     ('translate([10,0,0]) sphere(d=6,$fn=32);', 3, 32),
     ('hull(){ cube(4); translate([6,2,1]) sphere(2,$fn=16); }', 2, 16),
     ('difference(){ cube(8,center=true); sphere(5,$fn=40); }', 5, 40),
+    # Two fine spheres that overlap: within the intersection budget on both (see ScriptGeometryBudget.combine).
+    ('difference(){ sphere(10,$fn=96); translate([6,3,2]) sphere(8,$fn=96); }', 10, 96),
 ]
 
 
@@ -510,11 +512,21 @@ class DifferentialTests(unittest.TestCase):
                 theirs, ours = self.both(lambda kernel: measures(build(), kernel))
                 volume, section = sphere_allowance(radius, segments)
                 self.assertAlmostEqual(theirs['volume'], ours['volume'], delta=volume)
-                self.assert_boxes(theirs['bounds'], ours['bounds'])
+                # Where a sphere is cut by another shape, the cut runs across facets that differ: by their depth.
+                depth = radius * (1 - math.cos(math.tau / segments))
+                for a, b in zip(theirs['bounds'], ours['bounds'], strict=True):
+                    self.assertAlmostEqual(a, b, delta=BOX_MM + depth)
                 for a, b in zip(theirs['sections'], ours['sections'], strict=True):
                     self.assertEqual(a['contours'], b['contours'])
                     self.assertAlmostEqual(a['area'], b['area'], delta=section)
                 self.assertAlmostEqual(theirs['projection']['area'], ours['projection']['area'], delta=section)
+
+    def test_the_intersection_budget_refuses_the_same_scripts(self):
+        heavy = 'difference(){ sphere(10,$fn=160); translate([6,3,2]) sphere(8,$fn=160); }'
+        for name in ('manifold', 'kernel'):
+            with self.subTest(backend=name), backend(name):
+                with self.assertRaisesRegex(ValueError, 'intersection work budget'):
+                    build_script(heavy)
 
     def test_twisted_extrusion_at_its_layers(self):
         script = 'linear_extrude(height=5,twist=90,slices=12,scale=.5) translate([4,0]) square(2);'

@@ -120,6 +120,35 @@ the series for one sine and cosine. No trigonometric function of the platform's 
 Discs, obrounds and the ends and joins of strokes are drawn the same way, so a disc is never smaller than
 its diameter.
 
+### The corners of a drawing
+
+A drawing asks for other corners than a tool path does. `offset(region, distance, JoinOptions)` gives
+them, for the `offset()` of Studio's CAD scripts:
+
+* **Round**: an arc whose vertices lie **on** the true arc, as a drawing program draws it. The arc is
+  divided into equal parts of at most 1.0625 steps, a step being a whole turn divided by `segments`, so it
+  is short of the distance between its vertices by at most `d * (1 - cos(0.53125 * step))`.
+* **Miter**: the two offset edges carried on until they meet. A corner that would reach further from the
+  vertex than `miter_limit` times the distance is cut square instead, by the line across the corner at the
+  distance from the vertex.
+* **Bevel**: the ends of the two offset edges joined by one straight edge.
+
+Only the points of the corner differ from the round offset above. They are joined to the vertex in the same
+fan of exactly checked triangles, so the result is the same kind of exact union or difference and is
+always a valid region, and the directions of an arc come from the same series and square roots. The
+self-test checks each join on small cases with known answers and, on generated shapes grown and shrunk,
+that every result is a valid region, that a bevel adds least, a miter most and an arc lies between, and that
+growing contains the region and shrinking is contained in it.
+
+`convex_hull(points)` is the hull as one counter-clockwise ring, exact on the grid, and empty when the
+points lie on one line.
+
+Studio's script engine keeps a 2D drawing as the rings of a region and asks for each step through the
+kernel's `polygon` command (`kerfkite/polygon_command.hpp`): `normalise`, `union`, `intersection`,
+`difference`, `offset` with a `join`, `hull`, `circle` (the cross-section of the solid kernel's cylinder,
+vertex for vertex), `transform` and `rotate`. [The solid kernel](SOLID-KERNEL.md#how-studio-uses-the-kernel)
+describes that use and how it is compared with the third-party library it replaced.
+
 ## Line clipping
 
 `LineClipper::clip(a, b)` gives the parts of the segment from `a` to `b` that lie in the region or along its

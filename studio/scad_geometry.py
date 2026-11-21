@@ -10,7 +10,7 @@ import math
 import numpy as np
 from shapely.geometry import LinearRing
 
-from .solid_kernel import modelling
+from .solid_kernel import modelling, solid_backend
 
 
 class _Kernel:
@@ -26,6 +26,7 @@ _MAX_COORD = 100_000
 _MAX_VERTICES = 8_000
 _MAX_TRIANGLES = 75_000
 _MAX_WORK = 400_000
+_MAX_OVERLAP = 32_000_000
 _MAX_SEGMENTS = 256
 _DEFAULT_SEGMENTS = 48
 _MISSING = object()
@@ -301,6 +302,11 @@ class ScriptGeometryBudget:
             return shapes_type.batch_hull(shapes)
         # Bound pairwise intersection work for overlapping operands; disjoint arrays
         # cost only their input size. The post-operation limit still checks the result.
+        # KerfKite's kernel facets a sphere with about twice the triangles the library uses for the same
+        # $fn, so the same two shapes are up to four times the product there. Its allowance is four times
+        # as large, so that a script within the budget on one is within it on the other; the kernel also
+        # refuses by the pairs of triangles it actually has to examine.
+        allowed = _MAX_OVERLAP * (4 if solid_backend() == 'kernel' else 1)
         box = [s.bounds() if dim == 2 else s.bounding_box() for s in shapes]
         overlap = 0
         for i, a in enumerate(box):
@@ -308,7 +314,7 @@ class ScriptGeometryBudget:
                 b = box[j]
                 if all(a[axis] <= b[dim + axis] and b[axis] <= a[dim + axis] for axis in range(dim)):
                     overlap += sizes[i] * sizes[j]
-                    if overlap > 32_000_000:
+                    if overlap > allowed:
                         raise ValueError('Overlapping geometry exceeds the intersection work budget; reduce $fn')
         operation = {
             'union': kernel.OpType.Add,

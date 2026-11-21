@@ -84,6 +84,14 @@ Area operations need valid closed regions. An imported open centreline belongs i
 
 For a fit error, compare tool diameter with the actual feature width. Reducing the numeric diameter without changing the physical cutter creates an incorrect toolpath. Use a suitable tool or change the design. Internal corners narrower than the cutter cannot be machined sharp by that cutter.
 
+### A solid rebuild reports “features too fine for the 1 nm grid”
+
+Studio models solids on a grid of one nanometre and refuses a result it cannot represent validly there. This is rare. It happens where two faces almost coincide without coinciding, usually after both shapes were turned by an angle that is not a quarter turn: for example two blocks built to share a face and then rotated separately. The message names the feature or the script line. Move, turn or resize one of the two shapes by a small amount (a hundredth of a millimetre is plenty), or make them overlap properly instead of only touching. Studio does not fall back to another modelling library for one part, because the part would then change its facets between rebuilds. Setting `KERFKITE_SOLID_BACKEND=manifold` in the server's environment selects the earlier modelling library for the whole installation.
+
+### A model with many spheres exceeds the triangle budget
+
+A sphere has about twice the triangles it had before Studio's own solid kernel, for the same `$fn`. Reduce `$fn` on the spheres, or the number of pattern instances.
+
 ### Pocket has residual material
 
 Use a stepover no larger than half cutter diameter. Inspect inaccessible corners and narrow regions even when the stepover passes validation. Concentric pocketing is not adaptive clearing, and the tool must support the generated plunge entry. V-carving can also leave wide flat areas; it is not automatically a complete flat-clearing strategy.
