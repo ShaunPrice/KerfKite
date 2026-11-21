@@ -41,6 +41,7 @@
 //   generator's own message, so that a carve far beyond it is refused without being built.
 #include <algorithm>
 #include <cmath>
+#include <initializer_list>
 #include <numeric>
 
 #include "operations.hpp"

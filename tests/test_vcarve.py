@@ -13,7 +13,9 @@ validation/vcarve_check.py runs the same checks on thousands of shapes and print
 import math
 import os
 import random
+import re
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import shapely
@@ -26,6 +28,7 @@ from studio.operations import prepare, region
 KERNEL = operations.kernel_available() and operations.kernel_vcarve_available()
 BACKENDS = ['shapely'] + (['kernel'] if KERNEL else [])
 GRID = 1e-6  # the kernel's grid, in millimetres
+ROOT = Path(__file__).resolve().parents[1]
 BAR = [[10, 10], [40, 10], [40, 18], [10, 18], [10, 10]]  # 30 by 8
 
 
@@ -387,6 +390,26 @@ class VCarveFallbackTests(unittest.TestCase):
         # One path for each piece of the diagram, as before the kernel.
         self.assertTrue(all(LineString(path).length <= 0.5 * len(path) for path in paths))
         self.assertTrue(all(Point(path[0]).distance(region([BAR])) < 1e-9 for path in paths))
+
+
+class VCarveBuildTests(unittest.TestCase):
+    def test_every_build_carries_the_voronoi_diagram_and_the_carve(self):
+        """The extension and the core are built from every source of the polygon kernel and from the carve,
+        each named once, and the self-test with the kernel's own 128-bit integer has the kernel's sources."""
+        listed = re.findall(r"'((?:studio|native)/[\w/]+\.cpp)'", (ROOT / 'setup.py').read_text(encoding='utf-8'))
+        self.assertEqual(len(listed), len(set(listed)), 'a source listed twice breaks the link')
+        kernel = {path.relative_to(ROOT).as_posix() for path in (ROOT / 'native/core/src/polygon').glob('*.cpp')}
+        self.assertIn('native/core/src/polygon/voronoi.cpp', kernel)
+        needed = kernel | {'native/core/src/vcarve.cpp', 'native/core/src/operations.cpp'}
+        self.assertEqual(needed - set(listed), set())
+        self.assertIn('recursive-include native/core *.hpp *.cpp', (ROOT / 'MANIFEST.in').read_text(encoding='utf-8'))
+        cmake = (ROOT / 'native/CMakeLists.txt').read_text(encoding='utf-8')
+        for source in needed:
+            self.assertIn(source.removeprefix('native/'), cmake)
+        portable = cmake[cmake.index('add_executable(kerfkite_polygon_selftest_portable') :]
+        portable = portable[: portable.index(')')]
+        for source in kernel - {'native/core/src/polygon/command.cpp'}:
+            self.assertIn(source.removeprefix('native/'), portable)
 
 
 if __name__ == '__main__':

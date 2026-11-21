@@ -25,6 +25,7 @@
 // comparing fractions exactly, and only then are the two ends worked out and rounded to the grid, so a
 // centre far outside the box (the corners of a thin triangle) never has to be represented.
 #include <algorithm>
+#include <initializer_list>
 #include <numeric>
 
 #include "kernel.hpp"

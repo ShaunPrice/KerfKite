@@ -202,14 +202,13 @@ def main():
         if fallback is None:
             continue
         c = Carve(fallback)
-        gap = (
-            max(c.furthest(deep_points(ours, depths, settings)), a.furthest(deep_points(fallback, fallen, settings)))
-            / resolution
-        )
-        apart.append(gap)
-        # A shape with no corner turning inwards: its walls are sampled evenly as seen from every path.
-        if g.geom_type == 'Polygon' and not g.interiors and g.convex_hull.area - g.area < 1e-9 * g.area:
-            convex_apart.append(gap)
+        deep, fallen_deep = deep_points(ours, depths, settings), deep_points(fallback, fallen, settings)
+        if deep or fallen_deep:
+            gap = max(c.furthest(deep), a.furthest(fallen_deep)) / resolution
+            apart.append(gap)
+            # A shape with no corner turning inwards: its walls are sampled evenly as seen from every path.
+            if g.geom_type == 'Polygon' and not g.interiors and g.convex_hull.area - g.area < 1e-9 * g.area:
+                convex_apart.append(gap)
         lengths.append(abs(a.length - c.length) / c.length)
         shipped['kernel_paths'] += len(ours)
         shipped['fallback_paths'] += len(fallback)
@@ -233,8 +232,9 @@ def main():
         f' {same["depth"]:.2e} mm'
     )
     print(
-        f'3. the fallback as shipped, {len(apart)} shapes: a deep cut is from the other carve at most {middle(apart):.2f}'
-        f' sampling intervals in the middle shape, {high(apart):.2f} in 95% of shapes and {last(apart):.2f} in the worst;'
+        f'3. the fallback as shipped, {len(lengths)} shapes, {len(apart)} of them with deep cuts: a deep cut is from the'
+        f' other carve at most {middle(apart):.2f} sampling intervals in the middle shape, {high(apart):.2f} in 95% of shapes'
+        f' and {last(apart):.2f} in the worst;'
         f' for the {len(convex_apart)} shapes with no corner turning inwards, {last(convex_apart):.2f} in the worst.'
         f' Total length differs by {middle(lengths) * 100:.2f}% in the middle shape, {high(lengths) * 100:.1f}% in 95% and'
         f' {last(lengths) * 100:.1f}% in the worst; over all shapes {shipped["cut"]:.0f} mm against {shipped["fallback_cut"]:.0f} mm.'

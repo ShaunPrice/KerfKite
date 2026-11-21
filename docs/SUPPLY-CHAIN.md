@@ -43,7 +43,7 @@ Each of these goes when the part that uses it is ported, under rule 5.
 
 | Component | Use | Plan |
 | --- | --- | --- |
-| Shapely 2.2.0, which carries GEOS | Polygon work in ten modules: CAM operations, entry moves, sketch profiles, imports, solid text, exchange | **Being replaced.** Offsets, pockets and hatch fills now run on the in-house kernel, through the compiled extension. Shapely stays for now as their fallback where the extension is not installed (the portable wheel), as the reference the kernel is compared with in the checks, and in the other modules (V-carving, router entry clearance, sketch profiles, imports, text, exchange) until each is ported. |
+| Shapely 2.2.0, which carries GEOS | Polygon work in ten modules: CAM operations, entry moves, sketch profiles, imports, solid text, exchange | **Being replaced.** Offsets, pockets, hatch fills, the placing of helical pocket entries and V-carving now run on the in-house kernel, through the compiled extension; V-carving follows the kernel's own Voronoi diagram, so no CAM operation needs Shapely where the extension is installed. Shapely stays for now as their fallback where the extension is not installed (the portable wheel), as the reference the kernel is compared with in the checks, and in the other modules (contour checks before entries and tabs, sketch profiles, imports, text, exchange) until each is ported. |
 | NumPy | Arrays in seven modules: relief, stock simulation and others | Replace on porting; plain arrays in C++. |
 | pyserial | The serial link to the controller | Replace on porting the sender: the serial port through each operating system's own interface. |
 | Flask, with Werkzeug, Jinja2, Click, itsdangerous, MarkupSafe, blinker | The local web server behind the editor | Replace on porting the server: a small local HTTP server of our own. |
@@ -118,7 +118,7 @@ Rules for this:
 
 ## Order of work
 
-1. The polygon kernel, replacing GEOS in the core and Shapely in the CAM operations. Done for the core and for Studio with its compiled extension; the other Shapely users in Studio follow.
+1. The polygon kernel, replacing GEOS in the core and Shapely in the CAM operations. Done for the core and for Studio with its compiled extension, V-carving included; the other Shapely users in Studio follow.
 2. The solid kernel, replacing manifold3d in Studio's 3D CAD. Done for Studio with its compiled extension; the library remains as the fallback without it and as the test oracle.
 3. Pillow out of the installed dependencies.
 4. The remaining items as their parts are ported.

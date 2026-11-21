@@ -1,5 +1,6 @@
 // KerfKite's own planar polygon kernel: regions with holes, Boolean operations, round offsets, line
-// clipping and the union of very many shapes. It depends on nothing but the C++17 standard library.
+// clipping, the union of very many shapes, and the Delaunay triangulation and Voronoi diagram of points.
+// It depends on nothing but the C++17 standard library.
 // docs/POLYGON-KERNEL.md describes the method, the limits and how it is tested.
 //
 // Coordinates. Every vertex is a pair of 64-bit integers on a fixed grid of one nanometre (1e-6 mm).
