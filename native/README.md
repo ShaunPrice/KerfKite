@@ -69,8 +69,9 @@ Studio's CAD scripts draw with; see [The polygon kernel](#the-polygon-kernel).
     kerfkite-cam operation request.json
 
 answers the request Studio's Python makes for an offset, a pocket or a fill once it has checked the
-settings (`core/include/kerfkite/operation_command.hpp`): closed contours in, tool paths out. `generate`
-runs the same code for a whole project.
+settings (`core/include/kerfkite/operation_command.hpp`): closed contours in, tool paths out. Its `helix`
+operation answers where a helix may descend into a pocket: contours and the first point of each pass in, a
+centre and a start angle out. `generate` runs the same code for a whole project.
 
 ## What is ported
 
@@ -87,10 +88,11 @@ runs the same code for a whole project.
 | Circuit board import: Gerber layers, Excellon drill files, board outline paths, drilling operations (`core/src/gerber.cpp`, `core/src/excellon.cpp`) | Done. New in the core: there is no Python version. |
 | Isolation toolpaths from a copper layer, with the places the cutter cannot reach (`core/src/isolation.cpp`) | Done. New in the core, on the polygon kernel: there is no Python version. |
 | Drilling at point markers and circular hole outlines, in one plunge or in pecks (`core/src/drilling.cpp`) | Done. The hole list and tool shape that Studio adds for its stock simulation are not in the core's job yet. |
-| Drag-knife paths: the alignment lead-in and the swivel at each corner (`core/src/knife.cpp`) | Done, except a path that returns to a point through steps too short to keep: the reference fails on it, and the core declines it. |
-| Ramp entry on router line jobs (`core/src/router_entry.cpp`) | Done, with or without holding tabs. A helix entry is accepted only on a pocket, so on a line job it is rejected with the reference's message; on a pocket it waits for pockets and is declined (`helical entry into pockets`). |
+| Drag-knife paths: the alignment lead-in and the swivel at each corner (`core/src/knife.cpp`) | Done. Points within 0.1 nm of the last point kept are dropped, so every move has a direction, and a path that is then a single point is refused, as in the reference. |
+| Ramp entry on router line jobs and on offset contours (`core/src/router_entry.cpp`) | Done, with or without holding tabs. A helix entry is accepted only on a pocket, so on a line job it is rejected with the reference's message. |
+| Helical entry into pockets (`core/src/router_entry.cpp`, `core/src/pocket_entry.cpp`) | Done. Where each helix goes (clear of the pocket's walls and islands by the cutter's radius, with a clear feed to the pass) is decided on the core's own polygon kernel. This is the only implementation: Studio calls it through its extension (`studio/router_entry.py`), and keeps Shapely only as the fallback where the extension is not installed. |
 | Holding tabs on router line jobs (`core/src/tabs.cpp`) | Done: tab count or explicit positions, tabs across the seam, and every rejection. |
-| Shapely's `LineString.is_simple` and `.length`, which both features ask of each contour (`core/src/simple_line.cpp`) | Done by GEOS's own rules, including its double-double orientation test. A contour whose answer depends on rounding inside GEOS is declined. |
+| Shapely's `LineString.is_simple` and `.length`, which both features ask of each contour (`core/src/simple_line.cpp`) | Done by GEOS's own rules, including its double-double orientation test. A contour whose answer depends on rounding inside GEOS is declined. The work is bounded: a tree over the segments leaves out, a branch at a time, the pairs GEOS's test is certain to pass, so a contour of 100,000 long segments side by side (a comb, a fan, a spiral) takes a tenth of a second where testing every pair took a minute; and past a fixed count of work, about a second, a contour is declined (`a contour whose self-crossing test needs more comparisons than the core allows`). |
 | Inside and outside offsets (router: tool radius; laser: half the kerf), concentric pockets, hatch and cross-hatch fills (`core/src/operations.cpp`) | Done, on the core's own polygon kernel. This is the only implementation: Studio calls it through its extension (`studio/operations.py`), and keeps Shapely only as the fallback where the extension is not installed. |
 | The core's own polygon kernel (`core/src/polygon/`, `core/include/kerfkite/polygon.hpp`) | Done. See [The polygon kernel](#the-polygon-kernel). |
 | 3D solid modelling (`core/include/kerfkite/solid.hpp`, `core/src/solid/`) | Done as a kernel and a `solid` command. New in the core, and the only implementation of KerfKite's own: Studio's 3D CAD calls it through its extension (`studio/solid_kernel.py`), and keeps a third-party library only as the fallback where the extension is not installed. See `docs/SOLID-KERNEL.md`. |
@@ -177,19 +179,26 @@ compares the core with the Python reference in the same run:
 
 * several hundred thousand numbers, including decimal ties and the values either side of them, and as many
   distances and sums;
+* tens of thousands of lines, random and built to sit on the edge of each rule, for which the core must say
+  whether the line crosses itself exactly as Shapely's `is_simple` does, by each of its methods, and long
+  lines for which the work it counts must stay within a multiple of n log n;
 * every `studio.cam.generate` call made by the Python test suite;
 * thousands of generated projects with settings replaced by unusual values, so that rejections are compared
   as well as programs, and thousands of closed contours (alone, nested, overlapping, nearly closed) put
   through the offset, pocket and fill operations;
 * thousands of ramp, helix and holding-tab jobs on contours that cross, touch, fold back, nearly close or
-  sit at the edge of the work area, and a few at the limits on lines and vertices.
+  sit at the edge of the work area, and a few at the limits on lines and vertices;
+* thousands of pockets entered by a helix: many shapes, with and without islands, as one pocket or several,
+  for a range of cutters, depths, helix radii and entry angles, and a few at the limit on lines.
 
 The reference for lengths and totals is CPython 3.12 or later: earlier versions computed `math.dist` and
 `sum()` differently in the last bit, so the comparison is run with 3.12 or later.
 
-Knife swivels and laser arc leads take their sines, cosines and arc tangents from the platform's maths
-library, as Python does. The core therefore matches the Python on the same machine, while the last bit of
-those points may differ from one platform to another.
+Knife swivels, laser arc leads and the points of a helical entry take their sines, cosines, arc cosines and
+arc tangents from the platform's maths library, as Python does. The core therefore matches the Python on
+the same machine, while the last bit of those points may differ from one platform to another. The centre
+of a helix does not: it is worked out with `+ - * /` alone, and the self-test compares a digest of the
+centres it places with a recorded value.
 
 Each case must be reproduced exactly, or declined. A different answer fails the check. The share of cases
 reproduced is the measure of progress, and the list of declined features is the work that remains.
@@ -197,7 +206,11 @@ reproduced is the measure of progress, and the list of declined features is the 
 For offsets, pockets and fills the reference calls this core's kernel through the compiled extension, so
 the geometry of the operation is shared and cannot differ. Those jobs still compare everything round it:
 the checks of the settings and their order, the order of cutting, leads, tabs, ramp entries on the offset
-contours, laser power, post-processing and the totals. The comparison says which reference it is using.
+contours, laser power, post-processing and the totals. The place of a helix in a pocket is shared in the
+same way (`core/src/pocket_entry.cpp`); the helix built there, its feed to the pass and the limits on it
+are compared. That every helix keeps the cutter clear of the walls is checked on its own, by distance from
+the contours as drawn: in the self-test with code of its own, and in `tests/test_router_entry.py` with
+Shapely as the measure. The comparison says which reference it is using.
 Without the extension the reference would fall back to Shapely, whose vertices differ, so the comparison
 stops; `--without-polygon-operations` runs it with those jobs left out, and says so in its result.
 `validation/polygon_kernel_check.py` is the check of the geometry itself.

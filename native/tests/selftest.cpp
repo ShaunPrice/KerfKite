@@ -9,7 +9,9 @@
 
 #include "kerfkite/cam.hpp"
 #include "kerfkite/leveling.hpp"
+#include "kerfkite/line_check.hpp"
 #include "kerfkite/number_text.hpp"
+#include "kerfkite/operation_command.hpp"
 #include "kerfkite/pcb.hpp"
 
 using json = kerfkite::Json;
@@ -39,6 +41,335 @@ template <typename Thrown> static std::string message(const char *project) {
         return "(another exception)";
     }
     return "(nothing thrown)";
+}
+
+// Whether a line crosses itself (Shapely's is_simple), which a ramp entry and holding tabs ask of every
+// contour: known answers, the tree against the test of every pair on generated lines, and the work taken,
+// which must not grow with the square of the length of the line. validation/native_core_parity.py compares
+// the answers with Shapely's.
+static void self_crossing() {
+    using Line = std::vector<std::array<double, 2>>;
+    const LineMethod methods[3] = {LineMethod::Usual, LineMethod::Tree, LineMethod::EveryPair};
+    const auto says = [&](const Line &line, bool simple) {
+        for (const LineMethod method : methods) {
+            const LineCheck check = check_line(line, method);
+            if (check.declined || check.simple != simple) return false;
+        }
+        return true;
+    };
+    expect(says({{0, 0}, {10, 0}, {10, 10}, {0, 10}, {0, 0}}, true), "a closed square is simple: its ends may meet");
+    expect(says({{0, 0}, {10, 10}, {10, 0}, {0, 10}}, false), "a bow-tie crosses itself");
+    expect(says({{0, 0}, {10, 0}, {10, 10}, {5, 0}, {0, 10}}, false), "a vertex on another segment is a touch");
+    expect(says({{0, 0}, {10, 0}, {5, 0}, {5, 5}}, false), "a step back along a segment is an overlap");
+    expect(says({{0, 0}, {10, 0}, {10, 10}, {0, 0}, {-5, 5}}, false), "a vertex passed twice, away from the ends");
+    expect(says({{0, 0}, {5, 0}, {5, 0}, {10, 0}, {10, 10}}, true), "a repeated point and a vertex on a straight run are allowed");
+    expect(says({{3, 3}}, true) && says({{3, 3}, {3, 3}}, true) && says({}, true), "a line of one point is simple");
+
+    std::uint64_t state = 77;
+    const auto draw = [&](std::uint64_t below) {
+        state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+        return static_cast<double>((state >> 33) % below);
+    };
+    // Regular lines of n points, each simple: a zigzag, a comb of long parallel diagonals, a fan of rays, a
+    // square spiral and a line of short steps. Every coordinate is a ratio of whole numbers.
+    const auto regular = [&](int kind, int n) {
+        Line line;
+        double x = 0, y = 0;
+        for (int i = 0; i < n; ++i) {
+            if (kind == 0) {
+                line.push_back({i % 2 ? 100.0 : 0.0, i * 0.5});
+            } else if (kind == 1) {
+                line.push_back({(i % 2 ? 100.0 : 0.0) + i * 0.001, i % 2 ? 100.0 : 0.0});
+            } else if (kind == 2) {
+                // Ray k runs from (k, n - k) / n to a hundred times that; out along one, back along the next.
+                const int k = i / 2;
+                const double rx = static_cast<double>(k) / n, ry = static_cast<double>(n - k) / n;
+                const bool near = (i % 2 == 0) == (k % 2 == 0);
+                line.push_back({near ? rx : 100 * rx, near ? ry : 100 * ry});
+            } else if (kind == 3) {
+                line.push_back({x, y});
+                const double step = 100.0 - (i / 2) * (100.0 / n);
+                x += i % 4 == 0 ? step : i % 4 == 2 ? -step : 0;
+                y += i % 4 == 1 ? step : i % 4 == 3 ? -step : 0;
+            } else {
+                line.push_back({x, y});
+                x += 0.25 + draw(8) / 8;
+                y += draw(9) / 4 - 1;
+            }
+        }
+        return line;
+    };
+    // The same answer from the tree as from every pair: small lines on a coarse grid, where shared
+    // vertices, touches and overlaps are common, and regular lines with one fault somewhere.
+    std::size_t compared = 0, simple = 0, mismatched = 0, declined = 0, through_tree = 0;
+    const auto compare = [&](const Line &line) {
+        const LineCheck every = check_line(line, LineMethod::EveryPair), tree = check_line(line, LineMethod::Tree),
+                        usual = check_line(line, LineMethod::Usual);
+        if (every.declined || tree.declined || usual.declined) {
+            ++declined;
+            return;
+        }
+        ++compared;
+        simple += every.simple;
+        if (tree.simple != every.simple || usual.simple != every.simple) {
+            if (++mismatched <= 3) {
+                std::printf("a line answered %d by every pair, %d by the tree, %d as usual:", every.simple, tree.simple, usual.simple);
+                for (const std::array<double, 2> &point : line) std::printf(" (%.17g, %.17g)", point[0], point[1]);
+                std::printf("\n");
+            }
+        }
+        through_tree += tree.tree;
+    };
+    for (int round = 0; round < 4000; ++round) {
+        const double scale = draw(4) == 0 ? 0.1 : 0.5;
+        const int points = 2 + static_cast<int>(draw(11));
+        Line line;
+        for (int i = 0; i < points; ++i) {
+            const double x = scale * draw(5);
+            const double y = scale * draw(5);
+            line.push_back({x, y});
+        }
+        compare(line);
+    }
+    for (int round = 0; round < 1500; ++round) {
+        const int kind = static_cast<int>(draw(5));
+        const int n = 50 + static_cast<int>(draw(250));
+        Line line = regular(kind, n);
+        const std::size_t i = static_cast<std::size_t>(draw(line.size() - 1));
+        const std::size_t j = static_cast<std::size_t>(draw(line.size() - 1));
+        const std::array<double, 2> a = line[j], b = line[j + 1], middle = {(a[0] + b[0]) / 2, (a[1] + b[1]) / 2};
+        const std::uint64_t fault = static_cast<std::uint64_t>(draw(7));
+        if (fault == 0) {  // a vertex moved onto the middle of another segment
+            line[i] = middle;
+        } else if (fault == 1) {  // a vertex moved somewhere else
+            const double fx = draw(1200) / 10 - 10;
+            const double fy = draw(1200) / 10 - 10;
+            line[i] = {fx, fy};
+        } else if (fault == 2) {  // a vertex visited again later
+            line.insert(line.begin() + static_cast<std::ptrdiff_t>(i), a);
+        } else if (fault == 3) {  // a step back along a segment
+            line.insert(line.begin() + static_cast<std::ptrdiff_t>(j + 1), middle);
+            line.insert(line.begin() + static_cast<std::ptrdiff_t>(j + 1), b);
+        } else if (fault == 4) {  // a vertex one unit in the last place off the middle of another segment
+            line[i] = {middle[0], std::nextafter(middle[1], draw(2) == 0 ? -1e9 : 1e9)};
+        } else if (fault == 5) {  // closed
+            line.push_back(line[0]);
+        }
+        compare(line);
+    }
+    expect(mismatched == 0, "the tree and the test of every pair agree on whether a line crosses itself");
+    // A line of fewer than three distinct points is simple without a tree.
+    expect(compared > 5000 && simple > 500 && simple < compared - 2000 && declined < 20 && through_tree > compared - 400,
+           "enough lines of each kind were compared, nearly all through the tree");
+
+    // The work for long simple lines, where nothing ends the search early. Testing every pair of a comb of
+    // n long segments looks at n * n / 2 pairs; the tree's work is within a small multiple of n log n.
+    bool bounded = true;
+    for (int kind = 0; kind < 5; ++kind) {
+        const int n = 20000;
+        const LineCheck check = check_line(regular(kind, n));
+        const double allowed = 100.0 * n * std::log2(static_cast<double>(n));
+        if (check.declined || !check.simple || !check.tree || static_cast<double>(check.work) > allowed) {
+            std::printf("a line of kind %d: simple %d, declined %d, work %llu, allowed %.0f\n", kind, check.simple, check.declined,
+                        static_cast<unsigned long long>(check.work), allowed);
+            bounded = false;
+        }
+    }
+    expect(bounded, "the work for a long simple line grows no faster than n log n");
+    const Line comb = regular(1, 3000);
+    const LineCheck by_tree = check_line(comb), by_pairs = check_line(comb, LineMethod::EveryPair);
+    expect(by_tree.simple && by_pairs.simple && by_pairs.work > 3000ull * 3000 / 2 && by_tree.work * 10 < by_pairs.work,
+           "a comb of long segments, which the test of every pair takes the square of its length over");
+    // Past the budget a contour is declined, and the work stops there: that is the bound on the worst case.
+    const LineCheck stopped = check_line(comb, LineMethod::Usual, 20000);
+    expect(stopped.declined && stopped.reason == "a contour whose self-crossing test needs more comparisons than the core allows" &&
+               stopped.work > 20000 && stopped.work < 20000 + 40000,
+           "a contour whose test would take too long is declined");
+    expect(line_check_budget() >= 100000000 && line_check_budget() <= 1000000000, "the budget is about a second of work");
+    // A crossing ends the search: many long segments that all cross take almost no work.
+    Line scribble;
+    for (int i = 0; i < 20000; ++i) {
+        const double x = draw(100000) / 1000;
+        const double y = draw(100000) / 1000;
+        scribble.push_back({x, y});
+    }
+    const LineCheck crossed = check_line(scribble);
+    expect(!crossed.declined && !crossed.simple && crossed.work < 100.0 * 20000 * std::log2(20000.0), "a line with many crossings is answered at once");
+    std::printf("self-crossing: %zu lines compared by tree and by every pair (%zu simple, %zu declined); comb of 3000: %llu units by tree, %llu by every pair\n",
+                compared, simple, declined, static_cast<unsigned long long>(by_tree.work), static_cast<unsigned long long>(by_pairs.work));
+}
+
+// FNV-1a of the centres of the helices placed in the generated pockets of helical_entries(), recorded from
+// x86-64 GCC. A centre is worked out with + - * / alone, so every platform must give this value.
+static const std::uint64_t HELIX_DIGEST = 13467638686905150612ULL;
+
+// The distance from a point to a segment, in plain floating point: the check of helical_entries(), which
+// shares no code with the core.
+static double away(double px, double py, double ax, double ay, double bx, double by) {
+    const double dx = bx - ax, dy = by - ay, length = dx * dx + dy * dy;
+    double t = length > 0 ? ((px - ax) * dx + (py - ay) * dy) / length : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    return std::hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+// The distance from a point to the nearest wall of a pocket given as closed contours.
+static double to_walls(const json &contours, double px, double py) {
+    double nearest = 1e300;
+    for (const json &contour : contours)
+        for (std::size_t i = 0; i + 1 < contour.size(); ++i)
+            nearest = std::min(nearest, away(px, py, contour[i][0].get<double>(), contour[i][1].get<double>(),
+                                             contour[i + 1][0].get<double>(), contour[i + 1][1].get<double>()));
+    return nearest;
+}
+
+// Whether a point is in the pocket: inside an odd number of its contours.
+static bool in_pocket(const json &contours, double px, double py) {
+    bool inside = false;
+    for (const json &contour : contours)
+        for (std::size_t i = 0; i + 1 < contour.size(); ++i) {
+            const double ax = contour[i][0].get<double>(), ay = contour[i][1].get<double>();
+            const double bx = contour[i + 1][0].get<double>(), by = contour[i + 1][1].get<double>();
+            if ((ay > py) != (by > py) && px < ax + (py - ay) * (bx - ax) / (by - ay)) inside = !inside;
+        }
+    return inside;
+}
+
+// Helical entries into pockets: where the helix goes, that the cutter stays clear of every wall and island
+// there, the program built on it, and the refusals.
+static void helical_entries() {
+    // A 40 mm square pocket with a 12 mm square island, a 4 mm cutter and a helix of radius 1.5 mm.
+    const char *settings = R"("mode":"router","protocol":"grbl","width":90,"height":90,"safe":3,"depth":2,"step":1,
+        "power":9000,"feed":400,"plunge":90,"tool_diameter":4,"stepover":2,"operation":"pocket","router_entry":"helix",
+        "entry_angle":3,"stock_thickness":4)";
+    const std::string square = "[[10,10],[50,10],[50,50],[10,50],[10,10]]", island = "[[24,24],[36,24],[36,36],[24,36],[24,24]]";
+    const auto pocket = [&](const std::string &paths, const std::string &radius) {
+        return "{" + std::string(settings) + ",\"entry_radius\":" + radius + ",\"paths\":[" + paths + "]}";
+    };
+    const Job job = generate(json::parse(pocket(square + "," + island, "1.5")));
+    const std::vector<std::string> &lines = job.lines;
+    // The pass round the island starts at (22, 23.950903); its helix is centred 1.5024 mm away, inside the
+    // region kept for centres, and starts on its circle at the point nearest that seam.
+    expect(lines.size() == 3282 && lines[9] == "G0 Z3.000" && lines[10] == "G0 X21.998 Y23.951" &&
+               lines[11] == "G1 X21.998 Y23.951 Z0.000 F90.0" && lines[12] == "G1 X21.966 Y24.190 Z-0.009 F90.0" &&
+               lines[3281] == "M5",
+           "a pocket entered by a helix");
+    std::size_t falling = 0;
+    bool steep = false;
+    for (const Segment &move : job.segments) {
+        if (!(move.end_z < move.start_z) || move.start_z > 0) continue;
+        ++falling;
+        const double run = std::hypot(move.nx - move.x, move.ny - move.y);
+        if (!(run > 0) || (move.start_z - move.end_z) / run > std::tan(3 * 3.141592653589793 / 180) + 1e-7) steep = true;
+    }
+    expect(falling > 36 * 2 * 10 && !steep, "every fall into the stock is along a helix, no steeper than the entry angle");
+    expect(job.warnings.size() == 3 && job.warnings[1] == "Concentric pocket clearing preserves islands. Narrow residual features may remain.",
+           "its warnings");
+
+    // The same places through the command Studio's Python calls.
+    const json contours = json::parse("[" + square + "," + island + "]");
+    const json passes = operation_call("operation", json{{"op", "pocket"}, {"paths", contours}, {"radius", 2.0}, {"step", 2.0}})["paths"];
+    json seams = json::array();
+    for (const json &pass : passes) seams.push_back(pass[0]);
+    const json placed = operation_call("operation", json{{"op", "helix"}, {"paths", contours}, {"seams", seams},
+                                                         {"bit_radius", 2.0}, {"radius", 1.5}})["entries"];
+    expect(placed.size() == passes.size() && placed.size() == 10 && seams[1].dump() == "[12.0,12.0]" &&
+               placed[1][0].dump() == "13.5024" && placed[1][1].dump() == "13.5024" &&
+               std::fabs(placed[1][2].get<double>() + 2.356194490192345) < 1e-12 && placed[3].dump() == "[14.0,14.0,0.0]",
+           "a helix is centred on the seam where that is clear, and otherwise as near it as the walls allow");
+
+    // Refusals, with the reference's messages.
+    const auto refusal = [&](const std::string &paths, const std::string &radius) {
+        return message<ValueError>(pocket(paths, radius).c_str());
+    };
+    expect(refusal("[[10,10],[17,10],[17,17],[10,17],[10,10]]", "1.8") == "The pocket has insufficient room for the cutter and helix radius",
+           "a pocket the cutter fits and the helix does not");
+    expect(refusal("[[10,10],[40,10],[40,40],[10,40],[10,10]],[[50,10],[57,10],[57,17],[50,17],[50,10]]", "1.8") ==
+               "No clear helix and connecting feed to this pocket contour; reduce the helix radius or use a contour ramp",
+           "a small pocket beside a large one: no straight feed leads into it");
+    expect(refusal(square, "2.5") == "Helix radius cannot exceed the cutter radius; a larger helix leaves a central core",
+           "a helix wider than the cutter");
+    expect(refusal(square, "\"wide\"") == "entry_radius must be numeric", "a helix radius that is not a number");
+    expect(message<ValueError>(R"({"mode":"router","width":100,"height":50,"feed":600,"power":1,"operation":"pocket",
+        "router_entry":"helix","tool_diameter":3,"stepover":1.5,"entry_radius":0.05,"entry_angle":0.25,"depth":10,"step":10,
+        "paths":[[[20,20],[25,20],[25,25],[20,25],[20,20]]]})") == "Helix exceeds the path segment limit",
+           "a helix of more turns than a program may hold");
+
+    // Generated pockets: a rectangle with its corners cut by different amounts, sometimes with a triangular
+    // island and sometimes with a small second pocket beside it. Every coordinate is a whole number of
+    // thousandths, so the pockets are the same on every platform. For each helix placed, the centre must be
+    // in the pocket and at least cutter radius + helix radius from every wall, and the feed to the seam at
+    // least the cutter radius from every wall, less the two half steps of the kernel's grid.
+    std::uint64_t state = 2026, digest = 1469598103934665603ULL;
+    const auto draw = [&](std::uint64_t below) {
+        state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+        return (state >> 33) % below;
+    };
+    const auto mm = [](std::uint64_t thousandths) { return static_cast<double>(thousandths) / 1000.0; };
+    std::size_t helices = 0, refused = 0;
+    bool clear = true;
+    for (int round = 0; round < 120; ++round) {
+        const double x0 = mm(20000 + draw(5000));
+        const double y0 = mm(20000 + draw(5000));
+        const double w = mm(9000 + draw(14000));
+        const double h = mm(9000 + draw(14000));
+        double cut[4];
+        for (double &corner : cut) corner = mm(draw(4000));
+        json outer = json::array({json::array({x0 + cut[0], y0}), json::array({x0 + w - cut[1], y0}), json::array({x0 + w, y0 + cut[1]}),
+                                  json::array({x0 + w, y0 + h - cut[2]}), json::array({x0 + w - cut[2], y0 + h}),
+                                  json::array({x0 + cut[3], y0 + h}), json::array({x0, y0 + h - cut[3]}), json::array({x0, y0 + cut[0]})});
+        outer.push_back(outer[0]);
+        json pockets = json::array({outer});
+        const std::uint64_t extra = draw(3);
+        if (extra == 1) {  // an island
+            const double ix = x0 + w / 2 + mm(draw(3000)) - 1.5;
+            const double iy = y0 + h / 2 + mm(draw(3000)) - 1.5;
+            const double size = mm(500 + draw(2500));
+            pockets.push_back(json::array({json::array({ix, iy}), json::array({ix + size, iy + size / 4}),
+                                           json::array({ix + size / 3, iy + size}), json::array({ix, iy})}));
+        } else if (extra == 2) {  // a second pocket, which the helix may not fit
+            const double side = mm(1200 + draw(3500));
+            pockets.push_back(json::array({json::array({x0 + w + 3, y0}), json::array({x0 + w + 3 + side, y0}),
+                                           json::array({x0 + w + 3 + side, y0 + side}), json::array({x0 + w + 3, y0 + side}),
+                                           json::array({x0 + w + 3, y0})}));
+        }
+        const double bit = mm(500 + 250 * draw(6));
+        const double radius = std::min(bit, mm(50 + 150 * draw(8)));
+        json entries, starts = json::array();
+        try {
+            const json cuts = operation_call("operation", json{{"op", "pocket"}, {"paths", pockets}, {"radius", bit}, {"step", bit}})["paths"];
+            for (const json &pass : cuts) starts.push_back(pass[0]);
+            entries = operation_call("operation", json{{"op", "helix"}, {"paths", pockets}, {"seams", starts},
+                                                       {"bit_radius", bit}, {"radius", radius}})["entries"];
+        } catch (const ValueError &) {
+            ++refused;
+            continue;
+        }
+        if (entries.size() != starts.size()) clear = false;
+        for (std::size_t i = 0; i < entries.size() && i < starts.size(); ++i) {
+            ++helices;
+            const double cx = entries[i][0].get<double>(), cy = entries[i][1].get<double>(), angle = entries[i][2].get<double>();
+            for (const double value : {cx, cy}) {
+                std::uint64_t bits;
+                static_assert(sizeof bits == sizeof value, "a double is 64 bits");
+                std::copy(reinterpret_cast<const unsigned char *>(&value), reinterpret_cast<const unsigned char *>(&value) + 8,
+                          reinterpret_cast<unsigned char *>(&bits));
+                for (int byte = 0; byte < 8; ++byte) digest = (digest ^ ((bits >> (8 * byte)) & 0xff)) * 1099511628211ULL;
+            }
+            if (!in_pocket(pockets, cx, cy) || to_walls(pockets, cx, cy) < bit + radius) clear = false;
+            // The feed, from the point of the circle where the helix ends to the seam, a tenth at a time.
+            const double sx = cx + radius * std::cos(angle), sy = cy + radius * std::sin(angle);
+            const double ex = starts[i][0].get<double>(), ey = starts[i][1].get<double>();
+            for (int step = 0; step <= 10; ++step) {
+                const double fx = sx + (ex - sx) * step / 10, fy = sy + (ey - sy) * step / 10;
+                if (!in_pocket(pockets, fx, fy) || to_walls(pockets, fx, fy) < bit - 2e-6) clear = false;
+            }
+        }
+    }
+    expect(clear, "every helix and its feed keep the cutter clear of the pocket's walls and islands");
+    expect(helices > 300 && refused > 5 && refused < 80, "the generated pockets place helices and refuse some");
+    if (digest != HELIX_DIGEST) std::printf("helix centres: digest %llu\n", static_cast<unsigned long long>(digest));
+    expect(digest == HELIX_DIGEST, "the helix centres are the recorded ones");
+    std::printf("helical entries: %zu helices in generated pockets, %zu pockets refused\n", helices, refused);
 }
 
 // FNV-1a of one isolation answer as JSON text, recorded from x86-64 GCC. See circuit_boards().
@@ -214,9 +545,8 @@ int main() {
     expect(message<ValueError>(R"({"mode":"plasma"})") == "Choose router, laser or knife", "an unknown head");
     expect(message<ValueError>(R"({"mode":"router","width":100,"height":50,"feed":600,"power":1,
         "paths":[[[0,0],[101,0]]]})") == "X must be between 0 and 100.0", "a point outside the work area");
-    expect(message<NotPorted>(R"({"mode":"knife","width":100,"height":50,"feed":600,"power":1,
-        "paths":[[[9,9],[9.00000009,9],[9.00000018,9],[9,9]]]})") ==
-               "a drag-knife path that returns to a point (the reference fails on it)",
+    expect(message<NotPorted>(R"({"mode":"router","operation":"vcarve","width":100,"height":50,"feed":600,"power":1,
+        "paths":[[[10,10],[30,10],[30,30],[10,30],[10,10]]]})") == "V-carving",
            "a case that is not reproduced is declined, not guessed");
 
     // Drilling: a peck at each marker, with the last peck at the full depth.
@@ -250,6 +580,35 @@ int main() {
            "its summary");
     expect(message<ValueError>(R"({"mode":"knife","width":100,"height":50,"feed":600,"power":1,"knife_offset":2,
         "paths":[[[10,10],[20,10]]]})") == "knife_lead must be between 2.0 and 20", "a lead shorter than the offset");
+
+    // Repeated points on a knife path. A point is kept only when it is further than 0.1 nm from the last
+    // point kept, so no move has zero length. Two steps of 0.09 nm out and one step back are 0.18 nm each
+    // way: the knife turns half round at the far end and half round again where the path closes. (The steps
+    // out used to be dropped and the step back kept, a move of no length, on which the reference failed.)
+    const auto knife_lines = [](const char *paths) {
+        return generate(json::parse(std::string(R"({"mode":"knife","width":100,"height":50,"feed":600,"power":1,
+            "paths":)") + paths + "}")).lines;
+    };
+    const std::vector<std::string> turned = knife_lines("[[[9,9],[9.00000009,9],[9.00000018,9],[9,9]]]");
+    expect(turned.size() == 166 && turned[8] == "G0 X8.250 Y9.000" && turned[10] == "G1 X9.250 Y9.000 F600.0" &&
+               turned[11] == "G1 X9.250 Y9.000 F600.0" && turned[29] == "G1 X9.000 Y8.750 F600.0" &&
+               turned[47] == "G1 X8.750 Y9.000 F600.0" && turned[48] == "G1 X8.750 Y9.000 F600.0" &&
+               turned[66] == "G1 X9.000 Y9.250 F600.0" && turned[84] == "G1 X9.250 Y9.000 F600.0" &&
+               turned[85] == "G0 Z5.000",
+           "a knife path that goes out and back by more than the tolerance");
+    expect(turned == knife_lines("[[[9,9],[9.00000018,9],[9,9]]]"), "the step under the tolerance is not a point of it");
+    // Within the tolerance of the point kept there is no move at all, and exact repeats change nothing.
+    const std::vector<std::string> plain = knife_lines("[[[20,20],[30,25]]]");
+    expect(plain == knife_lines("[[[20,20],[20.00000006,20],[20.00000006,20.00000006],[20,20],[30,25]]]"),
+           "an excursion within the tolerance is dropped");
+    expect(plain == knife_lines("[[[20,20],[20,20],[30,25],[30,25]]]"), "exact repeats are dropped");
+    // Forty steps of 0.05 nm are 2 nm of travel: they are followed, where each used to be dropped.
+    std::string creeping = "[[[30,30]";
+    for (int i = 1; i <= 40; ++i) creeping += ",[" + text::repr(30 + 5e-8 * i) + ",30]";
+    expect(knife_lines((creeping + "]]").c_str()).size() > 10, "many short steps add up to a move");
+    expect(message<ValueError>(R"({"mode":"knife","width":100,"height":50,"feed":600,"power":1,
+        "paths":[[[10,10],[20,10]],[[5,5],[5,5],[5.00000005,5]]]})") == "Knife paths must contain nonzero travel",
+           "a knife path that is a single point is refused");
 
     // A ramp entry: one lap down a closed contour at no more than the entry angle, then a lap at depth.
     const Job ramp = generate(json::parse(R"({"mode":"router","width":100,"height":50,"feed":600,"power":12000,
@@ -323,6 +682,8 @@ int main() {
         expect(std::string(error.what()).find("only straight moves") != std::string::npos, "an arc is refused");
     }
 
+    self_crossing();
+    helical_entries();
     circuit_boards();
 
     std::printf(failures ? "%d checks failed\n" : "PASS native core self-test%.0d\n", failures);

@@ -26,6 +26,18 @@ namespace detail {
 // a contour that is open, crosses itself or has no area, or for contours that cancel.
 polygon::PolygonSet contour_region(const std::vector<std::vector<std::array<double, 2>>> &paths);
 
+// A helical entry into a pocket: the centre of the helix and the angle at which it starts and ends.
+struct HelixEntry {
+    double x, y, angle;
+};
+
+// studio.router_entry._pocket_entries(source, paths, bit_radius, radius) from the point where the reference
+// builds the pocket's region: one entry for each seam, the first point of each pocket contour. source holds
+// the pocket's contours as drawn. Throws the reference's messages when the pocket has no room for the
+// cutter and helix, or no clear feed from a helix to a seam. See pocket_entry.cpp.
+std::vector<HelixEntry> pocket_entries(const std::vector<std::vector<std::array<double, 2>>> &source,
+                                       const std::vector<std::array<double, 2>> &seams, double bit_radius, double radius);
+
 std::vector<std::string> prepare_operation(const json &project, std::vector<std::vector<std::array<double, 2>>> &paths,
                                            double width, double height);
 

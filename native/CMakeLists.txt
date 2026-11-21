@@ -34,10 +34,11 @@ else()
   target_compile_options(kerfkite_core PUBLIC -ffp-contract=off -Wall -Wextra)
 endif()
 
-# KerfKite's own polygon kernel, and the offset, pocket and fill operations built on it: standard library
-# only. The core contains no third-party code and its build fetches nothing.
+# KerfKite's own polygon kernel, and the offset, pocket and fill operations and the helical pocket entry
+# built on it: standard library only. The core contains no third-party code and its build fetches nothing.
 target_sources(kerfkite_core PRIVATE core/src/polygon/arrangement.cpp core/src/polygon/boolean.cpp core/src/polygon/clip.cpp
-  core/src/polygon/command.cpp core/src/polygon/measure.cpp core/src/polygon/offset.cpp core/src/operations.cpp)
+  core/src/polygon/command.cpp core/src/polygon/measure.cpp core/src/polygon/offset.cpp core/src/operations.cpp
+  core/src/pocket_entry.cpp)
 
 add_executable(kerfkite-cam tools/kerfkite_cam.cpp)
 target_link_libraries(kerfkite-cam PRIVATE kerfkite_core)

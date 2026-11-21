@@ -98,12 +98,15 @@ Job single(const json &project) {
     // studio.operations.prepare: the line operation leaves the paths as they are.
     std::vector<std::string> operation_warnings;
     const bool line = is_text_or_absent(operation, "line");
+    // A helix is placed in the pocket as drawn, so those contours are kept beside the pocket's passes.
+    std::vector<Path> drawn;
+    if (router && is_text(get(project, "router_entry"), "helix") && is_text(operation, "pocket")) drawn = clean;
     if (!line || knife) {
         if (!none(get(project, "path_depths")))
             throw ValueError("Per-vertex depth contours require the line operation");
         if (knife) {
             if (!line) throw ValueError("Knife uses contour lines, not pocket/fill operations");
-            clean = knife_paths(project, clean, width, height);
+            clean = knife_paths(project, clean, width, height, operation_warnings);
         } else {
             operation_warnings = prepare_operation(project, clean, width, height);  // operations.cpp
         }
@@ -141,8 +144,8 @@ Job single(const json &project) {
         if (depth <= 0) throw ValueError("No contour cuts below the stock surface");
     }
     if (router && !entry_plunge)
-        return entry_job(project, clean, has_depths ? &depths : nullptr, depth, step, safe, feed, plunge, power, width,
-                         height, operation_warnings);
+        return entry_job(project, drawn, clean, has_depths ? &depths : nullptr, depth, step, safe, feed, plunge, power,
+                         width, height, operation_warnings);
 
     std::vector<std::vector<LaserVertex>> laser_paths;
     bool leads = false;
@@ -283,7 +286,6 @@ Job single(const json &project) {
     job.warnings = {profile.notes, "Review tool geometry, stock and clearance before running.",
                     "Time estimate excludes travel, plunge, acceleration and spindle startup."};
     job.warnings.insert(job.warnings.begin() + 1, operation_warnings.begin(), operation_warnings.end());
-    if (knife) job.warnings.insert(job.warnings.begin() + 1, KNIFE_WARNING);
     if (profile.family == "rs274")
         job.warnings.push_back(
             "Before loading, clear controller scaling, rotation and local offsets. Set G54 Z zero for the current "
@@ -294,8 +296,6 @@ Job single(const json &project) {
     job.lines = postprocess(lines, protocol, mode, get(project, "dwell_units"));
     job.cut_length = rounded(length, 2);
     job.cut_minutes = rounded(length / cut_feed, 2);
-    // A knife job whose paths all had no travel has nothing to measure; the reference's min() says so.
-    if (knife && clean.empty()) throw ValueError("min() arg is an empty sequence");
     // [min x, min y, max x, max y] over every vertex of what is cut: for a laser, the paths with their leads.
     const auto cover = [&job](double x, double y, bool first) {
         if (first) job.bounds = {x, y, x, y};

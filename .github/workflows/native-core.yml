@@ -7,8 +7,10 @@ on:
       - native/**
       - validation/native_core_parity.py
       - validation/native_core_recorder.py
-      # The reference computes offsets, pockets and fills through the extension, which is built from these.
+      # The reference computes offsets, pockets and fills, and places helical pocket entries, through the
+      # extension, which is built from these.
       - studio/operations.py
+      - studio/router_entry.py
       - studio/_core_native.cpp
       - setup.py
       - .github/workflows/native-core.yml

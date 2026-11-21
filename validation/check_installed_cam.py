@@ -145,6 +145,28 @@ polygon_jobs = [
 counts = tuple(len(job['lines']) for job in polygon_jobs)
 digest = sha256('\n'.join(line for job in polygon_jobs for line in job['lines']).encode()).hexdigest()[:16]
 assert (counts, digest) == ((344, 176, 684, 1737), '59a9b75edf5ac767'), (counts, digest)
+# Where a helix descends into that pocket is decided by the same kernel, through this extension. The centre
+# of each helix is worked out with whole numbers and + - * / alone, so the centres are pinned too. (The
+# angle each helix starts at, and so the program, come from the C maths library's atan2, sine and cosine.)
+assert operations.kernel_entries_available()
+seams = [path[0] for path in polygon_jobs[2]['prepared_paths']]
+centres = [entry[:2] for entry in operations.kernel_pocket_entries([outline, island], seams, 2, 1.25)]
+digest = sha256(repr(centres).encode()).hexdigest()[:16]
+assert (len(centres), digest) == (12, '3cbe0efd71f24c55'), (len(centres), digest)
+helix_job = generate(
+    dict(
+        shape,
+        mode='router',
+        operation='pocket',
+        tool_diameter=4,
+        stepover=1.6,
+        depth=1,
+        step=1,
+        router_entry='helix',
+        entry_radius=1.25,
+    )
+)
+assert len(helix_job['lines']) > len(polygon_jobs[2]['lines']) + 36 * len(seams)
 # Isolation toolpaths exist only in the native core as well, on its own polygon kernel, whose arithmetic is in
 # whole nanometres: the copper image, the contours and the unreachable places of this board are pinned, so
 # that every platform a wheel is built for gives the same bytes. The board is written here because an

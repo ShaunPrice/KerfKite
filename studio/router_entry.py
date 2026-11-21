@@ -1,11 +1,18 @@
-"""Descend on a compensated contour or a pocket-contained helical entry."""
+"""Descend on a compensated contour or a pocket-contained helical entry.
+
+Where a helix goes is decided by the native core's polygon kernel whenever the compiled extension is
+installed (native/core/src/pocket_entry.cpp, through studio.operations.kernel_pocket_entries), as the
+pocket's own passes are. That is the code the kerfkite-cam tool runs, so Studio and the tool place the same
+helix. Without the extension, or with KERFKITE_POLYGON_BACKEND=shapely, it is decided here with Shapely, by
+the same rules; the two agree on which places are clear, and differ in the last digits of the centre.
+"""
 
 import math
 
 from shapely.geometry import LineString, Point
 from shapely.ops import nearest_points
 
-from .operations import polygons, region, value
+from .operations import kernel_entries_available, kernel_pocket_entries, polygon_backend, polygons, region, value
 from .cam_moves import PackedSegments, CutRun
 from .protocols import get_protocol, postprocess
 
@@ -13,12 +20,17 @@ from .protocols import get_protocol, postprocess
 def _pocket_entries(source, paths, bit_radius, radius):
     if radius > bit_radius:
         raise ValueError('Helix radius cannot exceed the cutter radius; a larger helix leaves a central core')
+    if polygon_backend() == 'kernel' and kernel_entries_available():
+        return kernel_pocket_entries(source, [path[0] for path in paths], bit_radius, radius)
     stock = region(source)
     clearance = stock.buffer(-bit_radius, quad_segs=32)
     # Offset polygons approximate round corners. Keep an extra chord allowance and
     # verify each chosen circle against the original material/island boundaries.
     pad = 0.001 + (radius + bit_radius) * 0.0004
-    centres = polygons(stock.buffer(-(bit_radius + radius + pad), quad_segs=64))
+    # A buffer that leaves nothing is an empty Polygon, which polygons() would list as a piece.
+    centres = [
+        patch for patch in polygons(stock.buffer(-(bit_radius + radius + pad), quad_segs=64)) if not patch.is_empty
+    ]
     if not centres:
         raise ValueError('The pocket has insufficient room for the cutter and helix radius')
     if len(centres) * len(paths) > 100000:

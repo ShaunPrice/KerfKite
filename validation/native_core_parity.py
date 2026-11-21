@@ -7,13 +7,16 @@ Three comparisons, all against values computed by Python in this run:
 
 1. Number text and arithmetic: fixed-point formatting, round() and repr() for several hundred thousand
    values, including decimal ties and values next to them; and math.dist and sum(), which Python computes
-   with more care than the plain formulas.
+   with more care than the plain formulas. Also the core's answer to whether a line crosses itself, against
+   shapely's LineString.is_simple, for random lines and lines built to sit on the edge of each rule.
 2. Recorded jobs: every studio.cam.generate call the test suite makes, replayed through the native core.
 3. Generated edge cases: projects with one to three settings replaced by unusual values, so that the
    reference's error messages are compared as well as its programs. A third as many again are closed
    contours for the polygon operations (offsets, pockets and hatch fills).
    Ramp, helix and holding-tab jobs have their own generator (entry_tab_cases), with contours that cross,
-   touch, fold back or nearly close, and are counted separately.
+   touch, fold back or nearly close, and are counted separately. So are pockets entered by a helix
+   (helix_pocket_cases): pockets of many shapes, with and without islands, for a range of cutters, depths
+   and helix radii.
 
 For each job the native core must either reproduce the reference exactly (program lines, preview segments,
 length, time, bounds and warnings, or the same error message) or decline it as not ported yet. A different
@@ -23,13 +26,17 @@ Offsets, pockets and fills have one implementation, the core's polygon kernel, w
 calls through the compiled extension (studio/operations.py). For those jobs the geometry of the operation
 is therefore shared, not compared; what is compared is everything around it: the checks of the settings and
 their order, the order of cutting, leads, tabs, ramp entries on the offset contours, laser power,
-post-processing and the totals. validation/polygon_kernel_check.py compares the kernel itself with Shapely.
+post-processing and the totals. Where a helix enters a pocket is decided by the same kernel, through the
+same extension (native/core/src/pocket_entry.cpp), so the place is shared and the helix built on it is
+compared. validation/polygon_kernel_check.py compares the kernel itself with Shapely, and
+tests/test_router_entry.py checks every helix against the pocket's walls.
 Without the extension the reference falls back to Shapely, whose vertices differ, so this comparison stops
 unless --without-polygon-operations is given, which leaves those jobs out and says so.
 """
 
 import argparse
 import collections
+import hashlib
 import itertools
 import json
 import math
@@ -150,6 +157,193 @@ def arithmetic(cli, count, seed):
             f'{request.strip()} gave {got!r}, Python {want!r}'
         )
     return len(expected)
+
+
+def crossing_lines(count, seed):
+    """Lines for the self-crossing test: random ones, and ones built to sit on the edge of each rule.
+
+    GEOS calls a line simple when no two of its segments cross, overlap or touch, except neighbours at the
+    vertex they share and the two ends of a closed line. The lines here have points on coarse grids, where
+    shared vertices, vertices on other segments, overlaps and returns along a segment are common; random
+    points; long regular lines (zigzags, combs of long parallel segments, fans, spirals, rings) left whole or
+    spoilt by one crossing, one touch or one overlap somewhere; points a few units in the last place either
+    side of another segment; and all of these moved and scaled, so that the coordinates round.
+    """
+    rng = random.Random(seed)
+
+    def regular(n):
+        kind = rng.randrange(7)
+        # Strokes from far apart down to a few units in the last place apart, where the signs GEOS works out
+        # need its double-double arithmetic and segments side by side cannot be told apart in groups.
+        pitch = rng.choice([0.5, 0.5, 0.01, 0.001, 1e-9, 1e-12, 3e-14])
+        if kind == 0:  # a zigzag of level strokes
+            return [[100.0 if i % 2 else 0.0, i * pitch] for i in range(n)]
+        if kind == 1:  # a comb of long parallel diagonals
+            return [[(100.0 if i % 2 else 0.0) + i * pitch, 100.0 if i % 2 else 0.0] for i in range(n)]
+        if kind == 2:  # a fan of rays, out along one and back along the next
+            points = []
+            for i in range(n // 2):
+                a = 1.5 * i / (n // 2)
+                ray = [[math.cos(a), math.sin(a)], [100 * math.cos(a), 100 * math.sin(a)]]
+                points += ray if i % 2 == 0 else ray[::-1]
+            return points
+        if kind == 3:  # a square spiral inwards
+            x = y = 0.0
+            points = []
+            for i in range(n):
+                points.append([x, y])
+                step = 100.0 - (i // 2) * (100.0 / n)
+                dx, dy = ((1, 0), (0, 1), (-1, 0), (0, -1))[i % 4]
+                x, y = x + dx * step, y + dy * step
+            return points
+        if kind == 4:  # a round spiral
+            return [[0.01 * i * math.cos(i * 0.1), 0.01 * i * math.sin(i * 0.1)] for i in range(n)]
+        if kind == 5:  # a ring, closed
+            points = [[50 * math.cos(2 * math.pi * i / n), 50 * math.sin(2 * math.pi * i / n)] for i in range(n)]
+            return points + [list(points[0])]
+        # a walk of short steps that never turns back
+        x = y = 0.0
+        points = []
+        for _ in range(n):
+            points.append([x, y])
+            x, y = x + rng.uniform(0.1, 1), y + rng.uniform(-1, 1)
+        return points
+
+    def spoil(points):
+        """One fault somewhere in a regular line, or none."""
+        points = [list(point) for point in points]
+        fault = rng.randrange(8)
+        i, j = rng.randrange(len(points) - 1), rng.randrange(len(points) - 1)
+        a, b = points[j], points[j + 1]
+        if fault == 0:  # a vertex moved onto the middle of another segment: a touch
+            points[i] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
+        elif fault == 1:  # a vertex moved far away: usually crossings
+            points[i] = [rng.uniform(-10, 110), rng.uniform(-10, 110)]
+        elif (
+            fault == 2
+        ):  # a vertex repeated later in the line: a shared vertex between segments that are not neighbours
+            points.insert(i, list(a))
+        elif fault == 3:  # a step back along the segment just drawn: an overlap
+            points.insert(j + 1, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2])
+            points.insert(j + 1, list(b))
+        elif fault == 4:  # a vertex within a few units in the last place of another segment's middle
+            x, y = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+            for _ in range(rng.randrange(0, 4)):
+                x = math.nextafter(x, rng.choice([-math.inf, math.inf]))
+                y = math.nextafter(y, rng.choice([-math.inf, math.inf]))
+            points[i] = [x, y]
+        elif fault == 5:  # closed, exactly or nearly
+            points.append([points[0][0] + rng.choice([0, 0, 1e-9]), points[0][1]])
+        elif fault == 6:  # a spur out and back from a vertex
+            points.insert(i + 1, list(points[i]))
+            points.insert(i + 1, [points[i][0] + rng.uniform(-3, 3), points[i][1] + rng.uniform(-3, 3)])
+        return points
+
+    for _ in range(count):
+        kind = rng.randrange(10)
+        if kind < 3:  # a few points on a coarse grid
+            scale = rng.choice([1, 1, 0.5, 0.1, 2.5, 1e-3])
+            points = [[scale * rng.randrange(0, 5), scale * rng.randrange(0, 5)] for _ in range(rng.randrange(2, 12))]
+        elif kind == 3:  # many points on a grid: certain to cross, in a line long enough for the tree
+            points = [[rng.randrange(0, 40) * 0.25, rng.randrange(0, 40) * 0.25] for _ in range(rng.randrange(50, 200))]
+        elif kind == 4:  # random points
+            points = [[rng.uniform(0, 100), rng.uniform(0, 100)] for _ in range(rng.randrange(3, 60))]
+        elif kind == 5:  # points in a line or nearly, in any order
+            slope, base = rng.choice([0, 1, 0.5, 1 / 3, 0.1]), rng.uniform(0, 5)
+            points = []
+            for _ in range(rng.randrange(3, 70)):
+                x = rng.choice([rng.randrange(0, 50) * 0.5, rng.uniform(0, 25)])
+                y = base + slope * x
+                if rng.random() < 0.1:
+                    y = math.nextafter(y, rng.choice([-math.inf, math.inf]))
+                points.append([x, y])
+            if rng.random() < 0.5:
+                points.sort()
+        else:  # a regular line of 50 to 400 points, usually with one fault
+            points = regular(rng.randrange(50, 400))
+            if rng.random() < 0.8:
+                points = spoil(points)
+        if rng.random() < 0.3:  # moved and scaled, as a design in a work area is
+            scale, dx, dy = rng.choice([1, 0.001, 1000, 1 / 3, 0.1]), rng.choice([0, 1000, 0.1]), rng.choice([0, 7.3])
+            points = [[x * scale + dx, y * scale + dy] for x, y in points]
+        if rng.random() < 0.05:
+            points.reverse()
+        yield points
+
+
+def self_crossing(cli, count, seed):
+    """line_is_simple of the core against shapely's LineString.is_simple, by each of the core's methods."""
+    from shapely.geometry import LineString
+
+    methods = ('usual', 'tree', 'pairs')
+
+    def ask(requests):
+        """The core's answer to each (method, points): [word, work, tree, reason]."""
+        text = ''.join(
+            f'{method} {" ".join(f"{float(x).hex()} {float(y).hex()}" for x, y in points)}\n'
+            for method, points in requests
+        )
+        rows = subprocess.run(
+            [str(cli), 'simple'], input=text, capture_output=True, text=True, check=True
+        ).stdout.splitlines()
+        assert len(rows) == len(requests), 'The native core did not answer every line.'
+        return [row.split(' ', 3) for row in rows]
+
+    tally = collections.Counter()
+    lines = crossing_lines(count, seed)
+    while True:
+        some = list(itertools.islice(lines, 1500))  # a few thousand at a time: the request is text
+        if not some:
+            break
+        answers = ask([(method, points) for points in some for method in methods])
+        for index, points in enumerate(some):
+            want = 'simple' if LineString(points).is_simple else 'crossing'
+            tally[want] += 1
+            for offset, method in enumerate(methods):
+                got = answers[index * len(methods) + offset]
+                if got[0] == 'declined':
+                    # Only for an answer that depends on rounding inside GEOS: none of these lines is long
+                    # enough to reach the limit on work.
+                    assert 'rounding inside GEOS' in got[3] or 'below 1e-140' in got[3], (
+                        f'{method} declined {points!r}: {got[3]}'
+                    )
+                    tally['declined', method] += 1
+                else:
+                    assert got[0] == want, f'is_simple is {want}, the core ({method}) says {got[0]}, for {points!r}'
+                if method == 'usual':
+                    tally['tree'] += got[2] == '1'
+
+    # Long lines of the kinds that used to take time growing with the square of their length. Each is
+    # simple, so nothing ends the search early, and the work is counted to show that it does not.
+    long_lines = []
+    for n in (2000, 8000):
+        long_lines.append(
+            [[(100.0 if i % 2 else 0.0) + i * 0.001, 100.0 if i % 2 else 0.0] for i in range(n)]
+        )  # a comb
+        fan = []
+        for i in range(n // 2):
+            a = 1.5 * i / (n // 2)
+            ray = [[math.cos(a), math.sin(a)], [100 * math.cos(a), 100 * math.sin(a)]]
+            fan += ray if i % 2 == 0 else ray[::-1]
+        long_lines.append(fan)
+        x = y = 0.0
+        spiral = []
+        for i in range(n):
+            spiral.append([x, y])
+            step = 100.0 - (i // 2) * (100.0 / n)
+            dx, dy = ((1, 0), (0, 1), (-1, 0), (0, -1))[i % 4]
+            x, y = x + dx * step, y + dy * step
+        long_lines.append(spiral)
+    for points, got in zip(long_lines, ask([('usual', points) for points in long_lines]), strict=True):
+        assert got[0] == 'simple' and got[2] == '1', f'A long simple line of {len(points)} points was answered {got}'
+        # Within a multiple of the length of the line times its logarithm. Testing every pair takes the
+        # square of the length: forty times this bound for the longer lines here, and a job may hold a
+        # line twelve times as long again.
+        assert int(got[1]) < 100 * len(points) * math.log2(len(points)), (
+            f'{len(points)} points took {got[1]} units of work'
+        )
+        tally['long'] += 1
+    return sum(tally[want] for want in ('simple', 'crossing')), tally
 
 
 WEIRD = [
@@ -638,6 +832,166 @@ def entry_tab_cases(count, seed):
         yield dict(base, depth=2, step=1, stock_thickness=2, tabs=tabs, router_entry='ramp', paths=[ring(6000, 20)])
 
 
+def helix_pocket_cases(count, seed):
+    """Pockets entered by a helix: the helix is placed inside the pocket, clear of its walls and islands.
+
+    Pockets of many shapes (rectangles, polygons at any angle, stars, shapes with narrow legs and necks),
+    alone, with islands, with islands inside islands and as several separate pockets, some of them too small
+    for the helix; cutters, stepovers, depths, step-downs, helix radii and entry angles from ones that fit to
+    ones that do not. About a fifth are untidy: contours that only nearly close or that cross, settings of
+    the wrong size or type, tabs, depth paths, other cutters and operations, so that each rejection is
+    compared in the reference's order. A few at the end reach the limits on lines.
+    """
+    rng = random.Random(seed)
+
+    def contour(cx, cy, size, places, tidy):
+        kind = rng.choice([0, 0, 1, 1, 2, 2, 3, 4]) if tidy or rng.random() < 0.9 else 5
+        if kind == 0:  # rectangle
+            w, h = size * rng.uniform(0.5, 1), size * rng.uniform(0.5, 1)
+            points = [[cx - w, cy - h], [cx + w, cy - h], [cx + w, cy + h], [cx - w, cy + h]]
+        elif kind == 1:  # regular polygon at any angle, up to a fine circle
+            n = rng.choice([3, 5, 6, 8, 24, 90])
+            turn = rng.uniform(0, 7)
+            points = [
+                [cx + size * math.cos(turn + 2 * math.pi * i / n), cy + size * math.sin(turn + 2 * math.pi * i / n)]
+                for i in range(n)
+            ]
+        elif kind == 2:  # star-shaped: simple, with sharp and reflex corners
+            n = rng.randrange(4, 12)
+            angles = sorted(rng.uniform(0, 2 * math.pi) for _ in range(n))
+            points = [
+                [cx + size * r * math.cos(a), cy + size * r * math.sin(a)]
+                for a, r in ((a, rng.uniform(0.35, 1)) for a in angles)
+            ]
+        elif kind == 3:  # an L with a leg that the helix may not fit, though the cutter does
+            leg = size * rng.choice([0.25, 0.4, 0.7])
+            points = [[cx - size, cy - size], [cx + size, cy - size], [cx + size, cy - size + leg], [cx - size + leg, cy - size + leg], [cx - size + leg, cy + size], [cx - size, cy + size]]  # fmt: skip
+        elif kind == 4:  # two lobes joined by a neck
+            neck = size * rng.choice([0.1, 0.25, 0.45])
+            points = [[cx - size, cy - size / 2], [cx - neck, cy - size / 2], [cx - neck, cy - neck], [cx + neck, cy - neck], [cx + neck, cy - size / 2], [cx + size, cy - size / 2], [cx + size, cy + size / 2], [cx + neck, cy + size / 2], [cx + neck, cy + neck], [cx - neck, cy + neck], [cx - neck, cy + size / 2], [cx - size, cy + size / 2]]  # fmt: skip
+        else:  # arbitrary points: often self-crossing, which the reference refuses
+            points = [
+                [cx + rng.uniform(-size, size), cy + rng.uniform(-size, size)] for _ in range(rng.randrange(3, 7))
+            ]
+        if rng.random() < 0.3:
+            points.reverse()
+        if places is not None:
+            points = [[round(x, places), round(y, places)] for x, y in points]
+        close = rng.random()
+        if tidy or close < 0.8:
+            points.append(list(points[0]))
+        elif close < 0.9:  # closed to within the tolerance but not exactly
+            points.append([points[0][0] + rng.choice([1e-7, -4e-7, 0]), points[0][1] + rng.choice([5e-7, -1e-9])])
+        elif close < 0.95:  # just outside the tolerance
+            points.append([points[0][0] + 2e-6, points[0][1]])
+        return points
+
+    for _ in range(count):
+        tidy = rng.random() < 0.8
+        width, height = rng.choice([(100, 50), (100, 50), (300, 200), (40.5, 30)])
+        places = rng.choice([None, None, 1, 2, 3, 0])
+        size = rng.uniform(2.5, 7)
+        margin = rng.choice([4, 4, 4, 1, 0.3] if not tidy else [4])
+        cx = rng.uniform(margin + size, width - margin - size)
+        cy = rng.uniform(margin + size, height - margin - size)
+        paths = [contour(cx, cy, size, places, tidy)]
+        layout = rng.choice([0, 0, 0, 1, 1, 2, 3, 4, 5])
+        if layout == 1:  # an island
+            paths.append(contour(cx, cy, size * rng.uniform(0.08, 0.4), places, tidy))
+        elif layout == 2:  # an island with a pocket in it
+            paths.append(contour(cx, cy, size * 0.6, places, tidy))
+            paths.append(contour(cx, cy, size * rng.choice([0.2, 0.35]), places, tidy))
+        elif layout == 3:  # an island off centre, which may touch or cross the wall
+            paths.append(
+                contour(
+                    cx + size * rng.uniform(-0.5, 0.5), cy + size * rng.uniform(-0.5, 0.5), size * 0.25, places, tidy
+                )
+            )
+        elif layout == 4:  # separate pockets of several sizes: the helix may fit some and not others
+            part = size / 2
+            paths = [
+                [[x, y], [x + w, y], [x + w, y + w * rng.choice([1, 1, 0.6])], [x, y + w], [x, y]]
+                for x, y, w in (
+                    (cx - size + i * part * 1.3, cy - size + j * part * 1.3, part * rng.choice([1, 1, 0.5, 0.35]))
+                    for i in range(2)
+                    for j in range(2)
+                )
+            ]
+            rng.shuffle(paths)
+        elif layout == 5:  # two pockets that overlap, which the even-odd rule turns into three
+            paths.append(contour(cx + size * 0.7, cy + size * 0.3, size * 0.6, places, tidy))
+        diameter = rng.choice([0.5, 1, 1, 1.5, 2, 2, 3, 3.175])
+        project = dict(
+            mode='router', protocol=rng.choice(['grbl', 'grbl', 'grbl', 'linuxcnc', 'marlin', 'mach3', 'fluidnc']),
+            width=width, height=height, feed=rng.choice([600, 1200.5, 90]), power=rng.choice([12000, 800.4]),
+            depth=rng.choice([1, 1, 0.3, 1.2, 2.55, 6]), step=rng.choice([0.5, 1, 1, 3, 10]), paths=paths,
+            operation='pocket', router_entry='helix', tool_diameter=diameter,
+            stepover=rng.choice([0.25, 0.4, 0.5, 0.5, 0.75, 1]),
+        )  # fmt: skip
+        if project['stepover'] > diameter / 2 and rng.random() < 0.95:
+            project['stepover'] = diameter / 2
+        if project['protocol'] in ('linuxcnc', 'mach3'):
+            project['dwell_units'] = rng.choice(['seconds', 'milliseconds'])
+        if rng.random() < 0.85:
+            radii = [0.05, 0.1, 0.25, 0.5, 0.5, 0.75, 1, 1.5, diameter / 2, diameter / 4, '0.4', ' 0.25 ']
+            project['entry_radius'] = rng.choice(radii if tidy else radii + [2, 3, 50, 0.04, 50.5, None, True, 'wide'])
+            if tidy and float(project['entry_radius']) > diameter / 2 and rng.random() < 0.8:
+                project['entry_radius'] = diameter / rng.choice([2, 2, 4])  # a helix as wide as the cutter allows
+        elif diameter < 2 and tidy:
+            project['entry_radius'] = diameter / 2  # the default radius of 1 is wider than this cutter
+        if rng.random() < 0.6:
+            angles = [3, 3, 5, 15, 1, 7.5, 10, '2.5', 3.0, 0.25]
+            project['entry_angle'] = rng.choice(angles if tidy else angles + [0.2, 15.5, None, True, 'steep'])
+            if project['entry_angle'] in (0.25, 1):
+                project['depth'] = 0.3  # a shallow angle takes many turns: one short level of them is enough
+        if rng.random() < 0.3:
+            project['plunge'] = rng.choice([30, 250.25, 1000, 600, 90])
+        if rng.random() < 0.2:
+            project['safe'] = rng.choice([0.1, 3, 12.345])
+        if rng.random() < 0.25:
+            depth = project['depth']
+            fits = [depth, depth + 1e-9, depth + 2, str(depth), 200]
+            project['stock_thickness'] = rng.choice(
+                fits if tidy else fits + [depth - 0.1, depth + 1e-7, 201, None, 'thick']
+            )
+        if not tidy:
+            for key, choices in (
+                ('tabs', [{'width': 3, 'height': 0.5, 'count': 2}, False, None]), ('tool_shape', ['flat', 'ball', 'drill', None]),
+                ('path_depths', [None, [[-1 for _ in path] for path in paths]]), ('router_entry', ['ramp', 'plunge', 'spiral', None]),
+                ('operation', ['line', 'inside', 'outside', 'drill', 'vcarve', 'fill', None]), ('mode', ['laser', 'knife']),
+                ('tool_diameter', [0.01, 12.7, 100, '3', None, True, 'wide']), ('stepover', [0.01, 0.005, '0.3', None, 100.5]),
+            ):  # fmt: skip
+                if rng.random() < 0.06:
+                    project[key] = rng.choice(choices)
+            if rng.random() < 0.08:
+                project[rng.choice(KEYS)] = rng.choice(WEIRD)
+        if rng.random() < 0.06:
+            # An ordered job: the pocket with its helix, and then its outline, with one tool.
+            first = {key: project.pop(key) for key in ('paths', 'operation', 'router_entry')}
+            second = dict(
+                paths=[[list(point) for point in path] for path in paths[:1]],
+                operation=rng.choice(['inside', 'line', 'pocket']),
+                router_entry=rng.choice(['plunge', 'ramp', 'helix']),
+            )
+            project['operations'] = [first, second]
+        yield project
+
+    if count:
+        # A pocket with a single pass and the longest helix allowed: 5553 turns of 36 chords are a program
+        # of just under 200,000 lines; two turns more and the closing lap passes the line limit; three more
+        # and the helix itself is refused.
+        base = dict(
+            mode='router', width=100, height=50, feed=600, power=12000, operation='pocket', router_entry='helix'
+        )
+        small = dict(base, tool_diameter=3, stepover=1.5, entry_radius=0.05, entry_angle=0.25, step=10)
+        square = [[20, 20], [25, 20], [25, 25], [20, 25], [20, 20]]
+        for depth in (7.602, 7.6047, 7.6061):
+            yield dict(small, depth=depth, paths=[square])
+        # A wide helix has more chords to a turn, and a second level starts at the depth of the first.
+        yield dict(base, tool_diameter=100, stepover=1, entry_radius=50, depth=2, step=1, width=300, height=300,
+                   paths=[[[20, 20], [280, 20], [280, 280], [20, 280], [20, 20]]], stock_thickness=2, entry_angle=15)  # fmt: skip
+
+
 def drill_knife_cases(count, seed):
     """Drilling and drag-knife projects: most are valid, the rest have the awkward inputs each must handle."""
     rng = random.Random(seed)
@@ -709,7 +1063,7 @@ def drill_knife_cases(count, seed):
         """A knife path inside the work area: corners of every kind, repeats and steps too short to keep."""
         x, y = rng.uniform(low + 5, high - 5), rng.uniform(15, 35)
         size = rng.choice([1, 2.5, 4])
-        kind = rng.randrange(10) if tidy or rng.random() < 0.6 else rng.randrange(10, 13)
+        kind = rng.randrange(10) if tidy or rng.random() < 0.6 else rng.randrange(10, 14)
         if kind < 3:
             points = [
                 [round(rng.uniform(low + 5, high - 5), rng.randrange(0, 5)), round(rng.uniform(15, 35), rng.randrange(0, 5))]
@@ -726,7 +1080,7 @@ def drill_knife_cases(count, seed):
                 [x + size * math.cos(2 * math.pi * i / sides), y + size * math.sin(2 * math.pi * i / sides)]
                 for i in range(sides)
             ]
-        elif kind == 7:  # repeats and near repeats, each compared with the point before it
+        elif kind == 7:  # repeats and near repeats, each compared with the last point kept (0.1 nm apart or less)
             step = rng.choice([1e-8, 9e-8, 1e-7, 1.1e-7, 0])
             points = [[x, y], [x, y], [x + step, y], [x + 2 * step, y], [x + 3, y], [x + 3, y + step], [x + 3, y + 2]]
         elif kind == 8:  # diagonals, and a turn of exactly half a circle
@@ -737,10 +1091,17 @@ def drill_knife_cases(count, seed):
                 [[x, 50], [x + size, 50], [x + size, 45]], [[99.5, y], [95, y], [95, y + 3]],
                 [[x, 0.0], [x - size, -0.0], [x - size, 3]], [[x, 0.0], [x + size, -0.0], [x + size, 3]],
             ])  # fmt: skip
-        elif kind == 10:  # no travel at all, so the path is left out
+        elif kind == 10:  # no travel at all: a single point once repeats are dropped, which is refused
             return [[x, y]] * rng.choice([2, 3]) + [[x + 5e-8, y]]
-        elif kind == 11:  # short steps that lead back to the start: the reference divides by zero
-            return [[x, y], [x + 9e-8, y], [x + 1.8e-7, y], [x, y]] + rng.choice([[], [[x + 2, y + 1]]])
+        elif kind == 11:  # short steps out and one step back to the start (the reference once divided by zero)
+            out = rng.choice([9e-8, 9e-8, 6e-8, 4e-8])  # two steps: beyond the tolerance together, or within it
+            return [[x, y], [x + out, y], [x + 2 * out, y], [x, y]] + rng.choice([[], [[x + 2, y + 1]]])
+        elif kind == 13:  # many steps each too short to keep, wandering or creeping away from the point kept
+            points = [[x, y]]
+            for _ in range(rng.randrange(2, 30)):
+                step, turn = rng.choice([3e-8, 6e-8, 9.9e-8, 1.01e-7]), rng.uniform(0, 7)
+                points.append([points[-1][0] + step * math.cos(turn), points[-1][1] + step * math.sin(turn)])
+            return points + rng.choice([[], [[x, y]], [[x + 2, y + 1]], [[x + 2, y + 1], [x, y]]])
         else:  # a lead-in or a swivel that leaves the work area
             return rng.choice([[[0.5, y], [3, y]], [[99.9, y], [95, y], [95, y + 3]], [[x, 49.9], [x + size, 49.9]]])
         if kind != 9 and rng.random() < 0.45:
@@ -859,6 +1220,8 @@ def main():
     parser.add_argument('--numbers', type=int, default=300000, help='number-text comparisons')
     parser.add_argument('--generated', type=int, default=12000, help='generated edge cases')
     parser.add_argument('--entries', type=int, default=6000, help='generated ramp, helix and holding-tab cases')
+    parser.add_argument('--lines', type=int, default=20000, help='lines for the self-crossing test')
+    parser.add_argument('--helix', type=int, default=5000, help='generated pockets entered by a helix')
     parser.add_argument('--skip-suite', action='store_true', help='do not replay the calls made by the test suite')
     parser.add_argument(
         '--without-polygon-operations',
@@ -878,6 +1241,14 @@ def main():
     else:
         # Python 3.10 and 3.11 computed math.dist and sum() differently in the last bit; the core follows 3.12.
         print('NOTE arithmetic not compared: it follows Python 3.12 and later, and this is an earlier Python')
+
+    compared, found = self_crossing(args.cli, args.lines, 90)
+    declined = ', '.join(f'{found["declined", method]} by {method}' for method in ('usual', 'tree', 'pairs'))
+    print(
+        f'PASS self-crossing: {compared} lines answered as shapely\'s is_simple answers them ({found["simple"]} simple,'
+        f' {found["crossing"]} not; {found["tree"]} through the tree; declined: {declined}), and {found["long"]} long'
+        ' lines within the bound on work'
+    )
 
     from native_core_recorder import reference
     from studio.cam import generate
@@ -939,33 +1310,55 @@ def main():
             line, _ = reference(generate, project)
             if line is not None:
                 lines.setdefault(line, 'entry/tabs')
-        cases.write_text(''.join(line + '\n' for line in lines), encoding='utf-8')
-        answers = subprocess.run(
-            [str(args.cli), 'batch', str(cases)], capture_output=True, text=True, encoding='utf-8', check=True
-        ).stdout.splitlines()
-    assert len(answers) == len(lines), 'The native core did not answer every case.'
+        tally = collections.Counter()
+        declined = collections.Counter()
+        failures = []
 
-    tally = collections.Counter()
-    declined = collections.Counter()
-    failures = []
-    for (line, origin), answer in zip(lines.items(), answers, strict=True):
-        case, got = json.loads(line), json.loads(answer)
-        expect = case['expect']
-        if not shared and uses_polygon_operation(case['project']):
-            tally[origin, 'left out'] += 1
-        elif 'declined' in got:
-            tally[origin, 'declined'] += 1
-            declined[got['declined']] += 1
-        elif 'raises' in expect:
-            # The reference stopped with something other than a rejection; there is no behaviour to match.
-            tally[origin, 'reference raised ' + expect['raises']] += 1
-            if 'invalid' not in got and 'error' not in got:
-                failures.append((case['project'], expect, got))
-        elif strict_equal(expect, got):
-            tally[origin, 'program' if 'ok' in got else 'rejection'] += 1
-        else:
-            failures.append((case['project'], expect, got))
-    for origin in ('suite', 'generated', 'entry/tabs'):
+        def compare(lines):
+            """Put a set of cases to the native core and count how each was answered."""
+            cases.write_text(''.join(line + '\n' for line in lines), encoding='utf-8')
+            answers = subprocess.run(
+                [str(args.cli), 'batch', str(cases)], capture_output=True, text=True, encoding='utf-8', check=True
+            ).stdout.splitlines()
+            assert len(answers) == len(lines), 'The native core did not answer every case.'
+            for (line, origin), answer in zip(lines.items(), answers, strict=True):
+                case, got = json.loads(line), json.loads(answer)
+                expect = case['expect']
+                if not shared and uses_polygon_operation(case['project']):
+                    tally[origin, 'left out'] += 1
+                elif 'declined' in got:
+                    tally[origin, 'declined'] += 1
+                    declined[got['declined']] += 1
+                elif 'raises' in expect:
+                    # The reference stopped with something other than a rejection; there is no behaviour to match.
+                    tally[origin, 'reference raised ' + expect['raises']] += 1
+                    if 'invalid' not in got and 'error' not in got:
+                        failures.append((case['project'], expect, got))
+                elif strict_equal(expect, got):
+                    tally[origin, 'program' if 'ok' in got else 'rejection'] += 1
+                else:
+                    failures.append((case['project'], expect, got))
+
+        compare(lines)
+        # A helix into a pocket is a long program, so these are compared a few hundred at a time and not kept.
+        seen = set()
+        helices = helix_pocket_cases(args.helix, 91)
+        while True:
+            batch = list(itertools.islice(helices, 250))
+            if not batch:
+                break
+            lines = {}
+            for project in batch:
+                line, _ = reference(generate, project)
+                # A digest that is the same from run to run stands for the line, so the lines are not kept.
+                mark = None if line is None else hashlib.sha256(line.encode()).digest()
+                if mark is not None and mark not in seen:
+                    seen.add(mark)
+                    lines.setdefault(line, 'helix')
+            if lines:
+                compare(lines)
+
+    for origin in ('suite', 'generated', 'entry/tabs', 'helix'):
         total = sum(n for (o, _), n in tally.items() if o == origin)
         if not total:
             continue

@@ -14,10 +14,10 @@
 namespace kerfkite {
 namespace detail {
 
+namespace {
+
 const char *const KNIFE_WARNING =
     "Knife alignment lead-in marks material before each contour. Test blade offset and corner swivels on scrap.";
-
-namespace {
 
 using Point = std::array<double, 2>;
 using Path = std::vector<Point>;
@@ -39,23 +39,29 @@ double value(const json &data, const char *key, double fallback, double lo, doub
     return result;
 }
 
+// Two points of a path nearer than this (0.1 nm) are one point: studio.operations.KNIFE_REPEAT.
+const double KNIFE_REPEAT = 1e-7;
+
+// studio.operations.knife_points(path): a point is kept only when it is further than KNIFE_REPEAT from the
+// last point kept, so every move that remains has a length and a direction.
+Path knife_points(const Path &path) {
+    Path kept{path[0]};
+    for (size_t i = 1; i < path.size(); ++i)
+        if (dist(kept.back(), path[i]) > KNIFE_REPEAT) kept.push_back(path[i]);
+    return kept;
+}
+
 // studio.operations.knife(paths, offset, lead)
 std::vector<Path> knife(const std::vector<Path> &paths, double offset, double lead) {
     const double five_degrees = 5 * (pytrig::PI / 180.0);  // math.radians(5)
     std::vector<Path> result;
     for (const Path &path : paths) {
-        // Each point is compared with the one before it in the design, not with the last point kept.
-        Path p{path[0]};
-        for (size_t i = 1; i < path.size(); ++i)
-            if (dist(path[i - 1], path[i]) > 1e-7) p.push_back(path[i]);
-        if (p.size() < 2) continue;
+        const Path p = knife_points(path);
+        if (p.size() < 2) throw ValueError("Knife paths must contain nonzero travel");  // no direction to cut in
         Path vectors;
         vectors.reserve(p.size() - 1);
         for (size_t i = 0; i + 1 < p.size(); ++i) {
-            const double length = dist(p[i], p[i + 1]);
-            // Several steps too short to keep can lead back to a kept point. The reference then divides by
-            // zero and fails without a message, so there is no answer to reproduce.
-            if (length == 0) throw NotPorted("a drag-knife path that returns to a point (the reference fails on it)");
+            const double length = dist(p[i], p[i + 1]);  // more than KNIFE_REPEAT, so never zero
             vectors.push_back({(p[i + 1][0] - p[i][0]) / length, (p[i + 1][1] - p[i][1]) / length});
         }
         const double ux = vectors[0][0], uy = vectors[0][1];
@@ -82,10 +88,12 @@ std::vector<Path> knife(const std::vector<Path> &paths, double offset, double le
 
 }  // namespace
 
-std::vector<Path> knife_paths(const json &project, const std::vector<Path> &paths, double width, double height) {
+std::vector<Path> knife_paths(const json &project, const std::vector<Path> &paths, double width, double height,
+                              std::vector<std::string> &warnings) {
     const double offset = value(project, "knife_offset", 0.25, 0.01, 5, "0.01", "5");
     const double lead = value(project, "knife_lead", 1, offset, 20, text::repr(offset), "20");
     std::vector<Path> result = knife(paths, offset, lead);
+    warnings.push_back(KNIFE_WARNING);
     // studio.cam: compensated geometry must still lie in the work area. Every coordinate here is finite.
     const std::string width_text = text::repr(width), height_text = text::repr(height);
     for (const Path &path : result)
