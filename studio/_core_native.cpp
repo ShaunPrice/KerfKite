@@ -7,6 +7,7 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 
+#include <cstdint>
 #include <new>
 #include <string>
 #include <vector>
@@ -134,4 +135,35 @@ PyObject *solid_call(PyObject *, PyObject *args) {
         return nullptr;
     }
     return Py_BuildValue("(NN)", text, capsule);
+}
+
+// solid_mesh(solid) -> (vertices, triangles): the mesh of a kept solid as two byte strings, float64 x, y, z
+// in millimetres for each vertex and uint32 a, b, c for each triangle, in the machine's own byte order.
+// They are the numbers of the "mesh" of an answer; a mesh of thousands of triangles need not be written
+// out as text and read back to cross from the kernel to numpy.
+PyObject *solid_mesh(PyObject *, PyObject *args) {
+    PyObject *capsule = nullptr;
+    if (!PyArg_ParseTuple(args, "O", &capsule)) return nullptr;
+    void *pointer = PyCapsule_GetPointer(capsule, kSolidCapsule);
+    if (!pointer) return nullptr;
+    static_assert(sizeof(kerfkite::solid::Vec3) == 3 * sizeof(double), "a vertex is three doubles");
+    static_assert(sizeof(kerfkite::solid::Triangle) == 3 * sizeof(std::uint32_t), "a triangle is three 32-bit numbers");
+    const kerfkite::solid::Solid &solid = *static_cast<kerfkite::solid::Solid *>(pointer);
+    std::vector<kerfkite::solid::Vec3> vertices;
+    // No C++ exception may leave this function: Python's caller is C.
+    try {
+        vertices = solid.vertices();
+    } catch (const std::exception &) {
+        return PyErr_NoMemory();
+    }
+    const std::vector<kerfkite::solid::Triangle> &triangles = solid.triangles();
+    PyObject *points = PyBytes_FromStringAndSize(reinterpret_cast<const char *>(vertices.data()), static_cast<Py_ssize_t>(vertices.size() * sizeof(kerfkite::solid::Vec3)));
+    if (!points) return nullptr;
+    PyObject *corners =
+        PyBytes_FromStringAndSize(reinterpret_cast<const char *>(triangles.data()), static_cast<Py_ssize_t>(triangles.size() * sizeof(kerfkite::solid::Triangle)));
+    if (!corners) {
+        Py_DECREF(points);
+        return nullptr;
+    }
+    return Py_BuildValue("(NN)", points, corners);
 }

@@ -30,6 +30,14 @@ struct GridPredicates {
         return orient2d_grid((*v)[static_cast<size_t>(a)].data(), (*v)[static_cast<size_t>(b)].data(),
                              (*v)[static_cast<size_t>(c)].data(), au, av);
     }
+    // What radial_sort() asks, from the points alone.
+    int frame(int a, int b, const std::vector<int> &third, int i, int &au, int &av) const {
+        return plain_radial_frame(*this, a, b, third[static_cast<size_t>(i)], au, av);
+    }
+    int side(int a, int b, int p, int au, int av) const { return orient2d(a, b, p, au, av); }
+    int turn(int a, int b, const std::vector<int> &third, int i, int j) const {
+        return orient3d(a, b, third[static_cast<size_t>(i)], third[static_cast<size_t>(j)]);
+    }
 };
 
 struct UnionFind {
@@ -407,17 +415,20 @@ Vec3 Solid::centroid() const {
     if (m.t.empty()) return Vec3{0, 0, 0};
     // Sum over tetrahedra from an origin: volume-weighted mean of the four corners.
     const GridPoint origin = m.v[m.t[0][0]];
-    detail::BigInt sum[3], volume;
+    // Each determinant is below 2^117 and each coordinate sum below 2^40; over the two million triangles a
+    // solid may have, the totals stay below 2^179, inside the three words of the running sums. They are
+    // the integers a big integer for every term would give.
+    detail::Sum192 sum[3], volume;
     for (const Triangle &tri : m.t) {
         const GridPoint &a = m.v[tri[0]], &b = m.v[tri[1]], &c = m.v[tri[2]];
-        const detail::BigInt det(detail::orient3d_value(origin.data(), a.data(), b.data(), c.data()));
-        volume = volume + det;
-        for (size_t k = 0; k < 3; ++k) sum[k] = sum[k] + det * detail::BigInt(a[k] + b[k] + c[k] - 3 * origin[k]);
+        const detail::I128 det = detail::orient3d_value(origin.data(), a.data(), b.data(), c.data());
+        volume.add(det, 1);
+        for (size_t k = 0; k < 3; ++k) sum[k].add(det, a[k] + b[k] + c[k] - 3 * origin[k]);
     }
-    const double v = volume.to_double();
+    const double v = volume.big().to_double();
     Vec3 out;
     double *o[3] = {&out.x, &out.y, &out.z};
-    for (size_t k = 0; k < 3; ++k) *o[k] = (static_cast<double>(origin[k]) + sum[k].to_double() / (4.0 * v)) / kUnitsPerMm;
+    for (size_t k = 0; k < 3; ++k) *o[k] = (static_cast<double>(origin[k]) + sum[k].big().to_double() / (4.0 * v)) / kUnitsPerMm;
     return out;
 }
 

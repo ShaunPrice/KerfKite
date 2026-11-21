@@ -120,6 +120,14 @@ kernel by invariants that need no reference;
 
 compares it with the third-party library Studio used before, which the core needs for that comparison only.
 
+    build/native/kerfkite_solid_bench [REPEAT] [FILTER]
+
+times twelve models on the kernel and prints a hash of each result, which must not change when the kernel
+is made faster. Configured with `-DKERFKITE_SOLID_PROFILE=ON` it also prints the time of each phase; that
+option compiles clocks into the kernel and is for measuring only. `validation/benchmark_solid.py` times the
+same kind of model through Studio, on the kernel and on the third-party library. See the Performance
+section of `docs/SOLID-KERNEL.md`.
+
 Studio's 3D CAD is modelled by this kernel wherever its compiled extension is installed: `setup.py` compiles
 the kernel and `solid_command.cpp` into the extension, and `studio/solid_kernel.py` calls them. The 2D
 drawings of Studio's CAD scripts run on the polygon kernel, through the same command `kerfkite-cam polygon`

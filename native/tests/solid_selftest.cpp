@@ -155,6 +155,19 @@ static void shorter_ways_arithmetic() {
         expect(U256::product(a1, b2) == U256::product(a2, b1), "equal ratios have equal cross products");
         expect(!(U256::product(a1 + I128(1), b2) == U256::product(a2, b1)), "unequal ratios have unequal cross products");
     }
+    // The three-word running sum against the big integer, through sums that change sign.
+    for (int round = 0; round < 300; ++round) {
+        detail::Sum192 quick;
+        BigInt slow;
+        for (int term = 0; term < 200; ++term) {
+            const I128 a = I128::mul(static_cast<int64_t>(rnd()) >> pick(50), static_cast<int64_t>(rnd() >> (12 + pick(40))));
+            const int64_t m = (static_cast<int64_t>(rnd()) >> (24 + pick(38))) * (pick(9) ? 1 : 0);
+            quick.add(a, m);
+            slow = slow + BigInt(a) * BigInt(m);
+        }
+        const BigInt got = quick.big();
+        expect(BigInt::cmp(got, slow) == 0 && got.to_double() == slow.to_double(), "the three-word running sum against the big integer");
+    }
     // The counting sort against std::sort, with many items to a key and with few.
     for (int round = 0; round < 60; ++round) {
         struct Item {
@@ -373,6 +386,92 @@ static void shorter_ways_turns() {
     }
     expect(wrong == 0, "a turn decided in doubles is the exact turn");
     expect(decided > 100000 && undecided > 10000 && zero > 10000, "the turns covered decided, undecided and collinear triples");
+}
+
+// The side of a plane decided in doubles against the exact value: whenever the doubles claim a side it is
+// the exact one, for points far from the plane, on it, and one grid unit off it, at every size of
+// coordinate the kernel allows.
+static void shorter_ways_sides() {
+    using detail::Arrangement;
+    using detail::Plane;
+    size_t decided = 0, undecided = 0, on_plane = 0, wrong = 0;
+    for (int round = 0; round < 4000; ++round) {
+        const int64_t span = round % 4 == 0 ? 20 : round % 4 == 1 ? 50000 : round % 4 == 2 ? 3000000000LL : 100000000000LL;
+        const auto coordinate = [&] { return static_cast<int64_t>(rnd() % static_cast<uint64_t>(2 * span + 1)) - span; };
+        int64_t a[3], b[3], c[3];
+        for (int k = 0; k < 3; ++k) {
+            a[k] = coordinate();
+            b[k] = coordinate();
+            c[k] = coordinate();
+        }
+        if (round % 5 == 0) a[2] = b[2] = c[2];  // a plane square to an axis
+        const Plane plane = detail::plane_of(a, b, c);
+        if (plane.n[0].zero() && plane.n[1].zero() && plane.n[2].zero()) continue;
+        const std::array<double, 5> doubles = Arrangement::plane_in_doubles(plane);
+        for (int test = 0; test < 60; ++test) {
+            int64_t p[3];
+            if (test % 3 == 0) {
+                for (int k = 0; k < 3; ++k) p[k] = coordinate();
+            } else {
+                // A point of the plane (a + i (b - a) + j (c - a), where it stays in range), or one unit off it.
+                const int64_t i = pick(5) - 2, j = pick(5) - 2;
+                bool inside = true;
+                for (int k = 0; k < 3; ++k) {
+                    p[k] = a[k] + i * (b[k] - a[k]) + j * (c[k] - a[k]);
+                    inside = inside && p[k] <= detail::kMaxCoord && p[k] >= -detail::kMaxCoord;
+                }
+                if (!inside) continue;
+                if (test % 3 == 2) p[pick(3)] += pick(2) ? 1 : -1;
+            }
+            const int exact = detail::plane_value(plane, p).sign(), quick = Arrangement::side_in_doubles(doubles.data(), p);
+            if (quick == 2) ++undecided;
+            else ++decided;
+            if (exact == 0) ++on_plane;
+            if (quick != 2 && quick != exact) ++wrong;
+        }
+    }
+    expect(wrong == 0, "a side of a plane decided in doubles is the exact side");
+    expect(decided > 50000 && undecided > 20000 && on_plane > 20000, "the sides covered points off the plane, on it and beside it");
+}
+
+// Whether two triangles meet, asked of a probing arrangement (which makes its crossings for one pair and
+// drops them) and of a counting one: on triangles of a small lattice, where they touch at corners, along
+// edges and within one plane as often as not.
+static void shorter_ways_probing() {
+    size_t compared = 0, meeting = 0, differ = 0;
+    for (int test = 0; test < 60000; ++test) {
+        // Six points; two triangles from them, so that they share none, one or two corners.
+        std::vector<GridPoint> points(6);
+        const int span = test % 4 == 0 ? 1 : test % 4 == 1 ? 2 : test % 4 == 2 ? 4 : 1000;
+        for (GridPoint &point : points)
+            for (int k = 0; k < 3; ++k) point[static_cast<size_t>(k)] = pick(2 * span + 1) - span;
+        if (test % 5 == 0)
+            for (GridPoint &point : points) point[2] = 0;  // all in one plane
+        std::sort(points.begin(), points.end());
+        points.erase(std::unique(points.begin(), points.end()), points.end());
+        if (points.size() < 4) continue;
+        const uint32_t n = static_cast<uint32_t>(points.size());
+        std::vector<Triangle> triangles(2);
+        for (Triangle &t : triangles) {
+            // Three different points (they may still lie in one line: such a triangle is left out on loading).
+            const uint32_t a = static_cast<uint32_t>(pick(static_cast<int>(n))), b = (a + 1 + static_cast<uint32_t>(pick(static_cast<int>(n) - 1))) % n;
+            uint32_t c = static_cast<uint32_t>(pick(static_cast<int>(n)));
+            while (c == a || c == b) c = (c + 1) % n;
+            t = Triangle{{a, b, c}};
+        }
+        const std::vector<detail::Operand> operands(1, detail::Operand{&points, &triangles, 0, false, nullptr});
+        detail::Arrangement counting, probing;
+        counting.load(operands);
+        probing.load(operands);
+        probing.probe_only();
+        const std::vector<char> every(2, 1);
+        const bool counted = counting.intersect() > 0, probed = probing.intersect(&every, true) > 0;
+        ++compared;
+        meeting += counted;
+        differ += counted != probed;
+    }
+    expect(differ == 0, "a probing arrangement finds the pairs that meet, as a counting one does");
+    expect(compared > 40000 && meeting > 8000 && compared - meeting > 8000, "the probed pairs covered meeting and separate triangles");
 }
 
 // Whole operations with every shorter way taken and with none: the same vertices, triangles and counts.
@@ -801,6 +900,19 @@ static void shorter_ways_operations(int cases) {
         detail::plain_paths() = false;
         return out;
     };
+    {
+        // A shape examined against itself once is recognised the next time and not examined again; the
+        // solids and every count must be the same the first time, later, and with nothing remembered.
+        const Solid plate = box({40, 30, 6}), bore = cylinder(8, 4, 4, 48), prism = extrude({{{0, 0}, {5, 0}, {5, 3}, {2, 5}, {0, 3}}}, 9);
+        for (int moved = 0; moved < 3; ++moved) {
+            const Solid tool = (moved % 2 ? prism : bore).translated({10.0 + 7 * moved, 12.0, -1.0});
+            const Outcome first = run(plate, tool, Op::Difference, false), again = run(plate, tool, Op::Difference, false), full = run(plate, tool, Op::Difference, true);
+            expect(first.vertices == again.vertices && first.triangles == again.triangles && first.vertices == full.vertices && first.triangles == full.triangles &&
+                       first.stats.candidate_pairs == again.stats.candidate_pairs && first.stats.candidate_pairs == full.stats.candidate_pairs &&
+                       first.stats.constructed_points == full.stats.constructed_points && first.stats.candidate_pairs > 100,
+                   "a shape recognised from an earlier operation gives the same solid and the same counts");
+        }
+    }
     for (int c = 0; c < cases; ++c) {
         Solid a, b;
         switch (c % 5) {
@@ -938,6 +1050,8 @@ int main(int argc, char **argv) {
     shorter_ways_arithmetic();
     shorter_ways_points();
     shorter_ways_turns();
+    shorter_ways_sides();
+    shorter_ways_probing();
     trigonometry();
     primitives_and_measures();
     meshes();

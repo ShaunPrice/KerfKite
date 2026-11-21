@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <deque>
 #include <stdexcept>
 
 namespace kerfkite {
@@ -22,6 +21,23 @@ namespace {
 Planar::Planar(Pool &pool, const Plane &carrier, int axis_u, int axis_v, int sign)
     : pool_(pool), carrier_(carrier), au_(axis_u), av_(axis_v), sign_(sign) {
     root[0] = root[1] = root[2] = -1;
+}
+
+void Planar::reset(const Plane &carrier, int axis_u, int axis_v, int sign) {
+    carrier_ = carrier;
+    au_ = axis_u;
+    av_ = axis_v;
+    sign_ = sign;
+    root[0] = root[1] = root[2] = -1;
+    supports.clear();
+    points.clear();
+    segments.clear();
+    pieces.clear();
+    triangles.clear();
+    neighbours.clear();
+    on_line_.clear();
+    line_start_.clear();
+    line_ids_.clear();
 }
 
 // For p on the line through a and b: strictly between them.
@@ -107,22 +123,23 @@ void Planar::split() {
     std::sort(points.begin(), points.end());
     points.erase(std::unique(points.begin(), points.end()), points.end());
     const size_t n = segments.size();
-    std::vector<std::vector<int>> on(n);
-    struct Bounds {
-        double ulo, uhi, vlo, vhi;
-    };
-    std::vector<Bounds> box(n);
+    std::vector<std::pair<int, int>> &on = on_;  // (segment, a point on it between its ends), in no order
+    on.clear();
+    std::vector<Bounds> &box = box_;
+    box.resize(n);
     for (size_t i = 0; i < n; ++i) {
         const Pt &a = pool_.pts[static_cast<size_t>(segments[i].a)], &b = pool_.pts[static_cast<size_t>(segments[i].b)];
         box[i] = Bounds{std::min(a.c[au_].lo, b.c[au_].lo), std::max(a.c[au_].hi, b.c[au_].hi), std::min(a.c[av_].lo, b.c[av_].lo),
                         std::max(a.c[av_].hi, b.c[av_].hi)};
     }
-    std::vector<int> order(n);
+    std::vector<int> &order = order_;
+    order.resize(n);
     for (size_t i = 0; i < n; ++i) order[i] = static_cast<int>(i);
     std::sort(order.begin(), order.end(), [&](int x, int y) {
         return box[static_cast<size_t>(x)].ulo != box[static_cast<size_t>(y)].ulo ? box[static_cast<size_t>(x)].ulo < box[static_cast<size_t>(y)].ulo : x < y;
     });
-    std::vector<int> created;
+    std::vector<int> &created = created_;
+    created.clear();
     for (size_t ii = 0; ii < n; ++ii) {
         const size_t i = static_cast<size_t>(order[ii]);
         const PlanarSegment &s = segments[i];
@@ -139,19 +156,20 @@ void Planar::split() {
             if (o1 * o2 < 0 && o3 * o4 < 0) {
                 const int x = pool_.three_planes(carrier_, supports[static_cast<size_t>(s.support)], supports[static_cast<size_t>(t.support)]);
                 if (x < 0) defect("crossing segments without a common point");
-                on[i].push_back(x);
-                on[j].push_back(x);
+                on.emplace_back(static_cast<int>(i), x);
+                on.emplace_back(static_cast<int>(j), x);
                 created.push_back(x);
                 continue;
             }
-            if (o1 == 0 && t.a != s.a && t.a != s.b && between(s.a, s.b, t.a)) on[i].push_back(t.a);
-            if (o2 == 0 && t.b != s.a && t.b != s.b && between(s.a, s.b, t.b)) on[i].push_back(t.b);
-            if (o3 == 0 && s.a != t.a && s.a != t.b && between(t.a, t.b, s.a)) on[j].push_back(s.a);
-            if (o4 == 0 && s.b != t.a && s.b != t.b && between(t.a, t.b, s.b)) on[j].push_back(s.b);
+            if (o1 == 0 && t.a != s.a && t.a != s.b && between(s.a, s.b, t.a)) on.emplace_back(static_cast<int>(i), t.a);
+            if (o2 == 0 && t.b != s.a && t.b != s.b && between(s.a, s.b, t.b)) on.emplace_back(static_cast<int>(i), t.b);
+            if (o3 == 0 && s.a != t.a && s.a != t.b && between(t.a, t.b, s.a)) on.emplace_back(static_cast<int>(j), s.a);
+            if (o4 == 0 && s.b != t.a && s.b != t.b && between(t.a, t.b, s.b)) on.emplace_back(static_cast<int>(j), s.b);
         }
     }
     // Points that are not the end of any segment may still lie on one.
-    std::vector<int> ends;
+    std::vector<int> &ends = ends_;
+    ends.clear();
     ends.reserve(2 * n);
     for (const PlanarSegment &s : segments) {
         ends.push_back(s.a);
@@ -165,26 +183,32 @@ void Planar::split() {
             if (q.c[au_].lo > box[i].uhi || q.c[au_].hi < box[i].ulo || q.c[av_].lo > box[i].vhi || q.c[av_].hi < box[i].vlo) continue;
             const PlanarSegment &s = segments[i];
             if (s.a == s.b) continue;
-            if (orient(s.a, s.b, p) == 0 && between(s.a, s.b, p)) on[i].push_back(p);
+            if (orient(s.a, s.b, p) == 0 && between(s.a, s.b, p)) on.emplace_back(static_cast<int>(i), p);
         }
     }
     points.insert(points.end(), created.begin(), created.end());
     pieces.clear();
     on_line_.clear();
+    // The points on each segment, segment by segment. Within a segment they are put in order along it
+    // below, so the order they come in here does not matter.
+    std::sort(on.begin(), on.end());
+    size_t next = 0;
+    std::vector<int> &list = list_;
     for (size_t i = 0; i < n; ++i) {
         const PlanarSegment &s = segments[i];
+        list.clear();
+        for (; next < on.size() && on[next].first == static_cast<int>(i); ++next) list.push_back(on[next].second);
         if (s.a == s.b) continue;
         points.push_back(s.a);
         points.push_back(s.b);
         // Its ends and the points placed on it lie on its line: for o().
         on_line_.emplace_back(s.a, static_cast<int>(i));
         on_line_.emplace_back(s.b, static_cast<int>(i));
-        for (const int q : on[i]) on_line_.emplace_back(q, static_cast<int>(i));
-        if (on[i].empty()) {
+        for (const int q : list) on_line_.emplace_back(q, static_cast<int>(i));
+        if (list.empty()) {
             pieces.push_back(s);
             continue;
         }
-        std::vector<int> &list = on[i];
         int axis = au_;
         if (pool_.compare(s.a, s.b, axis) == 0) axis = av_;
         const int direction = pool_.compare(s.a, s.b, axis);
@@ -377,8 +401,9 @@ void Planar::insert(int p) {
 }
 
 void Planar::enforce(int first, int second) {
-    std::vector<std::pair<int, int>> todo;
-    std::vector<int> fan;
+    std::vector<std::pair<int, int>> &todo = todo_;
+    std::vector<int> &fan = fan_;
+    todo.clear();
     todo.emplace_back(first, second);
     size_t guard = 0;
     while (!todo.empty()) {
@@ -418,7 +443,11 @@ void Planar::enforce(int first, int second) {
         }
         if (divided) continue;
         if (right < 0 || far < 0) defect("an edge leaves the triangulated area");
-        std::deque<std::pair<int, int>> crossed;
+        // The crossed edges, taken from the front and put back at the end: a queue held as a list and the
+        // place of its front.
+        std::vector<std::pair<int, int>> &crossed = crossed_;
+        size_t front = 0;
+        crossed.clear();
         crossed.emplace_back(right, left);
         bool restart = false;
         for (size_t step = 0;; ++step) {
@@ -450,10 +479,9 @@ void Planar::enforce(int first, int second) {
         if (restart) continue;
         size_t flips = 0;
         const size_t flip_limit = 64 * (crossed.size() + 4) * (crossed.size() + 4) + 4096;
-        while (!crossed.empty()) {
+        while (front < crossed.size()) {
             if (++flips > flip_limit) defect("edge flips did not finish");
-            const std::pair<int, int> edge = crossed.front();
-            crossed.pop_front();
+            const std::pair<int, int> edge = crossed[front++];
             if (!find_edge(edge.first, edge.second, t, i)) defect("a crossed edge vanished");
             const Tri &tri = tris_[static_cast<size_t>(t)];
             const int x = tri.v[i], y = tri.v[(i + 1) % 3], c = tri.v[(i + 2) % 3];
@@ -483,7 +511,8 @@ void Planar::enforce(int first, int second) {
 // over. The rule is evaluated in doubles, in a fixed order of correctly rounded operations, so every
 // platform makes the same flips; whether a flip is possible at all is still decided exactly.
 void Planar::improve(const std::vector<std::pair<int, int>> &required) {
-    std::vector<std::array<double, 2>> at(pid_.size());
+    std::vector<std::array<double, 2>> &at = at_;
+    at.resize(pid_.size());
     for (size_t k = 0; k < pid_.size(); ++k) {
         const Pt &p = pool_.pts[static_cast<size_t>(pid_[k])];
         at[k][0] = (p.c[au_].lo + p.c[au_].hi) / 2;
@@ -498,7 +527,8 @@ void Planar::improve(const std::vector<std::pair<int, int>> &required) {
         if (!(scale > 0)) return 0.0;
         return dot / (cross > 1e-12 * scale ? cross : 1e-12 * scale);
     };
-    std::vector<std::pair<int, int>> stack;
+    std::vector<std::pair<int, int>> &stack = flip_stack_;
+    stack.clear();
     for (size_t t = 0; t < tris_.size(); ++t)
         for (int k = 0; k < 3; ++k)
             if (tris_[t].n[k] > static_cast<int>(t)) stack.emplace_back(tris_[t].v[k], tris_[t].v[(k + 1) % 3]);
@@ -537,7 +567,8 @@ void Planar::triangulate(int r0, int r1, int r2) {
     pid_.push_back(r0);
     pid_.push_back(r1);
     pid_.push_back(r2);
-    std::vector<int> rest;
+    std::vector<int> &rest = rest_;
+    rest.clear();
     for (const int p : points)
         if (p != r0 && p != r1 && p != r2) rest.push_back(p);
     // Neighbouring points one after another keep the search for the containing triangle short.
@@ -548,7 +579,8 @@ void Planar::triangulate(int r0, int r1, int r2) {
         return x < y;
     });
     pid_.insert(pid_.end(), rest.begin(), rest.end());
-    std::vector<int> ids(pid_.size());
+    std::vector<int> &ids = ids_;
+    ids.resize(pid_.size());
     for (size_t k = 0; k < ids.size(); ++k) ids[k] = static_cast<int>(k);
     std::sort(ids.begin(), ids.end(), [&](int x, int y) { return pid_[static_cast<size_t>(x)] < pid_[static_cast<size_t>(y)]; });
     const auto local = [&](int pool_id) {
@@ -573,7 +605,8 @@ void Planar::triangulate(int r0, int r1, int r2) {
     line_start_.clear();
     line_ids_.clear();
     if (!on_line_.empty()) {
-        std::vector<std::pair<int, int>> filed;
+        std::vector<std::pair<int, int>> &filed = filed_;
+        filed.clear();
         filed.reserve(on_line_.size());
         for (const std::pair<int, int> &note : on_line_) filed.emplace_back(local(note.first), note.second);
         std::sort(filed.begin(), filed.end());
@@ -590,7 +623,8 @@ void Planar::triangulate(int r0, int r1, int r2) {
     vtri_.assign(pid_.size(), 0);
     last_ = 0;
     for (size_t p = 3; p < pid_.size(); ++p) insert(static_cast<int>(p));
-    std::vector<std::pair<int, int>> wanted;
+    std::vector<std::pair<int, int>> &wanted = wanted_;
+    wanted.clear();
     wanted.reserve(pieces.size());
     for (const PlanarSegment &s : pieces) {
         const int a = local(s.a), b = local(s.b);

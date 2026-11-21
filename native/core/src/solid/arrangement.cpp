@@ -36,10 +36,34 @@ namespace {
 
 [[noreturn]] void defect(const char *what) { throw std::logic_error(std::string("solid kernel: arrangement: ") + what); }
 
+// What radial_sort() asks about the faces at one edge, answered from the planes the faces are known to lie
+// in where that saves computing. `parent[i]` is a loaded triangle whose plane holds face i, or the list
+// is null and everything is computed from the points.
+//
+// Two faces at an edge u v with third corners p and q: the determinant of u, v, p, q is zero exactly when
+// q is in the plane of u v p. Each face lies in the plane of its parent. If the parents' planes are one,
+// it is zero. If they are two, they meet in the line of u v, which q is not on, so it is not zero, and its
+// sign is computed. And a face has area seen along the largest component of its plane's normal, so that
+// frame is taken at once; a turn within one plane has the same sign relative to the face's own in every
+// frame that is not edge-on, so the choice of frame changes no answer.
 struct PoolPredicates {
     const Pool *pool;
+    const Arrangement *planes;
+    const std::vector<int> *parent;
     int orient3d(int a, int b, int c, int d) const { return pool->orient3d(a, b, c, d); }
     int orient2d(int a, int b, int c, int au, int av) const { return pool->orient2d(a, b, c, au, av); }
+    int frame(int a, int b, const std::vector<int> &third, int i, int &au, int &av) const {
+        if (!parent) return plain_radial_frame(*this, a, b, third[static_cast<size_t>(i)], au, av);
+        const int axis = planes->plane_axis((*parent)[static_cast<size_t>(i)]);
+        au = (axis + 1) % 3;
+        av = (axis + 2) % 3;
+        return pool->orient2d(a, b, third[static_cast<size_t>(i)], au, av);
+    }
+    int side(int a, int b, int p, int au, int av) const { return pool->orient2d(a, b, p, au, av); }
+    int turn(int a, int b, const std::vector<int> &third, int i, int j) const {
+        if (parent && planes->same_plane((*parent)[static_cast<size_t>(i)], (*parent)[static_cast<size_t>(j)])) return 0;
+        return pool->orient3d(a, b, third[static_cast<size_t>(i)], third[static_cast<size_t>(j)]);
+    }
 };
 
 // Ray directions for the winding count: the axes first (a box query finds their candidates), then
@@ -59,6 +83,99 @@ bool &plain_paths() {
     return plain;
 }
 
+namespace {
+
+// Shapes found inert: an operand not yet known to be free of self-intersection is examined against
+// itself, every pair of its own triangles whose boxes overlap. For a primitive that is thousands of
+// pairs (every two triangles of a cap share a corner), and nothing comes of them: no pair meets, and no
+// pair gets as far as finding where an edge crosses a plane, so no point is made and nothing is noted.
+// Such an examination changes nothing but the count of pairs examined. A model is rebuilt from the same
+// primitives at every edit, and one pattern holds many copies of one, so the shapes found inert are
+// remembered, with their count, and an operand of a remembered shape is taken as examined: its own pairs
+// are left out and the count is added, which leaves every point, every number and every result as it
+// would have been.
+//
+// A shape is the triangles and the vertices relative to the first vertex. Everything the examination
+// decides is exact and unchanged when a solid is moved by whole grid units: which boxes overlap, on which
+// side of a plane a corner lies, whether triangles of one plane overlap. The list is held for each
+// thread, the last used first: at most 48 shapes and a million numbers (a few megabytes), and no shape of
+// more than 300 000. A shape is recognised by comparing all of it, not by its hash alone.
+struct InertShape {
+    uint64_t hash;
+    std::vector<int64_t> vertices;   // x, y, z of each, less those of the first
+    std::vector<uint32_t> triangles;
+    size_t pairs;
+};
+const size_t kInertShapes = 48, kInertNumbers = 300000, kInertNumbersInAll = 1000000;
+
+std::vector<InertShape> &inert_shapes() {
+    static thread_local std::vector<InertShape> shapes;
+    return shapes;
+}
+
+uint64_t shape_hash(const std::vector<GridPoint> &v, const std::vector<Triangle> &t) {
+    uint64_t h = 0x9E3779B97F4A7C15ULL ^ (static_cast<uint64_t>(v.size()) << 32) ^ t.size();
+    const auto mix = [&](uint64_t x) {
+        h = (h ^ x) * 0xD6E8FEB86659FD93ULL;
+        h ^= h >> 29;
+    };
+    for (const GridPoint &p : v)
+        for (size_t k = 0; k < 3; ++k) mix(static_cast<uint64_t>(p[k] - v[0][k]));
+    for (const Triangle &tri : t) mix((static_cast<uint64_t>(tri[0]) << 42) ^ (static_cast<uint64_t>(tri[1]) << 21) ^ tri[2]);
+    return h;
+}
+
+bool same_shape(const InertShape &shape, const std::vector<GridPoint> &v, const std::vector<Triangle> &t) {
+    if (shape.vertices.size() != 3 * v.size() || shape.triangles.size() != 3 * t.size()) return false;
+    for (size_t i = 0; i < v.size(); ++i)
+        for (size_t k = 0; k < 3; ++k)
+            if (shape.vertices[3 * i + k] != v[i][k] - v[0][k]) return false;
+    for (size_t i = 0; i < t.size(); ++i)
+        for (size_t k = 0; k < 3; ++k)
+            if (shape.triangles[3 * i + k] != t[i][k]) return false;
+    return true;
+}
+
+// The number of own pairs of a remembered shape, or -1.
+long long inert_pairs_of(const std::vector<GridPoint> &v, const std::vector<Triangle> &t) {
+    if (v.empty() || t.empty()) return -1;
+    std::vector<InertShape> &shapes = inert_shapes();
+    if (shapes.empty()) return -1;
+    const uint64_t hash = shape_hash(v, t);
+    for (size_t k = 0; k < shapes.size(); ++k) {
+        if (shapes[k].hash != hash || !same_shape(shapes[k], v, t)) continue;
+        std::rotate(shapes.begin(), shapes.begin() + static_cast<std::ptrdiff_t>(k), shapes.begin() + static_cast<std::ptrdiff_t>(k) + 1);
+        return static_cast<long long>(shapes[0].pairs);
+    }
+    return -1;
+}
+
+void remember_inert(const std::vector<GridPoint> &v, const std::vector<Triangle> &t, size_t pairs) {
+    if (v.empty() || t.empty() || 3 * (v.size() + t.size()) > kInertNumbers) return;
+    std::vector<InertShape> &shapes = inert_shapes();
+    InertShape shape;
+    shape.hash = shape_hash(v, t);
+    shape.pairs = pairs;
+    shape.vertices.resize(3 * v.size());
+    for (size_t i = 0; i < v.size(); ++i)
+        for (size_t k = 0; k < 3; ++k) shape.vertices[3 * i + k] = v[i][k] - v[0][k];
+    shape.triangles.resize(3 * t.size());
+    for (size_t i = 0; i < t.size(); ++i)
+        for (size_t k = 0; k < 3; ++k) shape.triangles[3 * i + k] = t[i][k];
+    shapes.insert(shapes.begin(), std::move(shape));
+    // Keep the list short and its memory bounded: drop from the end, the least recently used.
+    size_t numbers = 0;
+    for (size_t k = 0; k < shapes.size(); ++k) {
+        numbers += shapes[k].vertices.size() + shapes[k].triangles.size();
+        if (k >= kInertShapes || (k > 0 && numbers > kInertNumbersInAll)) {
+            shapes.resize(k);
+            break;
+        }
+    }
+}
+
+}  // namespace
+
 void Arrangement::load(const std::vector<Operand> &operands) {
     KERFKITE_SOLID_PHASE(Load);
     plain_ = pool.plain = plain_paths();
@@ -67,6 +184,9 @@ void Arrangement::load(const std::vector<Operand> &operands) {
     for (const Operand &op : operands) total += op.t->size();
     if (total > kMaxTriangles) throw ValueError("The solids of one operation have more than " + std::to_string(kMaxTriangles) + " triangles together");
     operand_hit_.assign(operands.size() + 1, 0);
+    operand_crossed_.assign(operands.size() + 1, 0);
+    own_pairs_.assign(operands.size() + 1, 0);
+    inert_pairs_.assign(operands.size() + 1, -1);
     tris_.reserve(total);
     planes_.reserve(total);
     boxes_.reserve(total);
@@ -81,6 +201,7 @@ void Arrangement::load(const std::vector<Operand> &operands) {
         close_span(spans_[o]);
     }
     real_triangles_ = tris_.size();
+    size_lists();
 }
 
 // After the triangles of a span have been added: its extent.
@@ -114,22 +235,53 @@ void Arrangement::overlapping(Span &span, const Box &box, F &&visit) {
 }
 
 // The normal of a triangle's plane in doubles, and its length.
+// Makes room in the lists kept for each triangle, after triangles have been added.
+void Arrangement::size_lists() {
+    const size_t old = plane_of_.size(), n = tris_.size();
+    normal_.resize(n);
+    normal_known_.resize(n, 0);
+    met_of_.resize(n, -1);
+    plane_of_.resize(n);
+    for (size_t k = old; k < n; ++k) plane_of_[k] = static_cast<int>(k);
+}
+
 const double *Arrangement::normal(int tri) {
     const size_t t = static_cast<size_t>(tri);
-    if (normal_.size() < tris_.size()) {
-        normal_.resize(tris_.size());
-        normal_known_.resize(tris_.size(), 0);
-    }
-    std::array<double, 4> &n = normal_[t];
+    std::array<double, 5> &n = normal_[t];
     if (!normal_known_[t]) {
-        const Plane &pl = planes_[t];
-        n[0] = pl.n[0].to_double();
-        n[1] = pl.n[1].to_double();
-        n[2] = pl.n[2].to_double();
-        n[3] = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+        n = plane_in_doubles(planes_[t]);
         normal_known_[t] = 1;
     }
     return n.data();
+}
+
+std::array<double, 5> Arrangement::plane_in_doubles(const Plane &pl) {
+    std::array<double, 5> n;
+    n[0] = pl.n[0].to_double();
+    n[1] = pl.n[1].to_double();
+    n[2] = pl.n[2].to_double();
+    n[3] = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+    n[4] = pl.d.to_double();
+    return n;
+}
+
+// The side of a plane a grid point is on, from doubles, when they are enough.
+//
+// The value is n . p - d. Each of nx, ny, nz, d is within a relative 2^-51 of its integer (to_double:
+// two rounded conversions and a rounded sum), and the coordinates of p are whole numbers below 2^53,
+// exact as doubles. Each rounded product is then within 2^-51 + 2^-53 (and their product) of the true
+// product, in proportion; each of the three rounded additions is within 2^-53 of its own result, and
+// those results are at most M = |nx px| + |ny py| + |nz pz| + |d| in size, give or take the same small
+// proportions. So the computed value is within M (2^-51 + 2^-53 + 3 * 2^-53) < M * 2^-50 of the true one.
+// M is computed from the rounded products, which is within 2^-50 of itself of the true M; the bound used
+// is M * 2^-49, twice what is needed. A value beyond it has the sign of the true value. Anything else is
+// answered 2 and the caller computes the value with integers, as it always did. The components are below
+// 2^78 and the coordinates below 2^38, so nothing overflows.
+int Arrangement::side_in_doubles(const double plane[5], const int64_t *p) {
+    const double x = plane[0] * static_cast<double>(p[0]), y = plane[1] * static_cast<double>(p[1]), z = plane[2] * static_cast<double>(p[2]);
+    const double value = x + y + z - plane[4];
+    const double bound = (std::fabs(x) + std::fabs(y) + std::fabs(z) + std::fabs(plane[4])) * 0x1p-49;
+    return value > bound ? 1 : value < -bound ? -1 : 2;
 }
 
 void Arrangement::add_triangle(int v0, int v1, int v2, int operand, int label) {
@@ -158,23 +310,74 @@ void Arrangement::add_triangle(int v0, int v1, int v2, int operand, int label) {
     sign_.push_back(static_cast<signed char>(pl.n[axis].sign()));
 }
 
+// The set of triangles found to lie in the plane of this one, by its lowest member so far.
+int Arrangement::plane_set(int tri) const {
+    while (plane_of_[static_cast<size_t>(tri)] != tri) {
+        plane_of_[static_cast<size_t>(tri)] = plane_of_[static_cast<size_t>(plane_of_[static_cast<size_t>(tri)])];
+        tri = plane_of_[static_cast<size_t>(tri)];
+    }
+    return tri;
+}
+
+bool Arrangement::planes_joined(int a, int b) const { return plane_set(a) == plane_set(b); }
+
+void Arrangement::join_planes(int a, int b) const {
+    const int ra = plane_set(a), rb = plane_set(b);
+    if (ra != rb) plane_of_[static_cast<size_t>(std::max(ra, rb))] = std::min(ra, rb);
+}
+
+// False when the planes of two triangles are certainly not one: their unit normals, in doubles, differ in
+// some component by more than a billionth both ways round. The normals of one plane are equal or opposite,
+// and each computed component is within a few times 10^-15 of the true one (the normal's components are
+// within 2^-51 of their integers in proportion, and the length is the rounded root of a rounded sum of
+// three rounded squares), so a billionth is a margin of six decimal places. True says nothing: the caller
+// then asks same_plane(), which is exact.
+bool Arrangement::may_be_one_plane(int a, int b) {
+    const double *na = normal(a), *nb = normal(b);
+    bool same = true, opposite = true;
+    for (int k = 0; k < 3; ++k) {
+        const double x = na[k] / na[3], y = nb[k] / nb[3];
+        same = same && std::fabs(x - y) <= 1e-9;
+        opposite = opposite && std::fabs(x + y) <= 1e-9;
+    }
+    return same || opposite;
+}
+
+// Exactly: the three corners of one are in the plane of the other. Lying in one plane is an equivalence, so
+// triangles found to share a plane are joined into a set, and two of one set need no computing again.
 bool Arrangement::same_plane(int a, int b) const {
     if (a == b) return true;
-    const Plane &pl = planes_[static_cast<size_t>(a)];
-    const SoupTriangle &t = tris_[static_cast<size_t>(b)];
+    const int ra = plane_set(a), rb = plane_set(b);
+    if (ra == rb) return true;
+    const Plane &pl = planes_[static_cast<size_t>(ra)];
+    const SoupTriangle &t = tris_[static_cast<size_t>(rb)];
     for (int k = 0; k < 3; ++k)
         if (!plane_value(pl, pool.pts[static_cast<size_t>(t.v[k])].i).zero()) return false;
+    plane_of_[static_cast<size_t>(std::max(ra, rb))] = std::min(ra, rb);
     return true;
 }
 
-void Arrangement::record_simple() const {
-    for (size_t o = 0; o < operands_.size(); ++o)
-        if (operands_[o].mesh && !operands_[o].simple && !operand_hit_[o]) operands_[o].mesh->simple = true;
+void Arrangement::record_simple() {
+    for (size_t o = 0; o < operands_.size(); ++o) {
+        if (operands_[o].simple || operand_hit_[o]) continue;
+        if (operands_[o].mesh) operands_[o].mesh->simple = true;
+        // Examined just now, and nothing came of it: remember the shape.
+        if (remember_shapes_ && inert_pairs_[o] < 0 && !operand_crossed_[o]) remember_inert(*operands_[o].v, *operands_[o].t, own_pairs_[o]);
+    }
 }
 
 std::size_t Arrangement::intersect(const std::vector<char> *flagged, bool stop_at_first) {
     KERFKITE_SOLID_PHASE(Candidates);
     if (probe_only_ && !stop_at_first) defect("a probing arrangement was asked to count");
+    if (remember_shapes_ && !flagged) {
+        // Operands of a shape examined before and found inert: their own pairs are counted and left out.
+        for (size_t o = 0; o < operands_.size(); ++o) {
+            if (operands_[o].simple) continue;
+            inert_pairs_[o] = inert_pairs_of(*operands_[o].v, *operands_[o].t);
+            if (inert_pairs_[o] >= 0) stats.candidate_pairs += static_cast<size_t>(inert_pairs_[o]);
+        }
+        if (stats.candidate_pairs > kMaxCandidatePairs) throw ValueError("The solids overlap in too many places for one operation; simplify them or combine fewer at once");
+    }
     std::vector<int> found;
     size_t hits = 0;
     // Examines triangle i against the others; `fresh` marks the triangles being examined in this round, so
@@ -183,7 +386,7 @@ std::size_t Arrangement::intersect(const std::vector<char> *flagged, bool stop_a
     const auto examine = [&](int i, const std::vector<char> *fresh) {
         found.clear();
         const SoupTriangle &a = tris_[static_cast<size_t>(i)];
-        const bool self = a.label == 2 || !operands_[static_cast<size_t>(a.operand)].simple;
+        const bool self = a.label == 2 || !(operands_[static_cast<size_t>(a.operand)].simple || inert_pairs_[static_cast<size_t>(a.operand)] >= 0);
         const Box &box = boxes_[static_cast<size_t>(i)];
         for (size_t s = 0; s < spans_.size(); ++s) {
             Span &span = spans_[s];
@@ -191,14 +394,18 @@ std::size_t Arrangement::intersect(const std::vector<char> *flagged, bool stop_a
             // and without `fresh` nothing below i is wanted: spans are in the order of their triangles.
             if (static_cast<int>(s) == a.operand && !self) continue;
             if (!fresh && span.first + span.count <= i) continue;
+            const size_t before = found.size();
             overlapping(span, box, [&](int j) {
                 if (j == i) return;
                 if (j < i && (!fresh || (*fresh)[static_cast<size_t>(j)])) return;  // seen from the other side
                 found.push_back(j);
             });
+            if (static_cast<int>(s) == a.operand) own_pairs_[s] += found.size() - before;
         }
         if (found.empty()) return false;
-        std::sort(found.begin(), found.end());
+        // In order, so that points are made in an order that does not depend on how the trees are laid
+        // out. A probing arrangement makes no lasting points and only wants to know whether any pair meets.
+        if (!probe_only_) std::sort(found.begin(), found.end());
         stats.candidate_pairs += found.size();
         if (stats.candidate_pairs > kMaxCandidatePairs) throw ValueError("The solids overlap in too many places for one operation; simplify them or combine fewer at once");
         KERFKITE_SOLID_PHASE(Pairs);
@@ -225,6 +432,7 @@ std::size_t Arrangement::intersect(const std::vector<char> *flagged, bool stop_a
         spans_.back().first = n;
         add_ribbons();
         close_span(spans_.back());
+        size_lists();
         std::vector<char> fresh(tris_.size(), 0);
         for (size_t i = static_cast<size_t>(n); i < tris_.size(); ++i) fresh[i] = 1;
         for (int i = n; i < static_cast<int>(tris_.size()); ++i) examine(i, &fresh);
@@ -362,10 +570,18 @@ bool Arrangement::coplanar_fan_overlap(int i, int j, int shared) const {
     const int64_t *c = pool.pts[static_cast<size_t>(tb.v[(sj + 1) % 3])].i, *d = pool.pts[static_cast<size_t>(tb.v[(sj + 2) % 3])].i;
     if (orient2d_grid(v, a, b, au, av) < 0) std::swap(a, b);
     if (orient2d_grid(v, c, d, au, av) < 0) std::swap(c, d);
-    const auto within = [&](const int64_t *from, const int64_t *to, const int64_t *x) {
-        return orient2d_grid(v, from, x, au, av) >= 0 && orient2d_grid(v, x, to, au, av) >= 0;
-    };
-    return within(a, b, c) || within(a, b, d) || within(c, d, a) || within(c, d, b);
+    if (plain_) {
+        const auto within = [&](const int64_t *from, const int64_t *to, const int64_t *x) {
+            return orient2d_grid(v, from, x, au, av) >= 0 && orient2d_grid(v, x, to, au, av) >= 0;
+        };
+        return within(a, b, c) || within(a, b, d) || within(c, d, a) || within(c, d, b);
+    }
+    // "x within the angle from..to" is two turns about v, and the eight turns of the four questions are
+    // four turns and their opposites: the turn of v, c, a is minus that of v, a, c, exactly.
+    const int ac = orient2d_grid(v, a, c, au, av), cb = orient2d_grid(v, c, b, au, av);
+    if (ac >= 0 && cb >= 0) return true;  // c within a..b
+    const int ad = orient2d_grid(v, a, d, au, av), db = orient2d_grid(v, d, b, au, av);
+    return (ad >= 0 && db >= 0) || (ac <= 0 && ad >= 0) || (cb >= 0 && db <= 0);  // d within a..b, a within c..d, b within c..d
 }
 
 size_t Arrangement::crossing_slot(uint64_t edge, int64_t bucket) const {
@@ -466,7 +682,6 @@ int Arrangement::ends(int tri, const int side[3], const I128 value[3], int out[2
 // being remembered.
 int Arrangement::ends_in_plane(int tri, int plane, const int side[3], const I128 value[3], int out[2]) {
     if (probe_only_ || plain_) return ends(tri, side, value, out);
-    if (met_of_.size() < tris_.size()) met_of_.resize(tris_.size(), -1);
     int &slot = met_of_[static_cast<size_t>(tri)];
     if (slot < 0) {
         slot = static_cast<int>(met_.size());
@@ -475,7 +690,7 @@ int Arrangement::ends_in_plane(int tri, int plane, const int side[3], const I128
     Met &met = met_[static_cast<size_t>(slot)];
     if (met.misses >= 8) return ends(tri, side, value, out);
     for (int e = 0; e < 2; ++e)
-        if (met.plane[e] >= 0 && same_plane(met.plane[e], plane)) {
+        if (met.plane[e] >= 0 && (planes_joined(met.plane[e], plane) || (may_be_one_plane(met.plane[e], plane) && same_plane(met.plane[e], plane)))) {
             out[0] = met.point[e][0];
             out[1] = met.point[e][1];
             met.misses = -(1 << 30);  // it pays for this triangle: keep remembering
@@ -549,33 +764,82 @@ bool Arrangement::pair(int i, int j) {
         cluster_join(i, j);
         return true;
     }
+    // Most pairs end here: one triangle lies wholly on one side of the other's plane. Where doubles are
+    // certain that every corner of one (but a common corner) is on the same side of the other's plane, that
+    // is the answer; otherwise the values are computed with integers, and the same is asked of them.
+    const auto certainly_apart = [&](int plane, const SoupTriangle &other, int common) {
+        const double *pl = normal(plane);
+        int side = 0;
+        for (int k = 0; k < 3; ++k) {
+            if (k == common) continue;
+            const int s = side_in_doubles(pl, grid(other.v[k]));
+            if (s == 2 || (side && s != side)) return false;
+            side = s;
+        }
+        return true;
+    };
     // The value of each plane at the corners of the other triangle. A common corner lies in both planes.
-    int side_b[3], side_a[3];
+    int side_b[3] = {0, 0, 0}, side_a[3] = {0, 0, 0};
     I128 value_b[3], value_a[3];
-    for (int k = 0; k < 3; ++k) {
-        if (!(shared == 1 && k == ib)) value_b[k] = plane_value(planes_[static_cast<size_t>(i)], grid(tb.v[k]));
-        side_b[k] = value_b[k].sign();
+    // Two triangles already found to lie in one plane have every one of those values zero, and so have two
+    // found to here: the corners of j all in the plane of i put i in the plane of j as well.
+    bool one_plane = !plain_ && planes_joined(i, j);
+    if (!one_plane) {
+        if (!plain_ && certainly_apart(i, tb, shared == 1 ? ib : -1)) return false;
+        for (int k = 0; k < 3; ++k) {
+            if (!(shared == 1 && k == ib)) value_b[k] = plane_value(planes_[static_cast<size_t>(i)], grid(tb.v[k]));
+            side_b[k] = value_b[k].sign();
+        }
+        if (shared == 0) {
+            if (side_b[0] == side_b[1] && side_b[1] == side_b[2] && side_b[0] != 0) return false;
+        } else if (side_b[(ib + 1) % 3] == side_b[(ib + 2) % 3] && side_b[(ib + 1) % 3] != 0) {
+            return false;
+        }
+        one_plane = side_b[0] == 0 && side_b[1] == 0 && side_b[2] == 0;
+        if (one_plane && !plain_) join_planes(i, j);
     }
-    if (shared == 0) {
-        if (side_b[0] == side_b[1] && side_b[1] == side_b[2] && side_b[0] != 0) return false;
-    } else if (side_b[(ib + 1) % 3] == side_b[(ib + 2) % 3] && side_b[(ib + 1) % 3] != 0) {
-        return false;
+    if (!one_plane || plain_) {
+        if (!plain_ && certainly_apart(j, ta, shared == 1 ? ia : -1)) return false;
+        for (int k = 0; k < 3; ++k) {
+            if (!(shared == 1 && k == ia)) value_a[k] = plane_value(planes_[static_cast<size_t>(j)], grid(ta.v[k]));
+            side_a[k] = value_a[k].sign();
+        }
+        if (shared == 0) {
+            if (side_a[0] == side_a[1] && side_a[1] == side_a[2] && side_a[0] != 0) return false;
+        } else if (side_a[(ia + 1) % 3] == side_a[(ia + 2) % 3] && side_a[(ia + 1) % 3] != 0) {
+            return false;
+        }
     }
-    for (int k = 0; k < 3; ++k) {
-        if (!(shared == 1 && k == ia)) value_a[k] = plane_value(planes_[static_cast<size_t>(j)], grid(ta.v[k]));
-        side_a[k] = value_a[k].sign();
-    }
-    if (shared == 0) {
-        if (side_a[0] == side_a[1] && side_a[1] == side_a[2] && side_a[0] != 0) return false;
-    } else if (side_a[(ia + 1) % 3] == side_a[(ia + 2) % 3] && side_a[(ia + 1) % 3] != 0) {
-        return false;
-    }
-    if (side_b[0] == 0 && side_b[1] == 0 && side_b[2] == 0) {
+    if (one_plane) {
         if (!(shared == 1 ? coplanar_fan_overlap(i, j, ia) : coplanar_overlap(i, j))) return false;
         cluster_join(i, j);
         return true;
     }
     if (ribbons_enabled_ && ta.label != 2 && tb.label != 2 && ta.operand != tb.operand) near_coplanar(i, j, value_b, value_a);
+    // Where an edge of one passes through the plane of the other a point is asked for: an operand whose own
+    // triangles do that is not inert (see InertShape).
+    if (ta.operand == tb.operand) {
+        const auto passes = [](const int side[3]) { return side[0] * side[1] < 0 || side[1] * side[2] < 0 || side[0] * side[2] < 0; };
+        if (passes(side_b) || passes(side_a)) operand_crossed_[static_cast<size_t>(ta.operand)] = 1;
+    }
+    if (probe_only_) {
+        // A triangle with one corner in the other's plane and the other two on one side of it touches the
+        // plane at that corner only: ends() would give that corner alone. The pair is then decided below
+        // from corners, and the crossings of the other triangle, which ends() would make first, are not
+        // looked at; when nothing is kept they need not be made.
+        const auto lone = [](const int side[3]) {
+            for (int k = 0; k < 3; ++k)
+                if (side[k] == 0 && side[(k + 1) % 3] * side[(k + 2) % 3] > 0) return k;
+            return -1;
+        };
+        const int kj = lone(side_b), ki = lone(side_a);
+        if (kj >= 0 || ki >= 0) {
+            const int p = kj >= 0 ? tb.v[kj] : ta.v[ki];
+            if (kj >= 0 && ki >= 0 && tb.v[kj] != ta.v[ki]) return false;
+            if (!inside_closed(kj >= 0 ? i : j, p)) return false;
+            return report_point(i, j, p);
+        }
+    }
     int ei[2], ej[2];
     const int nj = ends_in_plane(j, i, side_b, value_b, ej);
     const int ni = ends_in_plane(i, j, side_a, value_a, ei);
@@ -607,11 +871,10 @@ bool Arrangement::pair(int i, int j) {
     return report_segment(i, j, lo, hi);
 }
 
-void Arrangement::subdivide_one(int tri, size_t first, size_t last) {
+void Arrangement::subdivide_one(Planar &planar, int tri, size_t first, size_t last) {
     const SoupTriangle &t = tris_[static_cast<size_t>(tri)];
     const int axis = axis_[static_cast<size_t>(tri)];
-    Planar planar(pool, planes_[static_cast<size_t>(tri)], (axis + 1) % 3, (axis + 2) % 3, sign_[static_cast<size_t>(tri)]);
-    planar.plain = plain_;
+    planar.reset(planes_[static_cast<size_t>(tri)], (axis + 1) % 3, (axis + 2) % 3, sign_[static_cast<size_t>(tri)]);
     for (int k = 0; k < 3; ++k) {
         const int a = t.v[k], b = t.v[(k + 1) % 3];
         planar.points.push_back(a);
@@ -632,11 +895,10 @@ void Arrangement::subdivide_one(int tri, size_t first, size_t last) {
     ++stats.split_triangles;
 }
 
-void Arrangement::subdivide_cluster(const std::vector<int> &members, const std::vector<std::pair<size_t, size_t>> &ranges) {
+void Arrangement::subdivide_cluster(Planar &planar, const std::vector<int> &members, const std::vector<std::pair<size_t, size_t>> &ranges) {
     const int lead = members[0];
     const int axis = axis_[static_cast<size_t>(lead)], au = (axis + 1) % 3, av = (axis + 2) % 3;
-    Planar planar(pool, planes_[static_cast<size_t>(lead)], au, av, sign_[static_cast<size_t>(lead)]);
-    planar.plain = plain_;
+    planar.reset(planes_[static_cast<size_t>(lead)], au, av, sign_[static_cast<size_t>(lead)]);
     std::vector<std::pair<int, int>> edges;
     for (const int m : members) {
         const SoupTriangle &t = tris_[static_cast<size_t>(m)];
@@ -756,6 +1018,9 @@ void Arrangement::subdivide() {
         r = e;
     }
     instances_.reserve(n + 4 * records_.size());
+    // One triangulation object for every triangle and group: it keeps its working memory between them.
+    Planar planar(pool, Plane(), 0, 1, 1);
+    planar.plain = plain_;
     std::vector<std::pair<int, int>> grouped;
     for (size_t i = 0; i < n; ++i) {
         if (i < cluster_.size() && cluster_[i] >= 0) {
@@ -766,7 +1031,7 @@ void Arrangement::subdivide() {
             const SoupTriangle &t = tris_[i];
             instances_.push_back(Instance{{t.v[0], t.v[1], t.v[2]}, static_cast<int>(i)});
         } else {
-            subdivide_one(static_cast<int>(i), ranges[i].first, ranges[i].second);
+            subdivide_one(planar, static_cast<int>(i), ranges[i].first, ranges[i].second);
         }
     }
     std::sort(grouped.begin(), grouped.end());
@@ -775,7 +1040,7 @@ void Arrangement::subdivide() {
         members.clear();
         size_t e = g;
         while (e < grouped.size() && grouped[e].first == grouped[g].first) members.push_back(grouped[e++].second);
-        subdivide_cluster(members, ranges);
+        subdivide_cluster(planar, members, ranges);
         g = e;
     }
     stats.constructed_points = pool.rational_points();
@@ -879,8 +1144,8 @@ void Arrangement::build_cells() {
     const auto behind = [&](const EdgeUse &u) { return static_cast<uint32_t>(2 * u.face + (u.forward ? 1 : 0)); };
     groups_.clear();
     radial_.clear();
-    const PoolPredicates predicates{&pool};
-    std::vector<int> third, order;
+    std::vector<int> third, order, parent;
+    const PoolPredicates predicates{&pool, this, plain_ ? nullptr : &parent};
     for (size_t i = 0; i < uses_.size();) {
         size_t e = i;
         while (e < uses_.size() && uses_[e].a == uses_[i].a && uses_[e].b == uses_[i].b) ++e;
@@ -896,9 +1161,11 @@ void Arrangement::build_cells() {
         } else {
             third.resize(count);
             order.resize(count);
+            parent.resize(count);
             for (size_t k = 0; k < count; ++k) {
                 third[k] = uses_[i + k].third;
                 order[k] = static_cast<int>(k);
+                parent[k] = faces_[static_cast<size_t>(uses_[i + k].face)].parent;
             }
             if (!radial_sort(predicates, uses_[i].a, uses_[i].b, third, order)) defect("two faces in one half-plane at an edge");
             group.sorted = static_cast<long>(radial_.size());

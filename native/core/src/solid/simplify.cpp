@@ -9,6 +9,7 @@
 
 #include "arrangement.hpp"
 #include "edgemap.hpp"
+#include "planar.hpp"
 
 namespace kerfkite {
 namespace solid {
@@ -25,6 +26,8 @@ struct Simplifier {
     std::vector<uint32_t> vtri;  // one live triangle at each vertex
     EdgeMap edge;                // directed edge -> its triangle
     // Working lists of try_remove() and ears(), kept between calls so that they are allocated once.
+    std::vector<Planar::Local> ear_at;
+    bool plain;  // for tests: every turn asked of the pool
     std::vector<uint32_t> ring, ring_tri, polygon, ear_ring;
     std::vector<size_t> creases;
     std::vector<Triangle> fill;
@@ -63,26 +66,42 @@ struct Simplifier {
     bool ears(const std::vector<uint32_t> &polygon, int au, int av, int sign, std::vector<Triangle> &out) {
         std::vector<uint32_t> &ring = ear_ring;
         ring = polygon;
-        const auto turn = [&](uint32_t a, uint32_t b, uint32_t c) { return sign * pool.orient2d(p(a), p(b), p(c), au, av); };
+        // A turn is asked of doubles first, within the bound stated at Planar::filtered_turn, and of the
+        // pool when they cannot tell; `at` holds the doubles of each corner still in the ring.
+        std::vector<Planar::Local> &at = ear_at;
+        at.resize(ring.size());
+        if (!plain)
+            for (size_t k = 0; k < ring.size(); ++k) {
+                const Pt &q = pool.pts[static_cast<size_t>(p(ring[k]))];
+                at[k] = Planar::local_of(q.c[au], q.c[av], q.rat < 0);
+            }
+        const auto turn = [&](size_t ia, size_t ib, size_t ic) {
+            if (!plain && !(at[ia].grid && at[ib].grid && at[ic].grid)) {
+                const int quick = Planar::filtered_turn(at[ia], at[ib], at[ic]);
+                if (quick != 2) return sign * quick;
+            }
+            return sign * pool.orient2d(p(ring[ia]), p(ring[ib]), p(ring[ic]), au, av);
+        };
         while (ring.size() > 3) {
             bool cut = false;
             for (size_t i = 0; i < ring.size() && !cut; ++i) {
-                const uint32_t a = ring[(i + ring.size() - 1) % ring.size()], b = ring[i], c = ring[(i + 1) % ring.size()];
-                if (turn(a, b, c) <= 0) continue;
+                const size_t ia = (i + ring.size() - 1) % ring.size(), ib = i, ic = (i + 1) % ring.size();
+                if (turn(ia, ib, ic) <= 0) continue;
                 bool blocked = false;
                 for (size_t j = 0; j < ring.size() && !blocked; ++j) {
                     const uint32_t d = ring[j];
-                    if (d == a || d == b || d == c) continue;
-                    blocked = turn(a, b, d) >= 0 && turn(b, c, d) >= 0 && turn(c, a, d) >= 0;
+                    if (d == ring[ia] || d == ring[ib] || d == ring[ic]) continue;
+                    blocked = turn(ia, ib, j) >= 0 && turn(ib, ic, j) >= 0 && turn(ic, ia, j) >= 0;
                 }
                 if (blocked) continue;
-                out.push_back(Triangle{{a, b, c}});
+                out.push_back(Triangle{{ring[ia], ring[ib], ring[ic]}});
                 ring.erase(ring.begin() + static_cast<long>(i));
+                at.erase(at.begin() + static_cast<long>(i));
                 cut = true;
             }
             if (!cut) return false;
         }
-        if (turn(ring[0], ring[1], ring[2]) <= 0) return false;
+        if (turn(0, 1, 2) <= 0) return false;
         out.push_back(Triangle{{ring[0], ring[1], ring[2]}});
         return true;
     }
@@ -135,6 +154,15 @@ struct Simplifier {
         // c is not on, so c is in the second only.
         creases.clear();
         bool folded = false;
+        if (source) {
+            // More than two changes of plane round the vertex are more than two creases: it stays, and
+            // nothing else need be asked.
+            size_t changes = 0;
+            for (size_t i = 0; i < n; ++i) {
+                const int here = mesh.plane[ring_tri[i]], next = mesh.plane[ring_tri[(i + 1) % n]];
+                if (here != next && !source->same_plane(here, next) && ++changes > 2) return false;
+            }
+        }
         for (size_t i = 0; i < n; ++i) {
             const uint32_t a = ring[i], b = ring[(i + 1) % n], c = ring[(i + 2) % n];
             bool flat, plane_differs = false;
@@ -215,7 +243,7 @@ struct Simplifier {
 void simplify(const Pool &pool, ExactMesh &mesh, const Arrangement *source) {
     if (mesh.tri.empty()) return;
     if (mesh.plane.size() != mesh.tri.size() || plain_paths()) source = nullptr;
-    Simplifier s{pool, mesh, std::vector<char>(mesh.tri.size(), 0), std::vector<uint32_t>(mesh.vertex.size(), 0), {}, {}, {}, {}, {}, {}, {}, {}, source};
+    Simplifier s{pool, mesh, std::vector<char>(mesh.tri.size(), 0), std::vector<uint32_t>(mesh.vertex.size(), 0), {}, {}, plain_paths(), {}, {}, {}, {}, {}, {}, {}, source};
     s.edge.reserve(mesh.tri.size() * 3);
     for (uint32_t t = 0; t < mesh.tri.size(); ++t)
         for (size_t k = 0; k < 3; ++k) {

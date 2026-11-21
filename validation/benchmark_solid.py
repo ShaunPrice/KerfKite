@@ -1,6 +1,7 @@
 """Time representative Studio solid models on KerfKite's solid kernel and on manifold3d.
 
     python validation/benchmark_solid.py [--repeat 5] [--only TEXT] [--json FILE]
+    python validation/benchmark_solid.py --answers [--only TEXT]
 
 Each model is rebuilt through Studio's own entry points (studio.solid_cad.rebuild for a parametric part,
 studio.scad_geometry.build_script for a CAD script, with the mesh read back as the editor does) in a fresh
@@ -8,6 +9,11 @@ interpreter for each backend, REPEAT times, and the best time is kept: the machi
 and the best of several runs is the figure least disturbed by other work. A hash of the kernel's vertices
 and triangles is printed with each model, so that two builds of the kernel can be compared: a change that
 only makes the kernel faster leaves every hash as it was.
+
+With --answers nothing is timed. Each model is built once on the kernel and every answer the kernel gives
+on the way is hashed as the text it is: the measures of every intermediate solid, the meshes, the outlines
+and the counts of each operation. Two builds of the kernel that print the same hashes gave the same answers
+to the last character, which is a wider comparison than the final mesh alone.
 
 native/tools/solid_bench.cpp times the same shapes on the kernel alone, without Studio around them.
 """
@@ -20,6 +26,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -232,14 +239,51 @@ def worker(repeat, only):
         if only and only.lower() not in name.lower():
             continue
         best = None
-        for _ in range(repeat):
+        rounds = repeat
+        done = 0
+        while done < rounds:
             start = time.perf_counter()
             vertices, triangles = build(model)
             took = time.perf_counter() - start
             best = took if best is None else min(best, took)
+            done += 1
+            # A model that takes a few milliseconds is disturbed by anything: give it more tries.
+            if done == 1 and took < 0.05:
+                rounds = repeat * 6
         shape = hashlib.sha256(json.dumps([vertices, triangles], separators=(',', ':')).encode()).hexdigest()[:16]
         rows.append({'model': name, 'seconds': best, 'triangles': len(triangles), 'hash': shape})
     print(json.dumps({'backend': solid_kernel.solid_backend(), 'rows': rows}))
+
+
+def answers(only):
+    """A hash of every request to the kernel and every answer to it, model by model."""
+    sys.path.insert(0, str(ROOT))
+    from studio import solid_kernel
+
+    if solid_kernel.solid_backend() != 'kernel':
+        raise SystemExit('The answers of the kernel need the compiled extension')
+    asked = solid_kernel._solid_call
+    for name, model in MODELS:
+        if only and only.lower() not in name.lower():
+            continue
+        seen = hashlib.sha256()
+        count = 0
+
+        def logged(request, kept=(), seen=seen):
+            nonlocal count
+            answer, handle = asked(request, kept)
+            seen.update(request.encode())
+            seen.update(answer.encode())
+            count += 1
+            return answer, handle
+
+        # Meshes cross as text here, so that they are part of what is hashed.
+        with (
+            mock.patch.object(solid_kernel, '_solid_call', logged),
+            mock.patch.object(solid_kernel, '_solid_mesh', None),
+        ):
+            build(model)
+        print(f'{name:<40}{count:>6} answers  {seen.hexdigest()[:16]}')
 
 
 def measure(backend, repeat, only):
@@ -264,6 +308,7 @@ def main():
     parser.add_argument('--only', default='', help='only the models whose name contains this text')
     parser.add_argument('--backends', default='kernel,manifold', help='kernel, manifold or both, separated by a comma')
     parser.add_argument('--json', help='also write the measurements to this file')
+    parser.add_argument('--answers', action='store_true', help='hash every answer of the kernel instead of timing')
     parser.add_argument('--worker', action='store_true', help=argparse.SUPPRESS)
     options = parser.parse_args()
     if options.repeat < 1:
@@ -271,12 +316,17 @@ def main():
     if options.worker:
         worker(options.repeat, options.only)
         return
+    if options.answers:
+        answers(options.only)
+        return
     backends = [name.strip() for name in options.backends.split(',') if name.strip()]
     if not backends or any(name not in ('kernel', 'manifold') for name in backends):
         parser.error('--backends takes kernel, manifold or both')
     results = {name: measure(name, options.repeat, options.only) for name in backends}
     both = len(backends) == 2
-    print(f'Best of {options.repeat} rebuilds of each model through Studio.')
+    print(
+        f'Best of {options.repeat} rebuilds of each model through Studio ({options.repeat * 6} of a model under 50 ms).'
+    )
     header = f'{"Model":<40}' + ''.join(f'{name:>12}' for name in backends) + (f'{"ratio":>8}' if both else '')
     print(header + f'{"triangles":>11}  kernel hash' if 'kernel' in results else header)
     for index, row in enumerate(results[backends[0]]):

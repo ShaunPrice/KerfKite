@@ -301,6 +301,55 @@ struct BigInt {
     }
 };
 
+// A running sum of products of a 128-bit and a 64-bit integer, exact while it stays below 2^191 in size:
+// three 64-bit words in two's complement. For sums over the triangles of a solid, where a big integer
+// for every term would cost far more than the term.
+struct Sum192 {
+    uint64_t w[3] = {0, 0, 0};
+    void add(const I128 &a, int64_t m) {
+        // |a| * |m| as three words, then its negative if the signs differ, then a three-word addition.
+        const bool negative = (a.hi < 0) != (m < 0);
+        const I128 x = a.abs();
+        const uint64_t um = m < 0 ? ~static_cast<uint64_t>(m) + 1 : static_cast<uint64_t>(m);
+        uint64_t h0, l0, h1, l1;
+        umul64(x.lo, um, h0, l0);
+        umul64(static_cast<uint64_t>(x.hi), um, h1, l1);
+        uint64_t p[3];
+        p[0] = l0;
+        p[1] = h0 + l1;
+        p[2] = h1 + (p[1] < h0 ? 1 : 0);
+        if (negative) {
+            p[0] = ~p[0] + 1;
+            p[1] = ~p[1] + (p[0] == 0 ? 1 : 0);
+            p[2] = ~p[2] + (p[0] == 0 && p[1] == 0 ? 1 : 0);
+        }
+        uint64_t carry = 0;
+        for (int k = 0; k < 3; ++k) {
+            const uint64_t s = w[k] + p[k], t = s + carry;
+            carry = (s < p[k] ? 1 : 0) + (t < s ? 1 : 0);
+            w[k] = t;
+        }
+    }
+    BigInt big() const {
+        const bool negative = (w[2] >> 63) != 0;
+        uint64_t m[3] = {w[0], w[1], w[2]};
+        if (negative) {
+            m[0] = ~m[0] + 1;
+            m[1] = ~m[1] + (m[0] == 0 ? 1 : 0);
+            m[2] = ~m[2] + (m[0] == 0 && m[1] == 0 ? 1 : 0);
+        }
+        BigInt r;
+        for (int k = 0; k < 3; ++k) {
+            r.d[2 * k] = static_cast<uint32_t>(m[k]);
+            r.d[2 * k + 1] = static_cast<uint32_t>(m[k] >> 32);
+        }
+        r.n = 6;
+        while (r.n && !r.d[r.n - 1]) --r.n;
+        r.neg = negative && r.n;
+        return r;
+    }
+};
+
 // A closed interval of doubles that is guaranteed to contain the real result of the operations applied.
 // Each operation is computed in round-to-nearest and then widened by more than the rounding error.
 struct Interval {

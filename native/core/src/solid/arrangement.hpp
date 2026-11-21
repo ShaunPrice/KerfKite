@@ -41,6 +41,8 @@ struct Operand {
 
 // The result before rounding: vertices are points of the pool. `plane` names, for each triangle, a
 // triangle of the arrangement whose plane it lies in; it may be left empty.
+class Planar;
+
 struct ExactMesh {
     std::vector<int> vertex;
     std::vector<Triangle> tri;
@@ -69,7 +71,15 @@ public:
     void probe_only() { probe_only_ = !plain_; }
     // After resolve() with Rule::Positive on one operand: every face separates winding 0 from winding 1.
     bool unit_winding() const { return unit_winding_; }
-    void record_simple() const;
+    void record_simple();
+    // Lets load() recognise an operand whose shape was examined against itself before, in this thread, and
+    // found inert (see arrangement.cpp), and lets record_simple() remember the shapes found so this time.
+    void remember_shapes() { remember_shapes_ = !plain_paths(); }
+    // The plane {nx, ny, nz, |n|, d} in doubles, each the nearest to its integer (I128::to_double), and
+    // the side of it a grid point is on when the doubles suffice to be certain: 1, -1, or 2 for "cannot
+    // tell" (see arrangement.cpp).
+    static std::array<double, 5> plane_in_doubles(const Plane &pl);
+    static int side_in_doubles(const double plane[5], const int64_t *p);
     // Of the loaded triangles: whether two lie in one plane, and the coordinate axis along which the
     // plane of one is seen without being edge-on (the largest component of its normal).
     bool same_plane(int a, int b) const;
@@ -116,6 +126,13 @@ private:
     std::vector<Box> boxes_;
     std::vector<signed char> axis_, sign_;
     std::vector<char> operand_hit_;
+    // By operand: whether a pair of its own triangles went as far as finding where they cross a plane; how
+    // many pairs of its own triangles had overlapping boxes; and, for an operand recognised as inert, that
+    // number from when it was examined (otherwise -1).
+    std::vector<char> operand_crossed_;
+    std::vector<size_t> own_pairs_;
+    std::vector<long long> inert_pairs_;
+    bool remember_shapes_ = false;
     // The triangles of one operand, or the ribbons: they are contiguous in tris_. Each has a tree over its
     // own boxes, built once enough questions have been asked of it to pay for the building; until then a
     // question is answered by looking at every box. Both ways report the same triangles.
@@ -127,9 +144,9 @@ private:
         int scans = 0;
     };
     std::vector<Span> spans_;
-    // Normals as doubles and their lengths, for the choices and measures that use them: computed for a
-    // triangle when first asked for.
-    std::vector<std::array<double, 4>> normal_;
+    // The plane of a triangle in doubles (normal, its length, offset), for the choices and measures that
+    // use them and for side_in_doubles(): computed for a triangle when first asked for.
+    std::vector<std::array<double, 5>> normal_;
     std::vector<char> normal_known_;
     // Where an edge between two grid points crosses a plane, remembered by the edge and by the ratio of
     // the plane's values at its two ends (see crossing()).
@@ -151,6 +168,9 @@ private:
         int point[2][2];
         int misses;
     };
+    // Triangles found to lie in one plane are joined here, so that same_plane() computes for a pair of
+    // planes once: by triangle, a triangle of its plane found earlier (itself until one is).
+    mutable std::vector<int> plane_of_;
     std::vector<int> met_of_;  // by triangle: an index into met_, or -1
     std::vector<Met> met_;
     std::vector<Crossing> crossings_;
@@ -183,6 +203,11 @@ private:
     void close_span(Span &span);
     void add_ribbons();
     bool corner(int tri, int p) const;
+    void size_lists();
+    bool may_be_one_plane(int a, int b);
+    int plane_set(int tri) const;
+    bool planes_joined(int a, int b) const;
+    void join_planes(int a, int b) const;
     int ends(int tri, const int side[3], const I128 value[3], int out[2]);
     int ends_in_plane(int tri, int plane, const int side[3], const I128 value[3], int out[2]);
     bool inside_closed(int tri, int p) const;
@@ -194,8 +219,8 @@ private:
     int cluster_find(int i);
     void cluster_join(int i, int j);
     void subdivide();
-    void subdivide_one(int tri, size_t first, size_t last);
-    void subdivide_cluster(const std::vector<int> &members, const std::vector<std::pair<size_t, size_t>> &ranges);
+    void subdivide_one(Planar &planar, int tri, size_t first, size_t last);
+    void subdivide_cluster(Planar &planar, const std::vector<int> &members, const std::vector<std::pair<size_t, size_t>> &ranges);
     void build_faces();
     void build_cells();
     void wind();

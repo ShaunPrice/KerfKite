@@ -27,6 +27,9 @@ public:
     // The carrier plane, the two coordinate axes it is viewed in, and +1 or -1 so that orient() is
     // positive for counter-clockwise turns seen from the side the caller chose.
     Planar(Pool &pool, const Plane &carrier, int axis_u, int axis_v, int sign);
+    // Makes the object ready for another plane of the same pool. Its lists are emptied and keep their
+    // memory, so that one object can serve the thousands of small triangulations of an operation.
+    void reset(const Plane &carrier, int axis_u, int axis_v, int sign);
 
     std::vector<Plane> supports;
     std::vector<int> points;              // pool ids; duplicates are allowed
@@ -76,6 +79,14 @@ private:
     // line_ids_[line_start_[k + 1]], ascending).
     std::vector<std::pair<int, int>> on_line_;
     std::vector<int> line_start_, line_ids_;
+    // Working lists, kept between calls.
+    struct Bounds {
+        double ulo, uhi, vlo, vhi;
+    };
+    std::vector<Bounds> box_;
+    std::vector<std::pair<int, int>> on_, filed_, wanted_, todo_, crossed_, flip_stack_;  // on_: (segment, point on it)
+    std::vector<int> order_, created_, ends_, list_, rest_, ids_, fan_;
+    std::vector<std::array<double, 2>> at_;
 
     bool between(int a, int b, int p) const;
     int o(int a, int b, int c) const;

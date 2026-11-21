@@ -323,6 +323,7 @@ Solid run(const std::vector<detail::Operand> &operands, detail::Rule rule, const
             detail::Arrangement arrangement;
             arrangement.load(operands);
             arrangement.enable_ribbons();
+            arrangement.remember_shapes();
             arrangement.intersect();
             arrangement.record_simple();
             detail::ExactMesh exact;
