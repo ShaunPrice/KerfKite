@@ -288,6 +288,18 @@ class PlainInputTests(unittest.TestCase):
         self.assertIsNone(native.segment_rows(b'12345'))
 
 
+class BoundsTests(unittest.TestCase):
+    def test_bounds_keep_the_first_extreme_vertex_and_its_type(self):
+        from studio.cam import _bounds
+
+        paths = [[[0, 5.0], [10.0, 0]], [], [[0.0, 5], [10, 0.0], [3, 2]]]
+        bounds = _bounds(paths)
+        self.assertEqual(bounds, [0, 0, 10.0, 5.0])
+        self.assertEqual([type(v) for v in bounds], [int, int, float, float])
+        with self.assertRaises(ValueError):
+            _bounds([[], []])
+
+
 class BackendSelectionTests(unittest.TestCase):
     def test_backend_names_are_validated(self):
         with self.assertRaisesRegex(ValueError, 'auto, python or native'):

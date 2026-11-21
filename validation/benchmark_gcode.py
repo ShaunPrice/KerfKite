@@ -21,7 +21,7 @@ from studio.rotary import generate_rotary
 
 N = 9
 data = fixture()
-relief = prepare_relief(data, backend='native')
+relief = prepare_relief(data)  # auto: the fixture is the same on either relief backend
 project = dict(
     mode='router', protocol='grbl', width=680, height=240, feed=1200, plunge=300, power=1000, safe=5, depth=6, step=3,
     tool_diameter=3.175, paths=relief['paths'], path_depths=relief['path_depths'],

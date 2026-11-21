@@ -2,7 +2,7 @@
 
 `studio/_relief_native.cpp` is an in-process CPython extension. It accelerates conservative flat/ball cutter contact; Python retains input validation, work caps, path construction, metadata and the reference implementation. There are no runtime compiler or subprocess calls. The kernel releases the GIL during its bounded numerical loop.
 
-Install with a compiler and Python headers, then `python -m pip install .`. Developers can use `python setup.py build_ext --inplace`. Windows uses MSVC `/O2`; other builds use `-O3 -std=c++11`, without fast-math. The extension is optional, so inspect the backend rather than assuming compilation succeeded.
+Install with a compiler and Python headers, then `python -m pip install .`. Developers can use `python -m pip install -e .`, which builds the extension in place with the setuptools release the project requires, or `python setup.py build_ext --inplace` where setuptools 77 or later is already installed (the release bundled with a new Python 3.10 environment is older and rejects the licence field). Windows uses MSVC `/O2`; other builds use `-O3 -std=c++11`, without fast-math. The extension is optional, so inspect the backend rather than assuming compilation succeeded.
 
 ```python
 from studio.relief import prepare_relief

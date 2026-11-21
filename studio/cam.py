@@ -31,9 +31,22 @@ def _moves_backend(backend):
 
 def _bounds(paths):
     """[min x, min y, max x, max y] over every vertex."""
-    xs = [p[0] for path in paths for p in path]
-    ys = [p[1] for path in paths for p in path]
-    return [min(xs), min(ys), max(xs), max(ys)]
+    # One path at a time, so the working copy is the longest path and not every coordinate of the job.
+    # min(a, b) and max(a, b) keep a on a tie, so the first vertex with the extreme value is still the one returned.
+    low_x = low_y = high_x = high_y = None
+    for path in paths:
+        if not path:
+            continue
+        xs = [p[0] for p in path]
+        ys = [p[1] for p in path]
+        if low_x is None:
+            low_x, low_y, high_x, high_y = min(xs), min(ys), max(xs), max(ys)
+        else:
+            low_x, low_y = min(low_x, min(xs)), min(low_y, min(ys))
+            high_x, high_y = max(high_x, max(xs)), max(high_y, max(ys))
+    if low_x is None:
+        raise ValueError('min() arg is an empty sequence')
+    return [low_x, low_y, high_x, high_y]
 
 
 # Exact float and int only: bool, strings and other numeric types go through number().
