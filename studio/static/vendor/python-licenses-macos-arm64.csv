@@ -53,7 +53,6 @@ openapi-pydantic,0.6.0,MIT,8bd6d548a250da37db96f461bcd52b3468e8834ad7d6db14b00a6
 opentelemetry-api,1.45.2,Apache-2.0,2cbd737377e710ee740d261c94e93fa0f08e6d037c18f17513cc0a2d94479a34,https://pypi.org/project/opentelemetry-api/1.45.2/
 packaging,26.3,Apache-2.0 OR BSD-2-Clause,d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c,https://pypi.org/project/packaging/26.3/
 pathable,0.6.0,Apache-2.0,82c4ca6c98c502ad12e0d4e9779b6210afee93c38990988c8c5d1b49bdcdf566,https://pypi.org/project/pathable/0.6.0/
-pillow,12.3.0,MIT-CMU,ffd0c5368496f41b0944be820fcb7a838aa6e623d250b01acf2643939c3f99d7,https://pypi.org/project/pillow/12.3.0/
 platformdirs,4.14.7,MIT,391513b74707c42335fff3ea17eaac657a7ee9ffcadd809634d34ea594d0122c,https://pypi.org/project/platformdirs/4.14.7/
 py-key-value-aio,0.4.6,Apache-2.0,820b30c7959fc738ea3d00160cdb10cd258f51e38737b2add530defeea1ded77,https://pypi.org/project/py-key-value-aio/0.4.6/
 pycparser,3.12,BSD-3-Clause,a076f3f489b39b43ed13563a1dafe42447445bec2e294154ec5c57fcdda4c85e,https://pypi.org/project/pycparser/3.12/

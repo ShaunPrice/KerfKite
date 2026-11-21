@@ -50,7 +50,7 @@ Each of these goes when the part that uses it is ported, under rule 5.
 | ezdxf, with pyparsing, fonttools, typing-extensions | DXF import and export | Replace on porting: a reader and writer for the DXF entities Studio handles. |
 | pypdf | Vector import from PDF | Replace on porting. A sizeable piece: objects, compressed streams and drawing operators. |
 | manifold3d | Solid modelling: unions, differences and intersections of 3D shapes | **Replace** (owner's decision, 21 November 2026). An in-house 3D solid kernel is being written, because engravings can be three-dimensional and multi-axis machines are to follow. It also provides what those need: sections on any plane, ray casting with surface normals, and height maps. |
-| Pillow | Used only by packaging and guide-building scripts, not by Studio when it runs | **Quick win:** move it from the installed dependencies to a build-time requirement, after confirming the installers still build. |
+| Pillow | Used only by the scripts that build the installers and the materials guide | **Done:** no longer installed with Studio. It is a requirement of the release workstation only (`pip install .[packaging]`). |
 | cadquery-ocp (Open Cascade, LGPL 2.1 with exception), optional | STEP import and export | **Keep, optional** (owner's decision, 21 November 2026). Writing a STEP and B-rep kernel is not realistic. It stays a separately installed part, so the main product does not carry it. |
 | cheroot and cryptography, optional | The hosted editor, and the encrypted pendant link | Keep cryptography: rule 2. In a native application the operating system's own TLS can take its place. |
 | fastmcp, pydantic, playwright, optional | The MCP service | Replace on porting the service; the browser driver goes when the editor no longer needs driving. |
@@ -120,5 +120,4 @@ Rules for this:
 
 1. The polygon kernel, replacing GEOS in the core and Shapely in the CAM operations.
 2. The JSON reader and writer in the core.
-3. Pillow out of the installed dependencies.
-4. The remaining items as their parts are ported.
+3. The remaining items as their parts are ported.

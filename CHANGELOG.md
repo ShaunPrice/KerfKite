@@ -4,6 +4,9 @@ Notable changes to KerfKite Studio and KerfKite Pocket. Versions before this fil
 
 ## Unreleased
 
+### Changed
+- Pillow is no longer installed with Studio. Nothing in Studio uses it when running; only the scripts that build the installers and the materials guide do, and it is now their requirement alone (`pip install .[packaging]`).
+
 ### Added
 - A register of every third-party component, with the plan for each: KerfKite prefers its own code, and replaces third-party components where that is within reach. The register also records the decisions taken: 3D solid modelling is to be written in-house, Qt is kept for the editor of the C++ application, STEP support stays an optional part, and licences are kept to the part that contains the component. See [Third-party components and the plan for each](docs/SUPPLY-CHAIN.md).
 - Gerber and Excellon import for circuit boards, written once in the native core. `kerfkite-cam gerber` reads an RS-274X or X2 layer (standard and macro apertures, arcs in both quadrant modes, regions, polarity, step-and-repeat, attributes and the deprecated codes older programs still write) into the ordered list of objects it draws, in millimetres. `kerfkite-cam excellon` reads a drill file's tools, holes, repeats and slots, reports how it read the number format, warns when the file left that unstated, and accepts the format in the request. Two conversions need no further geometry: `gerber-outline` joins a board outline layer into closed paths for a cut-out job and refuses an open outline with the place, and `excellon-drills` gives drilling operations grouped by drill diameter. Python reaches the same commands through `studio.pcb_import`. Files are refused with the line and reason where they need something that is not supported, and every count a file controls is limited. **Isolation toolpaths are not generated yet**, and Studio has no panel for boards yet. See [Circuit boards](docs/PCB.md).
