@@ -391,6 +391,7 @@ job_test() {
   # Added after test.yml was removed: the lint gate configured in pyproject.toml.
   run python -m pip install "ruff>=0.8"
   run python -m ruff check studio
+  run python -m ruff format --check .
 
   # Exercise modelling and the sender simulator, then discover both language suites.
   run python scripts/simulate_studio.py --all

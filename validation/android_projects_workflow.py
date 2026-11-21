@@ -1,4 +1,5 @@
 """Exercise the native Pocket library and Android document picker on a disposable emulator."""
+
 import argparse
 import json
 from pathlib import Path
@@ -13,9 +14,9 @@ ACTIVITY = "au.cncstudio.pocket/.WorkshopActivity"
 
 def select_folder(phone, folder):
     phone.run("shell", "uiautomator", "dump", phone.hierarchy)
-    ui=ElementTree.fromstring(phone.run("shell","cat",phone.hierarchy))
-    toolbar=next((n for n in ui.iter("node") if n.get("resource-id","").endswith(":id/toolbar")), None)
-    if toolbar is not None and any(n.get("text")==folder for n in toolbar.iter("node")):
+    ui = ElementTree.fromstring(phone.run("shell", "cat", phone.hierarchy))
+    toolbar = next((n for n in ui.iter("node") if n.get("resource-id", "").endswith(":id/toolbar")), None)
+    if toolbar is not None and any(n.get("text") == folder for n in toolbar.iter("node")):
         return
     phone.tap("Show roots")
     # Browse shared storage directly. The Downloads collection may wait for a media scan.
@@ -65,10 +66,13 @@ def exercise(phone, apk, previous=None):
     remote = "/sdcard/Download/" + folder
     desktop_name = folder + "-reference"
     paths = [[[5, 9], [30, 11]], [[4, 3], [8, 3], [4, 9], [4, 3]]]
-    document = {"format": "pi-cnc-studio/1", "metadata": {"name": desktop_name},
-                "settings": {"width": 750, "height": 400, "mode": "laser", "power": 200, "paths": paths},
-                "objects": [{"name": "Line and triangle", "paths": paths, "output": False}],
-                "extras": {"custom": {"notes": "Keep this desktop setting exactly"}}}
+    document = {
+        "format": "pi-cnc-studio/1",
+        "metadata": {"name": desktop_name},
+        "settings": {"width": 750, "height": 400, "mode": "laser", "power": 200, "paths": paths},
+        "objects": [{"name": "Line and triangle", "paths": paths, "output": False}],
+        "extras": {"custom": {"notes": "Keep this desktop setting exactly"}},
+    }
     raw = json.dumps(document, ensure_ascii=False, indent=2) + "\n"
     with tempfile.TemporaryDirectory() as tmp:
         scratch = Path(tmp)

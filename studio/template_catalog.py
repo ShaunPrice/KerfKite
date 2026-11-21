@@ -1,4 +1,5 @@
 """Random access to KerfKite's bundled vector artwork; see scripts/build_templates.cjs."""
+
 import json
 import os
 import struct
@@ -112,8 +113,12 @@ class TemplateCatalog(Sequence):
     def search(self, query="", category="", limit=30):
         query = query.casefold()
         entries = self._current_index().entries
-        metadata = (item for _, _, item in entries
-                    if (not category or item["category"] == category)
-                    and query in (item["name"] + " " + item["category"]).casefold())
-        return [{key: item[key] for key in ("id", "name", "category")}
-                for item in islice(metadata, max(1, min(100, limit)))]
+        metadata = (
+            item
+            for _, _, item in entries
+            if (not category or item["category"] == category)
+            and query in (item["name"] + " " + item["category"]).casefold()
+        )
+        return [
+            {key: item[key] for key in ("id", "name", "category")} for item in islice(metadata, max(1, min(100, limit)))
+        ]

@@ -3,6 +3,7 @@
 Lengths are in mm and angles are in degrees. Evaluation returns data for the geometry
 kernel. The language has no imports, filesystem operations or host-language calls.
 """
+
 from dataclasses import dataclass, field
 import math
 import operator
@@ -18,11 +19,30 @@ MAX_GEOMETRY = 1500
 MAX_WORK = 180000
 MAX_NUMBER = 1e9
 
-GEOMETRY = frozenset((
-    'square', 'circle', 'polygon', 'cube', 'sphere', 'cylinder', 'union', 'difference',
-    'intersection', 'hull', 'translate', 'rotate', 'scale', 'mirror', 'linear_extrude',
-    'rotate_extrude', 'offset', 'projection', 'polyhedron', 'multmatrix',
-))
+GEOMETRY = frozenset(
+    (
+        'square',
+        'circle',
+        'polygon',
+        'cube',
+        'sphere',
+        'cylinder',
+        'union',
+        'difference',
+        'intersection',
+        'hull',
+        'translate',
+        'rotate',
+        'scale',
+        'mirror',
+        'linear_extrude',
+        'rotate_extrude',
+        'offset',
+        'projection',
+        'polyhedron',
+        'multmatrix',
+    )
+)
 FACET_OPERATIONS = {'circle', 'sphere', 'cylinder', 'rotate_extrude', 'offset'}
 RESERVED = {'true', 'false', 'PI', '$children', 'if', 'else', 'module', 'function', 'for', 'children'}
 TOKEN = re.compile(
@@ -86,8 +106,22 @@ class Node:
     parts: tuple = ()
 
 
-PRECEDENCE = {'||': 1, '&&': 2, '==': 3, '!=': 3, '<': 4, '<=': 4, '>': 4,
-              '>=': 4, '+': 5, '-': 5, '*': 6, '/': 6, '%': 6, '^': 8}
+PRECEDENCE = {
+    '||': 1,
+    '&&': 2,
+    '==': 3,
+    '!=': 3,
+    '<': 4,
+    '<=': 4,
+    '>': 4,
+    '>=': 4,
+    '+': 5,
+    '-': 5,
+    '*': 6,
+    '/': 6,
+    '%': 6,
+    '^': 8,
+}
 
 
 class Parser:
@@ -151,7 +185,7 @@ class Parser:
                     named.add(name.text)
                 elif named:
                     raise ScadError(self.token, 'Positional arguments must precede named arguments')
-                args.append((name.text if name else None, self.expression(level+1)))
+                args.append((name.text if name else None, self.expression(level + 1)))
                 if self.accept(')'):
                     break
                 self.expect(',')
@@ -168,7 +202,7 @@ class Parser:
             names.add(token.text)
             expr = None
             if self.accept('='):
-                expr = self.expression(level+1)
+                expr = self.expression(level + 1)
             elif not defaults:
                 raise ScadError(self.token, 'Expected an initializer')
             items.append((token.text, expr))
@@ -182,7 +216,7 @@ class Parser:
         if self.accept(';'):
             return Node(t, 'block', ([],))
         if self.accept('{'):
-            return Node(t, 'block', (self.program(level+1, '}'),))
+            return Node(t, 'block', (self.program(level + 1, '}'),))
         if t.text in ('module', 'function'):
             self.take()
             name = self.name(binding=True)
@@ -190,26 +224,26 @@ class Parser:
             params = self.bindings(level, True)
             if t.text == 'function':
                 self.expect('=')
-                body = self.expression(level+1)
+                body = self.expression(level + 1)
                 self.expect(';')
             else:
-                body = self.statement(level+1)
+                body = self.statement(level + 1)
             return Node(t, t.text, (name.text, params, body))
         if self.accept('if'):
             self.expect('(')
-            condition = self.expression(level+1)
+            condition = self.expression(level + 1)
             self.expect(')')
-            yes = self.statement(level+1)
-            no = self.statement(level+1) if self.accept('else') else None
+            yes = self.statement(level + 1)
+            no = self.statement(level + 1) if self.accept('else') else None
             return Node(t, 'if', (condition, yes, no))
         if self.accept('for'):
             self.expect('(')
             bindings = self.bindings(level, False)
-            return Node(t, 'for', (bindings, self.statement(level+1)))
-        if t.kind == 'name' and self.tokens[self.at+1].text == '=':
+            return Node(t, 'for', (bindings, self.statement(level + 1)))
+        if t.kind == 'name' and self.tokens[self.at + 1].text == '=':
             self.name(binding=True)
             self.take()
-            expr = self.expression(level+1)
+            expr = self.expression(level + 1)
             self.expect(';')
             return Node(t, 'assign', (t.text, expr))
         self.name()
@@ -217,29 +251,36 @@ class Parser:
         if self.accept(';'):
             children = []
         elif self.accept('{'):
-            children = self.program(level+1, '}')
+            children = self.program(level + 1, '}')
         else:
-            children = [self.statement(level+1)]
+            children = [self.statement(level + 1)]
         return Node(t, 'call', (t.text, args, children))
 
     def expression(self, level, minimum=0):
         self.depth(level)
         t = self.token
         if self.accept('('):
-            left = self.expression(level+1)
+            left = self.expression(level + 1)
             self.expect(')')
         elif self.accept('['):
             left = self.vector(t, level)
         elif t.text in ('+', '-', '!'):
             self.take()
-            left = Node(t, 'unary', (t.text, self.expression(level+1, 7)))
+            left = Node(t, 'unary', (t.text, self.expression(level + 1, 7)))
         elif t.kind == 'number':
             self.take()
             left = Node(t, 'literal', (number(float(t.text), t),))
         elif t.kind == 'name':
             self.take()
             if self.token.text == '(':
-                left = Node(t, 'function_call', (t.text, self.arguments(level),))
+                left = Node(
+                    t,
+                    'function_call',
+                    (
+                        t.text,
+                        self.arguments(level),
+                    ),
+                )
             else:
                 left = Node(t, 'var', (t.text,))
         else:
@@ -247,18 +288,18 @@ class Parser:
         while True:
             token = self.token
             if self.accept('['):
-                left = Node(token, 'index', (left, self.expression(level+1)))
+                left = Node(token, 'index', (left, self.expression(level + 1)))
                 self.expect(']')
             elif token.text in PRECEDENCE and PRECEDENCE[token.text] >= minimum:
                 self.take()
                 precedence = PRECEDENCE[token.text] + (token.text != '^')
-                left = Node(token, 'binary', (token.text, left, self.expression(level+1, precedence)))
+                left = Node(token, 'binary', (token.text, left, self.expression(level + 1, precedence)))
             else:
                 break
         if minimum == 0 and self.accept('?'):
-            yes = self.expression(level+1)
+            yes = self.expression(level + 1)
             self.expect(':')
-            left = Node(t, 'ternary', (left, yes, self.expression(level+1)))
+            left = Node(t, 'ternary', (left, yes, self.expression(level + 1)))
         return left
 
     def vector(self, token, level):
@@ -267,18 +308,18 @@ class Parser:
         if self.accept('for'):
             self.expect('(')
             bindings = self.bindings(level, False)
-            value = self.expression(level+1)
+            value = self.expression(level + 1)
             self.expect(']')
             return Node(token, 'comprehension', (bindings, value))
-        first = self.expression(level+1)
+        first = self.expression(level + 1)
         if self.accept(':'):
-            middle = self.expression(level+1)
-            end = self.expression(level+1) if self.accept(':') else None
+            middle = self.expression(level + 1)
+            end = self.expression(level + 1) if self.accept(':') else None
             self.expect(']')
             return Node(token, 'range', (first, middle, end))
         items = [first]
         while self.accept(',') and self.token.text != ']':
-            items.append(self.expression(level+1))
+            items.append(self.expression(level + 1))
         self.expect(']')
         return Node(token, 'vector', (items,))
 
@@ -337,16 +378,34 @@ class Scope:
 
 
 UNARY_MATH = {
-    'abs': abs, 'sqrt': math.sqrt, 'floor': math.floor, 'ceil': math.ceil,
-    'round': lambda x: math.floor(x+.5) if x >= 0 else math.ceil(x-.5),
-    'sin': lambda x: math.sin(math.radians(x)), 'cos': lambda x: math.cos(math.radians(x)),
-    'tan': lambda x: math.tan(math.radians(x)), 'asin': lambda x: math.degrees(math.asin(x)),
-    'acos': lambda x: math.degrees(math.acos(x)), 'atan': lambda x: math.degrees(math.atan(x)),
-    'sign': lambda x: (x>0)-(x<0), 'ln': math.log, 'log': math.log10, 'exp': math.exp,
+    'abs': abs,
+    'sqrt': math.sqrt,
+    'floor': math.floor,
+    'ceil': math.ceil,
+    'round': lambda x: math.floor(x + 0.5) if x >= 0 else math.ceil(x - 0.5),
+    'sin': lambda x: math.sin(math.radians(x)),
+    'cos': lambda x: math.cos(math.radians(x)),
+    'tan': lambda x: math.tan(math.radians(x)),
+    'asin': lambda x: math.degrees(math.asin(x)),
+    'acos': lambda x: math.degrees(math.acos(x)),
+    'atan': lambda x: math.degrees(math.atan(x)),
+    'sign': lambda x: (x > 0) - (x < 0),
+    'ln': math.log,
+    'log': math.log10,
+    'exp': math.exp,
 }
-SCALAR_OPS = {'+': operator.add, '-': operator.sub, '*': operator.mul, '/': operator.truediv,
-              '%': math.fmod, '^': math.pow, '<': operator.lt, '<=': operator.le,
-              '>': operator.gt, '>=': operator.ge}
+SCALAR_OPS = {
+    '+': operator.add,
+    '-': operator.sub,
+    '*': operator.mul,
+    '/': operator.truediv,
+    '%': math.fmod,
+    '^': math.pow,
+    '<': operator.lt,
+    '<=': operator.le,
+    '>': operator.gt,
+    '>=': operator.ge,
+}
 
 
 class Evaluator:
@@ -375,7 +434,7 @@ class Evaluator:
         self.geometry_count += 1
         if self.geometry_count > MAX_GEOMETRY:
             raise ScadError(token, f'Script exceeds {MAX_GEOMETRY} geometry nodes')
-        self.charge(token, 1+sum(map(value_cost, args))+sum(map(value_cost, kwargs.values())))
+        self.charge(token, 1 + sum(map(value_cost, args)) + sum(map(value_cost, kwargs.values())))
         return GeometryNode(token, name, args, kwargs, children)
 
     def group(self, nodes, token):
@@ -392,7 +451,7 @@ class Evaluator:
                 raise ScadError(token, f'Circular variable definition {name!r}')
             owner.resolving.add(name)
             try:
-                owner.values[name] = self.expr(owner.variables[name], owner, level+1)
+                owner.values[name] = self.expr(owner.variables[name], owner, level + 1)
             finally:
                 owner.resolving.remove(name)
         return owner.values[name]
@@ -400,7 +459,7 @@ class Evaluator:
     def arguments(self, arguments, scope, level):
         positional, named = [], {}
         for name, expr in arguments:
-            value = self.expr(expr, scope, level+1)
+            value = self.expr(expr, scope, level + 1)
             if name is None:
                 positional.append(value)
             else:
@@ -421,7 +480,7 @@ class Evaluator:
             elif key in kwargs:
                 env.values[key] = kwargs.pop(key)
             elif default is not None:
-                env.values[key] = self.expr(default, env, level+1)
+                env.values[key] = self.expr(default, env, level + 1)
             else:
                 raise ScadError(token, f'Missing argument {key!r}')
         if '$fn' not in env.values:
@@ -442,14 +501,15 @@ class Evaluator:
                 yield env
                 return
             name, expr = bindings[i]
-            values = self.expr(expr, env, level+i+1)
+            values = self.expr(expr, env, level + i + 1)
             if not isinstance(values, Vector):
                 raise ScadError(token, 'for requires a range or vector')
             if len(values) > MAX_RANGE:
                 raise ScadError(token, f'Loop sequence exceeds {MAX_RANGE} values')
             for value in values:
                 self.charge(token)
-                yield from expand(i+1, Scope(env, {name: value}))
+                yield from expand(i + 1, Scope(env, {name: value}))
+
         return expand(0, scope)
 
     def vector_arithmetic(self, op, a, b, t):
@@ -459,7 +519,7 @@ class Evaluator:
                 return self.vector((self.binary(op, x, y, t) for x, y in zip(a, b)), t)
             if op == '*':
                 self.charge(t, len(a))
-                return number(sum(number(x, t)*number(y, t) for x, y in zip(a, b)), t)
+                return number(sum(number(x, t) * number(y, t) for x, y in zip(a, b)), t)
         if av and not bv and op in ('*', '/'):
             return self.vector((self.binary(op, x, b, t) for x in a), t)
         if bv and not av and op == '*':
@@ -468,7 +528,7 @@ class Evaluator:
 
     def binary(self, op, a, b, t):
         if op in ('==', '!='):
-            self.charge(t, value_cost(a)+value_cost(b))
+            self.charge(t, value_cost(a) + value_cost(b))
             equal = (isinstance(a, bool) == isinstance(b, bool)) and a == b
             return equal if op == '==' else not equal
         if isinstance(a, Vector) or isinstance(b, Vector):
@@ -513,7 +573,7 @@ class Evaluator:
         t, kind, p = node.token, node.kind, node.parts
 
         def ev(expr):
-            return self.expr(expr, env, level+1)
+            return self.expr(expr, env, level + 1)
 
         if kind == 'literal':
             return p[0]
@@ -527,21 +587,21 @@ class Evaluator:
             step, end = (1, mid) if p[2] is None else (mid, number(ev(p[2]), t))
             if step == 0:
                 raise ScadError(t, 'Range step must be nonzero')
-            span = (end-start)/step
+            span = (end - start) / step
             if span < 0:
                 return self.vector([], t)
             if not math.isfinite(span) or span >= MAX_RANGE:
                 raise ScadError(t, f'Range exceeds {MAX_RANGE} values')
-            count = math.floor(span+1e-10)+1
+            count = math.floor(span + 1e-10) + 1
             if count > MAX_RANGE:
                 raise ScadError(t, f'Range exceeds {MAX_RANGE} values')
-            return self.vector((number(start+i*step, t) for i in range(count)), t)
+            return self.vector((number(start + i * step, t) for i in range(count)), t)
         if kind == 'comprehension':
             items = []
             for iteration in self.iterations(p[0], env, t, level):
                 if len(items) >= MAX_RANGE:
                     raise ScadError(t, 'Vector comprehension is too large')
-                items.append(self.expr(p[1], iteration, level+1))
+                items.append(self.expr(p[1], iteration, level + 1))
             return self.vector(items, t)
         if kind == 'index':
             vector = ev(p[0])
@@ -571,7 +631,7 @@ class Evaluator:
             if owner:
                 definition = owner.definitions['function', name]
                 scope = self.call_scope(definition, owner, env, args, kwargs, level, t)
-                return self.expr(definition.parts[2], scope, level+1)
+                return self.expr(definition.parts[2], scope, level + 1)
             return self.builtin(name, args, kwargs, t)
         raise ScadError(t, 'Invalid expression')
 
@@ -591,7 +651,7 @@ class Evaluator:
     def sequence(self, statements, scope, level):
         nodes = []
         for statement in self.declarations(statements, scope):
-            nodes.extend(self.statement(statement, scope, level+1))
+            nodes.extend(self.statement(statement, scope, level + 1))
         return nodes
 
     def children(self, args, kwargs, env, token, level):
@@ -607,7 +667,7 @@ class Evaluator:
             statements = [statements[index_number(args[0], len(statements), token)]]
         nodes = []
         for statement in statements:
-            nodes.extend(self.statement(statement, owner, level+1))
+            nodes.extend(self.statement(statement, owner, level + 1))
         return self.group(nodes, token)
 
     def statement(self, node, env, level):
@@ -618,11 +678,11 @@ class Evaluator:
         if kind == 'for':
             nodes = []
             for child_scope in self.iterations(p[0], env, t, level):
-                nodes.extend(self.statement(p[1], child_scope, level+1))
+                nodes.extend(self.statement(p[1], child_scope, level + 1))
             return self.group(nodes, t)
         if kind == 'if':
-            choice = p[1] if self.expr(p[0], env, level+1) else p[2]
-            return self.statement(choice, Scope(env), level+1) if choice else []
+            choice = p[1] if self.expr(p[0], env, level + 1) else p[2]
+            return self.statement(choice, Scope(env), level + 1) if choice else []
         if kind in ('assign', 'module', 'function'):
             self.declarations([node], env)
             return []
@@ -636,7 +696,7 @@ class Evaluator:
             child_statements = self.declarations(children, caller)
             child_env.values['$children'] = len(child_statements)
             child_env.input_children = child_statements, caller
-            return self.group(self.statement(definition.parts[2], child_env, level+1), t)
+            return self.group(self.statement(definition.parts[2], child_env, level + 1), t)
         if name == 'children':
             if children:
                 raise ScadError(t, 'children() cannot take child geometry')

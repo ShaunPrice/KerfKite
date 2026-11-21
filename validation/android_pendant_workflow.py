@@ -3,6 +3,7 @@
 Run with --serial emulator-5554 --apk path/to/KerfKite-Pocket-Android.apk.
 Requires a disposable, booted emulator, Android platform-tools and Studio's Python dependencies.
 """
+
 import argparse
 import logging
 from pathlib import Path
@@ -61,7 +62,7 @@ class Phone:
                 return
             # Inspect both ends of the native scrolling layout on small displays.
             width, height = map(int, re.findall(r'(\d+)x(\d+)', self.run('shell', 'wm', 'size'))[-1])
-            low, high = int(height * .78), int(height * .30)
+            low, high = int(height * 0.78), int(height * 0.30)
             a, b = (low, high) if attempt < 3 else (high, low)
             self.run('shell', 'input', 'swipe', str(width // 2), str(a), str(width // 2), str(b), '280')
         raise AssertionError('Missing enabled UI control: ' + label)
@@ -77,7 +78,7 @@ def wait_until(condition, description, timeout=18):
         value = condition()
         if value:
             return value
-        time.sleep(.15)
+        time.sleep(0.15)
     raise AssertionError(description)
 
 
@@ -123,12 +124,14 @@ def exercise(phone, apk, route):
 
         phone.tap('Jog X positive')
         wait_until(lambda: len(accepted) == 1 and not controller.status()['active'], 'Jog failed.')
-        assert (accepted[0]['axis'], accepted[0]['distance'], accepted[0]['feed']) == ('X', .1, 100)
+        assert (accepted[0]['axis'], accepted[0]['distance'], accepted[0]['feed']) == ('X', 0.1, 100)
         assert any('$J=G91 G21 X0.100' in entry for entry in controller.status()['log'])
         for action, label in [('home', 'Home'), ('zero', 'Zero XYZ')]:
             phone.tap(label, button=True)
             phone.confirm()
-            wait_until(lambda: accepted[-1]['action'] == action and not controller.status()['active'], action + ' failed.')
+            wait_until(
+                lambda: accepted[-1]['action'] == action and not controller.status()['active'], action + ' failed.'
+            )
 
         # Leave enough simulated motion queued to exercise feed hold and resume through the UI.
         jobs.arm(['G1 X0 Y0 F100'] * 20_000)
@@ -162,7 +165,9 @@ if __name__ == '__main__':
     parser.add_argument('--adb', default='adb', help='ADB executable')
     parser.add_argument('--serial', required=True, help='Disposable emulator serial')
     parser.add_argument('--apk', required=True, type=Path, help='KerfKite Pocket APK to install')
-    parser.add_argument('--route', choices=('reverse', 'lan'), default='reverse', help='ADB reverse or emulator virtual LAN')
+    parser.add_argument(
+        '--route', choices=('reverse', 'lan'), default='reverse', help='ADB reverse or emulator virtual LAN'
+    )
     args = parser.parse_args()
     logging.getLogger('werkzeug').setLevel(logging.ERROR)
     exercise(Phone(args.adb, args.serial), args.apk.resolve(), args.route)

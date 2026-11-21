@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Run the CAD-to-machine acceptance fixture using Studio's local simulator."""
+
 import argparse
 from collections import Counter
 import io
@@ -62,7 +63,7 @@ def replay(job, project):
         if mode == 'laser':
             check('Z' not in values, 'Laser job moved Z')
         elif xyz['Z'] is not None:
-            check(xyz['Z'] >= -project['depth'] - .001, 'Tool exceeds programmed depth')
+            check(xyz['Z'] >= -project['depth'] - 0.001, 'Tool exceeds programmed depth')
         if 'X' not in values and 'Y' not in values:
             continue
         check(0 <= xyz['X'] <= project['width'] and 0 <= xyz['Y'] <= project['height'], 'XY move leaves work area')
@@ -82,7 +83,7 @@ def replay(job, project):
         check(xyz['Z'] == project['safe'], 'Tool was not retracted')
     check(moves and len(moves) == len(job['segments']), 'Motion count differs from preview')
     for actual, segment in zip(moves, job['segments']):
-        check(all(abs(a - b) <= .00051 for a, b in zip(actual, segment[:5])), 'Posted motion differs from preview')
+        check(all(abs(a - b) <= 0.00051 for a, b in zip(actual, segment[:5])), 'Posted motion differs from preview')
     return len(moves)
 
 
@@ -90,6 +91,7 @@ class StudioFixture:
     def __init__(self):
         from studio.device import DeviceController
         from studio.server import create_app
+
         self.device = DeviceController()
         self.client = create_app(controller=self.device, allow_hardware=False).test_client()
         session = self.client.get('/api/session').get_json()
@@ -104,24 +106,49 @@ class StudioFixture:
 
     def solid(self):
         from studio.operations import region
+
         for width in (32, 40):
             model = fixture(width)
             rebuilt = self.request('solid-cad', {'model': model})
             area = width * width / 2 - 24
-            check(math.isclose(rebuilt['volume'], area * 3, abs_tol=.01), 'Solid volume differs from plate minus slot')
+            check(math.isclose(rebuilt['volume'], area * 3, abs_tol=0.01), 'Solid volume differs from plate minus slot')
             profiles = rebuilt['profiles']
-            check(len(profiles) == 2 and math.isclose(region(profiles).area, area, abs_tol=.01), 'Projection lost slot or dimensions')
+            check(
+                len(profiles) == 2 and math.isclose(region(profiles).area, area, abs_tol=0.01),
+                'Projection lost slot or dimensions',
+            )
         raw = self.request('solid-cad/stl', {'model': model}, binary=True)
-        facets, = struct.unpack_from('<I', raw, 80)
-        check(facets == len(rebuilt['triangles']) and len(raw) == 84 + 50 * facets, 'STL triangle records differ from preview')
+        (facets,) = struct.unpack_from('<I', raw, 80)
+        check(
+            facets == len(rebuilt['triangles']) and len(raw) == 84 + 50 * facets,
+            'STL triangle records differ from preview',
+        )
         self.profiles = profiles
-        return {'widths_mm': [32, 40], 'volume_mm3': rebuilt['volume'], 'stl_facets': facets, 'projected_area_mm2': area}
+        return {
+            'widths_mm': [32, 40],
+            'volume_mm3': rebuilt['volume'],
+            'stl_facets': facets,
+            'projected_area_mm2': area,
+        }
 
     def head(self, mode):
-        project = {'mode': mode, 'width': 75, 'height': 60, 'paths': self.profiles,
-                   'operation': 'outside' if mode == 'router' else 'line', 'power': 600,
-                   'safe': 4, 'feed': 300, 'plunge': 100, 'step': 1.5, 'depth': .2 if mode == 'knife' else 3,
-                   'tool_diameter': 2, 'stock_thickness': 3, 'knife_offset': .25, 'knife_lead': 1}
+        project = {
+            'mode': mode,
+            'width': 75,
+            'height': 60,
+            'paths': self.profiles,
+            'operation': 'outside' if mode == 'router' else 'line',
+            'power': 600,
+            'safe': 4,
+            'feed': 300,
+            'plunge': 100,
+            'step': 1.5,
+            'depth': 0.2 if mode == 'knife' else 3,
+            'tool_diameter': 2,
+            'stock_thickness': 3,
+            'knife_offset': 0.25,
+            'knife_lead': 1,
+        }
         job = self.request('generate', project)
         result = {'cutting_moves': replay(job, project), 'posted_lines': len(job['lines'])}
         if mode == 'router':
@@ -135,14 +162,20 @@ class StudioFixture:
             self.request('run', {'project': project, 'confirmed': True})
             self.device.command('hold')
             progress = self.device.status()['progress']
-            time.sleep(.04)
-            check(self.device.status()['progress'] == progress and self.device.status()['active'], 'Hold did not retain job')
+            time.sleep(0.04)
+            check(
+                self.device.status()['progress'] == progress and self.device.status()['active'],
+                'Hold did not retain job',
+            )
             self.device.command('resume')
-            deadline = time.monotonic() + 10 + len(job['lines']) * .04
+            deadline = time.monotonic() + 10 + len(job['lines']) * 0.04
             while self.device.status()['active'] and time.monotonic() < deadline:
-                time.sleep(.02)
+                time.sleep(0.02)
             state = self.device.status()
-            check(state['state'] == 'Idle' and state['progress'] == 100 and not state['error'], 'Simulator failed to finish')
+            check(
+                state['state'] == 'Idle' and state['progress'] == 100 and not state['error'],
+                'Simulator failed to finish',
+            )
             result['controller'] = state['state']
         finally:
             self.device.disconnect()
@@ -160,16 +193,27 @@ def python_suite():
 def js_suite():
     node = shutil.which('node')
     check(node, 'Node.js is required for --all')
-    files = sorted(set((ROOT / 'tests').rglob('*.test.cjs')) | set((ROOT / 'tests').glob('test*.cjs')) |
-                   set((ROOT / 'validation').glob('*.test.js')) | set((ROOT / 'validation').glob('test*.cjs')))
+    files = sorted(
+        set((ROOT / 'tests').rglob('*.test.cjs'))
+        | set((ROOT / 'tests').glob('test*.cjs'))
+        | set((ROOT / 'validation').glob('*.test.js'))
+        | set((ROOT / 'validation').glob('test*.cjs'))
+    )
     check(files, 'No JavaScript test files discovered')
-    proc = subprocess.run([node, '--test', '--test-reporter=tap', *map(str, files)], cwd=ROOT,
-                          capture_output=True, text=True, timeout=300,
-                          env={**os.environ, 'CNC_TEST_PYTHON': sys.executable})
+    proc = subprocess.run(
+        [node, '--test', '--test-reporter=tap', *map(str, files)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=300,
+        env={**os.environ, 'CNC_TEST_PYTHON': sys.executable},
+    )
     if proc.returncode:
         failures = re.findall(r'^not ok .*?(?=^# Subtest:|^1\.\.|\Z)', proc.stdout, re.M | re.S)
         raise ValueError('\n'.join(failures)[:6000] + proc.stderr[-2000:])
-    summary = {key: int(value) for key, value in re.findall(r'^# (tests|pass|fail|skipped|todo) (\d+)$', proc.stdout, re.M)}
+    summary = {
+        key: int(value) for key, value in re.findall(r'^# (tests|pass|fail|skipped|todo) (\d+)$', proc.stdout, re.M)
+    }
     check(summary.get('tests', 0) > 0, 'Missing Node TAP summary')
     return {'files': [str(f.relative_to(ROOT)) for f in files], **summary}
 
@@ -207,26 +251,43 @@ def main():
         else:
             cases.append({'name': head, 'status': 'skipped', 'reason': 'CAD fixture failed'})
     import simulate_interchange as extra
+
     if fixture_state:
-        for name, function in [('Assembly mate and interference', extra.assembly),
-                               ('Parametric surface patch', extra.surface),
-                               ('Swept holder and clamp', extra.collision),
-                               ('Plotter import to knife program', extra.program_import)]:
+        for name, function in [
+            ('Assembly mate and interference', extra.assembly),
+            ('Parametric surface patch', extra.surface),
+            ('Swept holder and clamp', extra.collision),
+            ('Plotter import to knife program', extra.program_import),
+        ]:
             run(name, lambda function=function: function(fixture_state[0]))
         from importlib.util import find_spec
+
         if find_spec('OCP') is not None or args.require_step:
             run('STEP surface and solid exchange', lambda: extra.step(fixture_state[0]))
         else:
-            cases.append({'name':'STEP surface and solid exchange', 'status':'skipped', 'reason':'Install .[step] or enforce with --require-step'})
+            cases.append(
+                {
+                    'name': 'STEP surface and solid exchange',
+                    'status': 'skipped',
+                    'reason': 'Install .[step] or enforce with --require-step',
+                }
+            )
     for name, function in [('Python regression suite', python_suite), ('JavaScript regression suite', js_suite)]:
         if args.all:
             run(name, function)
         else:
             cases.append({'name': name, 'status': 'skipped', 'reason': 'Use --all'})
-    report = {'format': 'cnc-studio-simulation/1', 'transport': 'in-process simulator', 'cases': cases,
-              'totals': dict(Counter(case['status'] for case in cases)),
-              'outside_simulation': ['Physical travel limits, tool calibration, material response and measured machine clearances',
-                                     'GUI interaction and visual tutorial acceptance', 'External controller execution of exported files']}
+    report = {
+        'format': 'cnc-studio-simulation/1',
+        'transport': 'in-process simulator',
+        'cases': cases,
+        'totals': dict(Counter(case['status'] for case in cases)),
+        'outside_simulation': [
+            'Physical travel limits, tool calibration, material response and measured machine clearances',
+            'GUI interaction and visual tutorial acceptance',
+            'External controller execution of exported files',
+        ],
+    }
     if args.json:
         args.json.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     print(report['totals'])

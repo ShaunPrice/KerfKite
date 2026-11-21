@@ -1,4 +1,5 @@
 """Exercise rebuilt contours, secondary assembly mates and the local pairing panel."""
+
 from playwright.sync_api import expect
 
 
@@ -43,7 +44,7 @@ def run(page):
     loc('#assembly-open').click()
     loc('#assembly-example').click()
     expect(loc('#assembly-status')).to_contain_text('No interference')
-    page.get_by_text('Additional mates',exact=True).click()
+    page.get_by_text('Additional mates', exact=True).click()
     loc('#assembly-extra-parent').fill('0,0,8')
     loc('#assembly-extra-child').fill('0,0,2')
     loc('#assembly-add-relation').click()
@@ -55,7 +56,7 @@ def run(page):
     loc('#assembly-close').click()
     print('PASS two independent assembly mate conditions saved and reopened')
     tab('Control')
-    page.get_by_text('Phone pendant',exact=True).click()
+    page.get_by_text('Phone pendant', exact=True).click()
     expect(loc('#phone-enable')).to_be_visible()
     loc('#phone-enable').click()
     loc('#phone-host').fill('127.0.0.1')

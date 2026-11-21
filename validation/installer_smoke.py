@@ -1,4 +1,5 @@
 """Exercise a freshly installed desktop launcher without connecting any machine."""
+
 import argparse
 from contextlib import contextmanager
 import json
@@ -32,20 +33,23 @@ def page_when(proc, needle):
         try:
             page = read(LAUNCH).decode()
         except (OSError, URLError):
-            time.sleep(.5)
+            time.sleep(0.5)
             continue
         if "Setup needs attention" in page:
             raise RuntimeError(re.search(r"<h1>.*?</h1><p>(.*?)</p>", page).group(1))
         if needle in page:
             return page
-        time.sleep(.5)
+        time.sleep(0.5)
     raise RuntimeError("Timed out waiting for " + needle)
 
 
 def submit(page, action, **fields):
     token = re.search(r'name="token" value="([^"]+)"', page).group(1)
-    return read(LAUNCH, headers={"Origin": LAUNCH.rstrip("/")},
-                data=urlencode(dict(action=action,token=token,**fields)).encode())
+    return read(
+        LAUNCH,
+        headers={"Origin": LAUNCH.rstrip("/")},
+        data=urlencode(dict(action=action, token=token, **fields)).encode(),
+    )
 
 
 def wait_for_studio_exit():
@@ -63,7 +67,7 @@ def wait_for_studio_exit():
             pass
         if time.monotonic() >= deadline:
             raise RuntimeError("Studio listener shutdown could not be confirmed after its launcher exited")
-        time.sleep(.2)
+        time.sleep(0.2)
 
 
 @contextmanager
@@ -79,10 +83,13 @@ def install_directory():
                 directory.cleanup()
                 break
             except OSError as error:
-                if (os.name != "nt" or getattr(error, "winerror", None) not in (5, 32, 33)
-                        or time.monotonic() >= deadline):
+                if (
+                    os.name != "nt"
+                    or getattr(error, "winerror", None) not in (5, 32, 33)
+                    or time.monotonic() >= deadline
+                ):
                     raise
-                time.sleep(.5)
+                time.sleep(0.5)
 
 
 def exercise_native(exe, scratch):
@@ -97,8 +104,16 @@ def exercise_native(exe, scratch):
         host = exe.with_name("KerfKiteNative")
         subprocess.run(["codesign", "--verify", "--strict", host], check=True)
         runner = scratch / "MacWindowTest"
-        subprocess.run([sys.executable, sources / "macos/build.py",
-                        "arm64" if platform.machine() == "arm64" else "amd64", runner, "--smoke"], check=True)
+        subprocess.run(
+            [
+                sys.executable,
+                sources / "macos/build.py",
+                "arm64" if platform.machine() == "arm64" else "amd64",
+                runner,
+                "--smoke",
+            ],
+            check=True,
+        )
         command = [runner, STUDIO]
     elif os.name == "nt":
         subprocess.run([sys.executable, sources / "windows/build.py", "--smoke-only", exe.parent], check=True)
@@ -118,53 +133,84 @@ def exercise_native(exe, scratch):
 def check(exe, data, offline, step, native=False, target=None):
     env = {**os.environ, "KERFKITE_DATA_DIR": str(data)}
     if offline:
-        env["UV_OFFLINE"]="1"
+        env["UV_OFFLINE"] = "1"
     proc = subprocess.Popen([exe], env=env)
     try:
         page = page_when(proc, "Choose your workshop")
-        submit(page, "launch", **({"step":"yes"} if step else {}))
+        submit(page, "launch", **({"step": "yes"} if step else {}))
         page = page_when(proc, "Your workshop is ready")
-        session=json.loads(read(STUDIO+"api/session"))
+        session = json.loads(read(STUDIO + "api/session"))
         assert session["hardware_enabled"] is False
         assert b"KerfKite Studio" in read(STUDIO)
         headers = {"Content-Type": "application/json", "X-Studio-Token": session["token"]}
+
         def post(path, payload):
             return json.loads(read(STUDIO + path, data=json.dumps(payload).encode(), headers=headers))
 
-        sketch = post("api/cad-script", {"source": "difference(){square([w,20]);translate([5,5]) circle(r=2);}", "overrides": {"w": 42}})
+        sketch = post(
+            "api/cad-script",
+            {"source": "difference(){square([w,20]);translate([5,5]) circle(r=2);}", "overrides": {"w": 42}},
+        )
         assert sketch["bounds"] == [0, 0, 42, 20] and len(sketch["profiles"]) == 2
         block = {"id": "Spacer", "kind": "script", "source": "cube([w,5,3]);", "scriptParameters": {"w": 12}}
         part = post("api/solid-cad", {"model": {"version": 1, "parameters": {"w": 99}, "features": [block]}})
         assert part["bounds"] == [0, 0, 0, 12, 5, 3] and abs(part["volume"] - 180) < 1e-8
         assert b"KerfKiteMacros" in read(STUDIO + "cad-macros.js")
-        project = {"mode": "laser", "protocol": "grbl", "paths": [[[10, 10], [30, 10], [30, 20]]],
-                   "width": 80, "height": 55, "operation": "line", "feed": 400, "power": 500, "passes": 1}
+        project = {
+            "mode": "laser",
+            "protocol": "grbl",
+            "paths": [[[10, 10], [30, 10], [30, 20]]],
+            "width": 80,
+            "height": 55,
+            "operation": "line",
+            "feed": 400,
+            "power": 500,
+            "passes": 1,
+        }
         assert post("api/generate", project)["cut_length"] == 30
         project.update(laser_pattern="perforate", laser_dash=3, laser_gap=2)
         laser = post("api/generate", project)
         assert {segment[5] for segment in laser["segments"]} == {0, 500}
 
-        feature = {"id": "inlet", "kind": "loft", "baseShape": "rectangle", "baseWidth": 40,
-                   "baseDepth": 24, "topShape": "circle", "topWidth": "outlet", "height": 20}
+        feature = {
+            "id": "inlet",
+            "kind": "loft",
+            "baseShape": "rectangle",
+            "baseWidth": 40,
+            "baseDepth": 24,
+            "topShape": "circle",
+            "topWidth": "outlet",
+            "height": 20,
+        }
         model = {"version": 1, "parameters": {"outlet": 18}, "features": [feature]}
         loops = post("api/solid-cad/section", {"model": model, "z": 10})["profiles"]
         assert len(loops) == 1
         x, y = zip(*loops[0])
-        assert abs(max(x) - min(x) - 29) < .01 and abs(max(y) - min(y) - 21) < .01
+        assert abs(max(x) - min(x) - 29) < 0.01 and abs(max(y) - min(y) - 21) < 0.01
         runtime_dir = f"runtime-{target}-*" if target else "runtime-*"
         interpreter = "Scripts/python.exe" if os.name == "nt" else "bin/python"
         [python] = data.glob(f"{runtime_dir}/{interpreter}")
         if target:
-            machine = subprocess.check_output([python, "-I", "-c", "import platform; print(platform.machine())"], text=True).strip()
+            machine = subprocess.check_output(
+                [python, "-I", "-c", "import platform; print(platform.machine())"], text=True
+            ).strip()
             assert machine == {"darwin-arm64": "arm64", "darwin-amd64": "x86_64"}[target], machine
         subprocess.run([python, "-I", Path(__file__).with_name("check_installed_cam.py")], check=True)
         if step:
-            subprocess.run([python,"-I","-c","from pypdf import PdfReader; from OCP.STEPControl import STEPControl_Writer; STEPControl_Writer()"],check=True)
+            subprocess.run(
+                [
+                    python,
+                    "-I",
+                    "-c",
+                    "from pypdf import PdfReader; from OCP.STEPControl import STEPControl_Writer; STEPControl_Writer()",
+                ],
+                check=True,
+            )
         if native and not offline:
             with install_directory() as scratch:
                 exercise_native(exe, scratch)
-        submit(page,"quit")
-        assert proc.wait(timeout=12)==0
+        submit(page, "quit")
+        assert proc.wait(timeout=12) == 0
         wait_for_studio_exit()
     finally:
         if proc.poll() is None:
@@ -179,13 +225,15 @@ def check(exe, data, offline, step, native=False, target=None):
                     proc.wait(timeout=10)
 
 
-if __name__=="__main__":
-    parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("executable",type=Path)
-    parser.add_argument("--step",action="store_true")
-    parser.add_argument("--native",action="store_true",help="exercise the platform window on a graphical session")
-    parser.add_argument("--also-intel", type=Path, help="On Apple Silicon, test the Intel launcher sharing the same user data")
-    args=parser.parse_args()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("executable", type=Path)
+    parser.add_argument("--step", action="store_true")
+    parser.add_argument("--native", action="store_true", help="exercise the platform window on a graphical session")
+    parser.add_argument(
+        "--also-intel", type=Path, help="On Apple Silicon, test the Intel launcher sharing the same user data"
+    )
+    args = parser.parse_args()
     if args.also_intel and (sys.platform != "darwin" or platform.machine() != "arm64"):
         parser.error("--also-intel requires an Apple Silicon Mac with Rosetta")
     with install_directory() as data:
@@ -199,10 +247,10 @@ if __name__=="__main__":
                     result = "Offline relaunch passed" if offline else "Fresh installation and CAM preview passed"
                     print(f"{target or executable.name}: {result}", flush=True)
         except Exception:
-            log=data/"setup.log"
+            log = data / "setup.log"
             if log.exists():
                 # Avoid leaking HTTP request information, index credentials or local paths.
-                lines=log.read_text(errors="replace").splitlines()
-                safe=[line for line in lines if "error" in line.lower() and "://" not in line and "@" not in line]
+                lines = log.read_text(errors="replace").splitlines()
+                safe = [line for line in lines if "error" in line.lower() and "://" not in line and "@" not in line]
                 print("Setup diagnostics:", " ".join(safe[-3:])[:500])
             raise

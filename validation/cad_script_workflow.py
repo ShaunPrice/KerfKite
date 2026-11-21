@@ -1,4 +1,5 @@
 """Exercise typed drawing, script previews, solid history and portable project exchange."""
+
 import json
 import math
 import struct
@@ -29,7 +30,7 @@ def run(page):
         expect(command).to_have_value("")
 
     def upload(control, filename, content):
-        loc(control).set_input_files({"name":filename, "mimeType":"text/plain", "buffer":content.encode()})
+        loc(control).set_input_files({"name": filename, "mimeType": "text/plain", "buffer": content.encode()})
 
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
@@ -41,7 +42,7 @@ def run(page):
     enter("circle 3 24 9", "Added circle")
     enter("line 0 0 15 10", "Added line")
     assert [o["name"] for o in objects()] == ["Rectangle", "Circle", "Line"]
-    assert objects()[0]["paths"][0][:2] == [[3,4],[21,4]]
+    assert objects()[0]["paths"][0][:2] == [[3, 4], [21, 4]]
     command.press("ArrowUp")
     expect(command).to_have_value("line 0 0 15 10")
     command.press("ArrowUp")
@@ -70,7 +71,7 @@ def run(page):
     source.press("Space")
     source.press("/")
     expect(source).to_be_focused()
-    expect(source).to_have_value(drawing+" /")
+    expect(source).to_have_value(drawing + " /")
     source.fill(drawing)
     source.press("F5")
     expect(metrics).to_contain_text("2D · 20 × 12 mm · 227.58 mm²")
@@ -79,19 +80,19 @@ def run(page):
       const ctx=c.getContext('2d'), sample=k=>ctx.getImageData(c.width*k,c.height/2,1,1).data[3];
       return [sample(.5),sample(.64)];
     }""")
-    assert alphas == [0,255], alphas
+    assert alphas == [0, 255], alphas
     assert len(objects()) == 3
     source.press("Control+Enter")
     expect(editor).not_to_be_visible()
     expect(message).to_contain_text("Applied drawing")
     assert len(objects()[-1]["paths"]) == 2
-    assert page.evaluate("CNCLayout.extent(CNCProjects.document().objects.at(-1))") == [0,0,20,12]
+    assert page.evaluate("CNCLayout.extent(CNCProjects.document().objects.at(-1))") == [0, 0, 20, 12]
 
     tab("Properties")
     for name, value in (("propertyX", "40"), ("propertyY", "24")):
-        loc("#"+name).fill(value)
-        loc("#"+name).press("Tab")
-    assert page.evaluate("CNCLayout.extent(CNCProjects.document().objects.at(-1))") == [40,24,60,36]
+        loc("#" + name).fill(value)
+        loc("#" + name).press("Tab")
+    assert page.evaluate("CNCLayout.extent(CNCProjects.document().objects.at(-1))") == [40, 24, 60, 36]
     loc("#cad-script-open").click()
     expect(source).to_have_value(drawing)
     changed = drawing.replace("[20,12]", "[30,12]")
@@ -100,7 +101,7 @@ def run(page):
     expect(editor).not_to_be_visible()
     updated = objects()[-1]
     assert updated["scad"]["source"] == changed
-    assert page.evaluate("CNCLayout.extent(CNCProjects.document().objects.at(-1))") == [35,24,65,36]
+    assert page.evaluate("CNCLayout.extent(CNCProjects.document().objects.at(-1))") == [35, 24, 65, 36]
 
     # A one-line model expression is applied as a solid, then edited in its feature history.
     enter("cube([40,30,8]);", "Applied script")
@@ -130,15 +131,15 @@ difference(){ cube([40,30,8]); bore(20,15); }"""
     features = model()["features"]
     assert len(features) == 1 and features[0]["source"] == plate
     volume = float(loc("#solid-volume").inner_text().replace(",", ""))
-    assert math.isclose(volume, 40*30*8-8*(48/2)*9*math.sin(math.tau/48), abs_tol=.02)
+    assert math.isclose(volume, 40 * 30 * 8 - 8 * (48 / 2) * 9 * math.sin(math.tau / 48), abs_tol=0.02)
     with page.expect_download() as download:
         loc("#solid-export").click()
     stl = Path(download.value.path()).read_bytes()
     count = struct.unpack_from("<I", stl, 80)[0]
-    assert count > 48 and len(stl) == 84+50*count
-    vertices = [row[i:i+3] for row in struct.iter_unpack("<12fH",stl[84:]) for i in (3,6,9)]
-    assert [max(v[i] for v in vertices)-min(v[i] for v in vertices) for i in range(3)] == [40,30,8]
-    assert any(abs(math.hypot(x-20,y-15)-3)<1e-5 and z==8 for x,y,z in vertices)
+    assert count > 48 and len(stl) == 84 + 50 * count
+    vertices = [row[i : i + 3] for row in struct.iter_unpack("<12fH", stl[84:]) for i in (3, 6, 9)]
+    assert [max(v[i] for v in vertices) - min(v[i] for v in vertices) for i in range(3)] == [40, 30, 8]
+    assert any(abs(math.hypot(x - 20, y - 15) - 3) < 1e-5 and z == 8 for x, y, z in vertices)
 
     tab("Projects")
     with page.expect_download() as saved:
@@ -165,5 +166,7 @@ difference(){ cube([40,30,8]); bore(20,15); }"""
     assert objects()[-1]["name"] == "label" and objects()[-1]["scad"]["source"] == uploaded
     assert model()["features"][0]["source"] == plate
     assert not errors, errors
-    print("PASS CAD commands and history, focus-safe shortcuts, measured 2D/3D builds, "
-          "scripted edits after moving, compiler errors, STL, SCAD and project round trips")
+    print(
+        "PASS CAD commands and history, focus-safe shortcuts, measured 2D/3D builds, "
+        "scripted edits after moving, compiler errors, STL, SCAD and project round trips"
+    )

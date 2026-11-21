@@ -31,8 +31,13 @@ def _https_url(suffix, *, origin=False):
         url = AnyHttpUrl(value)
     except ValidationError:
         raise ValueError(error) from None
-    if (url.scheme != "https" or not url.host or url.username is not None or url.password is not None
-            or (origin and url.path not in (None, "", "/"))):
+    if (
+        url.scheme != "https"
+        or not url.host
+        or url.username is not None
+        or url.password is not None
+        or (origin and url.path not in (None, "", "/"))
+    ):
         raise ValueError(error)
     host = url.host.strip("[]").lower().rstrip(".")
     try:

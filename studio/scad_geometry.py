@@ -1,4 +1,5 @@
 """Build millimetre-scale OpenSCAD-style regions and solids with Manifold."""
+
 import math
 
 import manifold3d as kernel
@@ -87,7 +88,7 @@ def _polygon(fields):
         raise ValueError('Polygon paths need at least three indices each and at most 2048 in total')
     contours = []
     for path in paths:
-        contour = [points[_integer(i, 0, len(points)-1, 'Point index')] for i in path]
+        contour = [points[_integer(i, 0, len(points) - 1, 'Point index')] for i in path]
         ring = LinearRing(contour)
         if not ring.is_ring or ring.is_empty:
             raise ValueError('Polygon paths must enclose an area without crossing themselves')
@@ -107,11 +108,11 @@ def _polyhedron(fields):
     if sum(map(len, faces)) > 4096:
         raise ValueError('Polyhedron exceeds the face index budget')
     points = np.array([_vector(point, 3) for point in raw_points], dtype=float)
-    tolerance = max(1e-9, np.ptp(points, axis=0).max()*1e-9)
+    tolerance = max(1e-9, np.ptp(points, axis=0).max() * 1e-9)
     triangles = []
     for face in faces:
         # Manifold uses CCW exterior winding; OpenSCAD's external faces are CW.
-        indices = [_integer(i, 0, len(points)-1, 'Vertex index') for i in reversed(face)]
+        indices = [_integer(i, 0, len(points) - 1, 'Vertex index') for i in reversed(face)]
         if len(set(indices)) != len(indices):
             raise ValueError('A face cannot repeat a vertex')
         relative = points[indices] - points[indices[0]]
@@ -126,7 +127,7 @@ def _polyhedron(fields):
         if distances.max() > tolerance:
             raise ValueError('Use a convex polyhedron with faces wound clockwise when seen from outside')
         axis = int(np.argmax(abs(normal)))
-        xy = relative[:, [(axis+1)%3, (axis+2)%3]].copy()
+        xy = relative[:, [(axis + 1) % 3, (axis + 2) % 3]].copy()
         xy[:, 1] *= np.sign(normal[axis])
         if not LinearRing(xy).is_ring:
             raise ValueError('Polyhedron face edges cannot cross')
@@ -142,13 +143,13 @@ def _matrix(shape, value):
     if not isinstance(value, list) or len(value) not in (3, 4):
         raise ValueError('Use a 3×4 or 4×4 affine matrix')
     rows = [_vector(row, 4) for row in value]
-    if len(rows) == 4 and rows[3] != [0,0,0,1]:
+    if len(rows) == 4 and rows[3] != [0, 0, 0, 1]:
         raise ValueError('The affine matrix must end in [0,0,0,1]')
     matrix = np.asarray(rows[:3])
     if _dimension(shape) == 2:
-        if any(matrix[2,[0,1,3]]):
+        if any(matrix[2, [0, 1, 3]]):
             raise ValueError('Keep the 2D drawing in the XY plane')
-        matrix = matrix[:2, [0,1,3]]
+        matrix = matrix[:2, [0, 1, 3]]
     if abs(np.linalg.det(matrix[:, :-1])) < 1e-14:
         raise ValueError('The affine matrix must have a nonsingular linear part')
     return shape.transform(matrix)
@@ -172,8 +173,8 @@ def _primitive(node):
         factory = kernel.CrossSection.circle if op == 'circle' else kernel.Manifold.sphere
         return factory(radius, _segments(f.get('$fn', 0)))
     if op == 'cylinder':
-        f = _bind(node, ('h', 'r1', 'r2', 'center'), named=('r','d','d1','d2','$fn'))
-        if {'r','d'} & f.keys() and {'r1','r2','d1','d2'} & f.keys():
+        f = _bind(node, ('h', 'r1', 'r2', 'center'), named=('r', 'd', 'd1', 'd2', '$fn'))
+        if {'r', 'd'} & f.keys() and {'r1', 'r2', 'd1', 'd2'} & f.keys():
             raise ValueError('Choose a common radius/diameter or individual end radii')
         radius = _radius(f)
         low, high = _radius(f, 'r1', 'd1', radius), _radius(f, 'r2', 'd2', radius)
@@ -182,10 +183,10 @@ def _primitive(node):
             raise ValueError('Cylinder height and at least one end radius must be positive')
         return kernel.Manifold.cylinder(height, low, high, _segments(f.get('$fn', 0)), _flag(f.get('center', False)))
     if op == 'polyhedron':
-        f = _bind(node, ('points','faces','convexity'))
+        f = _bind(node, ('points', 'faces', 'convexity'))
         _convexity(f)
         return _polyhedron(f)
-    f = _bind(node, ('points','paths','convexity'))
+    f = _bind(node, ('points', 'paths', 'convexity'))
     _convexity(f)
     return _polygon(f)
 
@@ -229,12 +230,16 @@ def _rotate(shape, f):
         return shape.rotate(math.copysign(1, z) * angle)
     if x == y == 0:
         return shape.rotate([0, 0, math.copysign(1, z) * angle])
-    x,y,z = (axis/length for axis in (x,y,z))
+    x, y, z = (axis / length for axis in (x, y, z))
     c, s = math.cos(math.radians(angle)), math.sin(math.radians(angle))
-    t = 1-c
-    return shape.transform([[t*x*x+c, t*x*y-s*z, t*x*z+s*y, 0],
-                            [t*x*y+s*z, t*y*y+c, t*y*z-s*x, 0],
-                            [t*x*z-s*y, t*y*z+s*x, t*z*z+c, 0]])
+    t = 1 - c
+    return shape.transform(
+        [
+            [t * x * x + c, t * x * y - s * z, t * x * z + s * y, 0],
+            [t * x * y + s * z, t * y * y + c, t * y * z - s * x, 0],
+            [t * x * z - s * y, t * y * z + s * x, t * z * z + c, 0],
+        ]
+    )
 
 
 class ScriptGeometryBudget:
@@ -285,12 +290,15 @@ class ScriptGeometryBudget:
         for i, a in enumerate(box):
             for j in range(i):
                 b = box[j]
-                if all(a[axis] <= b[dim+axis] and b[axis] <= a[dim+axis] for axis in range(dim)):
+                if all(a[axis] <= b[dim + axis] and b[axis] <= a[dim + axis] for axis in range(dim)):
                     overlap += sizes[i] * sizes[j]
                     if overlap > 32_000_000:
                         raise ValueError('Overlapping geometry exceeds the intersection work budget; reduce $fn')
-        operation = {'union':kernel.OpType.Add, 'difference':kernel.OpType.Subtract,
-                     'intersection':kernel.OpType.Intersect}[op]
+        operation = {
+            'union': kernel.OpType.Add,
+            'difference': kernel.OpType.Subtract,
+            'intersection': kernel.OpType.Intersect,
+        }[op]
         return shapes_type.batch_boolean(shapes, operation)
 
     def extrude(self, shape, op, f):
@@ -302,25 +310,25 @@ class ScriptGeometryBudget:
             if height <= 0:
                 raise ValueError('Extrusion height must be positive')
             twist = _number(f.get('twist', 0))
-            slices = _integer(f.get('slices', max(1, math.ceil(abs(twist)/12))), 1, 256, 'slices')
-            if abs(twist)/slices >= 180:
+            slices = _integer(f.get('slices', max(1, math.ceil(abs(twist) / 12))), 1, 256, 'slices')
+            if abs(twist) / slices >= 180:
                 raise ValueError('Use more extrusion slices for this twist')
             scale = _vector(f.get('scale', 1), 2, scalar=True)
             if min(scale) < 0:
                 raise ValueError('Extrusion scale must be nonnegative')
             center = _flag(f.get('center', False))
             # Each wall edge becomes two triangles per slice, plus two triangulated caps.
-            faces = 2 * shape.num_vert() * (slices+1) + 4*shape.num_contour()
+            faces = 2 * shape.num_vert() * (slices + 1) + 4 * shape.num_contour()
             if faces > _MAX_TRIANGLES:
                 raise ValueError('Extrusion exceeds the triangle budget; reduce slices or $fn')
             self.spend(faces)
-            solid = shape.extrude(height, slices-1, -twist, scale)
-            return solid.translate([0,0,-height/2]) if center else solid
+            solid = shape.extrude(height, slices - 1, -twist, scale)
+            return solid.translate([0, 0, -height / 2]) if center else solid
         angle = _number(f.get('angle', 360))
         if not 0 < abs(angle) <= 360:
             raise ValueError('Revolve angle must have a magnitude above 0 and at most 360 degrees')
         segments = _segments(f.get('$fn', 0))
-        faces = 2 * shape.num_vert() * (segments+1) + 4*shape.num_contour()
+        faces = 2 * shape.num_vert() * (segments + 1) + 4 * shape.num_contour()
         if faces > _MAX_TRIANGLES:
             raise ValueError('Revolution exceeds the triangle budget; reduce profile vertices or $fn')
         self.spend(faces)
@@ -329,18 +337,18 @@ class ScriptGeometryBudget:
             raise ValueError('A revolved profile must lie on one side of the Y axis')
         negative_x = left < 0
         if negative_x:
-            shape = shape.mirror([1,0])
+            shape = shape.mirror([1, 0])
         out = shape.revolve(segments, abs(angle))
         if angle < 0:
-            out = out.mirror([0,1,0])
-        return out.rotate([0,0,180]) if negative_x else out
+            out = out.mirror([0, 1, 0])
+        return out.rotate([0, 0, 180]) if negative_x else out
 
     def node(self, node, depth):
         if depth > 64 or self.nodes >= 1024:
             raise ValueError('Script exceeds the geometry nesting or instance limit')
         self.nodes += 1
         op = node['op']
-        children = [self.node(n, depth+1) for n in node['children']]
+        children = [self.node(n, depth + 1) for n in node['children']]
         try:
             shape = self.operation(node, op, children)
             return self.check(shape)
@@ -349,11 +357,11 @@ class ScriptGeometryBudget:
             raise ValueError(f'{location}{op}: {exc}') from exc
 
     def operation(self, node, op, children):
-        if op in ('square','cube','circle','sphere','cylinder','polygon','polyhedron'):
+        if op in ('square', 'cube', 'circle', 'sphere', 'cylinder', 'polygon', 'polyhedron'):
             if children:
                 raise ValueError('A primitive cannot contain children')
             return _primitive(node)
-        if op in ('union','difference','intersection','hull'):
+        if op in ('union', 'difference', 'intersection', 'hull'):
             _bind(node)
             return self.combine(op, children)
         shape = self.combine('union', children)
@@ -363,7 +371,7 @@ class ScriptGeometryBudget:
             value = f.get('v', _MISSING)
             if value is _MISSING:
                 raise ValueError('Supply a vector')
-            if op == 'scale' and type(value) in (int,float):
+            if op == 'scale' and type(value) in (int, float):
                 value = [_number(value)] * dim
             if op == 'mirror' and dim == 2 and isinstance(value, list) and len(value) == 3 and value[2] != 0:
                 raise ValueError('Use an in-plane mirror normal for a drawing')
@@ -376,33 +384,33 @@ class ScriptGeometryBudget:
         if op == 'multmatrix':
             return _matrix(shape, _bind(node, ('m',)).get('m'))
         if op == 'rotate':
-            return _rotate(shape, _bind(node, ('a','v')))
+            return _rotate(shape, _bind(node, ('a', 'v')))
         if op == 'linear_extrude':
-            return self.extrude(shape, op, _bind(node, ('height','center','convexity','twist','slices','scale')))
+            return self.extrude(shape, op, _bind(node, ('height', 'center', 'convexity', 'twist', 'slices', 'scale')))
         if op == 'rotate_extrude':
-            return self.extrude(shape, op, _bind(node, ('angle','convexity'), named=('$fn',)))
+            return self.extrude(shape, op, _bind(node, ('angle', 'convexity'), named=('$fn',)))
         if op == 'offset':
             if dim != 2:
                 raise ValueError('Offset needs a 2D drawing')
-            f = _bind(node, ('r',), named=('delta','chamfer','$fn'))
+            f = _bind(node, ('r',), named=('delta', 'chamfer', '$fn'))
             if 'delta' in f and 'r' in f:
                 raise ValueError('Choose delta or r')
-            chamfer = _flag(f.get('chamfer',False))
+            chamfer = _flag(f.get('chamfer', False))
             if chamfer and 'delta' not in f:
                 raise ValueError('Use chamfer with delta')
-            segments = _segments(f.get('$fn',0))
+            segments = _segments(f.get('$fn', 0))
             join = kernel.JoinType.Round
             if 'delta' in f:
                 join = kernel.JoinType.Bevel if chamfer else kernel.JoinType.Miter
             estimated = shape.num_vert() * (segments if join == kernel.JoinType.Round else 2)
             self.spend(estimated)
-            return shape.offset(_number(f.get('delta',f.get('r',1))), join, circular_segments=segments)
+            return shape.offset(_number(f.get('delta', f.get('r', 1))), join, circular_segments=segments)
         if op == 'projection':
             if dim != 3:
                 raise ValueError('Projection needs a 3D solid')
             f = _bind(node, ('cut',), named=('convexity',))
             _convexity(f)
-            if _flag(f.get('cut',False)):
+            if _flag(f.get('cut', False)):
                 return shape.slice(0.0)
             return kernel.CrossSection(shape.project().to_polygons(), kernel.FillRule.Positive)
         raise ValueError(f'Unknown geometry operation {op!r}')

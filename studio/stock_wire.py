@@ -1,4 +1,5 @@
 """Version 1 little-endian stock-preview transfer used by the desktop/web editor."""
+
 from struct import Struct
 from .cam_moves import PackedSegments
 
@@ -24,6 +25,15 @@ def from_stream(stream, content_length):
     rows = stream.read(size)
     if len(rows) != size or stream.read(1):
         raise ValueError('Stock preview length differs from segment count')
-    return dict(segments=PackedSegments.from_little_endian(rows), resolution=resolution,
-                x=x, y=y, width=width, height=height, tool_diameter=diameter, v_angle=angle,
-                tool_shape=_SHAPES[shape], stock_thickness=thickness)
+    return dict(
+        segments=PackedSegments.from_little_endian(rows),
+        resolution=resolution,
+        x=x,
+        y=y,
+        width=width,
+        height=height,
+        tool_diameter=diameter,
+        v_angle=angle,
+        tool_shape=_SHAPES[shape],
+        stock_thickness=thickness,
+    )

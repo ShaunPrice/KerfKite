@@ -7,6 +7,7 @@ linear move and the cutter footprint are considered; checking only vertices
 would miss collisions between them. Holder, clamps and material outside the
 height-field rectangle are not modeled.
 """
+
 import math
 
 try:
@@ -70,7 +71,12 @@ def prepare_relief(data, *, backend="auto"):
             raise ValueError('heightmap must be rectangular')
         converted = []
         for value in row:
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 1:
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or not 0 <= value <= 1
+            ):
                 raise ValueError('heightmap values must be finite numbers in 0..1')
             converted.append((float(value) - 1) * depth)
         values.append(converted)
@@ -87,8 +93,10 @@ def prepare_relief(data, *, backend="auto"):
     cells_y = min(rows - 1, math.ceil(diameter / dy) + 2)
     if nx * (ny + 1) * cells_x * cells_y > MAX_CONTACT_CHECKS:
         raise ValueError('Relief contact calculation too large; reduce map resolution or tool diameter')
-    maxima = [[max(values[j][i], values[j][i+1], values[j+1][i], values[j+1][i+1])
-               for i in range(columns - 1)] for j in range(rows - 1)]
+    maxima = [
+        [max(values[j][i], values[j][i + 1], values[j + 1][i], values[j + 1][i + 1]) for i in range(columns - 1)]
+        for j in range(rows - 1)
+    ]
     native_depths = None
     if backend != 'python' and _relief_native is not None:
         native_depths = _relief_native.contact(maxima, width, height, depth, diameter, allowance, nx, ny, shape)
@@ -103,25 +111,25 @@ def prepare_relief(data, *, backend="auto"):
             contact = []
             for start, end in zip(xs, xs[1:]):
                 best = -depth
-                lo_i = max(0, math.floor((start-radius) / dx))
-                hi_i = min(columns-2, math.floor((end+radius) / dx))
-                lo_j = max(0, math.floor((py-radius) / dy))
-                hi_j = min(rows-2, math.floor((py+radius) / dy))
-                for j in range(lo_j, hi_j+1):
-                    yd = max(j*dy-py, py-(j+1)*dy, 0)
-                    for i in range(lo_i, hi_i+1):
+                lo_i = max(0, math.floor((start - radius) / dx))
+                hi_i = min(columns - 2, math.floor((end + radius) / dx))
+                lo_j = max(0, math.floor((py - radius) / dy))
+                hi_j = min(rows - 2, math.floor((py + radius) / dy))
+                for j in range(lo_j, hi_j + 1):
+                    yd = max(j * dy - py, py - (j + 1) * dy, 0)
+                    for i in range(lo_i, hi_i + 1):
                         checks += 1
                         if checks > MAX_CONTACT_CHECKS:
                             raise ValueError('Relief contact calculation exceeds supported work limit')
-                        xd = max(i*dx-end, start-(i+1)*dx, 0)
-                        distance_sq = xd*xd + yd*yd
-                        if distance_sq > radius*radius:
+                        xd = max(i * dx - end, start - (i + 1) * dx, 0)
+                        distance_sq = xd * xd + yd * yd
+                        if distance_sq > radius * radius:
                             continue
-                        sag = 0 if shape == 'flat' else radius - math.sqrt(max(0, radius*radius-distance_sq))
+                        sag = 0 if shape == 'flat' else radius - math.sqrt(max(0, radius * radius - distance_sq))
                         best = max(best, maxima[j][i] - sag)
                 contact.append(min(0.0, best + allowance))
-            z = [contact[0]] + [max(contact[i-1], contact[i]) for i in range(1, nx)] + [contact[-1]]
-        path = [[x+px, y+py] for px in xs]
+            z = [contact[0]] + [max(contact[i - 1], contact[i]) for i in range(1, nx)] + [contact[-1]]
+        path = [[x + px, y + py] for px in xs]
         if raster % 2:
             path.reverse()
             z.reverse()
@@ -130,12 +138,23 @@ def prepare_relief(data, *, backend="auto"):
     return {
         'paths': paths,
         'path_depths': depths,
-        'surface': {'kind': 'bilinear-heightmap', 'width': width, 'height': height,
-                    'depth': depth, 'x': x, 'y': y, 'rows': rows, 'columns': columns,
-                    'sample_spacing': [dx, dy], 'actual_stepover': height/ny,
-                    'tool_shape': shape, 'tool_diameter': diameter, 'allowance': allowance,
-                    'compensation': 'conservative-cell-envelope',
-                    'backend': 'cpp' if native_depths is not None else 'python'},
+        'surface': {
+            'kind': 'bilinear-heightmap',
+            'width': width,
+            'height': height,
+            'depth': depth,
+            'x': x,
+            'y': y,
+            'rows': rows,
+            'columns': columns,
+            'sample_spacing': [dx, dy],
+            'actual_stepover': height / ny,
+            'tool_shape': shape,
+            'tool_diameter': diameter,
+            'allowance': allowance,
+            'compensation': 'conservative-cell-envelope',
+            'backend': 'cpp' if native_depths is not None else 'python',
+        },
         'warnings': [
             'Top-access finishing geometry only; caller must apply safe retracts, step-downs and machine limits.',
             'Compensation bounds the supplied bilinear height field using cell maxima. Coarse samples leave extra stock; features absent from the heightmap cannot be recovered.',

@@ -1,4 +1,5 @@
 """Import original-size and fitted SVGs in the server and file:// editors."""
+
 import json
 from pathlib import Path
 
@@ -27,47 +28,47 @@ def exercise(page):
     def upload(data):
         with page.expect_file_chooser() as chooser:
             loc("#svgImport").click()
-        chooser.value.set_files({"name":"sample.svg","mimeType":"image/svg+xml","buffer":data})
+        chooser.value.set_files({"name": "sample.svg", "mimeType": "image/svg+xml", "buffer": data})
 
     paths = lambda: page.evaluate("window.CNCProjects.document().objects.map(o=>o.paths)")
     upload(SAMPLE)
     expect(loc("#message")).to_contain_text("2 separate paths")
     imported = paths()[0]
     scale = 50.8 / 96
-    source = [[(2,3),(14,3),(14,15),(2,3)], [(26,15),(38,15),(38,21)]]
+    source = [[(2, 3), (14, 3), (14, 15), (2, 3)], [(26, 15), (38, 15), (38, 21)]]
     assert len(imported) == 2
-    for path, original in zip(imported,source,strict=True):
-        assert len(path)==len(original)
-        for (x,y),(a,b) in zip(path,original,strict=True):
-            assert abs(x-(5+a*scale)) < 1e-6 and abs(y-(6+25.4-b*scale)) < 1e-6, (x,y,a,b,imported)
+    for path, original in zip(imported, source, strict=True):
+        assert len(path) == len(original)
+        for (x, y), (a, b) in zip(path, original, strict=True):
+            assert abs(x - (5 + a * scale)) < 1e-6 and abs(y - (6 + 25.4 - b * scale)) < 1e-6, (x, y, a, b, imported)
     loc("#preview").click()
     expect(loc("#gcode")).to_contain_text("G1")
     assert page.evaluate("preview.segments.length") > 0
     for seg in page.evaluate("preview.segments"):
         # There is a gap of 12 source units between the two subpaths.
-        assert not min(seg[0],seg[2]) < 5+20*scale < max(seg[0],seg[2])
+        assert not min(seg[0], seg[2]) < 5 + 20 * scale < max(seg[0], seg[2])
     tab("Projects")
     with page.expect_download() as download:
         loc("#projectDownload").click()
-    doc=json.loads(Path(download.value.path()).read_text())
-    assert doc["objects"][0]["paths"]==imported
+    doc = json.loads(Path(download.value.path()).read_text())
+    assert doc["objects"][0]["paths"] == imported
     tab("Images")
     loc("#svgSizing").select_option("fit")
     upload(SAMPLE)
     expect(loc("#drawing path[data-object]")).to_have_count(2)
-    flat = sum(paths()[1],[])
-    assert min(p[0] for p in flat)==5 and max(p[0] for p in flat)==89
-    assert min(p[1] for p in flat)==6 and max(p[1] for p in flat)==42
+    flat = sum(paths()[1], [])
+    assert min(p[0] for p in flat) == 5 and max(p[0] for p in flat) == 89
+    assert min(p[1] for p in flat) == 6 and max(p[1] for p in flat) == 42
     # The bundled gear has one compound path for the teeth and bore.
     gear = Path(__file__).resolve().parents[1] / "studio/static/icons/gear.svg"
     upload(gear.read_bytes())
     expect(loc("#drawing path[data-object]")).to_have_count(3)
-    gear_paths=paths()[-1]
-    assert len(gear_paths)==2 and all(path[0]==path[-1] for path in gear_paths)
-    before=paths()
+    gear_paths = paths()[-1]
+    assert len(gear_paths) == 2 and all(path[0] == path[-1] for path in gear_paths)
+    before = paths()
     upload(b'<svg><path clip-path="url(#trim)" d="M0 0 L1 1"/></svg>')
     expect(loc("#message")).to_contain_text("clip-path")
-    assert paths()==before
+    assert paths() == before
     results = page.evaluate("""() => {
       const options={physical:true,bed:[200,200],box:[0,0,60,60]};
       const parse = inner => KerfKiteSvg.parse('<svg width="96px" height="72pt" viewBox="0 0 96 96">'+inner+'</svg>',options);
@@ -80,18 +81,22 @@ def exercise(page):
       }
       return {curve,transformed,alignment,rejected};
     }""")
-    assert results["curve"][0]==results["curve"][-1] and len(results["curve"])>40
-    assert abs(results["transformed"][0][0] - 12*25.4/96)<1e-7
-    assert results["alignment"]==[[0,75],[50,25]] and all(results["rejected"])
+    assert results["curve"][0] == results["curve"][-1] and len(results["curve"]) > 40
+    assert abs(results["transformed"][0][0] - 12 * 25.4 / 96) < 1e-7
+    assert results["alignment"] == [[0, 75], [50, 25]] and all(results["rejected"])
 
 
 def run(editor):
-    root=Path(__file__).resolve().parents[1]
-    for offline in (False,True):
-        with editor.context.browser.new_context(accept_downloads=True,viewport={"width":1360,"height":900}) as context:
+    root = Path(__file__).resolve().parents[1]
+    for offline in (False, True):
+        with editor.context.browser.new_context(
+            accept_downloads=True, viewport={"width": 1360, "height": 900}
+        ) as context:
             context.set_offline(offline)
-            page=context.new_page()
-            page.goto((root/"studio/static/index.html").as_uri() if offline else editor.url)
+            page = context.new_page()
+            page.goto((root / "studio/static/index.html").as_uri() if offline else editor.url)
             exercise(page)
-            print("PASS compound SVG import, physical units, transforms, arc sampling, CAM gaps, saved geometry and rejected effects in",
-                  "offline editor" if offline else "server editor")
+            print(
+                "PASS compound SVG import, physical units, transforms, arc sampling, CAM gaps, saved geometry and rejected effects in",
+                "offline editor" if offline else "server editor",
+            )

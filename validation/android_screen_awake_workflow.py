@@ -1,4 +1,5 @@
 """Verify Pocket's opt-in window flag, real inactivity and signed upgrade on a disposable emulator."""
+
 import argparse
 from pathlib import Path
 import re
@@ -30,6 +31,7 @@ def check_window(phone, activity, awake, secure=False):
     def expected():
         window = flags(phone, activity)
         return window is not None and ("KEEP_SCREEN_ON" in window) == awake and ("SECURE" in window) == secure
+
     wait_until(expected, f"{activity} keep-awake={awake}, secure={secure} did not match.")
 
 
@@ -68,7 +70,9 @@ def test_timeout(phone):
         assert awake(phone), "The foreground opted-in editor fell asleep."
         phone.tap(LABEL)
         check_window(phone, EDITOR, False)
-        wait_until(lambda: not awake(phone), "The normal display timeout failed after switching off.", timeout=duration+12)
+        wait_until(
+            lambda: not awake(phone), "The normal display timeout failed after switching off.", timeout=duration + 12
+        )
         print("PASS real emulator timeout with Keep screen awake on and off", flush=True)
     finally:
         for (group, key), value in zip(keys, original):
@@ -87,9 +91,12 @@ def exercise(phone, apk, previous):
         assert "versionName=0.4.0" in phone.run("shell", "dumpsys", "package", PACKAGE)
         launch(phone)
         project = "AwakeCheck-" + uuid.uuid4().hex[:8]
-        phone.tap("My projects"); phone.tap("New project")
-        replace_text(phone, "Project name", project); phone.confirm()
-        phone.tap("Add shape"); phone.confirm()
+        phone.tap("My projects")
+        phone.tap("New project")
+        replace_text(phone, "Project name", project)
+        phone.confirm()
+        phone.tap("Add shape")
+        phone.confirm()
         assert phone.find("Rectangle · 40.0 × 25.0 mm")
     phone.run("install", "-r", str(apk))
     pkg = phone.run("shell", "dumpsys", "package", PACKAGE)
@@ -101,20 +108,29 @@ def exercise(phone, apk, previous):
         print("PASS signed 0.4.0 → 0.4.1 upgrade preserves the drawing", flush=True)
     check_window(phone, EDITOR, False)
     check_switch(phone, False)
-    phone.tap(LABEL); check_window(phone, EDITOR, True)
+    phone.tap(LABEL)
+    check_window(phone, EDITOR, True)
     phone.tap("CNC pendant")
-    check_window(phone, PENDANT, True, secure=True); check_switch(phone, True)
-    phone.tap(LABEL); check_window(phone, PENDANT, False, secure=True)
+    check_window(phone, PENDANT, True, secure=True)
+    check_switch(phone, True)
+    phone.tap(LABEL)
+    check_window(phone, PENDANT, False, secure=True)
     phone.run("shell", "input", "keyevent", "KEYCODE_BACK")
-    check_window(phone, EDITOR, False); check_switch(phone, False)
+    check_window(phone, EDITOR, False)
+    check_switch(phone, False)
     print("PASS shared switch, back navigation and secure pairing window", flush=True)
-    phone.tap(LABEL); check_window(phone, EDITOR, True)
+    phone.tap(LABEL)
+    check_window(phone, EDITOR, True)
     phone.run("shell", "input", "keyevent", "KEYCODE_HOME")
     # Android can retain the paused window or remove it altogether.
-    wait_until(lambda: "KEEP_SCREEN_ON" not in (flags(phone, EDITOR) or set()),
-               "The background editor retained its keep-awake flag.")
+    wait_until(
+        lambda: "KEEP_SCREEN_ON" not in (flags(phone, EDITOR) or set()),
+        "The background editor retained its keep-awake flag.",
+    )
     phone.run("shell", "am", "force-stop", PACKAGE)
-    launch(phone); check_window(phone, EDITOR, True); check_switch(phone, True)
+    launch(phone)
+    check_window(phone, EDITOR, True)
+    check_switch(phone, True)
     print("PASS background release and persistence after process restart", flush=True)
     test_timeout(phone)
     check_switch(phone, False)

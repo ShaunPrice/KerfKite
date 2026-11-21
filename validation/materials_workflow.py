@@ -28,8 +28,12 @@ def check_router_links(editor):
     editor.get_by_role("tab", name="CAM", exact=True).click()
     editor.locator("#mode").select_option("router")
     editor.locator("#manualToolShape").select_option("flat")
-    for cam_op, tool, guide_op in (("line", "flat", "engrave"), ("outside", "flat", "profile"),
-                                    ("pocket", "flat", "pocket"), ("vcarve", "v", "engrave")):
+    for cam_op, tool, guide_op in (
+        ("line", "flat", "engrave"),
+        ("outside", "flat", "profile"),
+        ("pocket", "flat", "pocket"),
+        ("vcarve", "v", "engrave"),
+    ):
         editor.locator("#operation").select_option(cam_op)
         with editor.context.expect_page() as opened:
             editor.locator("#openMaterialsGuide").click()
@@ -57,9 +61,13 @@ def check_notebook_backup(page, original_note):
     backup = Path(download.value.path()).read_bytes()
     data = json.loads(backup)
     assert data["format"] == "kerfkite-material-samples/1"
-    sample, = data["samples"]
+    (sample,) = data["samples"]
     assert (sample["material"], sample["tool"], sample["operation"], sample["notes"]) == (
-        "pvc-vinyl", "knife", "kiss", original_note)
+        "pvc-vinyl",
+        "knife",
+        "kiss",
+        original_note,
+    )
     file = {"name": download.value.suggested_filename, "mimeType": "application/json", "buffer": backup}
 
     entries.get_by_role("button", name="Edit sample").click()
@@ -229,6 +237,8 @@ def run(editor):
                     assert dest.scheme in {"file", "data", "blob"}, url
                 elif dest.path.startswith("/api/"):
                     assert dest.path == "/api/session", url
-            print("PASS materials comparison, tool/operation restrictions and sample persistence in",
-                  "offline editor" if offline else "simulator editor")
+            print(
+                "PASS materials comparison, tool/operation restrictions and sample persistence in",
+                "offline editor" if offline else "simulator editor",
+            )
     hosted_notebooks(editor.context.browser)

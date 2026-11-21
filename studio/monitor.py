@@ -1,4 +1,5 @@
 """Paired phone status and bounded job actions; no arbitrary commands."""
+
 import math
 import secrets
 from collections import OrderedDict
@@ -37,14 +38,18 @@ def create_monitor_app(controller, token, phone_jobs=None, revoked=None):
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Referrer-Policy'] = 'no-referrer'
         response.headers['X-Content-Type-Options'] = 'nosniff'
-        response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'"
+        response.headers['Content-Security-Policy'] = (
+            "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'"
+        )
         return response
 
     @app.before_request
     def authorize():
         if request.path.startswith('/api/'):
             supplied = request.headers.get('Authorization', '')
-            if (revoked is not None and revoked.is_set()) or not secrets.compare_digest(supplied.encode('utf-8'), ('Bearer ' + token).encode('utf-8')):
+            if (revoked is not None and revoked.is_set()) or not secrets.compare_digest(
+                supplied.encode('utf-8'), ('Bearer ' + token).encode('utf-8')
+            ):
                 return jsonify(error='Pair this phone using the monitor link from the Pi'), 401
 
     @app.errorhandler(ValueError)
@@ -88,15 +93,17 @@ def create_monitor_app(controller, token, phone_jobs=None, revoked=None):
             action = data.get('action')
             args = {}
             if action == 'jog':
-                axis, distance, feed = (data.get(k) for k in ('axis','distance','feed'))
-                if axis not in ('X','Y','Z') or any(type(n) not in (float,int) or not math.isfinite(n) for n in (distance,feed)):
+                axis, distance, feed = (data.get(k) for k in ('axis', 'distance', 'feed'))
+                if axis not in ('X', 'Y', 'Z') or any(
+                    type(n) not in (float, int) or not math.isfinite(n) for n in (distance, feed)
+                ):
                     raise ValueError('Supply one XYZ axis and finite numeric jog settings.')
-                if not .001 <= abs(distance) <= 10 or not .1 <= feed <= 1000:
+                if not 0.001 <= abs(distance) <= 10 or not 0.1 <= feed <= 1000:
                     raise ValueError('Jog distance is 0.001–10 mm and feed is 0.1–1000 mm/min.')
                 args = dict(axis=axis, distance=distance, feed=feed)
             elif action not in ('home', 'zero'):
                 raise ValueError('Only a single incremental jog, home or work zero is supported.')
-            if set(data) != {'action','request_id','control_epoch',*args}:
+            if set(data) != {'action', 'request_id', 'control_epoch', *args}:
                 raise ValueError('Unexpected pendant action fields.')
             phone_jobs.disarm()
             controller.command(action, **args)
@@ -127,8 +134,15 @@ def create_monitor_app(controller, token, phone_jobs=None, revoked=None):
             state = controller.status()
             phone = {'armed': False}
         # Explicit allowlist: no saved machine configuration or serial-port inventory.
-        result = {key: state.get(key) for key in ('connected', 'simulated', 'state', 'active', 'progress', 'position', 'error', 'log', 'protocol')}
-        result.update(pendant=phone_jobs is not None and (bool(state.get('simulated')) or phone_jobs.allow_physical), controls=phone_jobs is not None, **phone)
+        result = {
+            key: state.get(key)
+            for key in ('connected', 'simulated', 'state', 'active', 'progress', 'position', 'error', 'log', 'protocol')
+        }
+        result.update(
+            pendant=phone_jobs is not None and (bool(state.get('simulated')) or phone_jobs.allow_physical),
+            controls=phone_jobs is not None,
+            **phone,
+        )
         return jsonify(result)
 
     return app

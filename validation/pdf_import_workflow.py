@@ -42,9 +42,7 @@ def run(page):
     expect(loc('#import-status')).to_contain_text('Added 2 objects')
     assert page.evaluate('project().operations.length') == 0
     page.get_by_role('tab', name='Layers', exact=True).click()
-    row = loc('#designLayerList .buttons').filter(
-        has=page.get_by_role('button', name='PDF page 2', exact=True)
-    )
+    row = loc('#designLayerList .buttons').filter(has=page.get_by_role('button', name='PDF page 2', exact=True))
     row.get_by_label('Output', exact=True).check()
     assert page.evaluate('project().operations.length') == 2
     page.get_by_role('tab', name='CAM', exact=True).click()

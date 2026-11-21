@@ -12,7 +12,9 @@ import tempfile
 import time
 from types import ModuleType
 
-loader = SourceFileLoader("kerfkite_gtk", os.environ.get("KERFKITE_NATIVE_HOST", str(Path(__file__).with_name("kerfkite-native"))))
+loader = SourceFileLoader(
+    "kerfkite_gtk", os.environ.get("KERFKITE_NATIVE_HOST", str(Path(__file__).with_name("kerfkite-native")))
+)
 ui = ModuleType(loader.name)
 loader.exec_module(ui)
 Gtk, GLib = ui.Gtk, ui.GLib
@@ -30,18 +32,22 @@ def until(test, label, seconds=25):
 def respond(kind, response, configure=None):
     # GTK's chooser validates filenames asynchronously before accepting the dialog.
     finished = []
+
     def find():
         for dialog in Gtk.Window.list_toplevels():
             if isinstance(dialog, kind) and dialog.get_visible():
                 if configure:
                     configure(dialog)
+
                 def answer():
                     dialog.response(response)
                     finished.append(True)
                     return False
+
                 GLib.timeout_add(350, answer)
                 return False
         return True
+
     GLib.timeout_add(15, find)
     return lambda: bool(finished)
 
@@ -50,29 +56,36 @@ def run(url):
     Gtk.init([])
     win = ui.Workbench(url)
     win.show_all()
+
     def failed(message):
         errors.append(str(message))
         print("GTK error:", message, flush=True)
+
     errors = []
+
     def click_web(button):
         script = "document.querySelector(" + json.dumps(button) + ").click()"
         if hasattr(win.view, "evaluate_javascript"):
             win.view.evaluate_javascript(script, -1, None, None, None, None, None)
         else:
             win.view.run_javascript(script, None, None, None)
+
     def check_web(expression, label):
         result = []
+
         def done(view, value, *_):
             if hasattr(view, "evaluate_javascript_finish"):
                 result.append(view.evaluate_javascript_finish(value).to_boolean())
             else:
                 result.append(view.run_javascript_finish(value).get_js_value().to_boolean())
+
         if hasattr(win.view, "evaluate_javascript"):
             win.view.evaluate_javascript(expression, -1, None, None, None, done, None)
         else:
             win.view.run_javascript(expression, None, done, None)
         until(lambda: bool(result), label)
         assert result[0], label
+
     win.error = failed
     until(lambda: "documentId" in win.last, "the simulator bridge")
     initial = len(win.store)
@@ -115,18 +128,24 @@ def run(url):
     check_web("document.activeElement.id === 'cad-command'", "keyboard focus in command line")
     entries["CAD script…"].activate()
     until(lambda: not win.busy, "script menu")
-    check_web("document.activeElement.id === 'cad-script-source' && document.getElementById('cad-script-dialog').open", "keyboard focus in script editor")
+    check_web(
+        "document.activeElement.id === 'cad-script-source' && document.getElementById('cad-script-dialog').open",
+        "keyboard focus in script editor",
+    )
     check_web("(document.getElementById('cad-script-dialog').close(), true)", "close script editor")
     print("Native CAD command and script menus passed", flush=True)
 
     with tempfile.TemporaryDirectory() as directory:
         project = Path(directory, "sample.cncstudio.json")
         gcode = Path(directory, "sample.nc")
+
         def save_to(path):
             def configure(dialog):
                 dialog.set_current_folder(str(path.parent))
                 dialog.set_current_name(path.name)
+
             respond(Gtk.FileChooserDialog, Gtk.ResponseType.ACCEPT, configure)
+
         save_to(project)
         win.save()
         until(lambda: project.is_file() and not win.busy and not win.last["dirty"], "save")
@@ -182,8 +201,12 @@ def run(url):
         until(lambda: not win.busy, "help tab")
         # Drive the actual target=_blank help link. The auxiliary window never receives desktop commands.
         click_web('a[href="./help.html"]')
-        until(lambda: any(w.get_child().get_uri() and w.get_child().get_uri().endswith("/help.html")
-                          for w in win.active_popups), "native help window")
+        until(
+            lambda: any(
+                w.get_child().get_uri() and w.get_child().get_uri().endswith("/help.html") for w in win.active_popups
+            ),
+            "native help window",
+        )
         before = win.view.get_uri()
         win.view.load_uri(url + "api/session")
         until(lambda: not win.view.is_loading(), "foreign document rejection")
@@ -198,5 +221,6 @@ def run(url):
 if __name__ == "__main__":
     # Bound nested GTK modal loops as well as the asynchronous operations checked by until().
     import signal
+
     signal.alarm(180)
     run(sys.argv[1])

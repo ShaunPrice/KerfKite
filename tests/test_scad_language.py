@@ -25,13 +25,13 @@ class ScadLanguageTests(unittest.TestCase):
             /* Top-level defaults may follow their uses. */
             width = 30; thick = 3; $fn = 36;
         '''
-        solid, = evaluate(script, {'width': 50})
+        (solid,) = evaluate(script, {'width': 50})
         self.assertEqual(solid['op'], 'difference')
         self.assertEqual(solid['children'][0]['args'][0], [50, 20, 3])
         translations = [n for n in walk(solid) if n['op'] == 'translate']
-        self.assertEqual([n['args'][0] for n in translations], [[4,4,-1],[4,16,-1],[46,4,-1],[46,16,-1]])
-        self.assertEqual(translations[0]['children'][0]['kwargs'], {'h':5,'d':4,'$fn':36})
-        self.assertEqual((solid.line, solid.column), (6,13))
+        self.assertEqual([n['args'][0] for n in translations], [[4, 4, -1], [4, 16, -1], [46, 4, -1], [46, 16, -1]])
+        self.assertEqual(translations[0]['children'][0]['kwargs'], {'h': 5, 'd': 4, '$fn': 36})
+        self.assertEqual((solid.line, solid.column), (6, 13))
         self.assertEqual(json.loads(json.dumps(solid)), solid)
 
     def test_functions_polygon_and_degree_angles(self):
@@ -43,7 +43,7 @@ class ScadLanguageTests(unittest.TestCase):
         pts = evaluate(script)[0]['kwargs']['points']
         self.assertEqual(len(pts), 6)
         self.assertAlmostEqual(pts[1][0], 2)
-        self.assertAlmostEqual(pts[1][1], 2*math.sqrt(3))
+        self.assertAlmostEqual(pts[1][1], 2 * math.sqrt(3))
 
     def test_lexical_nested_modules_children_and_dynamic_fn(self):
         script = '''
@@ -57,16 +57,16 @@ class ScadLanguageTests(unittest.TestCase):
             row();
         '''
         nodes = list(walk(evaluate(script)[0]))
-        self.assertEqual([n['args'] for n in nodes if n['op']=='circle'], [[4],[4]])
-        self.assertEqual([n['kwargs'] for n in nodes if n['op']=='circle'], [{'$fn':20}]*2)
+        self.assertEqual([n['args'] for n in nodes if n['op'] == 'circle'], [[4], [4]])
+        self.assertEqual([n['kwargs'] for n in nodes if n['op'] == 'circle'], [{'$fn': 20}] * 2)
         self.assertEqual(evaluate('module a(){ if($children==1) children(); } a() cube();')[0]['op'], 'cube')
 
     def test_scope_defaults_and_override(self):
-        self.assertEqual(evaluate('cube([x, twice, PI]); twice=2*x;x=4; x=7;', {'x':9})[0]['args'], [[9,18,math.pi]])
-        script='module m(x=2,y=x+1) { cube([x,y,1]); } m(y=7); m(5);'
+        self.assertEqual(evaluate('cube([x, twice, PI]); twice=2*x;x=4; x=7;', {'x': 9})[0]['args'], [[9, 18, math.pi]])
+        script = 'module m(x=2,y=x+1) { cube([x,y,1]); } m(y=7); m(5);'
         first, second = evaluate(script)
-        self.assertEqual(first['args'][0], [2,7,1])
-        self.assertEqual(second['args'][0], [5,6,1])
+        self.assertEqual(first['args'][0], [2, 7, 1])
+        self.assertEqual(second['args'][0], [5, 6, 1])
 
     def test_arithmetic_logic_vectors_and_short_circuit(self):
         script = '''
@@ -75,18 +75,18 @@ class ScadLanguageTests(unittest.TestCase):
             if (x || bad) square([x ? y : missing, [2,4][1]]);
             else bad();
         '''
-        self.assertEqual(evaluate(script)[0]['args'], [[18,4]])
-        self.assertEqual(evaluate('cube(([1,2,3]+[2,4,6])/3);')[0]['args'], [[1,2,3]])
-        self.assertEqual(evaluate('cube((![1] && missing) ? 0 : max(ceil(.01),floor(2.8)));')[0]['args'],[2])
-        self.assertEqual(evaluate('cube(atan2(1,1) + round(-.5));')[0]['args'],[44])
+        self.assertEqual(evaluate(script)[0]['args'], [[18, 4]])
+        self.assertEqual(evaluate('cube(([1,2,3]+[2,4,6])/3);')[0]['args'], [[1, 2, 3]])
+        self.assertEqual(evaluate('cube((![1] && missing) ? 0 : max(ceil(.01),floor(2.8)));')[0]['args'], [2])
+        self.assertEqual(evaluate('cube(atan2(1,1) + round(-.5));')[0]['args'], [44])
 
     def test_decimal_and_descending_ranges(self):
-        node, = evaluate('polygon(points=[for(x=[0:.1:.3], y=[3:-2:0]) [x,y]]);')
-        self.assertEqual(len(node['kwargs']['points']),8)
-        self.assertAlmostEqual(node['kwargs']['points'][-1][0],.3)
-        self.assertEqual(node['kwargs']['points'][-1][1],1)
-        self.assertEqual(evaluate('// No shapes here\nfor(i=[0:-1:3]) cube(i);'),[])
-        self.assertEqual(evaluate('/* header */  \n\n'),[])
+        (node,) = evaluate('polygon(points=[for(x=[0:.1:.3], y=[3:-2:0]) [x,y]]);')
+        self.assertEqual(len(node['kwargs']['points']), 8)
+        self.assertAlmostEqual(node['kwargs']['points'][-1][0], 0.3)
+        self.assertEqual(node['kwargs']['points'][-1][1], 1)
+        self.assertEqual(evaluate('// No shapes here\nfor(i=[0:-1:3]) cube(i);'), [])
+        self.assertEqual(evaluate('/* header */  \n\n'), [])
 
     def test_multmatrix_and_polyhedron(self):
         script = '''multmatrix([[1,0,0,3],[0,1,0,0],[0,0,1,0],[0,0,0,1]])
@@ -96,36 +96,37 @@ class ScadLanguageTests(unittest.TestCase):
 
     def test_errors_have_source_locations(self):
         for src, message in (
-            ('\n \tcube(1/0);','Invalid arithmetic'),
-            ('cube(1,round(0,1));','Unknown function or invalid arguments'),
-            ('square([1,z]);','Unknown variable'),
-            ('bad=other; other=bad;circle(bad);','Circular'),
-            ('foo(1);','unsupported geometry'),
-            ('module m(x){cube(x);} m();','Missing argument'),
-            ('module m(x=1){} m(z=2);','Unknown argument'),
-            ('module m(x){} m(1,x=2);','Duplicate'),
-            ('cube(x=1,2);','Positional arguments'),
-            ('if (true) { cube();','Expected'),
-            ('square(1); /* comment','Unterminated block comment'),
-            ('for (i=[0:0:8])cube(i);','step must be nonzero'),
-            ('square([1,2][3]);','Index outside'),
-            ('module a(x,x){}','Duplicate binding'),
-            ('include <part.scad>','External file command'),
-            ('import("drawing.svg");','External file command'),
-            ('children();','inside a module'),
-            ('cube(1e99999);','finite'),
+            ('\n \tcube(1/0);', 'Invalid arithmetic'),
+            ('cube(1,round(0,1));', 'Unknown function or invalid arguments'),
+            ('square([1,z]);', 'Unknown variable'),
+            ('bad=other; other=bad;circle(bad);', 'Circular'),
+            ('foo(1);', 'unsupported geometry'),
+            ('module m(x){cube(x);} m();', 'Missing argument'),
+            ('module m(x=1){} m(z=2);', 'Unknown argument'),
+            ('module m(x){} m(1,x=2);', 'Duplicate'),
+            ('cube(x=1,2);', 'Positional arguments'),
+            ('if (true) { cube();', 'Expected'),
+            ('square(1); /* comment', 'Unterminated block comment'),
+            ('for (i=[0:0:8])cube(i);', 'step must be nonzero'),
+            ('square([1,2][3]);', 'Index outside'),
+            ('module a(x,x){}', 'Duplicate binding'),
+            ('include <part.scad>', 'External file command'),
+            ('import("drawing.svg");', 'External file command'),
+            ('children();', 'inside a module'),
+            ('cube(1e99999);', 'finite'),
         ):
-            with self.subTest(src=src), self.assertRaisesRegex(ScadError,message) as caught:
+            with self.subTest(src=src), self.assertRaisesRegex(ScadError, message) as caught:
                 evaluate(src)
-            self.assertGreater(caught.exception.column,0)
-            self.assertGreater(caught.exception.line,0)
-        with self.assertRaisesRegex(ScadError,r'Line 3, column 6: Unknown variable'):
+            self.assertGreater(caught.exception.column, 0)
+            self.assertGreater(caught.exception.line, 0)
+        with self.assertRaisesRegex(ScadError, r'Line 3, column 6: Unknown variable'):
             evaluate('// one\n// two\ncube(oops);')
 
     def test_boundaries(self):
         for src in (
-            ' '*(MAX_SOURCE+1), 'cube('*70+'1'+')'*70+';',
-            'cube('+'+'.join(['1']*500)+');',
+            ' ' * (MAX_SOURCE + 1),
+            'cube(' * 70 + '1' + ')' * 70 + ';',
+            'cube(' + '+'.join(['1'] * 500) + ');',
             'module loop(){loop();}loop();',
             'function forever(x)=forever(x);cube(forever(0));',
             f'for (i=[0:{MAX_RANGE}]) cube(i);',
@@ -136,7 +137,7 @@ class ScadLanguageTests(unittest.TestCase):
         ):
             with self.subTest(src=src[:35]), self.assertRaises(ScadError):
                 evaluate(src)
-        for params in ([1], {'x':True}, {'x':float('inf')}, {'x':[1,2]}, {'false':0}):
+        for params in ([1], {'x': True}, {'x': float('inf')}, {'x': [1, 2]}, {'false': 0}):
             with self.subTest(params=params), self.assertRaises(ScadError):
                 evaluate('cube(1);', params)
 

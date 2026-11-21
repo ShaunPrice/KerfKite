@@ -1,4 +1,5 @@
 """Inspect selected text members of a LightBurn user bundle entirely in memory."""
+
 import base64
 import binascii
 import io
@@ -19,14 +20,23 @@ EXTENSIONS = {'.lbdev', '.lbprefs', '.clb', '.lbrn', '.lbrn2', '.lbset'}
 
 def _eligible(entry):
     path = PurePosixPath(entry.filename)
-    if (path.is_absolute() or '..' in path.parts or '\\' in entry.filename
-            or len(entry.filename) > 512 or ':' in entry.filename
-            or any(not c.isprintable() for c in entry.orig_filename)
-            or path.suffix.lower() not in EXTENSIONS or entry.is_dir()):
+    if (
+        path.is_absolute()
+        or '..' in path.parts
+        or '\\' in entry.filename
+        or len(entry.filename) > 512
+        or ':' in entry.filename
+        or any(not c.isprintable() for c in entry.orig_filename)
+        or path.suffix.lower() not in EXTENSIONS
+        or entry.is_dir()
+    ):
         return False
     mode = entry.external_attr >> 16
-    return (stat.S_IFMT(mode) in (0, stat.S_IFREG) and not (entry.flag_bits & 1)
-            and entry.compress_type in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED))
+    return (
+        stat.S_IFMT(mode) in (0, stat.S_IFREG)
+        and not (entry.flag_bits & 1)
+        and entry.compress_type in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED)
+    )
 
 
 def inspect_bundle(payload):
@@ -50,9 +60,10 @@ def inspect_bundle(payload):
             if any(e.file_size > MAX_MEMBER for e in accepted.values()):
                 raise ValueError('Bundle contains a supported file larger than 4 MB')
             if 'index' not in payload:
-                return {'files': [{'index': i, 'name': PurePosixPath(e.filename).name}
-                                  for i, e in accepted.items()],
-                        'skipped': sum(not e.is_dir() for i, e in enumerate(members) if i not in accepted)}
+                return {
+                    'files': [{'index': i, 'name': PurePosixPath(e.filename).name} for i, e in accepted.items()],
+                    'skipped': sum(not e.is_dir() for i, e in enumerate(members) if i not in accepted),
+                }
             index = payload['index']
             if type(index) is not int or index not in accepted:
                 raise ValueError('Select a supported member of this bundle')

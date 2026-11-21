@@ -1,4 +1,5 @@
 """Windows workstation admission for source installations and the Python entry points."""
+
 import ctypes
 from pathlib import Path
 import re
@@ -7,9 +8,27 @@ import sys
 
 
 _RELEASED_BUILDS = {
-    10240, 10586, 14393, 15063, 16299, 17134, 17763, 18362, 18363,
-    19041, 19042, 19043, 19044, 19045, 22000, 22621, 22631, 26100,
-    26200, 26300, 28000,
+    10240,
+    10586,
+    14393,
+    15063,
+    16299,
+    17134,
+    17763,
+    18362,
+    18363,
+    19041,
+    19042,
+    19043,
+    19044,
+    19045,
+    22000,
+    22621,
+    22631,
+    26100,
+    26200,
+    26300,
+    28000,
 }
 _UNSUPPORTED = "KerfKite requires Windows 10 or Windows 11 on an x64 PC with 64-bit x64 Python."
 
@@ -17,11 +36,16 @@ _UNSUPPORTED = "KerfKite requires Windows 10 or Windows 11 on an x64 PC with 64-
 def _windows_version():
     class Version(ctypes.Structure):
         _fields_ = [
-            ("size", ctypes.c_uint32), ("major", ctypes.c_uint32),
-            ("minor", ctypes.c_uint32), ("build", ctypes.c_uint32),
-            ("platform", ctypes.c_uint32), ("service_pack", ctypes.c_wchar * 128),
-            ("sp_major", ctypes.c_uint16), ("sp_minor", ctypes.c_uint16),
-            ("suite", ctypes.c_uint16), ("product_type", ctypes.c_ubyte),
+            ("size", ctypes.c_uint32),
+            ("major", ctypes.c_uint32),
+            ("minor", ctypes.c_uint32),
+            ("build", ctypes.c_uint32),
+            ("platform", ctypes.c_uint32),
+            ("service_pack", ctypes.c_wchar * 128),
+            ("sp_major", ctypes.c_uint16),
+            ("sp_minor", ctypes.c_uint16),
+            ("suite", ctypes.c_uint16),
+            ("product_type", ctypes.c_ubyte),
             ("reserved", ctypes.c_ubyte),
         ]
 
@@ -60,10 +84,19 @@ def _product_caption():
         raise OSError("Windows system directory query failed")
     shell = Path(directory.value) / "WindowsPowerShell/v1.0/powershell.exe"
     result = subprocess.run(
-        [str(shell), "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
-         "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); "
-         "(Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop).Caption"],
-        check=True, capture_output=True, timeout=10, creationflags=subprocess.CREATE_NO_WINDOW,
+        [
+            str(shell),
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); "
+            "(Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop).Caption",
+        ],
+        check=True,
+        capture_output=True,
+        timeout=10,
+        creationflags=subprocess.CREATE_NO_WINDOW,
     )
     return result.stdout.decode("utf-8-sig").strip()
 
@@ -74,8 +107,7 @@ def _eligible(version, native_x64, caption):
         return False
     if build in _RELEASED_BUILDS:
         return True
-    return bool(re.match(r"^(?:Microsoft\s+)?Windows\s+(?:10|11)(?:\s|$)",
-                         caption(), re.IGNORECASE))
+    return bool(re.match(r"^(?:Microsoft\s+)?Windows\s+(?:10|11)(?:\s|$)", caption(), re.IGNORECASE))
 
 
 def require_supported_windows():

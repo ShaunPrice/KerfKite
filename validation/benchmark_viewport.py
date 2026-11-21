@@ -1,4 +1,5 @@
 """Measure cached mesh orbit frame intervals in the filesystem editor on this device."""
+
 import argparse
 import json
 from pathlib import Path
@@ -49,19 +50,19 @@ def measure(page):
 
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--browser',help='Chromium executable, e.g. the installed Chrome or Chromium browser')
-    args=parser.parse_args()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--browser', help='Chromium executable, e.g. the installed Chrome or Chromium browser')
+    args = parser.parse_args()
     with sync_playwright() as pw:
-        browser=pw.chromium.launch(executable_path=args.browser)
+        browser = pw.chromium.launch(executable_path=args.browser)
         try:
-            page=browser.new_page(viewport={'width':1440,'height':980})
-            page.goto((Path(__file__).resolve().parents[1]/'studio/static/index.html').as_uri())
+            page = browser.new_page(viewport={'width': 1440, 'height': 980})
+            page.goto((Path(__file__).resolve().parents[1] / 'studio/static/index.html').as_uri())
             page.wait_for_function('window.KerfKiteViews')
-            print(json.dumps(measure(page),indent=2))
+            print(json.dumps(measure(page), indent=2))
         finally:
             browser.close()
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
     main()

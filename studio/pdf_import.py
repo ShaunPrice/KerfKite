@@ -236,9 +236,7 @@ class Extraction:
                 x, y, w, h = numbers(args, 4)
                 current = []
                 paths.append(current)
-                corners = [
-                    point(state.matrix, a, b) for a, b in ((x, y), (x + w, y), (x + w, y + h), (x, y + h))
-                ]
+                corners = [point(state.matrix, a, b) for a, b in ((x, y), (x + w, y), (x + w, y + h), (x, y + h))]
                 add([*corners, corners[0]])
                 hull.extend(corners)
             elif op in (b'W', b'W*'):
@@ -302,13 +300,7 @@ class Extraction:
                 if form.get('/Subtype') != '/Form':
                     self.skips['image omitted; use a raster import for this artwork'] += 1
                     continue
-                if (
-                    (marks and marks[-1])
-                    or '/OC' in form
-                    or '/Group' in form
-                    or state.soft_mask
-                    or state.clip is None
-                ):
+                if (marks and marks[-1]) or '/OC' in form or '/Group' in form or state.soft_mask or state.clip is None:
                     self.skips['optional, masked, clipped or transparency-group form omitted'] += 1
                     continue
                 self.forms += 1
@@ -400,9 +392,7 @@ def import_pdf(payload):
             ArithmeticError,
             RecursionError,
         ) as exc:
-            raise ValueError(
-                'Cannot read this PDF page. Export a simplified, unencrypted vector PDF.'
-            ) from exc
+            raise ValueError('Cannot read this PDF page. Export a simplified, unencrypted vector PDF.') from exc
     drawing = extraction.drawing
     drawing.warnings.append(
         'Paths keep page scale. Strokes import as centrelines and fills as boundaries. Check stacked artwork, holes and orientation before choosing a cutting operation.'
@@ -417,7 +407,5 @@ def import_pdf(payload):
         if drawing.objects
         else dict(objects=[], layers=[], presets=[], devices=[], warnings=drawing.warnings, mode=None)
     )
-    result.update(
-        page=number, pageCount=count, pageSize=[height, width] if rotation in (90, 270) else [width, height]
-    )
+    result.update(page=number, pageCount=count, pageSize=[height, width] if rotation in (90, 270) else [width, height])
     return result

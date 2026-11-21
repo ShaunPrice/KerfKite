@@ -14,6 +14,7 @@ The run pairs over the LAN, sends a 0.1 mm X jog, Home and Zero XYZ, starts an a
 resumes, sends Pocket to the background and back with the job running, stops, and forgets the pairing.
 It refuses to continue when the handset already holds a pairing unless --replace-pairing is given.
 """
+
 import argparse
 import logging
 from pathlib import Path
@@ -35,8 +36,18 @@ from studio.phone_jobs import PhoneJobs
 
 PACKAGE = 'au.cncstudio.pocket'
 # The launcher's own intent: returning with a different intent starts a second editor on top of the pendant.
-LAUNCH = ('shell', 'am', 'start', '-W', '-a', 'android.intent.action.MAIN',
-          '-c', 'android.intent.category.LAUNCHER', '-n', PACKAGE + '/.WorkshopActivity')
+LAUNCH = (
+    'shell',
+    'am',
+    'start',
+    '-W',
+    '-a',
+    'android.intent.action.MAIN',
+    '-c',
+    'android.intent.category.LAUNCHER',
+    '-n',
+    PACKAGE + '/.WorkshopActivity',
+)
 
 
 class Phone:
@@ -59,7 +70,7 @@ class Phone:
                 self.run('shell', 'uiautomator', 'dump', self.hierarchy)
                 return ElementTree.fromstring(self.run('shell', 'cat', self.hierarchy))
             except (RuntimeError, ElementTree.ParseError):
-                time.sleep(.5)
+                time.sleep(0.5)
         raise RuntimeError('UI hierarchy unavailable')
 
     def find(self, label, button=False, prefix=False):
@@ -84,7 +95,7 @@ class Phone:
             if point:
                 self.run('shell', 'input', 'tap', *(str(v) for v in point))
                 return
-            low, high = int(height * .78), int(height * .30)
+            low, high = int(height * 0.78), int(height * 0.30)
             a, b = (low, high) if attempt < 3 else (high, low)
             self.run('shell', 'input', 'swipe', str(width // 2), str(a), str(width // 2), str(b), '280')
         raise AssertionError('Missing enabled UI control: ' + label)
@@ -106,7 +117,7 @@ def wait_until(condition, description, timeout=20):
         value = condition()
         if value:
             return value
-        time.sleep(.15)
+        time.sleep(0.15)
     raise AssertionError(description)
 
 
@@ -119,9 +130,15 @@ def step(name, action):
 def exercise(phone, host, port, replace_pairing):
     assert phone.run('shell', 'getprop', 'sys.boot_completed') == '1', 'Unlock and boot the handset before running.'
     assert phone.run('shell', 'pm', 'list', 'packages', PACKAGE), 'Install KerfKite Pocket on the handset first.'
-    print('Handset:', phone.run('shell', 'getprop', 'ro.product.model'),
-          '· Android', phone.run('shell', 'getprop', 'ro.build.version.release'),
-          '· API', phone.run('shell', 'getprop', 'ro.build.version.sdk'), flush=True)
+    print(
+        'Handset:',
+        phone.run('shell', 'getprop', 'ro.product.model'),
+        '· Android',
+        phone.run('shell', 'getprop', 'ro.build.version.release'),
+        '· API',
+        phone.run('shell', 'getprop', 'ro.build.version.sdk'),
+        flush=True,
+    )
     controller = DeviceController()
     controller.connect('simulator')
     jobs = PhoneJobs(controller)
@@ -147,7 +164,9 @@ def exercise(phone, host, port, replace_pairing):
         time.sleep(1.2)
         if phone.find('Forget pairing', button=True):
             if not replace_pairing:
-                raise AssertionError('The handset already holds a pendant pairing. Rerun with --replace-pairing to forget it.')
+                raise AssertionError(
+                    'The handset already holds a pendant pairing. Rerun with --replace-pairing to forget it.'
+                )
             phone.tap('Forget pairing', button=True)
             time.sleep(1)
 
@@ -159,23 +178,31 @@ def exercise(phone, host, port, replace_pairing):
                 phone.run('shell', 'input', 'keyevent', 'KEYCODE_BACK')
             phone.tap('Pair', button=True)
             phone.confirm()
-            wait_until(lambda: phone.find('Simulator', prefix=True),
-                       'The pendant did not show simulator status. Check that the workstation firewall admits the handset on the monitor port.')
+            wait_until(
+                lambda: phone.find('Simulator', prefix=True),
+                'The pendant did not show simulator status. Check that the workstation firewall admits the handset on the monitor port.',
+            )
+
         step('pair over the LAN and show simulator status', pair)
         paired = True
 
         def jog():
             phone.tap('Jog X positive')
             wait_until(lambda: len(accepted) == 1 and not controller.status()['active'], 'Jog failed.')
-            assert (accepted[0]['axis'], accepted[0]['distance'], accepted[0]['feed']) == ('X', .1, 100)
+            assert (accepted[0]['axis'], accepted[0]['distance'], accepted[0]['feed']) == ('X', 0.1, 100)
             assert any('$J=G91 G21 X0.100' in entry for entry in controller.status()['log'])
+
         step('jog X +0.1 mm', jog)
 
         for action, label in [('home', 'Home'), ('zero', 'Zero XYZ')]:
+
             def confirmed(action=action, label=label):
                 phone.tap(label, button=True)
                 phone.confirm()
-                wait_until(lambda: accepted[-1]['action'] == action and not controller.status()['active'], action + ' failed.')
+                wait_until(
+                    lambda: accepted[-1]['action'] == action and not controller.status()['active'], action + ' failed.'
+                )
+
             step(action, confirmed)
 
         # Leave enough simulated motion queued to exercise feed hold, resume and a background return.
@@ -185,16 +212,19 @@ def exercise(phone, host, port, replace_pairing):
             phone.tap('Start', button=True)
             phone.confirm()
             wait_until(lambda: controller.status()['active'], 'Armed job did not start.')
+
         step('start armed job', start)
 
         def pause():
             phone.tap('Pause', button=True)
             wait_until(lambda: controller.status()['state'] == 'Hold', 'Feed hold failed.')
+
         step('pause', pause)
 
         def resume():
             phone.tap('Resume', button=True)
             wait_until(lambda: controller.status()['state'] == 'Run', 'Resume failed.')
+
         step('resume', resume)
 
         def background():
@@ -203,6 +233,7 @@ def exercise(phone, host, port, replace_pairing):
             assert controller.status()['active'], 'The job stopped while Pocket was in the background.'
             phone.run(*LAUNCH)
             wait_until(lambda: phone.find('Stop', button=True), 'Pendant controls missing after returning to Pocket.')
+
         step('background for 6 s and return to the pendant with the job running', background)
 
         def stop():
@@ -210,6 +241,7 @@ def exercise(phone, host, port, replace_pairing):
             phone.confirm()
             wait_until(lambda: not controller.status()['active'], 'Abort failed.')
             assert not jobs.status()['armed']
+
         step('stop after the background return', stop)
 
         assert [action['action'] for action in accepted] == ['jog', 'home', 'zero', 'start', 'pause', 'resume', 'stop']
@@ -218,6 +250,7 @@ def exercise(phone, host, port, replace_pairing):
         def forget():
             phone.tap('Forget pairing', button=True)
             wait_until(lambda: phone.find('Monitor pairing link'), 'Forget did not restore pairing.')
+
         step('forget pairing', forget)
         paired = False
     finally:
@@ -229,7 +262,9 @@ def exercise(phone, host, port, replace_pairing):
         if paired:
             print('The handset still holds the test pairing. Open CNC pendant and choose Forget pairing.', flush=True)
     assert len(peers) == 1, 'Requests arrived from more than one address.'
-    print('PASS native pair, X jog, home, zero, start, pause, resume, background return, stop and forget on a physical handset.')
+    print(
+        'PASS native pair, X jog, home, zero, start, pause, resume, background return, stop and forget on a physical handset.'
+    )
 
 
 if __name__ == '__main__':

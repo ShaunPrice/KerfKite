@@ -1,4 +1,5 @@
 """Exercise laser cut patterns in the simulator workstation and disconnected file editor."""
+
 import json
 from pathlib import Path
 from playwright.sync_api import expect
@@ -25,8 +26,8 @@ def check(page):
     loc('#preview').click()
     expect(loc('#gcode')).to_contain_text(' S0')
     perforation = loc('#gcode').text_content()
-    zero_moves=[l for l in perforation.splitlines() if l.startswith('G1 ') and l.endswith(' S0')]
-    assert len(zero_moves)>=4, (perforation[:500],len(zero_moves))
+    zero_moves = [l for l in perforation.splitlines() if l.startswith('G1 ') and l.endswith(' S0')]
+    assert len(zero_moves) >= 4, (perforation[:500], len(zero_moves))
     # A different selected-object operation takes precedence over its saved layer.
     loc('#laser_pattern').select_option('bridges')
     loc('#laser_bridge_count').fill('2')
@@ -40,12 +41,12 @@ def check(page):
     tab('Projects')
     with page.expect_download() as download:
         loc('#projectDownload').click()
-    raw=Path(download.value.path()).read_bytes()
-    saved=json.loads(raw)
-    assert saved['extras']['designLayers'][0]['settings']['laser_pattern']=='perforate'
-    assert saved['objects'][0]['operationSettings']['laser_pattern']=='bridges'
+    raw = Path(download.value.path()).read_bytes()
+    saved = json.loads(raw)
+    assert saved['extras']['designLayers'][0]['settings']['laser_pattern'] == 'perforate'
+    assert saved['objects'][0]['operationSettings']['laser_pattern'] == 'bridges'
     loc('#loadProject').click()
-    loc('#file').set_input_files(dict(name='pattern.cncstudio.json',mimeType='application/json',buffer=raw))
+    loc('#file').set_input_files(dict(name='pattern.cncstudio.json', mimeType='application/json', buffer=raw))
     expect(loc('#message')).to_contain_text('Project opened')
     expect(loc('#laser_bridge_count')).to_have_value('2')
     loc('#preview').click()
@@ -54,15 +55,15 @@ def check(page):
 
 
 def run(page):
-    root=Path(__file__).resolve().parents[1]
-    results=[]
-    for offline in (False,True):
-        with page.context.browser.new_context(viewport={'width':1440,'height':980},accept_downloads=True) as ctx:
+    root = Path(__file__).resolve().parents[1]
+    results = []
+    for offline in (False, True):
+        with page.context.browser.new_context(viewport={'width': 1440, 'height': 980}, accept_downloads=True) as ctx:
             if offline:
                 ctx.set_offline(True)
-            editor=ctx.new_page()
-            editor.on('dialog',lambda dialog:dialog.accept())
-            editor.goto((root/'studio/static/index.html').as_uri() if offline else page.url)
+            editor = ctx.new_page()
+            editor.on('dialog', lambda dialog: dialog.accept())
+            editor.goto((root / 'studio/static/index.html').as_uri() if offline else page.url)
             results.append(check(editor))
-    assert results[0]==results[1]
+    assert results[0] == results[1]
     print('PASS laser pattern layer and object overrides, portable project and identical server/offline G-code')

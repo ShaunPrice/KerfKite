@@ -1,4 +1,5 @@
 """Browser acceptance for surface edits, STEP exchange and CAM transfers."""
+
 from pathlib import Path
 
 from playwright.sync_api import expect
@@ -8,6 +9,7 @@ from studio.cad_exchange import inspect_step, write_step
 
 def run(page):
     loc = page.locator
+
     def open_exchange():
         page.get_by_role('tab', name='3D CAD', exact=True).click()
         loc('#cad-exchange-open').click()
@@ -60,19 +62,19 @@ def run(page):
     assert exact['faces'] == 2 and exact['solids'] == 0
     loc('#exchange-relief').click()
     expect(loc('#reliefFile')).to_have_value(r'C:\fakepath\geometry.stl')
-    page.get_by_role('tab',name='Projects',exact=True).click()
+    page.get_by_role('tab', name='Projects', exact=True).click()
     loc('#projectName').fill('Trimmed joined sheet')
     loc('#projectSaveLibrary').click()
-    row=loc('#projectList p').filter(has_text='Trimmed joined sheet')
+    row = loc('#projectList p').filter(has_text='Trimmed joined sheet')
     expect(row).to_have_count(1)
     loc('#projectNew').click()
-    row.get_by_role('button',name='Open',exact=True).click()
+    row.get_by_role('button', name='Open', exact=True).click()
     open_exchange()
     expect(loc('#exchange-status')).to_contain_text('2 faces')
     assert page.evaluate('window.projectExtras.cadExchange.surface.boundary[1].length') == 3
     print('PASS C1 patch seam, shaped trim hole, exact sewn STEP, relief transfer and project reopen')
 
-    loc('#exchange-file').set_input_files({'name':'patch.step', 'mimeType':'model/step', 'buffer':sheet})
+    loc('#exchange-file').set_input_files({'name': 'patch.step', 'mimeType': 'model/step', 'buffer': sheet})
     expect(loc('#exchange-status')).to_contain_text('0 solids')
     expect(loc('#exchange-add')).to_be_disabled()
     loc('#exchange-relief').click()
@@ -83,8 +85,8 @@ def run(page):
     page.get_by_role('tab', name='Projects', exact=True).click()
     loc('#projectNew').click()
     open_exchange()
-    raw = write_step(model={'version':1, 'features':[{'id':'plate','kind':'box','size':[40,20,5]}]})
-    loc('#exchange-file').set_input_files({'name':'plate.stp','mimeType':'model/step','buffer':raw})
+    raw = write_step(model={'version': 1, 'features': [{'id': 'plate', 'kind': 'box', 'size': [40, 20, 5]}]})
+    loc('#exchange-file').set_input_files({'name': 'plate.stp', 'mimeType': 'model/step', 'buffer': raw})
     expect(loc('#exchange-status')).to_contain_text('plate.stp')
     loc('#exchange-add').click()
     expect(loc('#solid-size')).to_have_text('40 × 20 × 5')

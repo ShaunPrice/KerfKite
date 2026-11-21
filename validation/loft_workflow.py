@@ -69,6 +69,4 @@ def run(page):
     step = Path(output.value.path()).read_bytes()
     assert b'MANIFOLD_SOLID_BREP' in step and b'RATIONAL_B_SPLINE_SURFACE' in step
     loc('#exchange-close').click()
-    print(
-        'PASS loft editor, linked section from 29 × 21 to 31 × 23 mm, project reopen, STL and exact STEP downloads'
-    )
+    print('PASS loft editor, linked section from 29 × 21 to 31 × 23 mm, project reopen, STL and exact STEP downloads')

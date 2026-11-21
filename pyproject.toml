@@ -30,8 +30,13 @@ studio = ["static/*", "static/icons/*", "static/vendor/*", "builtin_templates.kk
 
 [tool.ruff]
 target-version = "py310"
-# Formatting is not enforced yet: the dense house style is reformatted in a separate, mechanical change.
-line-length = 320
+line-length = 120
+# Python sources only: fenced code in the guides is left as written.
+extend-exclude = ["*.md"]
+
+[tool.ruff.format]
+# Keep the project's single-quoted strings; only layout is normalised.
+quote-style = "preserve"
 
 [tool.ruff.lint]
 # Syntax errors, pyflakes, likely bugs and security rules. Style rules are deliberately off.

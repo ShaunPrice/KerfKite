@@ -1,4 +1,5 @@
 """Planar profiles with straight edges, cubic Béziers and tangent corner fillets."""
+
 from dataclasses import dataclass
 import math
 
@@ -17,7 +18,7 @@ def crossing_axis(values, axis):
         raise ValueError('The sketch trim reference lines are parallel or collapsed')
     t = ((cx - ax) * sy - (cy - ay) * sx) / denominator
     u = ((cx - ax) * ry - (cy - ay) * rx) / denominator
-    if not -1e-8/first <= t <= 1+1e-8/first or not -1e-8/second <= u <= 1+1e-8/second:
+    if not -1e-8 / first <= t <= 1 + 1e-8 / first or not -1e-8 / second <= u <= 1 + 1e-8 / second:
         raise ValueError('The sketch trim reference segments no longer cross')
     t = min(1.0, max(0.0, t))
     return (ax + t * rx, ay + t * ry)[axis]
@@ -36,8 +37,7 @@ class Corner:
 
     def at(self, fraction):
         angle = self.start_angle + self.sweep * fraction
-        return (self.center[0] + self.radius * math.cos(angle),
-                self.center[1] + self.radius * math.sin(angle))
+        return (self.center[0] + self.radius * math.cos(angle), self.center[1] + self.radius * math.sin(angle))
 
 
 def _corner(a, b, c, radius):
@@ -88,13 +88,15 @@ def profile_geometry(feature, dimensions, solved=None):
         raise ValueError('Sketch vertices must be distinct')
     controls = resolve_curves(raw_curves, points, dimensions)
     for i, handles in enumerate(controls):
-        if handles is not None and (radii[i] or radii[(i+1) % len(points)]):
-            raise ValueError('Remove the endpoint fillet before making a curved edge. Use tangent handles to round a cubic join.')
-    corners = [_corner(points[i-1], b, points[(i+1) % len(points)], radii[i]) for i, b in enumerate(points)]
+        if handles is not None and (radii[i] or radii[(i + 1) % len(points)]):
+            raise ValueError(
+                'Remove the endpoint fillet before making a curved edge. Use tangent handles to round a cubic join.'
+            )
+    corners = [_corner(points[i - 1], b, points[(i + 1) % len(points)], radii[i]) for i, b in enumerate(points)]
     outline = []
     for i, corner in enumerate(corners):
-        if corner.setback + corners[i-1].setback > math.dist(points[i-1], points[i]) + 1e-10:
-            raise ValueError(f'Fillets exceed the available length of the edge leading to point {i+1}')
+        if corner.setback + corners[i - 1].setback > math.dist(points[i - 1], points[i]) + 1e-10:
+            raise ValueError(f'Fillets exceed the available length of the edge leading to point {i + 1}')
         if not outline or math.dist(outline[-1], corner.start) > 1e-10:
             outline.append(corner.start)
         if corner.radius:
@@ -103,7 +105,7 @@ def profile_geometry(feature, dimensions, solved=None):
             outline.append(corner.end)
         if controls[i] is not None:
             corner.outgoing_controls = controls[i]
-            end = corners[(i+1) % len(points)].start
+            end = corners[(i + 1) % len(points)].start
             if feature.get('kind') == 'revolve':
                 radial = [p[0] for p in (corner.end, *controls[i], end)]
                 if minimum_coordinate(*radial) < -1e-10:
@@ -135,7 +137,7 @@ def step_profile_face(feature, dimensions):
     corners, _ = profile_geometry(feature, dimensions)
     wire = BRepBuilderAPI_MakeWire()
     for i, corner in enumerate(corners):
-        previous = corners[i-1]
+        previous = corners[i - 1]
         if previous.outgoing_controls:
             poles = TColgp_Array1OfPnt(1, 4)
             for index, point in enumerate((previous.end, *previous.outgoing_controls, corner.start), 1):
@@ -145,9 +147,9 @@ def step_profile_face(feature, dimensions):
                 raise ValueError('STEP could not construct the cubic sketch edge')
             wire.Add(edge.Edge())
         elif math.dist(previous.end, corner.start) > 1e-10:
-            wire.Add(BRepBuilderAPI_MakeEdge(gp(corners[i-1].end), gp(corner.start)).Edge())
+            wire.Add(BRepBuilderAPI_MakeEdge(gp(corners[i - 1].end), gp(corner.start)).Edge())
         if corner.radius:
-            arc = GC_MakeArcOfCircle(gp(corner.start), gp(corner.at(.5)), gp(corner.end))
+            arc = GC_MakeArcOfCircle(gp(corner.start), gp(corner.at(0.5)), gp(corner.end))
             if not arc.IsDone():
                 raise ValueError('STEP could not form a circular sketch fillet')
             wire.Add(BRepBuilderAPI_MakeEdge(arc.Value()).Edge())

@@ -11,6 +11,7 @@ if [ -z "$PY" ]; then
 fi
 echo "pre-push: ruff"
 "$PY" -m ruff check studio
+"$PY" -m ruff format --check .
 echo "pre-push: Python tests"
 "$PY" -m pytest -q -p no:cacheprovider tests
 echo "pre-push: JavaScript tests"

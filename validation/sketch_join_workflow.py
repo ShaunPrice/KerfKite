@@ -1,4 +1,5 @@
 """Exercise driven line intersections, edge alignment and fillets through Studio."""
+
 from playwright.sync_api import expect
 
 
@@ -64,36 +65,48 @@ def run(page):
     page.get_by_role('tab', name='Projects', exact=True).click()
     page.locator('#projectNew').click()
     page.get_by_role('tab', name='3D CAD', exact=True).click()
-    for name,value in [('plate_width','24'),('plate_height','13')]:
+    for name, value in [('plate_width', '24'), ('plate_height', '13')]:
         page.locator('#solid-param-name').fill(name)
         page.locator('#solid-add-param').click()
         field(name).fill(value)
     page.locator('#solid-kind').select_option('extrude')
     page.locator('#solid-add').click()
     button('Add point').click()
-    for i,(x,y) in enumerate([(0,0),(20,0),(19,11),(-1,9)],1):
-        field('X '+str(i)).fill(str(x))
-        field('Y '+str(i)).fill(str(y))
+    for i, (x, y) in enumerate([(0, 0), (20, 0), (19, 11), (-1, 9)], 1):
+        field('X ' + str(i)).fill(str(x))
+        field('Y ' + str(i)).fill(str(y))
     button('Edit sketch on plane').click()
     dialog.get_by_text('Geometric constraints', exact=True).click()
-    def relation(kind,a,b=None,val=None,y=None):
+
+    def relation(kind, a, b=None, val=None, y=None):
         dialog.locator('[data-relation-kind]').select_option(kind)
         dialog.locator('[data-ref-a]').select_option(value=str(a))
-        if b is not None: dialog.locator('[data-ref-b]').select_option(value=str(b))
-        if val is not None: dialog.locator('[data-val]').fill(str(val))
-        if y is not None: dialog.locator('[data-fixed-y]').fill(str(y))
+        if b is not None:
+            dialog.locator('[data-ref-b]').select_option(value=str(b))
+        if val is not None:
+            dialog.locator('[data-val]').fill(str(val))
+        if y is not None:
+            dialog.locator('[data-fixed-y]').fill(str(y))
         dialog.locator('[data-add-rel]').click()
 
-    for count, args in enumerate([('fixed',0,None,0,0),('fixed',1,None,'plate_width',0),
-                                  ('distance',1,2,'plate_height'),('perpendicular',0,1),
-                                  ('parallel',0,2),('equal',0,2)],1):
+    for count, args in enumerate(
+        [
+            ('fixed', 0, None, 0, 0),
+            ('fixed', 1, None, 'plate_width', 0),
+            ('distance', 1, 2, 'plate_height'),
+            ('perpendicular', 0, 1),
+            ('parallel', 0, 2),
+            ('equal', 0, 2),
+        ],
+        1,
+    ):
         relation(*args)
         try:
             expect(dialog.locator('[data-rel-list] option')).to_have_count(count)
         except AssertionError as error:
-            raise AssertionError(f'Relation {args}: '+dialog.locator('[data-status]').inner_text()) from error
+            raise AssertionError(f'Relation {args}: ' + dialog.locator('[data-status]').inner_text()) from error
     expect(dialog.locator('[data-dof]')).to_have_text('Fully constrained')
-    relation('distance',1,2,28)
+    relation('distance', 1, 2, 28)
     expect(dialog.locator('[data-status]')).to_contain_text('Cannot satisfy sketch constraint')
     expect(dialog.locator('[data-rel-list] option')).to_have_count(6)
     dialog.locator('[data-rel-list]').select_option('2')
@@ -110,11 +123,11 @@ def run(page):
     row = page.locator('#projectList p').filter(has_text='Constrained rectangle regression')
     expect(row).to_have_count(1)
     page.locator('#projectNew').click()
-    row.get_by_role('button',name='Open',exact=True).click()
+    row.get_by_role('button', name='Open', exact=True).click()
     page.get_by_role('tab', name='3D CAD', exact=True).click()
     expect(page.locator('#solid-volume')).to_have_text('3,360')
     button('Edit sketch on plane').click()
-    dialog.get_by_text('Geometric constraints',exact=True).click()
+    dialog.get_by_text('Geometric constraints', exact=True).click()
     expect(dialog.locator('[data-rel-list] option')).to_have_count(6)
     dialog.locator('[data-rel-list]').select_option('5')
     dialog.locator('[data-remove-rel]').click()
@@ -123,7 +136,9 @@ def run(page):
     dialog.locator('[data-remove]').click()
     expect(dialog.locator('[data-status]')).to_contain_text('before changing its vertex')
     dialog.locator('[data-cancel]').click()
-    print('PASS fully constrained rectangle, named distance changes, conflict detection, relation edits and project reload')
+    print(
+        'PASS fully constrained rectangle, named distance changes, conflict detection, relation edits and project reload'
+    )
 
     page.get_by_role('tab', name='Projects', exact=True).click()
     page.locator('#projectNew').click()
@@ -134,18 +149,20 @@ def run(page):
     page.locator('#solid-kind').select_option('extrude')
     page.locator('#solid-add').click()
     button('Add point').click()
-    for i,(x,y) in enumerate([(0,0),(20,0),(20,10),(0,10)],1):
-        field('X '+str(i)).fill(str(x))
-        field('Y '+str(i)).fill(str(y))
-    page.get_by_role('textbox',name='Height',exact=True).fill('5')
+    for i, (x, y) in enumerate([(0, 0), (20, 0), (20, 10), (0, 10)], 1):
+        field('X ' + str(i)).fill(str(x))
+        field('Y ' + str(i)).fill(str(y))
+    page.get_by_role('textbox', name='Height', exact=True).fill('5')
     button('Edit sketch on plane').click()
     dialog.locator('[data-vertex]').select_option('2')
-    dialog.get_by_text('Cubic Bézier edge',exact=True).click()
+    dialog.get_by_text('Cubic Bézier edge', exact=True).click()
+
     def control(which, axis):
-        return dialog.get_by_label(which+' control '+axis+' (mm or parameter)',exact=True)
-    for which,x in [('Start','40/3'),('End','20/3')]:
-        control(which,'X').fill(x)
-        control(which,'Y').fill('10+arch_rise')
+        return dialog.get_by_label(which + ' control ' + axis + ' (mm or parameter)', exact=True)
+
+    for which, x in [('Start', '40/3'), ('End', '20/3')]:
+        control(which, 'X').fill(x)
+        control(which, 'Y').fill('10+arch_rise')
     dialog.locator('[data-save-curve]').click()
     expect(dialog.locator('[data-status]')).to_have_text('Cubic edge updated.')
     expect(dialog.locator('[data-handle]')).to_have_count(2)
@@ -156,28 +173,28 @@ def run(page):
     page.get_by_role('tab', name='Projects', exact=True).click()
     page.locator('#projectName').fill('Cubic arch')
     page.locator('#projectSaveLibrary').click()
-    row=page.locator('#projectList p').filter(has_text='Cubic arch')
+    row = page.locator('#projectList p').filter(has_text='Cubic arch')
     expect(row).to_have_count(1)
     page.locator('#projectNew').click()
-    row.get_by_role('button',name='Open',exact=True).click()
+    row.get_by_role('button', name='Open', exact=True).click()
     page.get_by_role('tab', name='3D CAD', exact=True).click()
     expect(page.locator('#solid-status')).to_have_text('Solid ready.')
     button('Edit sketch on plane').click()
     dialog.locator('[data-vertex]').select_option('2')
-    dialog.get_by_text('Cubic Bézier edge',exact=True).click()
-    expect(control('Start','Y')).to_have_value('10+arch_rise')
-    control('Start','X').fill('14')
-    control('Start','Y').fill('18')
+    dialog.get_by_text('Cubic Bézier edge', exact=True).click()
+    expect(control('Start', 'Y')).to_have_value('10+arch_rise')
+    control('Start', 'X').fill('14')
+    control('Start', 'Y').fill('18')
     dialog.locator('[data-save-curve]').click()
     expect(dialog.locator('[data-status]')).to_have_text('Cubic edge updated.')
-    handle=dialog.locator('[data-handle="0"]')
+    handle = dialog.locator('[data-handle="0"]')
     handle.scroll_into_view_if_needed()
-    before=handle.bounding_box()
-    page.mouse.move(before['x']+before['width']/2,before['y']+before['height']/2)
+    before = handle.bounding_box()
+    page.mouse.move(before['x'] + before['width'] / 2, before['y'] + before['height'] / 2)
     page.mouse.down()
-    page.mouse.move(before['x']+32,before['y']+12,steps=4)
+    page.mouse.move(before['x'] + 32, before['y'] + 12, steps=4)
     page.mouse.up()
-    expect(control('Start','X')).not_to_have_value('14')
+    expect(control('Start', 'X')).not_to_have_value('14')
     dialog.locator('[data-tangent-start]').check()
     dialog.locator('[data-save-curve]').click()
     expect(dialog.locator('[data-status]')).to_have_text('Cubic edge updated.')
