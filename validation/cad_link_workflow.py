@@ -62,6 +62,21 @@ def run(page):
     loc('#phone-host').fill('127.0.0.1')
     pattern = __import__('re').compile
     expect(loc('#phone-link')).to_have_value(pattern(r'^https?://127\.0\.0\.1:\d+/#token='))
+
+    def code():
+        # The QR code is the link shown beside it, drawn square and large enough to scan from a screen.
+        expect(loc('#phone-qr svg path')).to_be_visible()
+        assert page.evaluate(
+            "KerfPairingQr.symbol(document.querySelector('#phone-link').value).path === document.querySelector('#phone-qr path').getAttribute('d')"
+        )
+        box = loc('#phone-qr svg').bounding_box()
+        assert abs(box['width'] - box['height']) < 1 and box['width'] >= 180, box
+        return int(loc('#phone-qr svg').get_attribute('viewBox').split()[-1])
+
+    modules = code()
+    loc('#phone-host').fill('')
+    expect(loc('#phone-qr')).to_be_hidden()
+    loc('#phone-host').fill('127.0.0.1')
     if loc('#phone-link').input_value().startswith('https:'):
         # With the web extra the listener is encrypted and the link carries the certificate fingerprint.
         expect(loc('#phone-link')).to_have_value(pattern(r'^https://127\.0\.0\.1:\d+/#token=[^&]+&fp=[0-9a-f]{64}$'))
@@ -70,8 +85,15 @@ def run(page):
         expect(loc('#phone-link')).to_be_hidden()
         loc('#phone-plaintext').check()
         loc('#phone-enable').click()
+        expect(loc('#phone-link')).to_have_value(pattern(r'^http://'))
+        assert code() < modules, 'The plain link has no fingerprint, so its code should be smaller.'
     expect(loc('#phone-link')).to_have_value(pattern(r'^http://127\.0\.0\.1:\d+/#token=[^&]+$'))
     expect(loc('#phone-pair-status')).to_contain_text('Pairing uses HTTP')
     loc('#phone-disable').click()
     expect(loc('#phone-link')).to_be_hidden()
-    print('PASS local phone pendant pairing and revocation')
+    # A revoked pairing leaves neither the link nor its code in the page.
+    assert (
+        page.evaluate("document.querySelector('#phone-qr').innerHTML + document.querySelector('#phone-link').value")
+        == ''
+    )
+    print('PASS local phone pendant pairing, its QR code and revocation')

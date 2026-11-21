@@ -57,12 +57,35 @@ class PhoneMonitor:
         self.bound_port = port
 
     @staticmethod
+    def routed_address():
+        """The address this machine uses to reach other networks, or None. Connecting a UDP socket sends nothing."""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+                probe.connect(('192.0.2.1', 9))  # documentation address: only the route is looked up
+                address = probe.getsockname()[0]
+        except OSError:
+            return None
+        return None if ipaddress.ip_address(address).is_loopback or address == '0.0.0.0' else address  # noqa: S104
+
+    @staticmethod
     def addresses():
+        """This machine's IPv4 addresses, the likeliest one for a phone first.
+
+        The workstation offers the first address in the pairing link and its QR code. Virtual adapters (WSL,
+        Hyper-V, container bridges) often sort first numerically but are unreachable from a phone, so the address
+        on the default route leads and self-assigned 169.254 addresses trail.
+        """
         try:
             ips = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)
-            return sorted({ip[4][0] for ip in ips if not ipaddress.ip_address(ip[4][0]).is_loopback})
+            found = {ip[4][0] for ip in ips if not ipaddress.ip_address(ip[4][0]).is_loopback}
         except OSError:
-            return []
+            found = set()
+        routed = PhoneMonitor.routed_address()
+        if routed:
+            found.add(routed)
+        return sorted(
+            found, key=lambda ip: (ip != routed, ipaddress.ip_address(ip).is_link_local, ipaddress.ip_address(ip))
+        )
 
     def pinned(self):
         """Whether enabling the listener creates a certificate pinned by the pairing link."""

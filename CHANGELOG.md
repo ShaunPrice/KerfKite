@@ -4,7 +4,11 @@ Notable changes to KerfKite Studio and KerfKite Pocket. Versions before this fil
 
 ## Unreleased
 
+### Added
+- Pair Pocket by QR code. Studio draws the pairing link as a QR code under **Phone pendant**, and Pocket's **CNC pendant** has **Scan QR code**, which reads it with the rear camera and pairs exactly as a pasted link does. Pocket asks for camera access when the scanner is first opened and uses it for nothing else. Decoding uses ZXing core (Apache-2.0).
+
 ### Fixed
+- Phone pairing offers the workstation's routed network address first. It used to offer the numerically lowest address, which on a machine with WSL, Hyper-V or a container bridge is a virtual adapter no phone can reach; the pairing link, and now the QR code, then pointed the phone at it. The other addresses are listed in the address box.
 - Pocket: the light navigation bar attribute, which needs API 27, is no longer referenced on API 26.
 - Design routes (`/api/geometry`, `/api/extrude`, `/api/artwork-relief` and the other design endpoints) answer malformed bodies with a JSON `400`. Contours that are not lists of finite XY points are rejected before any geometry is built.
 - Pocket: every shape can be selected from the drawing preview. New shapes no longer start exactly on top of the previous one, a repeated tap moves to the next overlapping shape, and a tap within 12 dp of an outline counts.
@@ -23,6 +27,8 @@ Notable changes to KerfKite Studio and KerfKite Pocket. Versions before this fil
 - The local session token is compared in constant time.
 
 ### Development
+- Pocket builds remove code they never reach (R8, names kept), for debug and release alike. With the QR scanner the debug APK is 115 KB and the unsigned release APK 73 KB; unshrunk, the scanner's library took the debug APK from 56 KB to 358 KB.
+- `validation/pairing_qr_check.py` decodes the pairing codes Studio draws with Pocket's decoder, from simulated camera frames.
 - A debug build of Pocket installs beside the released app as **Pocket debug** (`au.cncstudio.pocket.debug`), so a change can be tried on a phone without replacing the released app or its projects. The device workflows drive the debug build unless `KERFKITE_POCKET_PACKAGE` names another id.
 - `validation/pendant_tls_pin_check.py` checks Pocket's pinning class against a real phone listener with a JDK, without a phone.
 - Pocket is versioned 0.5.0 (version code 6).
