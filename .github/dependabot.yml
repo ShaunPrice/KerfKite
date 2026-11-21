@@ -6,9 +6,21 @@ updates:
     schedule: {interval: monthly}
     groups:
       python: {patterns: ["*"]}
+    ignore:
+      # FastMCP 4 changes the client handshake and the confirmation (elicitation) flow that guards machine
+      # motion: four MCP tests fail on 4.2.3. Lift this once the service has been migrated and re-tested.
+      - dependency-name: fastmcp
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: gradle
     directory: /android
     schedule: {interval: monthly}
+    ignore:
+      # Android Gradle Plugin 9 needs Gradle 9 and SDK Build Tools 36, whose licence each builder must accept.
+      # Move the plugin, the wrapper and the documented Build Tools together, then lift this.
+      - dependency-name: com.android.application
+        update-types: ["version-update:semver-major"]
+      - dependency-name: gradle-wrapper
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule: {interval: monthly}
