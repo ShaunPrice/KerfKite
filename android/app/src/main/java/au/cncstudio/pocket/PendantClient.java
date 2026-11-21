@@ -8,7 +8,11 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.util.UUID;
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLSocketFactory;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -20,7 +24,11 @@ final class PendantClient {
 
     final String origin;
     final boolean cleartext;
+    /** True when the link carried a certificate fingerprint and only that certificate is accepted. */
+    final boolean pinned;
     private final String token;
+    private final SSLSocketFactory pinnedSockets;
+    private final HostnameVerifier pinnedVerifier;
 
     PendantClient(String link) {
         URI uri;
@@ -32,13 +40,23 @@ final class PendantClient {
         cleartext = "http".equalsIgnoreCase(uri.getScheme());
         if ((!https && !cleartext) || host == null || uri.getRawUserInfo() != null || uri.getRawQuery() != null
                 || (!uri.getRawPath().isEmpty() && !"/".equals(uri.getRawPath())) || uri.getPort() == 0 || uri.getPort() > 65535
-                || fragment == null || !fragment.matches("token=[A-Za-z0-9_-]{32,256}")) {
+                || PinnedTls.parse(fragment) == null) {
             throw new IllegalArgumentException("Use the monitor’s full pairing link, including #token= and the pairing token.");
         }
+        String[] pairing = PinnedTls.parse(fragment);
+        pinned = pairing[1] != null;
+        if (pinned && !https)
+            throw new IllegalArgumentException("A pairing link with a certificate fingerprint must use HTTPS. Copy a fresh link from Studio.");
         if (cleartext && !privateHost(host))
             throw new IllegalArgumentException("For HTTP use the Pi’s private IPv4 address. Use HTTPS for hostnames.");
         origin = (https ? "https://" : "http://") + uri.getRawAuthority();
-        token = fragment.substring(6);
+        token = pairing[0];
+        try {
+            pinnedSockets = pinned ? PinnedTls.factory(pairing[1]) : null;
+            pinnedVerifier = pinned ? PinnedTls.verifier(pairing[1]) : null;
+        } catch (GeneralSecurityException e) {
+            throw new IllegalArgumentException("This phone cannot open an encrypted connection to the receiver.");
+        }
     }
 
     private static boolean privateHost(String host) {
@@ -79,6 +97,11 @@ final class PendantClient {
     private JSONObject request(String path, JSONObject body) throws IOException, JSONException {
         HttpURLConnection http=(HttpURLConnection)URI.create(origin+path).toURL().openConnection();
         try {
+            if (pinned) {
+                // The receiver's self-signed certificate is trusted by fingerprint alone.
+                ((HttpsURLConnection) http).setSSLSocketFactory(pinnedSockets);
+                ((HttpsURLConnection) http).setHostnameVerifier(pinnedVerifier);
+            }
             http.setInstanceFollowRedirects(false);
             http.setConnectTimeout(3000);
             http.setReadTimeout(3000);

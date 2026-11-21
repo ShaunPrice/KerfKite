@@ -161,9 +161,12 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
 
     @app.post('/api/phone-monitor')
     def configure_phone():
-        action = payload().get('action')
+        data = payload()
+        action = data.get('action')
         if action not in ('status', 'enable', 'disable'):
             raise ValueError('Select a phone pairing action.')
+        if action == 'enable' and 'plaintext' in data:
+            monitor.set_plaintext(data['plaintext'])
         try:
             info = {'status': monitor.info, 'enable': monitor.enable, 'disable': monitor.disable}[action]()
         except OSError as exc:
@@ -315,17 +318,26 @@ def main():
     parser.add_argument('--monitor-port', type=int, default=8766)
     parser.add_argument('--monitor-cert', help='HTTPS certificate for the phone monitor')
     parser.add_argument('--monitor-key', help='Matching HTTPS private key')
+    parser.add_argument(
+        '--monitor-plaintext',
+        action='store_true',
+        help='Serve the phone monitor over HTTP. Needed for Pocket 0.4.1 and earlier, which cannot verify a pinned certificate',
+    )
     args = parser.parse_args()
     ctl = Controller()
     jobs = PhoneJobs(ctl, allow_physical=args.enable_hardware)
     if bool(args.monitor_cert) != bool(args.monitor_key):
         parser.error('Provide both --monitor-cert and --monitor-key')
-    monitor = PhoneMonitor(ctl, jobs, args.monitor_port, args.monitor_cert, args.monitor_key)
+    if args.monitor_plaintext and args.monitor_cert:
+        parser.error('Use either --monitor-plaintext or a monitor certificate')
+    monitor = PhoneMonitor(
+        ctl, jobs, args.monitor_port, args.monitor_cert, args.monitor_key, plaintext=args.monitor_plaintext
+    )
     if args.monitor:
         pairing = monitor.enable()
-        print(
-            f"Phone pairing: {pairing['scheme']}://<PI-LAN-IP>:{pairing['port']}/#token={pairing['token']}", flush=True
-        )
+        print(f"Phone pairing: {pairing['scheme']}://<PI-LAN-IP>:{pairing['port']}/#{pairing['fragment']}", flush=True)
+        if pairing['encryption'] == 'none':
+            print('The phone monitor is using HTTP: the pairing token and commands are readable on this network.')
         print('Open Control → Phone pendant to view or revoke pairing.', flush=True)
     create_app(ctl, jobs, allow_hardware=args.enable_hardware, phone_monitor=monitor).run(
         host='127.0.0.1', port=args.port, threaded=True, debug=False

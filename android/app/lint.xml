@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- PinnedTls accepts exactly one certificate, identified by the SHA-256 fingerprint in the pairing link.
+         That is stricter than the platform default, not a way round it; see validation/pendant_tls_pin_check.py. -->
+    <issue id="CustomX509TrustManager">
+        <ignore path="src/main/java/au/cncstudio/pocket/PinnedTls.java" />
+    </issue>
+</lint>

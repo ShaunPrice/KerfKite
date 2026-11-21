@@ -17,10 +17,15 @@ Notable changes to KerfKite Studio and KerfKite Pocket. Versions before this fil
 - Pocket no longer allocates while drawing the preview and computes each shape's outline once.
 
 ### Security
+- The phone pendant listener is encrypted by default when the `cryptography` package is installed. Studio creates a certificate for each pairing and places its SHA-256 fingerprint in the pairing link; Pocket 0.5.0 accepts only that certificate. **Pocket 0.4.1 and earlier cannot use these links**: tick **Unencrypted pairing** or start with `--monitor-plaintext` until the phone is updated. The desktop installers do not yet bundle `cryptography` and continue to use HTTP.
+- The desktop installers now include `cryptography`, so an installed Studio encrypts the pendant without a further step. Intel macOS receives 48.0.1, the last release published for it; the other targets receive 50.0.2.
 - `/api/command` accepts only `action`, `axis`, `distance` and `feed`; any other field is refused before the controller is called.
 - The local session token is compared in constant time.
 
 ### Development
+- A debug build of Pocket installs beside the released app as **Pocket debug** (`au.cncstudio.pocket.debug`), so a change can be tried on a phone without replacing the released app or its projects. The device workflows drive the debug build unless `KERFKITE_POCKET_PACKAGE` names another id.
+- `validation/pendant_tls_pin_check.py` checks Pocket's pinning class against a real phone listener with a JDK, without a phone.
+- Pocket is versioned 0.5.0 (version code 6).
 - `tests/test_design_api.py` covers the design routes (28% to 87% of `studio/design_api.py`). Overall coverage is 86% with the `mcp`, `web` and `step` extras and 76% on a plain install; the pre-push hook enforces a 75% floor when `pytest-cov` is installed.
 - Python sources are formatted with `ruff format` (120 columns, existing quote style kept). The change is layout only: the syntax tree of every file is identical before and after. The pre-push hook and `scripts/ci-local.sh` check formatting.
 - `scripts/build_help.py` orders the guide sections by file name, so the bundled help is identical whichever machine builds it.

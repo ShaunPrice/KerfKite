@@ -60,7 +60,18 @@ def run(page):
     expect(loc('#phone-enable')).to_be_visible()
     loc('#phone-enable').click()
     loc('#phone-host').fill('127.0.0.1')
-    expect(loc('#phone-link')).to_have_value(__import__('re').compile(r'^http://127\.0\.0\.1:\d+/#token=.+'))
+    pattern = __import__('re').compile
+    expect(loc('#phone-link')).to_have_value(pattern(r'^https?://127\.0\.0\.1:\d+/#token='))
+    if loc('#phone-link').input_value().startswith('https:'):
+        # With the web extra the listener is encrypted and the link carries the certificate fingerprint.
+        expect(loc('#phone-link')).to_have_value(pattern(r'^https://127\.0\.0\.1:\d+/#token=[^&]+&fp=[0-9a-f]{64}$'))
+        expect(loc('#phone-pair-status')).to_contain_text('Encrypted pairing')
+        loc('#phone-disable').click()
+        expect(loc('#phone-link')).to_be_hidden()
+        loc('#phone-plaintext').check()
+        loc('#phone-enable').click()
+    expect(loc('#phone-link')).to_have_value(pattern(r'^http://127\.0\.0\.1:\d+/#token=[^&]+$'))
+    expect(loc('#phone-pair-status')).to_contain_text('Pairing uses HTTP')
     loc('#phone-disable').click()
     expect(loc('#phone-link')).to_be_hidden()
     print('PASS local phone pendant pairing and revocation')

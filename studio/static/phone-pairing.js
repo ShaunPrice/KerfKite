@@ -5,6 +5,7 @@
   panel.hidden = true;
   panel.innerHTML = `<summary>Phone pendant</summary>
     <p class="hint">Connect your phone over Wi-Fi, USB tethering or Bluetooth tethering. Use this server’s address on that connection. Each phone command goes through Studio.</p>
+    <label id="phone-plaintext-row" hidden><input type="checkbox" id="phone-plaintext"> Unencrypted pairing, for Pocket 0.4.1 and earlier or a phone browser</label>
     <button type="button" id="phone-enable">Enable phone pairing</button>
     <div id="phone-pair-fields" hidden>
       <label>Server address on the phone’s network<input id="phone-host" placeholder="Server IP or hostname" autocomplete="off"></label>
@@ -19,25 +20,27 @@
     const host=el('host').value.trim();
     const enabled=!!state?.enabled;
     el('enable').hidden=enabled;
+    el('plaintext-row').hidden=enabled || !state?.can_encrypt || state?.encryption==='certificate';
+    if(state && !busy)el('plaintext').checked=!!state.plaintext;
     el('pair-fields').hidden=!enabled;
     let link='';
     if(enabled && /^[\w.:%\[\]-]+$/.test(host)){
       try {
         const name=host.includes(':') && !host.startsWith('[') ? '['+host+']' : host;
         const url=new URL(state.scheme+'://'+name+':'+state.port+'/');
-        url.hash=new URLSearchParams({token:state.token}).toString();
+        url.hash=state.fragment||new URLSearchParams({token:state.token}).toString();
         link=url.href;
       } catch {}
     }
     el('link').value=link;
     el('copy').disabled=!link;
-    el('pair-status').textContent=enabled ? (state.scheme==='https'?'HTTPS pairing enabled.':'Pairing uses HTTP. Use a trusted local connection, or set a monitor TLS certificate on the server.') : 'Pairing is off.';
+    el('pair-status').textContent=enabled ? (state.encryption==='pinned'?'Encrypted pairing enabled. Pocket 0.5.0 or later accepts only this session’s certificate, identified in the link. A phone browser will warn about the certificate.':state.scheme==='https'?'HTTPS pairing enabled.':'Pairing uses HTTP. Use a trusted local connection, install the Studio web extra for encrypted pairing, or set a monitor TLS certificate on the server.') : 'Pairing is off.';
   }
   async function change(action){
     if(busy)return;
     busy=true;
     try{
-      state=await api('phone-monitor',{action});
+      state=await api('phone-monitor',action==='enable' && !el('plaintext-row').hidden ? {action,plaintext:el('plaintext').checked} : {action});
       if(!el('host').value && state.hosts?.length)el('host').value=state.hosts[0];
       display();
     }catch(error){el('pair-status').textContent=error.message;}

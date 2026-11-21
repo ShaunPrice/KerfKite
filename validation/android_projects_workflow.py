@@ -8,8 +8,9 @@ import tempfile
 import uuid
 
 from android_pendant_workflow import Phone, wait_until
+from pocket_app import PACKAGE, component
 
-ACTIVITY = "au.cncstudio.pocket/.WorkshopActivity"
+ACTIVITY = component()
 
 
 def select_folder(phone, folder):
@@ -55,7 +56,7 @@ def exercise(phone, apk, previous=None):
         phone.confirm()
         assert phone.find("Rectangle · 40.0 × 25.0 mm")
     phone.run("install", "-r", str(apk))
-    phone.run("shell", "am", "force-stop", "au.cncstudio.pocket")
+    phone.run("shell", "am", "force-stop", PACKAGE)
     phone.run("shell", "am", "start", "-W", "-f", "0x10008000", "-n", ACTIVITY)
     if previous:
         assert phone.find("Pocket design")
@@ -142,7 +143,7 @@ def exercise(phone, apk, previous=None):
         phone.tap("My projects")
         phone.tap(folder, button=True)
         assert phone.find("Rectangle · 40.0 × 25.0 mm")
-        phone.run("shell", "am", "force-stop", "au.cncstudio.pocket")
+        phone.run("shell", "am", "force-stop", PACKAGE)
         phone.run("shell", "am", "start", "-W", "-f", "0x10008000", "-n", ACTIVITY)
         assert phone.find(folder) and phone.find("Rectangle · 40.0 × 25.0 mm")
         print("PASS create, rename, duplicate, delete, switch and active project persistence", flush=True)
