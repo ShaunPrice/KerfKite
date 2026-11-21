@@ -15,7 +15,7 @@ Use the **server's** interface address. The phone's gateway address, the control
 ## Pair and use the pendant
 
 1. In the local machine workstation open **Control → Phone pendant**. Choose **Enable phone pairing**, enter the server address for the link you selected and copy the generated private pairing URL. The workstation can also start with `python -m studio.server --monitor`. Its terminal displays the port and a token. Replace the host placeholder with the server address.
-2. Open **CNC pendant** in Pocket. Paste the complete pairing URL and tap **Pair**. The token grants workshop controls to its holder. Keep the link private.
+2. Open **CNC pendant** in Pocket. Tap **Scan QR code** and point the phone at the code Studio shows under the pairing link, or paste the complete pairing URL and tap **Pair**. The link and the code both carry the token, which grants workshop controls to its holder: keep them private, keep the code out of view of other cameras, and choose **Disable and revoke pairing** in Studio when the pendant is not in use.
 
    **Encrypted by default.** When the workstation has the `cryptography` package (included in the desktop installers, and in Studio's `web` extra for a source install), enabling pairing creates a certificate for that pairing and puts its SHA-256 fingerprint in the link after `&fp=`. Pocket 0.5.0 or later connects over HTTPS and accepts only that certificate; it does not rely on a certificate authority or on the address in the link. A new certificate is made each time pairing is enabled, and disabling pairing discards it.
 

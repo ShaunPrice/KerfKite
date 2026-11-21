@@ -2,6 +2,7 @@ package au.cncstudio.pocket;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Intent;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
@@ -48,6 +49,7 @@ public final class PendantActivity extends Activity {
     private ScreenAwakeSwitch screenAwake;
     private Spinner increment,feed;
     private AlertDialog confirm;
+    private static final int SCAN=1;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -61,7 +63,7 @@ public final class PendantActivity extends Activity {
         });
         page=column();page.setPadding(dp(16),dp(12),dp(16),dp(24));scroll.addView(page);setContentView(scroll);
         title("CNC pendant",26);
-        page.addView(text("Reach the Studio receiver over Wi-Fi, USB tethering or Bluetooth tethering. Paste the pairing link shown by Studio.",15));
+        page.addView(text("Reach the Studio receiver over Wi-Fi, USB tethering or Bluetooth tethering. Scan the QR code shown by Studio, or paste its pairing link.",15));
         pairFields=column();page.addView(pairFields);
         pairFields.addView(text("Pair with the machine receiver",17));
         link=new EditText(this);
@@ -71,6 +73,7 @@ public final class PendantActivity extends Activity {
                 InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         link.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
         pairFields.addView(link);pairFields.addView(button("Pair",this::pair));
+        pairFields.addView(button("Scan QR code",()->startActivityForResult(new Intent(this,ScanActivity.class),SCAN)));
         machine=text("Unpaired",20);machine.setContentDescription("Machine status");page.addView(machine);
         position=text("Position unavailable",16);position.setContentDescription("Controller position unavailable");page.addView(position);
         armed=text("",15);page.addView(armed);
@@ -118,6 +121,14 @@ public final class PendantActivity extends Activity {
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);s.setAdapter(adapter);return s;
     }
 
+    /** A link read by the scanner is paired exactly as a pasted one, including the question before plain HTTP. */
+    @Override protected void onActivityResult(int request,int result,Intent data){
+        super.onActivityResult(request,result,data);
+        if(request!=SCAN || result!=RESULT_OK || data==null || client!=null)return;
+        String scanned=data.getStringExtra(ScanActivity.LINK);
+        if(scanned==null)return;
+        link.setText(scanned);pair();
+    }
     private void pair(){
         PendantClient candidate;
         try {candidate=new PendantClient(link.getText().toString());}

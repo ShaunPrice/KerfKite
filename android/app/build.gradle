@@ -24,3 +24,7 @@ android {
         }
     }
 }
+dependencies {
+    // QR decoding for the pairing-code scanner. Apache-2.0; its licence and notice are in src/main/assets.
+    implementation 'com.google.zxing:core:3.5.3'
+}

@@ -68,7 +68,7 @@ See the [0.6.1 performance measurements](docs/PERFORMANCE.md), the [18 November 
 
 To trim two crossing lines, open the [geometry guide](docs/GEOMETRY.md). In a solid sketch, you can [trim a crossing, dimension a fillet or constrain a profile](docs/SKETCH.md). A rebuilt solid can update linked machining contours, sections and reliefs. See [solid CAD](docs/SOLID-CAD.md).
 
-For phone control, open **Control → Phone pendant** on the Studio workstation and choose **Enable phone pairing**. Use the private pairing link in Pocket. Wi-Fi, USB tethering and Bluetooth tethering all connect the phone to the same server. See the [connection guide](docs/PHONE-CONNECTIONS.md).
+For phone control, open **Control → Phone pendant** on the Studio workstation and choose **Enable phone pairing**. Scan the QR code with Pocket, or use the private pairing link. Wi-Fi, USB tethering and Bluetooth tethering all connect the phone to the same server. See the [connection guide](docs/PHONE-CONNECTIONS.md).
 
 ## Workshop tools
 
