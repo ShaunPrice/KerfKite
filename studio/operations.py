@@ -5,6 +5,9 @@ Inside and outside offsets, pockets and hatch fills are computed by the native c
 kerfkite-cam tool runs, so Studio and the tool cut the same paths. The settings are still checked here,
 with the messages and in the order they always had.
 
+The place where a helix descends into a pocket is found by the same kernel (kernel_pocket_entries, for
+studio/router_entry.py).
+
 Without the extension (the portable wheel) the same operations are computed with Shapely, as they were
 before the kernel. The two give the same regions; their vertices differ by far less than a machine can
 resolve, and the kernel's pockets have fewer of them. KERFKITE_POLYGON_BACKEND=shapely selects the Shapely
@@ -92,6 +95,42 @@ def _kernel(op, paths, **settings):
     _contours(paths)
     request = dict(settings, op=op, paths=[[[float(x), float(y)] for x, y in path] for path in paths])
     return json.loads(_core_call('operation', json.dumps(request, allow_nan=False)))['paths']
+
+
+_entries_installed = None
+
+
+def kernel_entries_available():
+    """Whether the compiled extension carries the native core's placing of helical pocket entries."""
+    global _entries_installed
+    if _entries_installed is None:
+        try:
+            # An extension built before this was added answers "Unknown operation".
+            _entries_installed = kernel_available() and bool(
+                kernel_pocket_entries([[[0, 0], [9, 0], [9, 9], [0, 9], [0, 0]]], [[1, 1]], 1, 0.5)
+            )
+        except (ValueError, RuntimeError):
+            _entries_installed = False
+    return _entries_installed
+
+
+def kernel_pocket_entries(source, seams, bit_radius, radius):
+    """Where the native core puts a helix into a pocket, for each seam: (centre x, centre y, start angle).
+
+    source holds the pocket's contours as drawn and seams the first point of each pocket pass. This is the
+    code kerfkite-cam runs (native/core/src/pocket_entry.cpp); its messages come back as ValueError.
+    """
+    _contours(source)
+    _contours([seams])
+    request = dict(
+        op='helix',
+        paths=[[[float(x), float(y)] for x, y in path] for path in source],
+        seams=[[float(x), float(y)] for x, y in seams],
+        bit_radius=float(bit_radius),
+        radius=float(radius),
+    )
+    answer = json.loads(_core_call('operation', json.dumps(request, allow_nan=False)))
+    return [tuple(entry) for entry in answer['entries']]
 
 
 def region(paths):

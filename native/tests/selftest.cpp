@@ -10,6 +10,7 @@
 #include "kerfkite/cam.hpp"
 #include "kerfkite/leveling.hpp"
 #include "kerfkite/number_text.hpp"
+#include "kerfkite/operation_command.hpp"
 #include "kerfkite/pcb.hpp"
 
 using json = kerfkite::Json;
@@ -39,6 +40,179 @@ template <typename Thrown> static std::string message(const char *project) {
         return "(another exception)";
     }
     return "(nothing thrown)";
+}
+
+// FNV-1a of the centres of the helices placed in the generated pockets of helical_entries(), recorded from
+// x86-64 GCC. A centre is worked out with + - * / alone, so every platform must give this value.
+static const std::uint64_t HELIX_DIGEST = 13467638686905150612ULL;
+
+// The distance from a point to a segment, in plain floating point: the check of helical_entries(), which
+// shares no code with the core.
+static double away(double px, double py, double ax, double ay, double bx, double by) {
+    const double dx = bx - ax, dy = by - ay, length = dx * dx + dy * dy;
+    double t = length > 0 ? ((px - ax) * dx + (py - ay) * dy) / length : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    return std::hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+// The distance from a point to the nearest wall of a pocket given as closed contours.
+static double to_walls(const json &contours, double px, double py) {
+    double nearest = 1e300;
+    for (const json &contour : contours)
+        for (std::size_t i = 0; i + 1 < contour.size(); ++i)
+            nearest = std::min(nearest, away(px, py, contour[i][0].get<double>(), contour[i][1].get<double>(),
+                                             contour[i + 1][0].get<double>(), contour[i + 1][1].get<double>()));
+    return nearest;
+}
+
+// Whether a point is in the pocket: inside an odd number of its contours.
+static bool in_pocket(const json &contours, double px, double py) {
+    bool inside = false;
+    for (const json &contour : contours)
+        for (std::size_t i = 0; i + 1 < contour.size(); ++i) {
+            const double ax = contour[i][0].get<double>(), ay = contour[i][1].get<double>();
+            const double bx = contour[i + 1][0].get<double>(), by = contour[i + 1][1].get<double>();
+            if ((ay > py) != (by > py) && px < ax + (py - ay) * (bx - ax) / (by - ay)) inside = !inside;
+        }
+    return inside;
+}
+
+// Helical entries into pockets: where the helix goes, that the cutter stays clear of every wall and island
+// there, the program built on it, and the refusals.
+static void helical_entries() {
+    // A 40 mm square pocket with a 12 mm square island, a 4 mm cutter and a helix of radius 1.5 mm.
+    const char *settings = R"("mode":"router","protocol":"grbl","width":90,"height":90,"safe":3,"depth":2,"step":1,
+        "power":9000,"feed":400,"plunge":90,"tool_diameter":4,"stepover":2,"operation":"pocket","router_entry":"helix",
+        "entry_angle":3,"stock_thickness":4)";
+    const std::string square = "[[10,10],[50,10],[50,50],[10,50],[10,10]]", island = "[[24,24],[36,24],[36,36],[24,36],[24,24]]";
+    const auto pocket = [&](const std::string &paths, const std::string &radius) {
+        return "{" + std::string(settings) + ",\"entry_radius\":" + radius + ",\"paths\":[" + paths + "]}";
+    };
+    const Job job = generate(json::parse(pocket(square + "," + island, "1.5")));
+    const std::vector<std::string> &lines = job.lines;
+    // The pass round the island starts at (22, 23.950903); its helix is centred 1.5024 mm away, inside the
+    // region kept for centres, and starts on its circle at the point nearest that seam.
+    expect(lines.size() == 3282 && lines[9] == "G0 Z3.000" && lines[10] == "G0 X21.998 Y23.951" &&
+               lines[11] == "G1 X21.998 Y23.951 Z0.000 F90.0" && lines[12] == "G1 X21.966 Y24.190 Z-0.009 F90.0" &&
+               lines[3281] == "M5",
+           "a pocket entered by a helix");
+    std::size_t falling = 0;
+    bool steep = false;
+    for (const Segment &move : job.segments) {
+        if (!(move.end_z < move.start_z) || move.start_z > 0) continue;
+        ++falling;
+        const double run = std::hypot(move.nx - move.x, move.ny - move.y);
+        if (!(run > 0) || (move.start_z - move.end_z) / run > std::tan(3 * 3.141592653589793 / 180) + 1e-7) steep = true;
+    }
+    expect(falling > 36 * 2 * 10 && !steep, "every fall into the stock is along a helix, no steeper than the entry angle");
+    expect(job.warnings.size() == 3 && job.warnings[1] == "Concentric pocket clearing preserves islands. Narrow residual features may remain.",
+           "its warnings");
+
+    // The same places through the command Studio's Python calls.
+    const json contours = json::parse("[" + square + "," + island + "]");
+    const json passes = operation_call("operation", json{{"op", "pocket"}, {"paths", contours}, {"radius", 2.0}, {"step", 2.0}})["paths"];
+    json seams = json::array();
+    for (const json &pass : passes) seams.push_back(pass[0]);
+    const json placed = operation_call("operation", json{{"op", "helix"}, {"paths", contours}, {"seams", seams},
+                                                         {"bit_radius", 2.0}, {"radius", 1.5}})["entries"];
+    expect(placed.size() == passes.size() && placed.size() == 10 && seams[1].dump() == "[12.0,12.0]" &&
+               placed[1][0].dump() == "13.5024" && placed[1][1].dump() == "13.5024" &&
+               std::fabs(placed[1][2].get<double>() + 2.356194490192345) < 1e-12 && placed[3].dump() == "[14.0,14.0,0.0]",
+           "a helix is centred on the seam where that is clear, and otherwise as near it as the walls allow");
+
+    // Refusals, with the reference's messages.
+    const auto refusal = [&](const std::string &paths, const std::string &radius) {
+        return message<ValueError>(pocket(paths, radius).c_str());
+    };
+    expect(refusal("[[10,10],[17,10],[17,17],[10,17],[10,10]]", "1.8") == "The pocket has insufficient room for the cutter and helix radius",
+           "a pocket the cutter fits and the helix does not");
+    expect(refusal("[[10,10],[40,10],[40,40],[10,40],[10,10]],[[50,10],[57,10],[57,17],[50,17],[50,10]]", "1.8") ==
+               "No clear helix and connecting feed to this pocket contour; reduce the helix radius or use a contour ramp",
+           "a small pocket beside a large one: no straight feed leads into it");
+    expect(refusal(square, "2.5") == "Helix radius cannot exceed the cutter radius; a larger helix leaves a central core",
+           "a helix wider than the cutter");
+    expect(refusal(square, "\"wide\"") == "entry_radius must be numeric", "a helix radius that is not a number");
+    expect(message<ValueError>(R"({"mode":"router","width":100,"height":50,"feed":600,"power":1,"operation":"pocket",
+        "router_entry":"helix","tool_diameter":3,"stepover":1.5,"entry_radius":0.05,"entry_angle":0.25,"depth":10,"step":10,
+        "paths":[[[20,20],[25,20],[25,25],[20,25],[20,20]]]})") == "Helix exceeds the path segment limit",
+           "a helix of more turns than a program may hold");
+
+    // Generated pockets: a rectangle with its corners cut by different amounts, sometimes with a triangular
+    // island and sometimes with a small second pocket beside it. Every coordinate is a whole number of
+    // thousandths, so the pockets are the same on every platform. For each helix placed, the centre must be
+    // in the pocket and at least cutter radius + helix radius from every wall, and the feed to the seam at
+    // least the cutter radius from every wall, less the two half steps of the kernel's grid.
+    std::uint64_t state = 2026, digest = 1469598103934665603ULL;
+    const auto draw = [&](std::uint64_t below) {
+        state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+        return (state >> 33) % below;
+    };
+    const auto mm = [](std::uint64_t thousandths) { return static_cast<double>(thousandths) / 1000.0; };
+    std::size_t helices = 0, refused = 0;
+    bool clear = true;
+    for (int round = 0; round < 120; ++round) {
+        const double x0 = mm(20000 + draw(5000));
+        const double y0 = mm(20000 + draw(5000));
+        const double w = mm(9000 + draw(14000));
+        const double h = mm(9000 + draw(14000));
+        double cut[4];
+        for (double &corner : cut) corner = mm(draw(4000));
+        json outer = json::array({json::array({x0 + cut[0], y0}), json::array({x0 + w - cut[1], y0}), json::array({x0 + w, y0 + cut[1]}),
+                                  json::array({x0 + w, y0 + h - cut[2]}), json::array({x0 + w - cut[2], y0 + h}),
+                                  json::array({x0 + cut[3], y0 + h}), json::array({x0, y0 + h - cut[3]}), json::array({x0, y0 + cut[0]})});
+        outer.push_back(outer[0]);
+        json pockets = json::array({outer});
+        const std::uint64_t extra = draw(3);
+        if (extra == 1) {  // an island
+            const double ix = x0 + w / 2 + mm(draw(3000)) - 1.5;
+            const double iy = y0 + h / 2 + mm(draw(3000)) - 1.5;
+            const double size = mm(500 + draw(2500));
+            pockets.push_back(json::array({json::array({ix, iy}), json::array({ix + size, iy + size / 4}),
+                                           json::array({ix + size / 3, iy + size}), json::array({ix, iy})}));
+        } else if (extra == 2) {  // a second pocket, which the helix may not fit
+            const double side = mm(1200 + draw(3500));
+            pockets.push_back(json::array({json::array({x0 + w + 3, y0}), json::array({x0 + w + 3 + side, y0}),
+                                           json::array({x0 + w + 3 + side, y0 + side}), json::array({x0 + w + 3, y0 + side}),
+                                           json::array({x0 + w + 3, y0})}));
+        }
+        const double bit = mm(500 + 250 * draw(6));
+        const double radius = std::min(bit, mm(50 + 150 * draw(8)));
+        json entries, starts = json::array();
+        try {
+            const json cuts = operation_call("operation", json{{"op", "pocket"}, {"paths", pockets}, {"radius", bit}, {"step", bit}})["paths"];
+            for (const json &pass : cuts) starts.push_back(pass[0]);
+            entries = operation_call("operation", json{{"op", "helix"}, {"paths", pockets}, {"seams", starts},
+                                                       {"bit_radius", bit}, {"radius", radius}})["entries"];
+        } catch (const ValueError &) {
+            ++refused;
+            continue;
+        }
+        if (entries.size() != starts.size()) clear = false;
+        for (std::size_t i = 0; i < entries.size() && i < starts.size(); ++i) {
+            ++helices;
+            const double cx = entries[i][0].get<double>(), cy = entries[i][1].get<double>(), angle = entries[i][2].get<double>();
+            for (const double value : {cx, cy}) {
+                std::uint64_t bits;
+                static_assert(sizeof bits == sizeof value, "a double is 64 bits");
+                std::copy(reinterpret_cast<const unsigned char *>(&value), reinterpret_cast<const unsigned char *>(&value) + 8,
+                          reinterpret_cast<unsigned char *>(&bits));
+                for (int byte = 0; byte < 8; ++byte) digest = (digest ^ ((bits >> (8 * byte)) & 0xff)) * 1099511628211ULL;
+            }
+            if (!in_pocket(pockets, cx, cy) || to_walls(pockets, cx, cy) < bit + radius) clear = false;
+            // The feed, from the point of the circle where the helix ends to the seam, a tenth at a time.
+            const double sx = cx + radius * std::cos(angle), sy = cy + radius * std::sin(angle);
+            const double ex = starts[i][0].get<double>(), ey = starts[i][1].get<double>();
+            for (int step = 0; step <= 10; ++step) {
+                const double fx = sx + (ex - sx) * step / 10, fy = sy + (ey - sy) * step / 10;
+                if (!in_pocket(pockets, fx, fy) || to_walls(pockets, fx, fy) < bit - 2e-6) clear = false;
+            }
+        }
+    }
+    expect(clear, "every helix and its feed keep the cutter clear of the pocket's walls and islands");
+    expect(helices > 300 && refused > 5 && refused < 80, "the generated pockets place helices and refuse some");
+    if (digest != HELIX_DIGEST) std::printf("helix centres: digest %llu\n", static_cast<unsigned long long>(digest));
+    expect(digest == HELIX_DIGEST, "the helix centres are the recorded ones");
+    std::printf("helical entries: %zu helices in generated pockets, %zu pockets refused\n", helices, refused);
 }
 
 // FNV-1a of one isolation answer as JSON text, recorded from x86-64 GCC. See circuit_boards().
@@ -351,6 +525,7 @@ int main() {
         expect(std::string(error.what()).find("only straight moves") != std::string::npos, "an arc is refused");
     }
 
+    helical_entries();
     circuit_boards();
 
     std::printf(failures ? "%d checks failed\n" : "PASS native core self-test%.0d\n", failures);

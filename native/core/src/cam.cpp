@@ -98,6 +98,9 @@ Job single(const json &project) {
     // studio.operations.prepare: the line operation leaves the paths as they are.
     std::vector<std::string> operation_warnings;
     const bool line = is_text_or_absent(operation, "line");
+    // A helix is placed in the pocket as drawn, so those contours are kept beside the pocket's passes.
+    std::vector<Path> drawn;
+    if (router && is_text(get(project, "router_entry"), "helix") && is_text(operation, "pocket")) drawn = clean;
     if (!line || knife) {
         if (!none(get(project, "path_depths")))
             throw ValueError("Per-vertex depth contours require the line operation");
@@ -141,8 +144,8 @@ Job single(const json &project) {
         if (depth <= 0) throw ValueError("No contour cuts below the stock surface");
     }
     if (router && !entry_plunge)
-        return entry_job(project, clean, has_depths ? &depths : nullptr, depth, step, safe, feed, plunge, power, width,
-                         height, operation_warnings);
+        return entry_job(project, drawn, clean, has_depths ? &depths : nullptr, depth, step, safe, feed, plunge, power,
+                         width, height, operation_warnings);
 
     std::vector<std::vector<LaserVertex>> laser_paths;
     bool leads = false;

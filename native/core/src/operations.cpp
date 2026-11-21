@@ -276,6 +276,25 @@ Json operation_call(const std::string &command, const Json &request) {
     if (command != "operation") throw ValueError("Unknown command: " + command);
     const json *name = request.is_object() ? get(request, "op") : nullptr;
     const std::string op = name && name->is_string() ? name->get<std::string>() : std::string();
+    if (op == "helix") {
+        const json *given = get(request, "seams");
+        if (!given || !given->is_array()) throw ValueError("The operation request needs a list of points for \"seams\"");
+        std::vector<std::array<double, 2>> seams;
+        seams.reserve(given->size());
+        for (const json &point : *given) {
+            if (!point.is_array() || point.size() != 2 || !point[0].is_number() || !point[1].is_number())
+                throw ValueError("The operation request needs a list of points for \"seams\"");
+            seams.push_back({point[0].get<double>(), point[1].get<double>()});
+        }
+        const double bit_radius = request_number(request, "bit_radius"), radius = request_number(request, "radius");
+        // Smaller than this the shrunk regions would be the pocket itself.
+        if (!(bit_radius >= 0.001) || !(radius >= 0.001))
+            throw ValueError("A helical entry needs a cutter radius and a helix radius of at least 0.001 mm");
+        json entries = json::array();
+        for (const HelixEntry &entry : pocket_entries(contours(request), seams, bit_radius, radius))
+            entries.push_back(json::array({entry.x, entry.y, entry.angle}));
+        return json{{"entries", std::move(entries)}};
+    }
     if (op != "region" && op != "offset" && op != "pocket" && op != "fill") throw ValueError("Unknown operation: " + op);
     const PolygonSet g = contour_region(contours(request));
     std::vector<Path> paths;

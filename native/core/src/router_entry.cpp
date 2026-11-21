@@ -1,14 +1,21 @@
-// Descend along a closed contour instead of plunging: studio/router_entry.py, statement for statement
-// where order affects the result.
+// Descend along a closed contour, or down a helix inside a pocket, instead of plunging:
+// studio/router_entry.py, statement for statement where order affects the result.
 //
 // The reference keeps the integer 0 as the first height of the first level, and the preview data tells it
 // from 0.0, so the moves below carry that distinction with them.
+//
+// Where a helix goes is decided by pocket_entry.cpp, on the polygon kernel, which the reference calls too.
+// Its points then come from the platform's sine and cosine, and the number of its chords from the
+// platform's arc cosine, one call each as Python makes them: they are compared with the reference on the
+// same machine, and the last bit may differ from one platform to another.
 #include "router_entry.hpp"
 
 #include <cmath>
 #include <limits>
 
 #include "kerfkite/py_math.hpp"
+#include "operations.hpp"
+#include "py_trig.hpp"
 
 #if defined(_MSC_VER)
 #define KERFKITE_NOINLINE __declspec(noinline)
@@ -25,6 +32,7 @@ const double PI = 3.141592653589793;  // math.pi
 
 // One library call, as Python makes it, kept out of line so that it is never evaluated at compile time.
 KERFKITE_NOINLINE double tangent(double x) { return std::tan(x); }
+KERFKITE_NOINLINE double arc_cosine(double x) { return std::acos(x); }
 
 // studio.operations.value(project, key, default, lo, hi): cam.number with the key in the message.
 double value(const json &project, const char *key, double fallback, double low, double high, const char *low_text,
@@ -52,9 +60,9 @@ double dist3(double ax, double ay, double az, double bx, double by, double bz) {
 
 }  // namespace
 
-Job entry_job(const json &project, const std::vector<Contour> &paths, const std::vector<std::vector<double>> *caps,
-              double depth, double step, double safe, double feed, double plunge, double rpm, double width,
-              double height, const std::vector<std::string> &warnings) {
+Job entry_job(const json &project, const std::vector<Contour> &source, const std::vector<Contour> &paths,
+              const std::vector<std::vector<double>> *caps, double depth, double step, double safe, double feed,
+              double plunge, double rpm, double width, double height, const std::vector<std::string> &warnings) {
     const json *strategy = get(project, "router_entry");
     const bool helix = is_text(strategy, "helix");
     if (!helix && !is_text(strategy, "ramp")) throw ValueError("Choose plunge, contour ramp or pocket helix");
@@ -89,12 +97,20 @@ Job entry_job(const json &project, const std::vector<Contour> &paths, const std:
             edges.push_back(pymath::dist(path[i - 1][0], path[i - 1][1], path[i][0], path[i][1]));
         lens.push_back(std::move(edges));
     }
+    std::vector<HelixEntry> helices;
+    double radius = 0, chords = 0, turn_length = 0;
     if (helix) {
         if (!pocket || caps) throw ValueError("Helical entry requires a pocket with confirmed cutter clearance");
-        const double radius = value(project, "entry_radius", 1, 0.05, 50, "0.05", "50");
+        radius = value(project, "entry_radius", 1, 0.05, 50, "0.05", "50");
         if (radius > bit_radius)
             throw ValueError("Helix radius cannot exceed the cutter radius; a larger helix leaves a central core");
-        throw NotPorted("helical entry into pockets");
+        std::vector<std::array<double, 2>> seams;
+        seams.reserve(paths.size());
+        for (const Contour &path : paths) seams.push_back(path[0]);
+        helices = pocket_entries(source, seams, bit_radius, radius);
+        // Chords short enough to stay within 0.005 mm of the circle, and at least 36 to a turn.
+        chords = py_max(36, std::ceil(PI / arc_cosine(py_max(-1, 1 - 0.005 / radius))));
+        turn_length = 2 * radius * pytrig::sine(PI / chords) * chords;
     }
 
     Job job;
@@ -150,7 +166,15 @@ Job entry_job(const json &project, const std::vector<Contour> &paths, const std:
             const std::vector<double> &lengths = lens[i];
             const double perimeter = pymath::sum(lengths.begin(), lengths.end());
             const std::vector<double> *limit = caps && !(*caps)[i].empty() ? &(*caps)[i] : nullptr;
-            const double x = path[0][0], y = path[0][1];
+            double x = path[0][0], y = path[0][1];
+            double cx = 0, cy = 0, start_angle = 0;
+            if (helix) {
+                cx = helices[i].x;
+                cy = helices[i].y;
+                start_angle = helices[i].angle;
+                x = cx + radius * pytrig::cosine(start_angle);
+                y = cy + radius * pytrig::sine(start_angle);
+            }
             lines.push_back(safe_line);
             lines.push_back("G0 X" + fixed(x, 3) + " Y" + fixed(y, 3));
             line_count += 2;
@@ -160,20 +184,35 @@ Job entry_job(const json &project, const std::vector<Contour> &paths, const std:
             at_whole = false;
             if (limit && (*limit)[0] > previous) move(x, y, (*limit)[0], false, plunge);
             else move(x, y, previous, previous_whole, plunge);
-            // The reference divides by these; a zero would stop it with an error that is not a rejection.
-            if (!(slope * perimeter > 0)) throw NotPorted("ramps along contours of no length");
-            const double turns = py_max(1, std::ceil(drop / (slope * perimeter)));
-            if (!(turns <= 200000) || line_count + static_cast<size_t>(turns) * (path.size() - 1) > 200000)
-                throw ValueError("Contour ramp exceeds the path segment limit");
-            const double total = turns * perimeter;
-            double along = 0;
-            for (double turn = 0; turn < turns; ++turn)
-                for (size_t j = 1; j < path.size(); ++j) {
-                    along += lengths[j - 1];
-                    double z = py_max(bottom, previous - drop * along / total);
-                    if (limit) z = py_max(z, (*limit)[j]);
-                    move(path[j][0], path[j][1], z, false, ramp_feed);
+            if (helix) {
+                // Whole turns of the helix, each falling no more steeply than the entry angle, then a feed
+                // at the level's depth from the circle to the contour.
+                const double turns = py_max(1, std::ceil(drop / (slope * turn_length)));
+                const double count = turns * chords;
+                if (!(count <= 200000) || static_cast<double>(line_count) + count > 200000)
+                    throw ValueError("Helix exceeds the path segment limit");
+                for (double j = 1; j <= count; ++j) {
+                    const double theta = start_angle + 2 * PI * std::fmod(j, chords) / chords;
+                    move(cx + radius * pytrig::cosine(theta), cy + radius * pytrig::sine(theta), previous - drop * j / count,
+                         false, ramp_feed);
                 }
+                move(path[0][0], path[0][1], bottom, false, feed);
+            } else {
+                // The reference divides by these; a zero would stop it with an error that is not a rejection.
+                if (!(slope * perimeter > 0)) throw NotPorted("ramps along contours of no length");
+                const double turns = py_max(1, std::ceil(drop / (slope * perimeter)));
+                if (!(turns <= 200000) || line_count + static_cast<size_t>(turns) * (path.size() - 1) > 200000)
+                    throw ValueError("Contour ramp exceeds the path segment limit");
+                const double total = turns * perimeter;
+                double along = 0;
+                for (double turn = 0; turn < turns; ++turn)
+                    for (size_t j = 1; j < path.size(); ++j) {
+                        along += lengths[j - 1];
+                        double z = py_max(bottom, previous - drop * along / total);
+                        if (limit) z = py_max(z, (*limit)[j]);
+                        move(path[j][0], path[j][1], z, false, ramp_feed);
+                    }
+            }
             // Finish a complete lap at this level, including raised tab plateaux.
             for (size_t j = 1; j < path.size(); ++j)
                 move(path[j][0], path[j][1], limit ? py_max(bottom, (*limit)[j]) : bottom, false, limit ? ramp_feed : feed);

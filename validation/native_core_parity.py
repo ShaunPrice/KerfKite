@@ -13,7 +13,9 @@ Three comparisons, all against values computed by Python in this run:
    reference's error messages are compared as well as its programs. A third as many again are closed
    contours for the polygon operations (offsets, pockets and hatch fills).
    Ramp, helix and holding-tab jobs have their own generator (entry_tab_cases), with contours that cross,
-   touch, fold back or nearly close, and are counted separately.
+   touch, fold back or nearly close, and are counted separately. So are pockets entered by a helix
+   (helix_pocket_cases): pockets of many shapes, with and without islands, for a range of cutters, depths
+   and helix radii.
 
 For each job the native core must either reproduce the reference exactly (program lines, preview segments,
 length, time, bounds and warnings, or the same error message) or decline it as not ported yet. A different
@@ -23,7 +25,10 @@ Offsets, pockets and fills have one implementation, the core's polygon kernel, w
 calls through the compiled extension (studio/operations.py). For those jobs the geometry of the operation
 is therefore shared, not compared; what is compared is everything around it: the checks of the settings and
 their order, the order of cutting, leads, tabs, ramp entries on the offset contours, laser power,
-post-processing and the totals. validation/polygon_kernel_check.py compares the kernel itself with Shapely.
+post-processing and the totals. Where a helix enters a pocket is decided by the same kernel, through the
+same extension (native/core/src/pocket_entry.cpp), so the place is shared and the helix built on it is
+compared. validation/polygon_kernel_check.py compares the kernel itself with Shapely, and
+tests/test_router_entry.py checks every helix against the pocket's walls.
 Without the extension the reference falls back to Shapely, whose vertices differ, so this comparison stops
 unless --without-polygon-operations is given, which leaves those jobs out and says so.
 """
@@ -638,6 +643,166 @@ def entry_tab_cases(count, seed):
         yield dict(base, depth=2, step=1, stock_thickness=2, tabs=tabs, router_entry='ramp', paths=[ring(6000, 20)])
 
 
+def helix_pocket_cases(count, seed):
+    """Pockets entered by a helix: the helix is placed inside the pocket, clear of its walls and islands.
+
+    Pockets of many shapes (rectangles, polygons at any angle, stars, shapes with narrow legs and necks),
+    alone, with islands, with islands inside islands and as several separate pockets, some of them too small
+    for the helix; cutters, stepovers, depths, step-downs, helix radii and entry angles from ones that fit to
+    ones that do not. About a fifth are untidy: contours that only nearly close or that cross, settings of
+    the wrong size or type, tabs, depth paths, other cutters and operations, so that each rejection is
+    compared in the reference's order. A few at the end reach the limits on lines.
+    """
+    rng = random.Random(seed)
+
+    def contour(cx, cy, size, places, tidy):
+        kind = rng.choice([0, 0, 1, 1, 2, 2, 3, 4]) if tidy or rng.random() < 0.9 else 5
+        if kind == 0:  # rectangle
+            w, h = size * rng.uniform(0.5, 1), size * rng.uniform(0.5, 1)
+            points = [[cx - w, cy - h], [cx + w, cy - h], [cx + w, cy + h], [cx - w, cy + h]]
+        elif kind == 1:  # regular polygon at any angle, up to a fine circle
+            n = rng.choice([3, 5, 6, 8, 24, 90])
+            turn = rng.uniform(0, 7)
+            points = [
+                [cx + size * math.cos(turn + 2 * math.pi * i / n), cy + size * math.sin(turn + 2 * math.pi * i / n)]
+                for i in range(n)
+            ]
+        elif kind == 2:  # star-shaped: simple, with sharp and reflex corners
+            n = rng.randrange(4, 12)
+            angles = sorted(rng.uniform(0, 2 * math.pi) for _ in range(n))
+            points = [
+                [cx + size * r * math.cos(a), cy + size * r * math.sin(a)]
+                for a, r in ((a, rng.uniform(0.35, 1)) for a in angles)
+            ]
+        elif kind == 3:  # an L with a leg that the helix may not fit, though the cutter does
+            leg = size * rng.choice([0.25, 0.4, 0.7])
+            points = [[cx - size, cy - size], [cx + size, cy - size], [cx + size, cy - size + leg], [cx - size + leg, cy - size + leg], [cx - size + leg, cy + size], [cx - size, cy + size]]  # fmt: skip
+        elif kind == 4:  # two lobes joined by a neck
+            neck = size * rng.choice([0.1, 0.25, 0.45])
+            points = [[cx - size, cy - size / 2], [cx - neck, cy - size / 2], [cx - neck, cy - neck], [cx + neck, cy - neck], [cx + neck, cy - size / 2], [cx + size, cy - size / 2], [cx + size, cy + size / 2], [cx + neck, cy + size / 2], [cx + neck, cy + neck], [cx - neck, cy + neck], [cx - neck, cy + size / 2], [cx - size, cy + size / 2]]  # fmt: skip
+        else:  # arbitrary points: often self-crossing, which the reference refuses
+            points = [
+                [cx + rng.uniform(-size, size), cy + rng.uniform(-size, size)] for _ in range(rng.randrange(3, 7))
+            ]
+        if rng.random() < 0.3:
+            points.reverse()
+        if places is not None:
+            points = [[round(x, places), round(y, places)] for x, y in points]
+        close = rng.random()
+        if tidy or close < 0.8:
+            points.append(list(points[0]))
+        elif close < 0.9:  # closed to within the tolerance but not exactly
+            points.append([points[0][0] + rng.choice([1e-7, -4e-7, 0]), points[0][1] + rng.choice([5e-7, -1e-9])])
+        elif close < 0.95:  # just outside the tolerance
+            points.append([points[0][0] + 2e-6, points[0][1]])
+        return points
+
+    for _ in range(count):
+        tidy = rng.random() < 0.8
+        width, height = rng.choice([(100, 50), (100, 50), (300, 200), (40.5, 30)])
+        places = rng.choice([None, None, 1, 2, 3, 0])
+        size = rng.uniform(2.5, 7)
+        margin = rng.choice([4, 4, 4, 1, 0.3] if not tidy else [4])
+        cx = rng.uniform(margin + size, width - margin - size)
+        cy = rng.uniform(margin + size, height - margin - size)
+        paths = [contour(cx, cy, size, places, tidy)]
+        layout = rng.choice([0, 0, 0, 1, 1, 2, 3, 4, 5])
+        if layout == 1:  # an island
+            paths.append(contour(cx, cy, size * rng.uniform(0.08, 0.4), places, tidy))
+        elif layout == 2:  # an island with a pocket in it
+            paths.append(contour(cx, cy, size * 0.6, places, tidy))
+            paths.append(contour(cx, cy, size * rng.choice([0.2, 0.35]), places, tidy))
+        elif layout == 3:  # an island off centre, which may touch or cross the wall
+            paths.append(
+                contour(
+                    cx + size * rng.uniform(-0.5, 0.5), cy + size * rng.uniform(-0.5, 0.5), size * 0.25, places, tidy
+                )
+            )
+        elif layout == 4:  # separate pockets of several sizes: the helix may fit some and not others
+            part = size / 2
+            paths = [
+                [[x, y], [x + w, y], [x + w, y + w * rng.choice([1, 1, 0.6])], [x, y + w], [x, y]]
+                for x, y, w in (
+                    (cx - size + i * part * 1.3, cy - size + j * part * 1.3, part * rng.choice([1, 1, 0.5, 0.35]))
+                    for i in range(2)
+                    for j in range(2)
+                )
+            ]
+            rng.shuffle(paths)
+        elif layout == 5:  # two pockets that overlap, which the even-odd rule turns into three
+            paths.append(contour(cx + size * 0.7, cy + size * 0.3, size * 0.6, places, tidy))
+        diameter = rng.choice([0.5, 1, 1, 1.5, 2, 2, 3, 3.175])
+        project = dict(
+            mode='router', protocol=rng.choice(['grbl', 'grbl', 'grbl', 'linuxcnc', 'marlin', 'mach3', 'fluidnc']),
+            width=width, height=height, feed=rng.choice([600, 1200.5, 90]), power=rng.choice([12000, 800.4]),
+            depth=rng.choice([1, 1, 0.3, 1.2, 2.55, 6]), step=rng.choice([0.5, 1, 1, 3, 10]), paths=paths,
+            operation='pocket', router_entry='helix', tool_diameter=diameter,
+            stepover=rng.choice([0.25, 0.4, 0.5, 0.5, 0.75, 1]),
+        )  # fmt: skip
+        if project['stepover'] > diameter / 2 and rng.random() < 0.95:
+            project['stepover'] = diameter / 2
+        if project['protocol'] in ('linuxcnc', 'mach3'):
+            project['dwell_units'] = rng.choice(['seconds', 'milliseconds'])
+        if rng.random() < 0.85:
+            radii = [0.05, 0.1, 0.25, 0.5, 0.5, 0.75, 1, 1.5, diameter / 2, diameter / 4, '0.4', ' 0.25 ']
+            project['entry_radius'] = rng.choice(radii if tidy else radii + [2, 3, 50, 0.04, 50.5, None, True, 'wide'])
+            if tidy and float(project['entry_radius']) > diameter / 2 and rng.random() < 0.8:
+                project['entry_radius'] = diameter / rng.choice([2, 2, 4])  # a helix as wide as the cutter allows
+        elif diameter < 2 and tidy:
+            project['entry_radius'] = diameter / 2  # the default radius of 1 is wider than this cutter
+        if rng.random() < 0.6:
+            angles = [3, 3, 5, 15, 1, 7.5, 10, '2.5', 3.0, 0.25]
+            project['entry_angle'] = rng.choice(angles if tidy else angles + [0.2, 15.5, None, True, 'steep'])
+            if project['entry_angle'] in (0.25, 1):
+                project['depth'] = 0.3  # a shallow angle takes many turns: one short level of them is enough
+        if rng.random() < 0.3:
+            project['plunge'] = rng.choice([30, 250.25, 1000, 600, 90])
+        if rng.random() < 0.2:
+            project['safe'] = rng.choice([0.1, 3, 12.345])
+        if rng.random() < 0.25:
+            depth = project['depth']
+            fits = [depth, depth + 1e-9, depth + 2, str(depth), 200]
+            project['stock_thickness'] = rng.choice(
+                fits if tidy else fits + [depth - 0.1, depth + 1e-7, 201, None, 'thick']
+            )
+        if not tidy:
+            for key, choices in (
+                ('tabs', [{'width': 3, 'height': 0.5, 'count': 2}, False, None]), ('tool_shape', ['flat', 'ball', 'drill', None]),
+                ('path_depths', [None, [[-1 for _ in path] for path in paths]]), ('router_entry', ['ramp', 'plunge', 'spiral', None]),
+                ('operation', ['line', 'inside', 'outside', 'drill', 'vcarve', 'fill', None]), ('mode', ['laser', 'knife']),
+                ('tool_diameter', [0.01, 12.7, 100, '3', None, True, 'wide']), ('stepover', [0.01, 0.005, '0.3', None, 100.5]),
+            ):  # fmt: skip
+                if rng.random() < 0.06:
+                    project[key] = rng.choice(choices)
+            if rng.random() < 0.08:
+                project[rng.choice(KEYS)] = rng.choice(WEIRD)
+        if rng.random() < 0.06:
+            # An ordered job: the pocket with its helix, and then its outline, with one tool.
+            first = {key: project.pop(key) for key in ('paths', 'operation', 'router_entry')}
+            second = dict(
+                paths=[[list(point) for point in path] for path in paths[:1]],
+                operation=rng.choice(['inside', 'line', 'pocket']),
+                router_entry=rng.choice(['plunge', 'ramp', 'helix']),
+            )
+            project['operations'] = [first, second]
+        yield project
+
+    if count:
+        # A pocket with a single pass and the longest helix allowed: 5553 turns of 36 chords are a program
+        # of just under 200,000 lines; two turns more and the closing lap passes the line limit; three more
+        # and the helix itself is refused.
+        base = dict(
+            mode='router', width=100, height=50, feed=600, power=12000, operation='pocket', router_entry='helix'
+        )
+        small = dict(base, tool_diameter=3, stepover=1.5, entry_radius=0.05, entry_angle=0.25, step=10)
+        square = [[20, 20], [25, 20], [25, 25], [20, 25], [20, 20]]
+        for depth in (7.602, 7.6047, 7.6061):
+            yield dict(small, depth=depth, paths=[square])
+        # A wide helix has more chords to a turn, and a second level starts at the depth of the first.
+        yield dict(base, tool_diameter=100, stepover=1, entry_radius=50, depth=2, step=1, width=300, height=300,
+                   paths=[[[20, 20], [280, 20], [280, 280], [20, 280], [20, 20]]], stock_thickness=2, entry_angle=15)  # fmt: skip
+
+
 def drill_knife_cases(count, seed):
     """Drilling and drag-knife projects: most are valid, the rest have the awkward inputs each must handle."""
     rng = random.Random(seed)
@@ -866,6 +1031,7 @@ def main():
     parser.add_argument('--numbers', type=int, default=300000, help='number-text comparisons')
     parser.add_argument('--generated', type=int, default=12000, help='generated edge cases')
     parser.add_argument('--entries', type=int, default=6000, help='generated ramp, helix and holding-tab cases')
+    parser.add_argument('--helix', type=int, default=5000, help='generated pockets entered by a helix')
     parser.add_argument('--skip-suite', action='store_true', help='do not replay the calls made by the test suite')
     parser.add_argument(
         '--without-polygon-operations',
@@ -945,33 +1111,51 @@ def main():
             line, _ = reference(generate, project)
             if line is not None:
                 lines.setdefault(line, 'entry/tabs')
-        cases.write_text(''.join(line + '\n' for line in lines), encoding='utf-8')
-        answers = subprocess.run(
-            [str(args.cli), 'batch', str(cases)], capture_output=True, text=True, encoding='utf-8', check=True
-        ).stdout.splitlines()
-    assert len(answers) == len(lines), 'The native core did not answer every case.'
+        tally = collections.Counter()
+        declined = collections.Counter()
+        failures = []
 
-    tally = collections.Counter()
-    declined = collections.Counter()
-    failures = []
-    for (line, origin), answer in zip(lines.items(), answers, strict=True):
-        case, got = json.loads(line), json.loads(answer)
-        expect = case['expect']
-        if not shared and uses_polygon_operation(case['project']):
-            tally[origin, 'left out'] += 1
-        elif 'declined' in got:
-            tally[origin, 'declined'] += 1
-            declined[got['declined']] += 1
-        elif 'raises' in expect:
-            # The reference stopped with something other than a rejection; there is no behaviour to match.
-            tally[origin, 'reference raised ' + expect['raises']] += 1
-            if 'invalid' not in got and 'error' not in got:
-                failures.append((case['project'], expect, got))
-        elif strict_equal(expect, got):
-            tally[origin, 'program' if 'ok' in got else 'rejection'] += 1
-        else:
-            failures.append((case['project'], expect, got))
-    for origin in ('suite', 'generated', 'entry/tabs'):
+        def compare(lines):
+            """Put a set of cases to the native core and count how each was answered."""
+            cases.write_text(''.join(line + '\n' for line in lines), encoding='utf-8')
+            answers = subprocess.run(
+                [str(args.cli), 'batch', str(cases)], capture_output=True, text=True, encoding='utf-8', check=True
+            ).stdout.splitlines()
+            assert len(answers) == len(lines), 'The native core did not answer every case.'
+            for (line, origin), answer in zip(lines.items(), answers, strict=True):
+                case, got = json.loads(line), json.loads(answer)
+                expect = case['expect']
+                if not shared and uses_polygon_operation(case['project']):
+                    tally[origin, 'left out'] += 1
+                elif 'declined' in got:
+                    tally[origin, 'declined'] += 1
+                    declined[got['declined']] += 1
+                elif 'raises' in expect:
+                    # The reference stopped with something other than a rejection; there is no behaviour to match.
+                    tally[origin, 'reference raised ' + expect['raises']] += 1
+                    if 'invalid' not in got and 'error' not in got:
+                        failures.append((case['project'], expect, got))
+                elif strict_equal(expect, got):
+                    tally[origin, 'program' if 'ok' in got else 'rejection'] += 1
+                else:
+                    failures.append((case['project'], expect, got))
+
+        compare(lines)
+        # A helix into a pocket is a long program, so these are compared a few hundred at a time and not kept.
+        seen = set()
+        helices = helix_pocket_cases(args.helix, 91)
+        while True:
+            lines = {}
+            for project in itertools.islice(helices, 250):
+                line, _ = reference(generate, project)
+                if line is not None and hash(line) not in seen:
+                    seen.add(hash(line))
+                    lines.setdefault(line, 'helix')
+            if not lines:
+                break
+            compare(lines)
+
+    for origin in ('suite', 'generated', 'entry/tabs', 'helix'):
         total = sum(n for (o, _), n in tally.items() if o == origin)
         if not total:
             continue

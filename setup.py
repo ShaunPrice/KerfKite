@@ -23,8 +23,9 @@ setup(
                 'native/core/src/excellon.cpp',
                 'native/core/src/gerber.cpp',
                 'native/core/src/pcb.cpp',
-                # Offsets, pockets and fills, and the polygon kernel they are built on.
+                # Offsets, pockets and fills, where a helix enters a pocket, and the polygon kernel they are built on.
                 'native/core/src/operations.cpp',
+                'native/core/src/pocket_entry.cpp',
                 # Isolation toolpaths for circuit boards, on the same kernel.
                 'native/core/src/isolation.cpp',
                 'native/core/src/polygon/arrangement.cpp',
