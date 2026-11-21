@@ -210,7 +210,7 @@ class Reader {
     void read(const std::string &text) {
         if (text.find("FS") == std::string::npos)
             throw ValueError("This is not a Gerber RS-274X file: it has no format statement (%FS)");
-        size_t i = 0;
+        size_t i = after_mark(text);
         const size_t n = text.size();
         while (i < n && !ended) {
             const char c = text[i];

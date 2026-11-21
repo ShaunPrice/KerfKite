@@ -1734,7 +1734,7 @@ kerfkite-cam excellon board.drl
 kerfkite-cam excellon board.drl --units inch --integer 2 --decimal 4 --omitted-zeros leading
 kerfkite-cam excellon-drills board.drl --offset [-95,115]
 </code></pre>
-<p>The file is the input (<code>-</code> reads standard input) and the answer is JSON on standard output. Each <code>--option value</code> pair is a field of the request described below. A file that is refused exits with status 2 and the reason on standard error; status 1 is a file that cannot be opened or a usage error.</p>
+<p>The file is the input (<code>-</code> reads standard input) and the answer is JSON on standard output. Each <code>--option value</code> pair is a field of the request described below. A field that is not known is refused, so that a misspelt option is not passed over. A file that is refused exits with status 2 and the reason on standard error; status 1 is a file that cannot be opened or a usage error.</p>
 <p>From Python:</p>
 <pre><code>from studio import pcb_import
 from studio.cam import generate
@@ -1984,7 +1984,7 @@ copper = pcb_import.gerber(pcb_import.read('board-F_Cu.gbr'))     # objects only
 <tbody>
 <tr>
 <td>Header <code>M48</code> … <code>%</code> or <code>M95</code></td>
-<td>A <code>%</code> before <code>M48</code> is accepted. A file with no header is read as a body.</td>
+<td>A <code>%</code> before <code>M48</code> is accepted. A file with no header is read as a body. A byte order mark before the first line is passed over, in Gerber files too.</td>
 </tr>
 <tr>
 <td>Units</td>

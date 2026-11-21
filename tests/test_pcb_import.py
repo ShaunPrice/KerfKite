@@ -394,6 +394,10 @@ class GerberTests(Base):
     def test_bytes_that_are_not_text_are_only_tolerated_in_comments(self):
         layer = pcb_import.gerber(b'G04 caf\xe9 \xff*\n%TF.Part,caf\xc3\xa9*%\n' + HEAD.encode() + b'M02*\n')
         self.assertEqual(layer['attributes'], {'.Part': 'caf??'})  # an answer holds printable ASCII only
+        marked = pcb_import.gerber('\ufeff' + fixture('panel_sr.gbr'))  # a byte order mark before the first command
+        self.assertEqual(marked, pcb_import.gerber(fixture('panel_sr.gbr')))
+        drill = fixture('drill_inch.drl')
+        self.assertEqual(pcb_import.excellon(b'\xef\xbb\xbf' + drill.encode()), pcb_import.excellon(drill))
         self.refused(lambda: pcb_import.gerber(HEAD.encode() + b'X1\xe9D02*\nM02*\n'), 'Line 3', 'not understood')
 
     def test_truncated_files_are_refused(self):

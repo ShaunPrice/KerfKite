@@ -134,6 +134,9 @@ inline const std::string &file_text(const json &request, const char *what, size_
     return content;
 }
 
+// Where the file starts: after a UTF-8 byte order mark, which some editors put first.
+inline size_t after_mark(const std::string &text) { return text.compare(0, 3, "\xEF\xBB\xBF") == 0 ? 3 : 0; }
+
 // "offset":[dx, dy], added to every coordinate of a conversion; absent means none.
 inline Point offset_of(const json &request) {
     Point offset;

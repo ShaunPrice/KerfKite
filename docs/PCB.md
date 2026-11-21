@@ -21,7 +21,7 @@ The importers are written once, in the native core (`native/core/src/gerber.cpp`
     kerfkite-cam excellon board.drl --units inch --integer 2 --decimal 4 --omitted-zeros leading
     kerfkite-cam excellon-drills board.drl --offset [-95,115]
 
-The file is the input (`-` reads standard input) and the answer is JSON on standard output. Each `--option value` pair is a field of the request described below. A file that is refused exits with status 2 and the reason on standard error; status 1 is a file that cannot be opened or a usage error.
+The file is the input (`-` reads standard input) and the answer is JSON on standard output. Each `--option value` pair is a field of the request described below. A field that is not known is refused, so that a misspelt option is not passed over. A file that is refused exits with status 2 and the reason on standard error; status 1 is a file that cannot be opened or a usage error.
 
 From Python:
 
@@ -180,7 +180,7 @@ The paths are the outline itself. Use them as `paths` of a router job; to cut th
 
 | Part of the format | Handling |
 | --- | --- |
-| Header `M48` … `%` or `M95` | A `%` before `M48` is accepted. A file with no header is read as a body. |
+| Header `M48` … `%` or `M95` | A `%` before `M48` is accepted. A file with no header is read as a body. A byte order mark before the first line is passed over, in Gerber files too. |
 | Units | `METRIC`, `INCH`, `M71`, `M72`. |
 | Zero suppression | `LZ` (leading zeros present, trailing omitted) and `TZ` (the reverse). Coordinates with a decimal point need neither. |
 | Digits | `METRIC,LZ,000.000`; comments `;FILE_FORMAT=3:3` (Altium, EasyEDA) and `; FORMAT={3:3/ absolute / metric / suppress leading zeros}` (KiCad). |

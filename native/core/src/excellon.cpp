@@ -114,7 +114,7 @@ class Drill {
     }
 
     void read(const std::string &text) {
-        size_t at = 0;
+        size_t at = after_mark(text);
         while (at <= text.size() && !ended) {
             size_t end = text.find('\n', at);
             if (end == std::string::npos) end = text.size();
