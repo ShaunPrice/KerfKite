@@ -34,6 +34,10 @@ if(KERFKITE_GEOS_TARGET)
   target_link_libraries(kerfkite_core PRIVATE ${KERFKITE_GEOS_TARGET})
 endif()
 
+# KerfKite's own polygon kernel: standard library only, and no part of it needs GEOS.
+target_sources(kerfkite_core PRIVATE core/src/polygon/arrangement.cpp core/src/polygon/boolean.cpp core/src/polygon/clip.cpp
+  core/src/polygon/command.cpp core/src/polygon/measure.cpp core/src/polygon/offset.cpp)
+
 add_executable(kerfkite-cam tools/kerfkite_cam.cpp)
 target_link_libraries(kerfkite-cam PRIVATE kerfkite_core)
 
@@ -44,3 +48,6 @@ add_test(NAME selftest COMMAND kerfkite_selftest)
 add_executable(kerfkite_geometry_selftest tests/geometry_selftest.cpp)
 target_link_libraries(kerfkite_geometry_selftest PRIVATE kerfkite_core)
 add_test(NAME geometry COMMAND kerfkite_geometry_selftest)
+add_executable(kerfkite_polygon_selftest tests/polygon_selftest.cpp)
+target_link_libraries(kerfkite_polygon_selftest PRIVATE kerfkite_core)
+add_test(NAME polygon COMMAND kerfkite_polygon_selftest)
