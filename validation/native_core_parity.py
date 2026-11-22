@@ -32,6 +32,17 @@ Eight comparisons, all against values computed by Python in this run:
    swept against generated boxes (fixture_cases). Lines that are not ASCII are declined.
 8. STL height fields: studio.mesh_import.stl_heightmap for binary and ASCII meshes, at every resolution, damaged
    in the ways the reader must refuse (stl_cases).
+9. Solids and CAD scripts: parametric solid histories and their sections (solid_cad_cases), and CAD scripts for
+   the script preview (cad_script_cases), both through the compiled extension's kernel.
+10. Foreign drawings: studio.program_import's import_program for posted G-code, HP-GL plotter files and LinuxCNC
+   INI files, sound, damaged and refused, with every filename suffix and unit (program_import_cases). Program
+   text that is not ASCII is declined. DXF drawings, which the core reads with its own reader, are left out
+   here and compared to the tolerance by validation/dxf_import_check.py. And studio.pdf_import's import_pdf for
+   PDF pages written as producers write them (pdf_import_cases): paths, fills and their rules, clipping, forms,
+   graphics states, optional content, text and images, page trees, boxes, units and rotations, every filter,
+   cross-reference tables and streams, and damaged operators, documents and payloads. And
+   studio.import_bundle's inspect_bundle for LightBurn bundles (bundle_import_cases): ZIP archives listed and
+   read member by member, sound, unusual and damaged.
 
 For each job the native core must either reproduce the reference exactly (program lines, preview segments,
 length, time, bounds and warnings, and for a rotary job its rotary setup; or the same error message) or
@@ -57,16 +68,19 @@ import argparse
 import base64
 import collections
 import hashlib
+import io
 import itertools
 import json
 import math
 import os
 from pathlib import Path
 import random
+import re
 import struct
 import subprocess
 import sys
 import tempfile
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -2438,6 +2452,817 @@ def strict_equal(a, b):
     return a == b
 
 
+def program_import_cases(count, seed):
+    """Foreign drawings for /api/program-import: posted G-code with linear moves, arcs given by I/J and by R,
+    absolute and incremental coordinates and centres, units, comments, tool changes, dwells and program ends;
+    HP-GL with pens up and down, absolute and relative moves, arcs, circles, pen speeds and forces; LinuxCNC
+    INI files with units, coordinates and axis limits; long runs of contours that are batched; every limit;
+    each with words, values and statements made unsound at random, under every suffix and unit, and payloads
+    the request itself refuses. DXF drawings and text that is not ASCII are the core's to decline."""
+    rng = random.Random(seed)
+    pick = rng.choice
+    risk = [0.0]
+
+    def opt(good, bad=()):
+        return pick(bad) if bad and rng.random() < risk[0] else pick(good)
+
+    def value(low, high, digits=3):
+        roll = rng.random()
+        if roll < 0.15:
+            return str(rng.randint(int(low), int(high)))
+        if roll < 0.2:
+            return pick(['0', '-0', '.5', '5.', '+2', '-.25', '0.0', '1.000'])
+        text = f'{rng.uniform(low, high):.{digits}f}'
+        return text.rstrip('0').rstrip('.') if rng.random() < 0.3 else text
+
+    def gcode():
+        lines = []
+        if rng.random() < 0.8:
+            lines.append(
+                opt(['G21', 'G20', 'G21 G90', 'G90 G21 G17', 'G20 G91.1', 'G21 G90.1', '%'], ['G21 G20', 'G18', 'G70'])
+            )
+        if rng.random() < 0.3:
+            lines.append(opt(['T1 M6', 'T2 M06', 'T3 M6 (change)'], ['M6', 'T-1 M6', 'T1.5 M6']))
+        x = y = None
+        if rng.random() < 0.85:
+            lines.append(pick(['G0 X0 Y0', 'G0 X0 Y0 Z5', 'G00 X1.5 Y-2 Z3']))
+            x, y = (1.5, -2.0) if 'X1.5' in lines[-1] else (0.0, 0.0)
+        centre_absolute = bool(lines) and 'G90.1' in lines[0]
+        arcs = False  # whether G2 or G3 is the modal motion
+        for _ in range(rng.randint(1, 40)):
+            roll = rng.random()
+            parts = []
+            if roll < 0.12:
+                x, y = rng.uniform(-40, 40), rng.uniform(-40, 40)
+                parts = [opt(['G0', 'G00', 'G0'], ['G0 G1']), f'X{x:.3f}', f'Y{y:.3f}']
+                arcs = False
+                if rng.random() < 0.5:
+                    parts.append(f'Z{value(-3, 10)}')
+            elif roll < 0.22:
+                parts = [opt(['G1', 'G01'], ['G1 G2']), f'Z{value(-6, 5)}', f'F{value(50, 900, 2)}']
+                arcs = False
+            elif roll < 0.55:
+                parts = [opt(['G01', 'G1'] if arcs else ['G1', '', 'G01'], ['G80', 'G5'])]
+                arcs = False
+                for axis in sorted(rng.sample('XYZ', rng.randint(1, 3))):
+                    if axis == 'Z':
+                        parts.append(f'Z{value(-6, 5)}')
+                    else:
+                        number = rng.uniform(-40, 40)
+                        x, y = (number, y) if axis == 'X' else (x, number)
+                        parts.append(f'{axis}{number:.4f}')
+                if rng.random() < 0.4:
+                    parts.append(f'F{value(10, 12000, rng.choice([0, 1, 3, 6]))}')
+            elif roll < 0.78 and x is not None and y is not None:
+                motion = pick(['G2', 'G3', 'G02', 'G03'])
+                form = rng.random()
+                if form < 0.5:
+                    i, j = rng.uniform(-15, 15), rng.uniform(-15, 15)
+                    radius, turn = math.hypot(i, j), rng.uniform(-math.pi, math.pi)
+                    ex, ey = x + i + radius * math.cos(turn), y + j + radius * math.sin(turn)
+                    if abs(ex) > 50 or abs(ey) > 50:
+                        continue
+                    centre = [f'I{x + i:.4f}', f'J{y + j:.4f}'] if centre_absolute else [f'I{i:.4f}', f'J{j:.4f}']
+                    parts = [motion, f'X{ex:.4f}', f'Y{ey:.4f}', *rng.sample(centre, opt([2], [1]))]
+                    if rng.random() < 0.2:
+                        parts = parts[:1] + parts[3:]  # a full circle back to the start
+                        ex, ey = x, y
+                elif form < 0.8:
+                    ex, ey = rng.uniform(-30, 30), rng.uniform(-30, 30)
+                    half = math.dist((x, y), (ex, ey)) / 2
+                    radius = half * opt([1.0000001, 1.5, 3, 1.01], [1, 0.9]) * pick([1, -1])
+                    parts = [motion, f'X{ex:.4f}', f'Y{ey:.4f}', f'R{radius:.5f}']
+                else:
+                    ex, ey = rng.uniform(-30, 30), rng.uniform(-30, 30)
+                    parts = [
+                        motion,
+                        f'X{ex:.4f}',
+                        f'Y{ey:.4f}',
+                        opt([f'R{45 + rng.random():.3f}'], ['R1 I1', 'K2', '', 'I1']),
+                    ]
+                if rng.random() < 0.3:
+                    parts.append(f'Z{value(-4, 1)}')
+                x, y = ex, ey
+                arcs = True
+            elif roll < 0.85:
+                parts = [opt(['M3 S12000', 'M5', 'M8', 'M9', 'S800', 'G4 P0.5', 'M4 S300', 'G94', 'G54 G40 G49'],
+                             ['G4 X1', 'M7 P1', 'G33', 'M98'])]  # fmt: skip
+            elif roll < 0.9:
+                parts = [opt(['G90', 'G90', 'G91 G1 X5 Y-2\nG90', 'G90.1', 'G91.1'], ['G90 G91', 'G90.1 G91.1', 'G91'])]
+                if 'X5' in parts[0]:
+                    x, y = (x + 5, y - 2) if x is not None and y is not None else (None, None)
+                    arcs = False
+                centre_absolute = 'G90.1' in parts[0] or (centre_absolute and 'G91.1' not in parts[0])
+            elif roll < 0.95:
+                parts = [opt(['(comment)', '; note', 'G1 X1 (inline) Y2', 'N10 G1 X2 Y3', 'g1 x4 y5', 'G1X6Y7F100', '((nested) text)'],
+                             ['#1=2', 'G1 X[1+2]', 'G1 X1 X2', 'O100', 'G1 X1e3', '(unclosed', 'G1 X 1 Y'])]  # fmt: skip
+                found = re.findall(r'([XY])(\d+)', re.sub(r'\([^()]*\)', '', parts[0].upper()))
+                for axis, number in found:
+                    x, y = (float(number), y) if axis == 'X' else (x, float(number))
+                if found and parts[0].upper().startswith(('G1', 'N10 G1')):
+                    arcs = False
+            else:
+                parts = [opt(['M30', 'M2', 'M02'], ['M30\nG1 X1 Y1'])]
+            if rng.random() < risk[0] * 0.3:
+                parts.append(pick(['A1', 'X1e12', 'Y' + '9' * 400, 'F-5', 'Q1', '@', 'X99999999', 'F' + '1' * 30]))
+            lines.append(' '.join(part for part in parts if part))
+            if lines[-1].startswith(('M30', 'M2', 'M02')) and rng.random() < 0.8:
+                break
+        newline = pick(['\n', '\r\n', '\n', '\r', '\x0b', '\x1e'])
+        return newline.join(lines) + pick(['', '\n', newline])
+
+    def hpgl():
+        out = [opt(['IN', 'IN;SP1', 'DF', 'IN;DF;SP2'], ['IN 1', 'SP 300', 'SP 1.5', 'XX'])]
+        for _ in range(rng.randint(1, 30)):
+            roll = rng.random()
+            if roll < 0.4:
+                count = rng.randint(1, 6) * 2
+                command = pick(['PD', 'PA', 'PR', 'PU', 'PD'])
+                reach = 1000 if command == 'PR' else 40000
+                numbers = [
+                    str(rng.randint(-reach, reach)) if rng.random() < 0.7 else value(-4000, 4000) for _ in range(count)
+                ]
+                separator = pick([',', ' ', ', ', ' ,', ',  '])
+                out.append(command + separator.join(numbers) if numbers else command)
+            elif roll < 0.5:
+                out.append(pick(['PD', 'PU', 'PA', 'PR']))
+            elif roll < 0.62:
+                out.append(pick(['AA', 'AR']) + ','.join([str(rng.randint(-4000, 4000)), str(rng.randint(-4000, 4000)),
+                                                         opt([value(-360, 360, 1)], ['0', '400'])] + ([value(1, 5)] if rng.random() < 0.3 else [])))  # fmt: skip
+            elif roll < 0.7:
+                out.append('CI' + value(1, 4000, 1) + (pick([',5', '']) if rng.random() < 0.5 else ''))
+            elif roll < 0.82:
+                out.append(pick(['VS', 'FS']) + value(0, 60, 1) + pick(['', ',1', ',2', ',' + str(rng.randint(0, 3))]))
+            elif roll < 0.9:
+                out.append(opt(['SP' + str(rng.randint(0, 8)), 'SP'], ['SP-1', 'SP256']))
+            else:
+                out.append(
+                    opt(['', ' ', 'pd1,2,3,4', 'IN'], ['LB text', 'PD 1,2,3', 'PA 1e5,1', 'VS -1', 'CI 0', 'AA 1,2'])
+                )
+        separator = pick([';', ';\n', ';', '; '])
+        return separator.join(out) + pick(['', ';', ';\n'])
+
+    def ini():
+        unit = opt(['mm', 'inch', 'metric', 'Imperial', 'MM'], ['cm', '', 'furlong'])
+        lines = ['[EMC]', 'VERSION = 1.1', '[TRAJ]']
+        if rng.random() > risk[0] * 0.5:
+            lines.append(f'LINEAR_UNITS = {unit}')
+        if rng.random() < 0.5:
+            lines.append('COORDINATES = ' + opt(['X Y Z', 'XYZ', 'X Y Z A'], ['X Z', 'A B']))
+        for axis in rng.sample('XYZ', 3):
+            if axis == 'Z' and rng.random() < 0.3:
+                continue
+            lines.append(pick([f'[AXIS_{axis}]', f'[axis_{axis.lower()}]', f'[[AXIS_{axis}]]']))
+            inch = unit.lower() in ('inch', 'imperial')
+            low = rng.uniform(-15, 0) if inch else rng.uniform(-400, 0)
+            span = opt([rng.uniform(0.05, 75) if inch else rng.uniform(1, 1900)], [0, -5, 3000, 0.5])
+            for key, text in (('MIN_LIMIT', f'{low:.3f}'), ('MAX_LIMIT', f'{low + span:.3f}'),
+                              ('MAX_VELOCITY', value(1, 200)), ('MAX_ACCELERATION', value(10, 3000))):  # fmt: skip
+                if rng.random() < 0.9:
+                    text = opt([text, text + 'e0', f'{float(text):.2E}'], ['', 'fast', '1e999', '-3', '0x10'])
+                    lines.append(f'{key} = {text}' + pick(['', ' ; note', ' # note']))
+            if rng.random() < risk[0] * 0.2:
+                lines.append('MIN_LIMIT = 1')
+        if rng.random() < risk[0] * 0.2:
+            lines.insert(1, pick(['#INCLUDE other.inc', '  # include x', '#INCLUDED = 1']))
+        return '\n'.join(lines) + '\n'
+
+    def long_run():
+        # More than 100 contours: batched by layer and depth semantics; some near the limits.
+        size = pick([101, 150, 400, 2999, 3001])
+        lines = ['G21 G90']
+        for index in range(size):
+            x = (index % 50) * 3.0
+            y = (index // 50) * 3.0
+            depth = pick(['-1', '-1', '2']) if rng.random() < 0.05 else '-1'
+            lines += [f'G0 X{x:g} Y{y:g}', f'G1 Z{depth} F300', f'G1 X{x + 1:g}', 'G0 Z5']
+            if rng.random() < 0.01:
+                lines.append(f'T{rng.randint(1, 3)} M6')
+        return '\n'.join(lines)
+
+    suffixes = {
+        'gcode': ['.nc', '.gcode', '.NGC', '.cnc', '.tap', '.Nc'],
+        'hpgl': ['.plt', '.hpgl', '.HPG'],
+        'ini': ['.ini', '.INI'],
+    }
+    for index in range(count):
+        risk[0] = pick([0.0, 0.0, 0.0, 0.01, 0.03, 0.2])
+        roll = rng.random()
+        if roll < 0.45:
+            kind, text = 'gcode', gcode()
+        elif roll < 0.75:
+            kind, text = 'hpgl', hpgl()
+        elif roll < 0.88:
+            kind, text = 'ini', ini()
+        elif roll < 0.92:
+            kind, text = 'gcode', long_run()
+        else:
+            kind, text = 'gcode', ''
+        name = pick(['part', 'job', 'dir/sub/part', 'C:\\\\cut\\\\part', 'a.b', '.hidden', 'x..y']) + pick(
+            suffixes[kind]
+        )
+        payload = {'name': name, 'text': text, 'unit': pick(['mm', 'mm', 'in', 'inch', 'cm', 'm', 'ft'])}
+        if roll >= 0.92:
+            payload = pick([
+                {'name': 'part.nc', 'text': 'G21\nG1 X1 Y1\n', 'unit': 'yard'},
+                {'name': 'part.nc', 'text': '', 'unit': 'mm'},
+                {'name': 'part.nc', 'text': 'G1 X1\0', 'unit': 'mm'},
+                {'name': 'part.svg', 'text': 'G1 X1', 'unit': 'mm'},
+                {'name': 'part.', 'text': 'G1 X1', 'unit': 'mm'},
+                {'name': 'part.nc', 'text': '\ufeff\ufeffG21\nG0 X0 Y0\nG1 X3 Y4 F100'},
+                {'name': 'part.nc', 'text': 'G21 (Ä)\nG0 X0 Y0\nG1 X3 Y4 F100', 'unit': 'mm'},
+                {'name': 'part.dxf', 'text': '0\nEOF\n', 'unit': 'mm'},
+                {'name': 'x' * 1025 + '.nc', 'text': 'G1 X1', 'unit': 'mm'},
+                {'name': 7, 'text': 'G1 X1', 'unit': 'mm'},
+                {'name': 'part.nc', 'text': 5},
+                {'name': 'part.nc', 'text': 'G1 X1', 'unit': None},
+                {'text': 'G1 X1'},
+                [],
+                'G1 X1',
+                {'name': 'part.plt', 'text': 'IN;SP1;PU0,0;PD400,0,400,400;CI40000000;', 'unit': 'mm'},
+                {'name': 'part.plt', 'text': ';'.join(['IN', 'SP1'] + [f'VS{v}' for v in range(17)]) + ';PD1,1,9,9', 'unit': 'mm'},
+                {'name': 'part.nc', 'text': 'G21\nG0 X0 Y0\nG2 X0 Y0 I1999 J0 F100', 'unit': 'mm'},
+                {'name': 'part.nc', 'text': 'G21\nG0 X0 Y0 Z1\nG1 X10 Z-2 F100\nG1 Y10\nG1 Z-60\nG1 X0', 'unit': 'mm'},
+                {'name': 'part.nc', 'text': 'G20\nG0 X0 Y0\nG3 X1 Y1 R-1 F12.3456789', 'unit': 'mm'},
+            ])  # fmt: skip
+        if rng.random() < 0.03 and isinstance(payload, dict) and isinstance(payload.get('text'), str):
+            payload['text'] = pick(['\ufeff', '\ufeff\ufeff', '']) + payload['text'] + pick(['', ' é', '\u2028G1 X1'])
+        yield payload
+
+
+def _lzw(data):
+    """LZW codes for data, as PDF's LZWDecode reads them, written by pypdf's encoder (PDF 1.7, 7.4.4.2)."""
+    from pypdf._codecs._codecs import LzwCodec
+
+    return LzwCodec().encode(data)
+
+
+def _run_length(data):
+    out = bytearray()
+    for i in range(0, len(data), 100):
+        chunk = data[i : i + 100]
+        out += bytes([len(chunk) - 1]) + chunk
+    return bytes(out + b'\x80')
+
+
+def pdf_document(pages, rng, objects_in_streams=False, table=None):
+    """A PDF of the given pages, written as PDF producers write them: each page a dict of its entries, with
+    'content' (bytes or a list of bytes) and optional 'forms', 'states' and 'images'; inherited attributes
+    on a parent node. The cross-reference is a table or a stream, with objects in an object stream."""
+    import zlib
+
+    objects = {}
+
+    def new(body):
+        number = len(objects) + 1
+        objects[number] = body
+        return number
+
+    def stream(data, extra=b''):
+        kind = rng.choice(['plain', 'flate', 'flate', 'hex', 'a85', 'lzw', 'rl', 'chain'])
+        if kind == 'flate':
+            data, extra = zlib.compress(data), extra + b'/Filter /FlateDecode'
+        elif kind == 'hex':
+            data, extra = data.hex().encode() + b'>', extra + b'/Filter /ASCIIHexDecode'
+        elif kind == 'a85':
+            data, extra = base64.a85encode(data, adobe=True), extra + b'/Filter /ASCII85Decode'
+        elif kind == 'lzw':
+            data, extra = _lzw(data), extra + b'/Filter /LZWDecode'
+        elif kind == 'rl':
+            data, extra = _run_length(data), extra + b'/Filter /RunLengthDecode'
+        elif kind == 'chain':
+            data, extra = (
+                base64.a85encode(zlib.compress(data), adobe=True),
+                extra + b'/Filter [/ASCII85Decode /FlateDecode]',
+            )
+        return ('stream', b'<< /Length %d %s >>' % (len(data), extra), data)
+
+    page_numbers = []
+    parent = new(None)
+    for page in pages:
+        resources = []
+        for name, (form_content, form_extra) in page.get('forms', {}).items():
+            resources.append(
+                (b'XObject', name, new(stream(form_content, b'/Type /XObject /Subtype /Form ' + form_extra)))
+            )
+        for name, image in page.get('images', {}).items():
+            resources.append(
+                (
+                    b'XObject',
+                    name,
+                    new(
+                        stream(
+                            b'\x00' * 4,
+                            b'/Type /XObject /Subtype /Image /Width 2 /Height 2 /BitsPerComponent 8 /ColorSpace /DeviceGray',
+                        )
+                    ),
+                )
+            )
+        for name, state in page.get('states', {}).items():
+            resources.append((b'ExtGState', name, new(b'<< /Type /ExtGState ' + state + b' >>')))
+        grouped = {}
+        for category, name, number in resources:
+            grouped.setdefault(category, []).append(b'/%s %d 0 R' % (name, number))
+        resource_text = b'<< ' + b' '.join(b'/%s << %s >>' % (k, b' '.join(v)) for k, v in grouped.items()) + b' >>'
+        content = page['content']
+        if isinstance(content, list):
+            contents = b'[' + b' '.join(b'%d 0 R' % new(stream(c)) for c in content) + b']'
+        else:
+            contents = b'%d 0 R' % new(stream(content))
+        entries = page.get('entries', b'/MediaBox [0 0 144 180]')
+        if page.get('no_resources'):
+            body = b'<< /Type /Page /Parent %d 0 R %s /Contents %s >>' % (parent, entries, contents)
+        else:
+            body = b'<< /Type /Page /Parent %d 0 R %s /Resources %s /Contents %s >>' % (
+                parent,
+                entries,
+                resource_text,
+                contents,
+            )
+        page_numbers.append(new(body))
+    inherited = pages[0].get('inherited', b'') if pages else b''
+    objects[parent] = b'<< /Type /Pages /Count %d /Kids [%s] %s >>' % (
+        len(page_numbers),
+        b' '.join(b'%d 0 R' % n for n in page_numbers),
+        inherited,
+    )
+    catalog = new(b'<< /Type /Catalog /Pages %d 0 R >>' % parent)
+    head = b'%PDF-1.' + (b'5' if table is False else b'4') + b'\n%\xe2\xe3\xcf\xd3\n'
+    out = bytearray(head)
+    offsets = {}
+    use_stream = table is False or (table is None and rng.random() < 0.4)
+    packed = {}
+    if use_stream and objects_in_streams:
+        # Plain dictionaries go into one object stream.
+        members = [n for n, body in objects.items() if not isinstance(body, tuple)]
+        if members:
+            header, data = [], b''
+            for n in members:
+                header.append(b'%d %d' % (n, len(data)))
+                data += objects[n] + b'\n'
+            first = b' '.join(header) + b'\n'
+            container = len(objects) + 1
+            objects[container] = (
+                'stream',
+                b'<< /Type /ObjStm /N %d /First %d /Length %d >>' % (len(members), len(first), len(first + data)),
+                first + data,
+            )
+            for index, n in enumerate(members):
+                packed[n] = (container, index)
+    for number in sorted(objects):
+        if number in packed:
+            continue
+        body = objects[number]
+        offsets[number] = len(out)
+        if isinstance(body, tuple):
+            _, dictionary, data = body
+            out += b'%d 0 obj\n%s\nstream\n' % (number, dictionary) + data + b'\nendstream\nendobj\n'
+        else:
+            out += b'%d 0 obj\n%s\nendobj\n' % (number, body)
+    size = max(objects) + 1
+    if use_stream:
+        xref_number = size
+        size += 1
+        rows = [b'\x00\x00\x00\xff\xff']
+        for n in range(1, size):
+            if n == xref_number:
+                rows.append(b'\x01' + len(out).to_bytes(3, 'big') + b'\x00')
+            elif n in packed:
+                rows.append(b'\x02' + packed[n][0].to_bytes(3, 'big') + bytes([packed[n][1]]))
+            else:
+                rows.append(b'\x01' + offsets[n].to_bytes(3, 'big') + b'\x00')
+        data = b''.join(rows)
+        predictor = rng.random() < 0.5
+        if predictor:
+            previous, encoded = bytes(5), b''
+            for row in rows:
+                encoded += b'\x02' + bytes((a - b) & 0xFF for a, b in zip(row, previous))
+                previous = row
+            data = zlib.compress(encoded)
+            parms = b'/DecodeParms << /Predictor 12 /Columns 5 >>'
+        else:
+            data = zlib.compress(data)
+            parms = b''
+        start = len(out)
+        out += (
+            b'%d 0 obj\n<< /Type /XRef /Size %d /W [1 3 1] /Root %d 0 R /Filter /FlateDecode %s /Length %d >>\nstream\n'
+            % (xref_number, size, catalog, parms, len(data))
+        )
+        out += data + b'\nendstream\nendobj\n'
+    else:
+        start = len(out)
+        out += b'xref\n0 %d\n0000000000 65535 f \n' % size
+        for n in range(1, size):
+            out += b'%010d 00000 n \n' % offsets[n]
+        out += b'trailer\n<< /Size %d /Root %d 0 R >>\n' % (size, catalog)
+    out += b'startxref\n%d\n%%%%EOF\n' % start
+    return bytes(out)
+
+
+def pdf_import_cases(count, seed):
+    """PDF pages for /api/pdf-import: strokes and fills of lines, rectangles and curves (c, v, y) under
+    transformation matrices; closed paths; fills by the even-odd and nonzero rules, nested, separate,
+    touching and overlapping; clipping by rectangles, convex and other paths; forms with matrices and boxes,
+    nested; graphics states with alpha, soft masks and dashes; marked and optional content; text, shading
+    and images; page trees with inherited boxes and resources, crop boxes, user units and rotations; every
+    filter, cross-reference tables and streams with predictors and object streams; and damaged operators,
+    operands, documents and payloads."""
+    rng = random.Random(seed)
+    pick = rng.choice
+    risk = [0.0]
+
+    def opt(good, bad=()):
+        return pick(bad) if bad and rng.random() < risk[0] else pick(good)
+
+    def n(low=-20, high=160):
+        value = rng.uniform(low, high)
+        return pick(['%d' % round(value), '%.1f' % value, '%.3f' % value, '%.2f' % value])
+
+    def path():
+        roll = rng.random()
+        if roll < 0.35:
+            return f'{n()} {n()} {n(1, 60)} {n(1, 60)} re'
+        if roll < 0.55:
+            corners = [(n(), n()) for _ in range(rng.randint(2, 6))]
+            text = f'{corners[0][0]} {corners[0][1]} m ' + ' '.join(f'{x} {y} l' for x, y in corners[1:])
+            return text + pick(['', ' h', ' h'])
+        if roll < 0.8:
+            text = f'{n()} {n()} m '
+            for _ in range(rng.randint(1, 3)):
+                op = pick(['c', 'c', 'v', 'y'])
+                count = 6 if op == 'c' else 4
+                text += ' '.join(n() for _ in range(count)) + f' {op} '
+            return text + pick(['', 'h'])
+        if roll < 0.9:
+            # Nested squares for fill rules.
+            x, y, size = rng.uniform(0, 80), rng.uniform(0, 80), rng.uniform(20, 60)
+            inner = size * rng.uniform(0.2, 0.7)
+            outer = f'{x:.2f} {y:.2f} {size:.2f} {size:.2f} re'
+            if rng.random() < 0.5:
+                return outer + f' {x + (size - inner) / 2:.2f} {y + (size - inner) / 2:.2f} {inner:.2f} {inner:.2f} re'
+            # The inner one drawn the other way round.
+            a, b = x + (size - inner) / 2, y + (size - inner) / 2
+            return (
+                outer
+                + f' {a:.2f} {b:.2f} m {a:.2f} {b + inner:.2f} l {a + inner:.2f} {b + inner:.2f} l {a + inner:.2f} {b:.2f} l h'
+            )
+        return opt(['0 0 m 50 50 l'], ['m', '1 2 3 l', '0 0 m 1 2 3 4 c', '5 5 l', '1 2 3 4 5 v', 'h 1 1 l'])
+
+    def paint():
+        return opt(['S', 'f', 'f*', 'B', 'b', 's', 'B*', 'b*', 'F', 'n', 'S', 'f'], ['W n', 'W* n'])
+
+    def content(depth=0, forms=()):
+        ops = []
+        for _ in range(rng.randint(1, 14)):
+            roll = rng.random()
+            if roll < 0.45:
+                ops.append(f'{path()} {paint()}')
+            elif roll < 0.55:
+                ops.append(
+                    pick(['q', 'Q', 'q', 'Q']) if rng.random() < risk[0] else 'q ' + f'{path()} {paint()}' + ' Q'
+                )
+            elif roll < 0.63:
+                ops.append(
+                    pick(
+                        [
+                            f'1 0 0 1 {n()} {n()} cm',
+                            f'2 0 0 2 {n()} {n()} cm',
+                            '0 1 -1 0 100 0 cm',
+                            f'{n(0.5, 2)} 0.2 -0.1 {n(0.5, 2)} 5 5 cm',
+                        ]
+                    )
+                )
+            elif roll < 0.7:
+                ops.append(pick([f'{n()} {n()} {n(5, 80)} {n(5, 80)} re W n', '10 10 m 90 10 l 50 90 l h W n', '10 10 m 90 10 l 10 90 l 90 90 l h W n',
+                                 '0 0 144 180 re W* n', '20 20 m 80 20 l 80 80 l 20 80 l W n']))  # fmt: skip
+            elif roll < 0.75:
+                ops.append(pick(['[3 2] 0 d', '[] 0 d', '/GS0 gs', '/GS1 gs', '/GS2 gs', '/GS3 gs']))
+            elif roll < 0.8:
+                ops.append(
+                    pick(['/OC /L1 BDC 0 0 m 10 10 l S EMC', '/Span BMC 0 0 m 20 5 l S EMC', '/OC /L1 BDC /F0 Do EMC'])
+                )
+            elif roll < 0.86:
+                ops.append(
+                    pick(
+                        [
+                            'BT /F1 12 Tf 10 10 Td (Label) Tj ET',
+                            'BT 7 Tr (Clip) Tj ET 0 0 m 5 5 l S',
+                            'BT [(A) 2 (B)] TJ ET',
+                            "BT (x) ' ET",
+                        ]
+                    )
+                )
+            elif roll < 0.9:
+                ops.append(pick(['/Sh0 sh', '/Im0 Do']))
+            elif roll < 0.96 and forms:
+                ops.append(f'q 1 0 0 1 {n(0, 40)} {n(0, 40)} cm /{pick(forms)} Do Q')
+            else:
+                ops.append(
+                    opt(
+                        ['0 0 m 1 1 l S'],
+                        [
+                            'Q',
+                            'EMC',
+                            'q q',
+                            '/Missing gs',
+                            '/Nothing Do',
+                            '1 0 0 cm',
+                            '/Span BMC',
+                            '1e400 0 m 1 1 l S',
+                            '99999999999 0 m 1 1 l S',
+                        ],
+                    )
+                )
+        return ' '.join(ops).encode()
+
+    for index in range(count):
+        risk[0] = pick([0.0, 0.0, 0.0, 0.05, 0.2])
+        forms = {}
+        if rng.random() < 0.4:
+            for k in range(rng.randint(1, 2)):
+                extra = pick([b'/BBox [0 0 40 40]', b'/BBox [0 0 40 40] /Matrix [2 0 0 1 0 0]', b'/BBox [5 5 60 30] /Matrix [1 0 0 1 3 4]',
+                              b'/BBox [0 0 40 40] /Group << /S /Transparency >>', b'/BBox [-10 -10 200 200]'])  # fmt: skip
+                forms[f'F{k}'.encode()] = (content(1), extra)
+        states = {
+            b'GS0': b'/CA 0.5 /ca 0.5',
+            b'GS1': pick([b'/ca 0', b'/CA 0']),
+            b'GS2': pick([b'/SMask /None', b'/SMask << /S /Luminosity >>']),
+            b'GS3': pick([b'/D [[2 1] 0]', b'/D [[] 0]']),
+        }
+        page = {
+            'content': content(0, [f.decode() for f in forms]),
+            'forms': forms,
+            'states': states,
+            'images': {b'Im0': True} if rng.random() < 0.5 else {},
+        }
+        roll = rng.random()
+        entries = [b'/MediaBox [0 0 144 180]']
+        if roll < 0.15:
+            entries.append(pick([b'/CropBox [18 36 126 144]', b'/CropBox [0 0 300 300]', b'/CropBox [50 50 40 40]']))
+        if rng.random() < 0.2:
+            entries.append(
+                pick([b'/Rotate 90', b'/Rotate 180', b'/Rotate 270', b'/Rotate -90', b'/Rotate 45', b'/Rotate 450'])
+            )
+        if rng.random() < 0.1:
+            entries.append(pick([b'/UserUnit 2', b'/UserUnit 0.5']))
+        if rng.random() < 0.1:
+            entries.append(b'/Annots [<< /Type /Annot /Subtype /Text /Rect [0 0 10 10] >>]')
+        page['entries'] = b' '.join(entries)
+        if rng.random() < 0.1:
+            page['content'] = [page['content'], content(0)]
+        pages = [page]
+        if rng.random() < 0.2:
+            pages.append({'content': content(0), 'entries': b'', 'inherited': b'', 'states': states})
+            pages[0]['inherited'] = b'/MediaBox [0 0 200 200]'
+            pages[1]['entries'] = b''
+        if rng.random() < 0.05:
+            pages[0]['no_resources'] = True
+        data = pdf_document(pages, rng, objects_in_streams=rng.random() < 0.5)
+        number = rng.randint(1, len(pages)) if rng.random() < 0.9 else pick([0, len(pages) + 1, True, 1.0, '1'])
+        payload = {'content': base64.b64encode(data).decode('ascii'), 'page': number}
+        if rng.random() < 0.04:
+            payload = pick([
+                {'content': 'not base64!'},
+                {'content': base64.b64encode(b'not a PDF').decode()},
+                {'content': base64.b64encode(b'%PDF-1.5\nmissing xref').decode()},
+                {'content': base64.b64encode(data[: len(data) // 2]).decode()},
+                {'page': 1},
+                [],
+                {'content': 5},
+            ])  # fmt: skip
+        yield payload
+
+
+def bundle_archive(members, rng, *, comment=b'', comment_field=None, prefix=b'', absolute=False, tail=b''):
+    """A ZIP archive written field by field, so that any field can be what a damaged or unusual archive holds.
+    Each member is a dict: name (bytes), data, and optionally method, level, flags, local_flags, crc, size,
+    csize, version, external, extra, local_name, local_extra, comment and offset."""
+    import zlib
+
+    blob = bytearray(prefix)
+    base = 0 if absolute else len(prefix)
+    directory = bytearray()
+    for m in members:
+        name, raw, method = m['name'], m['data'], m.get('method', 8)
+        if method == 8:
+            packer = zlib.compressobj(m.get('level', 6), zlib.DEFLATED, -15)
+            packed = packer.compress(raw) + packer.flush()
+        else:
+            packed = raw
+        flags = m.get('flags', 0)
+        crc, size, csize = m.get('crc', zlib.crc32(raw)), m.get('size', len(raw)), m.get('csize', len(packed))
+        local_name, local_extra = m.get('local_name', name), m.get('local_extra', b'')
+        offset = len(blob) - base
+        blob += struct.pack(
+            '<4s2B4HL2L2H', b'PK\x03\x04', 20, 0, m.get('local_flags', flags), method, 0, 0x21, crc, csize, size,
+            len(local_name), len(local_extra),
+        )  # fmt: skip
+        blob += local_name + local_extra + packed
+        extra, note = m.get('extra', b''), m.get('comment', b'')
+        directory += struct.pack(
+            '<4s4B4HL2L5H2L', b'PK\x01\x02', 20, 3, m.get('version', 20), 0, flags, method, 0, 0x21, crc, csize,
+            size, len(name), len(extra), len(note), 0, 0, m.get('external', 0o100644 << 16), m.get('offset', offset),
+        )  # fmt: skip
+        directory += name + extra + note
+    start = len(blob) - base
+    blob += directory
+    blob += struct.pack(
+        '<4s4H2LH', b'PK\x05\x06', 0, 0, len(members), len(members), len(directory), start,
+        len(comment) if comment_field is None else comment_field,
+    )  # fmt: skip
+    return bytes(blob + comment + tail)
+
+
+def bundle_import_cases(count, seed):
+    """LightBurn bundles for /api/import-bundle: archives of device, material, preference and project members
+    with LightBurn and other suffixes, stored and deflated, names in UTF-8 and code page 437, unsafe and
+    unprintable names, folders and links, encrypted, patched and newer-version entries, extra fields, comments,
+    data before and after the archive, member text in UTF-8, with a signature, and in UTF-16 either way round,
+    and damage of every kind: changed sizes, checksums, offsets and names, cut and flipped bytes, members that
+    inflate too far, and payloads that are not bundles at all. Each archive is listed and then read member by
+    member."""
+    import zlib
+
+    rng = random.Random(seed)
+    pick = rng.choice
+    suffixes = ['.lbdev', '.lbprefs', '.clb', '.lbrn', '.lbrn2', '.lbset', '.LBDEV', '.Clb', '.txt', '.lbart', '']
+    folders = ['', 'devices/', 'materials/', 'Prefs/', 'a/b/', './', 'x//', 'deep/./er/']
+
+    def name():
+        roll = rng.random()
+        stem = pick(['one', 'Laser', 'ref', 'my prefs', 'pé', 'job-2', 'été', '中', 'x'])
+        text = pick(folders) + stem + pick(suffixes)
+        if roll < 0.06:
+            text = pick(['../wrong.clb', '/abs.lbdev', 'c:drive.lbset', 'back\\slash.clb', 'a/../b.lbrn', '.lbdev',
+                         'dot.lbdev.', 'dir.lbdev/', 'folder/', 'x.lbdev/.', 'tab\there.clb', 'bell\x07.lbset',
+                         'line .clb', 'z' * 509 + '.clb', 'y' * 600 + '.clb', 'soft­.lbdev',
+                         'k.Klb', ' space.lbrn'])  # fmt: skip
+        if rng.random() < 0.6 and all(ord(c) < 128 for c in text):
+            return text.encode(), 0
+        if rng.random() < 0.7:
+            return text.encode('utf-8'), 0x800
+        try:
+            return text.encode('cp437'), 0
+        except UnicodeEncodeError:
+            return text.encode('utf-8'), 0  # read as code page 437, as an unflagged archive is
+
+    def body():
+        roll = rng.random()
+        words = pick(['{"name": "Laser", "speed": %d}' % rng.randint(1, 900), '<Library><Material name="Ply"/></Library>',
+                      'réglage = été → \U0001f600', '', 'a' * rng.randint(1, 600),
+                      json.dumps({'layers': [rng.random() for _ in range(rng.randint(0, 40))]})])  # fmt: skip
+        if roll < 0.45:
+            return words.encode()
+        if roll < 0.55:
+            return b'\xef\xbb\xbf' + words.encode()
+        if roll < 0.63:
+            return words.encode('utf-16')
+        if roll < 0.68:
+            return b'\xfe\xff' + words.encode('utf-16-be')
+        if roll < 0.72:
+            return (
+                b'\xff\xfe'
+                + words.encode('utf-16-le')
+                + pick([b'\x00', b'\x00\xd8', b'\x00\xdc\x41\x00', b'\x3d\xd8A\x00'])
+            )
+        if roll < 0.77:
+            return words.encode() + pick(
+                [b'\xff', b'\xc3', b'\xed\xa0\x80', b'\xf4\x90\x80\x80', b'\xc0\xaf', b'\xe2\x82']
+            )
+        if roll < 0.81:
+            return words.encode() + b'\x00bin'
+        if roll < 0.84:
+            return '\x00'.encode('utf-16')
+        if roll < 0.87:
+            return bytes(rng.randrange(256) for _ in range(rng.randint(0, 64)))
+        return (words * rng.randint(1, 8)).encode()
+
+    def member():
+        raw_name, flags = name()
+        m = {
+            'name': raw_name,
+            'flags': flags,
+            'data': body(),
+            'method': pick([0, 8, 8, 8]),
+            'level': pick([0, 1, 6, 9]),
+        }
+        roll = rng.random()
+        if roll < 0.04:
+            m['external'] = pick([(0o120777 << 16), (0o040755 << 16) | 0x10, 0, 0o060644 << 16, 0x10])
+        elif roll < 0.07:
+            m['flags'] |= pick([1, 8, 0x20, 0x40, 2, 4])
+        elif roll < 0.09:
+            m['method'] = pick([12, 14, 99, 9])
+        elif roll < 0.11:
+            m['version'] = pick([45, 63, 64, 99])
+        elif roll < 0.15:
+            m['extra'] = pick([b'\xfe\xca\x04\x00abcd', b'\x0a\x00\x20\x00' + bytes(32), b'\x01\x00\x08\x00' + bytes(8),
+                               b'\x75\x70\x05\x00\x01abcd', b'\x00\x00\x09\x00abc', b'\xfe', b'ab\x01\x00x'])  # fmt: skip
+        elif roll < 0.18:
+            m['local_extra'] = pick([b'\x55\x54\x05\x00\x01abcd', bytes(rng.randint(1, 30))])
+        elif roll < 0.21:
+            m['comment'] = pick([b'note', 'kommentar é'.encode(), b'PK\x05\x06'])
+        elif roll < 0.25:
+            m['crc'] = rng.randrange(1 << 32)
+        elif roll < 0.30:
+            m['size'] = max(0, len(m['data']) + rng.randint(-5, 5))
+        elif roll < 0.33:
+            m['csize'] = rng.randint(0, 64)
+        elif roll < 0.35:
+            m['local_name'] = pick([b'other.clb', raw_name.upper(), raw_name + b'x', b''])
+        elif roll < 0.37:
+            m['local_flags'] = m['flags'] ^ 0x800
+        elif roll < 0.38:
+            m['size'] = pick([4_000_001, 4_000_000, 2**32 - 1])
+        elif roll < 0.385:
+            m['data'], m['method'] = bytes(rng.randint(4_000_001, 4_200_000)), 8
+            m['size'] = pick([100, 4_000_000, len(m['data'])])
+        return m
+
+    def damaged(blob):
+        blob = bytearray(blob)
+        roll = rng.random()
+        if roll < 0.35 and blob:
+            for _ in range(rng.randint(1, 4)):
+                at = rng.randrange(len(blob))
+                blob[at] ^= 1 << rng.randrange(8)
+        elif roll < 0.55:
+            del blob[rng.randint(0, len(blob)) :]
+        elif roll < 0.7 and len(blob) > 22:
+            # The end record's sizes and offsets.
+            at = len(blob) - 22 + pick([8, 10, 12, 16])
+            blob[at : at + 2] = struct.pack('<H', rng.randrange(1 << 16))
+        elif roll < 0.85:
+            at = rng.randint(0, len(blob))
+            blob[at:at] = bytes(rng.randrange(256) for _ in range(rng.randint(1, 30)))
+        else:
+            blob = blob[: rng.randint(0, len(blob))] + b'PK\x05\x06' + bytes(rng.randint(0, 30))
+        return bytes(blob)
+
+    def payloads(blob, members):
+        content = base64.b64encode(blob).decode()
+        yield {'content': content}
+        for index in range(min(members, 6)):
+            yield {'content': content, 'index': index}
+        if rng.random() < 0.2:
+            yield {'content': content, 'index': pick([True, -1, members, 300, '0', None, 1.0, 10**30, 0.5])}
+
+    made = 0
+    while made < count:
+        roll = rng.random()
+        if roll < 0.05:
+            cases = [
+                [], 'text', {'index': 0}, {'content': 5}, {'content': 'not base64!'}, {'content': 'AQID='},
+                {'content': ''}, {'content': 'éAAA'}, {'content': base64.b64encode(b'not a zip archive').decode()},
+                {'content': base64.b64encode(b'PK\x05\x06' + bytes(18)).decode()},
+                {'content': base64.b64encode(b'PK\x05\x06' + bytes(10)).decode()},
+            ]  # fmt: skip
+            if made < 2:
+                cases.append({'content': 'A' * 5_333_340})
+                cases.append({'content': base64.b64encode(bytes(4_000_001)).decode()})
+            for payload in cases:
+                made += 1
+                yield payload
+            continue
+        if roll < 0.15:
+            # An archive as zipfile writes it.
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, 'w', compression=pick([zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED])) as archive:
+                for _ in range(rng.randint(0, 6)):
+                    raw_name, _ = name()
+                    info = zipfile.ZipInfo(raw_name.decode('utf-8', 'replace'))
+                    if rng.random() < 0.1:
+                        info.external_attr = 0o120777 << 16
+                    archive.writestr(info, body(), compress_type=pick([zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED]))
+                if rng.random() < 0.2:
+                    archive.comment = pick([b'bundle', b'PK\x05\x06', bytes(40)])
+            blob, total = buffer.getvalue(), 6
+        else:
+            many = rng.random() < 0.03
+            members = [member() for _ in range(rng.randint(257, 262) if many else rng.randint(0, 7))]
+            if rng.random() < 0.04 and members:
+                for m in members:
+                    m['size'] = pick([3_999_999, 4_000_000])
+            if rng.random() < 0.05 and len(members) > 1:
+                members[1]['offset'] = 0  # two entries at one header
+            if rng.random() < 0.03 and members:
+                members[0]['offset'] = 2**32 - 10
+            prefix = pick([b'', b'', b'', b'MZ stub ' * rng.randint(1, 8)])
+            comment = pick([b'', b'', b'LightBurn bundle', b'PK\x05\x06xx', bytes(rng.randint(0, 80))])
+            blob = bundle_archive(
+                members, rng, comment=comment, prefix=prefix, absolute=rng.random() < 0.5,
+                comment_field=pick([None, None, None, 0, 200]), tail=pick([b'', b'', b'junk', b'\x00\x00']),
+            )  # fmt: skip
+            if rng.random() < 0.02:
+                blob = blob[:-22] + b'PK\x06\x07' + bytes(16) + blob[-22:]
+            total = len(members)
+            if rng.random() < 0.3:
+                blob = damaged(blob)
+        for payload in payloads(blob, total):
+            made += 1
+            yield payload
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--cli', required=True, type=Path, help='the kerfkite-cam executable')
@@ -2456,6 +3281,9 @@ def main():
     parser.add_argument('--stl', type=int, default=1000, help='generated STL meshes for relief height fields')
     parser.add_argument('--solid-cad', type=int, default=300, help='generated parametric solid histories and sections')
     parser.add_argument('--cad-script', type=int, default=1000, help='generated CAD scripts for the script preview')
+    parser.add_argument('--program-import', type=int, default=3000, help='generated G-code, HP-GL and INI drawings')
+    parser.add_argument('--pdf-import', type=int, default=1500, help='generated PDF pages')
+    parser.add_argument('--bundle-import', type=int, default=3000, help='generated LightBurn bundle requests')
     parser.add_argument('--skip-suite', action='store_true', help='do not replay the calls made by the test suite')
     parser.add_argument(
         '--without-polygon-operations',
@@ -2591,6 +3419,18 @@ def main():
                 line = preview_reference('cad_script', script_request(payload))
                 if line is not None:
                     lines.setdefault(line, 'cad-script')
+        for payload in program_import_cases(args.program_import, 105):
+            line = preview_reference('program_import', payload)
+            if line is not None:
+                lines.setdefault(line, 'program-import')
+        for payload in pdf_import_cases(args.pdf_import, 106):
+            line = preview_reference('pdf_import', payload)
+            if line is not None:
+                lines.setdefault(line, 'pdf-import')
+        for payload in bundle_import_cases(args.bundle_import, 107):
+            line = preview_reference('bundle_import', payload)
+            if line is not None:
+                lines.setdefault(line, 'bundle-import')
         tally = collections.Counter()
         declined = collections.Counter()
         failures = []
@@ -2598,9 +3438,10 @@ def main():
         def compare(lines):
             """Put a set of cases to the native core and count how each was answered."""
             cases.write_text(''.join(line + '\n' for line in lines), encoding='utf-8')
+            # One answer a line; split at newlines alone, as a member's text may hold other line separators.
             answers = subprocess.run(
                 [str(args.cli), 'batch', str(cases)], capture_output=True, text=True, encoding='utf-8', check=True
-            ).stdout.splitlines()
+            ).stdout.split('\n')[:-1]
             assert len(answers) == len(lines), 'The native core did not answer every case.'
             for (line, origin), answer in zip(lines.items(), answers, strict=True):
                 case, got = json.loads(line), json.loads(answer)
@@ -2610,6 +3451,8 @@ def main():
                 )
                 if subject is None:
                     subject = case.get('solid_cad', case.get('solid_cad_section', case.get('cad_script')))
+                if subject is None:
+                    subject = case.get('program_import', case.get('pdf_import', case.get('bundle_import')))
                 if 'relief' in case and 'ok' in got:
                     got = {'ok': where_computed_left_out(got['ok'])}
                 if not shared and 'project' in case and uses_polygon_operation(subject):
@@ -2651,7 +3494,17 @@ def main():
                     compare(lines)
 
     origins = ('suite', 'generated', 'entry/tabs', 'helix', 'v-carve', 'rotary', 'rotary-wrap', 'relief', 'stock')
-    for origin in (*origins, 'tool-changes', 'fixtures', 'stl', 'solid-cad', 'cad-script'):
+    for origin in (
+        *origins,
+        'tool-changes',
+        'fixtures',
+        'stl',
+        'solid-cad',
+        'cad-script',
+        'program-import',
+        'pdf-import',
+        'bundle-import',
+    ):
         total = sum(n for (o, _), n in tally.items() if o == origin)
         if not total:
             continue
@@ -2684,6 +3537,12 @@ def main():
         raise SystemExit('No solid was rebuilt: the comparison did not exercise the parametric history.')
     if shared and args.cad_script and not tally['cad-script', 'program']:
         raise SystemExit('No CAD script was previewed: the comparison did not exercise the script engine.')
+    if args.pdf_import and not tally['pdf-import', 'program']:
+        raise SystemExit('No PDF page was read: the comparison did not exercise the PDF reader.')
+    if args.bundle_import and not tally['bundle-import', 'program']:
+        raise SystemExit('No bundle member was read: the comparison did not exercise the bundle reader.')
+    if args.program_import and not tally['program-import', 'program']:
+        raise SystemExit('No drawing was imported: the comparison did not exercise the program reader.')
     if not shared:
         print(
             'PASS for the cases compared; offsets, pockets, fills and V-carves were NOT COMPARED (no compiled extension).'

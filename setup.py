@@ -57,6 +57,17 @@ setup(
                 # STL height fields for reliefs.
                 'native/core/src/stl_heightmap.cpp',
                 'native/core/src/artwork_relief.cpp',
+                # Foreign drawings and toolpaths: G-code, HP-GL and LinuxCNC INI import.
+                'native/core/src/program_import.cpp',
+                'native/core/src/dxf.cpp',
+                # Vector PDF pages, with the core's own inflate for FlateDecode.
+                'native/core/src/pdf_import.cpp',
+                'native/core/src/inflate.cpp',
+                # LightBurn bundles: the ZIP archive and its text members.
+                'native/core/src/bundle_import.cpp',
+                'native/core/src/python_text.cpp',
+                # Editable Bézier and B-spline surfaces.
+                'native/core/src/surface.cpp',
                 # Circuit board import: Gerber layers and Excellon drill files.
                 'native/core/src/excellon.cpp',
                 'native/core/src/gerber.cpp',

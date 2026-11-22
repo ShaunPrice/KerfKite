@@ -18,10 +18,17 @@
 //                                            as a drawing or a solid (/api/cad-script, studio.scad_geometry)
 //   kerfkite-cam sketch-solve REQUEST.json   {"feature", "parameters", "order"}: a sketch's vertices with its
 //                                            constraints solved, and the solver's diagnostics (studio.sketch_constraints)
+//   kerfkite-cam solid-cad-surface REQUEST.json {"surface", "order", "orders"}: a Bézier or B-spline surface, sheet or
+//                                            trimmed outline tessellated (studio.cad_exchange.surface_mesh)
 //   kerfkite-cam assembly-solve REQUEST.json {"assembly", "mesh", "orders"}: parts placed by their mates, with contacts
 //                                            and interferences (studio.assembly)
 //   kerfkite-cam artwork-relief REQUEST.json closed artwork contours as a raised or recessed relief (/api/artwork-relief)
 //   kerfkite-cam artwork-raster REQUEST.json the artwork relief's height field alone
+//   kerfkite-cam program-import REQUEST.json {"name", "text", "unit"}: posted G-code, HP-GL, a LinuxCNC INI or a DXF
+//                                            drawing read as artwork for review (/api/program-import)
+//   kerfkite-cam pdf-import REQUEST.json     {"content": base64, "page"}: a PDF page's vector paths (/api/pdf-import)
+//   kerfkite-cam bundle-import REQUEST.json  {"content": base64, "index"}: a LightBurn bundle's text members, or the
+//                                            text of one (/api/import-bundle)
 //   kerfkite-cam calibrate                   measure the relief contact on the threads and any GPU, and how to share
 //   kerfkite-cam gerber FILE [--arc-tolerance MM]            a Gerber layer as drawn objects in millimetres
 //   kerfkite-cam gerber-outline FILE [--tolerance MM] [--offset [X,Y]]   a profile layer as closed paths
@@ -70,6 +77,7 @@
 #include "kerfkite/tool_changes.hpp"
 #include "kerfkite/fixture_collision.hpp"
 #include "kerfkite/stl_heightmap.hpp"
+#include "kerfkite/program_import.hpp"
 #include "kerfkite/leveling.hpp"
 #include "kerfkite/line_check.hpp"
 #include "kerfkite/number_text.hpp"
@@ -233,8 +241,16 @@ int batch(const std::string &path) {
                 job = kerfkite::solid_cad_call("cad-script", request.at("cad_script"));
             else if (request.contains("sketch_solve"))
                 job = kerfkite::solid_cad_call("sketch-solve", request.at("sketch_solve"));
+            else if (request.contains("program_import"))
+                job = kerfkite::program_import_call("program-import", request.at("program_import"));
+            else if (request.contains("pdf_import"))
+                job = kerfkite::program_import_call("pdf-import", request.at("pdf_import"));
+            else if (request.contains("bundle_import"))
+                job = kerfkite::program_import_call("bundle-import", request.at("bundle_import"));
             else if (request.contains("assembly_solve"))
                 job = kerfkite::solid_cad_call("assembly-solve", request.at("assembly_solve"));
+            else if (request.contains("solid_cad_surface"))
+                job = kerfkite::solid_cad_call("solid-cad-surface", request.at("solid_cad_surface"));
             else if (request.contains("relief"))
                 job = kerfkite::prepare_relief(request.at("relief"));
             else if (request.contains("stock"))
@@ -363,7 +379,9 @@ int main(int argc, char **argv) {
          command == "solid" || command == "rotary" || command == "rotary-wrap" || command == "relief" || command == "stock" ||
          command == "tool-changes" || command == "fixture-collision" || command == "stl-heightmap" ||
          command == "solid-cad" || command == "solid-cad-section" || command == "cad-script" || command == "sketch-solve" || command == "assembly-solve" ||
-         command == "artwork-relief" || command == "artwork-raster") &&
+         command == "solid-cad-surface" ||
+         command == "artwork-relief" || command == "artwork-raster" || command == "program-import" || command == "pdf-import" ||
+         command == "bundle-import") &&
         argc == 3)
         return request(command, argv[2]);
     if ((command == "polygon-batch" || command == "solid-batch") && argc == 3)

@@ -1,4 +1,13 @@
-"""Read foreign drawing and toolpath files as editable artwork for layer-gated review."""
+"""Read foreign drawing and toolpath files as editable artwork for layer-gated review.
+
+With the compiled extension, import_program is answered by the native core. For G-code, HP-GL and LinuxCNC INI
+files the core has a port of this module (native/core/src/program_import.cpp), which reads them the same way and
+gives the same artwork, presets, warnings and messages to the bit. DXF drawings are read by the core's own
+reader (native/core/src/dxf.cpp), which flattens the true curves where _dxf flattens ezdxf's Bézier paths: the
+outlines agree to the tolerance, and validation/dxf_import_check.py compares the two. This module stays as the
+reference, and answers what the core declines: text that is not ASCII in a program, and a DXF spline given only
+by fit points.
+"""
 
 import io
 import math
@@ -7,6 +16,11 @@ from collections import Counter
 from pathlib import Path
 
 from flask import jsonify, request
+
+try:  # The native core's port of this module, in the compiled extension.
+    from ._relief_native import core_cam as _core_cam, core_cam_text as _core_cam_text
+except ImportError:
+    _core_cam = _core_cam_text = None
 
 
 UNITS = {'mm': 1.0, 'in': 25.4, 'inch': 25.4, 'cm': 10.0, 'm': 1000.0, 'ft': 304.8}
@@ -634,7 +648,38 @@ def _linuxcnc_ini(text):
     }
 
 
-def import_program(payload):
+def import_json(payload):
+    """import_program(payload) as JSON text written by the core, for a web response, or None: then import_program."""
+    if _core_cam_text is None:
+        return None
+    try:
+        return _core_cam_text('program-import', payload)
+    except NotImplementedError:
+        return None
+
+
+def import_program(payload, *, backend='auto'):
+    """The artwork, layers, presets, devices and warnings read from a foreign drawing or toolpath.
+
+    backend='auto' reads in the native core where it can and here otherwise; 'python' reads here; 'native'
+    raises NotImplementedError where the core cannot answer.
+    """
+    if backend not in ('auto', 'python', 'native'):
+        raise ValueError('Program import backend must be auto, python or native')
+    if backend != 'python':
+        if _core_cam is not None:
+            try:
+                answer = _core_cam('program-import', payload)
+            except NotImplementedError:
+                if backend == 'native':
+                    raise
+                answer = None
+            if answer is not None:
+                return answer
+            if backend == 'native':
+                raise NotImplementedError('The drawing cannot be passed to the native core unchanged')
+        elif backend == 'native':
+            raise NotImplementedError('The native program import is not installed')
     if not isinstance(payload, dict):
         raise ValueError('Provide a drawing filename and its text')
     text, name = payload.get('text'), payload.get('name')
@@ -661,10 +706,19 @@ def import_program(payload):
 def register(app):
     @app.post('/api/pdf-import')
     def review_pdf():
-        from .pdf_import import import_pdf
+        from . import pdf_import
 
-        return jsonify(import_pdf(request.get_json()))
+        payload = request.get_json()
+        text = pdf_import.import_json(payload)
+        if text is not None:
+            return app.response_class(text, mimetype='application/json')
+        return jsonify(pdf_import.import_pdf(payload, backend='python'))
 
     @app.post('/api/program-import')
     def program_import():
-        return jsonify(import_program(request.get_json()))
+        payload = request.get_json()
+        # The core's own JSON text is the response; the Python answers what the core declines.
+        text = import_json(payload)
+        if text is not None:
+            return app.response_class(text, mimetype='application/json')
+        return jsonify(import_program(payload, backend='python'))

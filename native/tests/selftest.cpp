@@ -16,6 +16,7 @@
 #include "kerfkite/number_text.hpp"
 #include "kerfkite/operation_command.hpp"
 #include "kerfkite/pcb.hpp"
+#include "kerfkite/program_import.hpp"
 #include "kerfkite/relief.hpp"
 #include "kerfkite/rotary.hpp"
 #include "kerfkite/stock.hpp"
@@ -1212,6 +1213,187 @@ static void cad_scripts() {
     expect(refusal("cube(\xd9\xa3);").empty(), "an Arabic-Indic digit is a number");
 }
 
+// Standard base64 with padding, for requests that carry a file.
+static std::string base64_text(const std::string &bytes) {
+    static const char *alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string encoded;
+    for (size_t i = 0; i < bytes.size(); i += 3) {
+        const unsigned a = static_cast<unsigned char>(bytes[i]), b = i + 1 < bytes.size() ? static_cast<unsigned char>(bytes[i + 1]) : 0,
+                       c = i + 2 < bytes.size() ? static_cast<unsigned char>(bytes[i + 2]) : 0;
+        const unsigned group = (a << 16) | (b << 8) | c;
+        encoded += alphabet[(group >> 18) & 63];
+        encoded += alphabet[(group >> 12) & 63];
+        encoded += i + 1 < bytes.size() ? alphabet[(group >> 6) & 63] : '=';
+        encoded += i + 2 < bytes.size() ? alphabet[group & 63] : '=';
+    }
+    return encoded;
+}
+
+static void program_imports() {
+    const auto read = [](const char *name, const std::string &text, const char *unit = "mm") {
+        json request = json::object();
+        request["name"] = name;
+        request["text"] = text;
+        request["unit"] = unit;
+        return kerfkite::program_import_call("program-import", request);
+    };
+    const auto refusal = [&](const char *name, const std::string &text) -> std::string {
+        try {
+            read(name, text);
+        } catch (const kerfkite::ValueError &error) {
+            return error.what();
+        } catch (const kerfkite::NotPorted &) {
+            return "declined";
+        }
+        return "";
+    };
+    const json square = read("part.nc", "G21 G90\nG0 X0 Y0 Z5\nG1 Z-1 F300\nG1 X10\nG1 Y10\nG2 X0 Y10 R5\nM30\n");
+    const json &cut = square.at("objects").at(0);
+    expect(square.at("mode") == json("router") && cut.at("name") == json("Toolpath"), "posted G-code is a router drawing");
+    expect(cut.at("paths").at(0).at(0) == json::array({0.0, 0.0}) && cut.at("depths").at(0).at(0) == json(-1.0), "a contour starts where the plunge ended");
+    expect(square.at("presets").at(0).at("name") == json("Posted feed \xc2\xb7 300 mm/min"), "a posted feed is a preset, written as Python's {:g}");
+    const json inch = read("part.nc", "G0 X0 Y0\nG1 X1 Y0 F12.3456789", "in");
+    expect(inch.at("objects").at(0).at("paths").at(0).at(1) == json::array({25.4, 0.0}), "motion before a units command takes the chosen unit");
+    expect(inch.at("presets").at(0).at("settings").at("feed") == json(313.58024), "a feed is rounded to five places");
+    const json pens = read("cutter.plt", "IN;SP1;VS2.5;PU0,0;PD400,0,400,400;SP2;PU800,800;CI40;");
+    expect(pens.at("mode") == json("knife") && pens.at("layers").size() == 2, "each HP-GL pen is a layer");
+    expect(pens.at("warnings").at(0) == json("Pen 1 velocity (cm/s): 2.5"), "pen speeds are reported");
+    const json machine = read("machine.ini", "[TRAJ]\nLINEAR_UNITS = inch\n[AXIS_X]\nMIN_LIMIT = 0\nMAX_LIMIT = 10\n[AXIS_Y]\nMIN_LIMIT = -1\nMAX_LIMIT = 1E1\n");
+    expect(machine.at("devices").at(0).at("width") == json(254.0) && machine.at("devices").at(0).at("height") == json(279.4), "an INI's travel is the workspace");
+    expect(refusal("part.nc", "G21\nG0 X0 Y0\nG2 X10 Y0 I3 J0") == "G-code line 3: inconsistent arc endpoints and centre", "an arc off its circle");
+    expect(refusal("part.nc", "M30\nG1 X1") == "G-code line 2: instructions after program end", "nothing after the end");
+    expect(refusal("part.plt", "IN;LB text;") == "Invalid plotter values at instruction 2", "label text is not a value");
+    expect(refusal("part.plt", "IN;EA4,4;") == "Unsupported HP-GL instruction 2: EA. Export plain, unscaled pen paths.", "filled shapes are refused");
+    expect(refusal("part.svg", "G1") == "Choose an ASCII DXF, G-code or HP-GL drawing", "an unknown suffix");
+    expect(refusal("part.nc", "G21 (\xc3\xa9)") == "declined", "program text that is not ASCII is Python's");
+    // A DXF drawing, by the core's own reader.
+    std::string dxf;
+    for (const char *pair : {"0", "SECTION", "2", "HEADER", "9", "$INSUNITS", "70", "4", "0", "ENDSEC", "0", "SECTION", "2", "TABLES", "0",
+                             "TABLE", "2", "LAYER", "0", "LAYER", "2", "Cut", "62", "1", "70", "0", "0", "ENDTAB", "0", "ENDSEC", "0", "SECTION",
+                             "2", "BLOCKS", "0", "BLOCK", "2", "Hole", "10", "0", "20", "0", "0", "CIRCLE", "8", "0", "10", "0", "20", "0", "40",
+                             "2", "0", "ENDBLK", "0", "ENDSEC", "0", "SECTION", "2", "ENTITIES", "0", "LINE", "8", "Cut", "10", "0", "20", "0",
+                             "11", "10", "21", "0", "0", "LWPOLYLINE", "8", "Cut", "90", "2", "70", "0", "10", "0", "20", "0", "42", "1", "10",
+                             "10", "20", "0", "0", "INSERT", "8", "Cut", "2", "Hole", "10", "50", "20", "50", "0", "TEXT", "8", "0", "1", "Hi",
+                             "0", "ENDSEC", "0", "EOF"})
+        dxf += std::string(pair) + "\n";
+    const json plate = read("plate.dxf", dxf);
+    const json &objects = plate.at("objects");
+    expect(objects.size() == 3 && objects.at(0).at("name") == json("Cut \xc2\xb7 Line") && objects.at(2).at("name") == json("Cut \xc2\xb7 Circle"),
+           "a DXF's lines, polylines and block circles are read, the circle on the reference's layer");
+    double lowest = 0;
+    for (const json &p : objects.at(1).at("paths").at(0)) lowest = std::min(lowest, p.at(1).get<double>());
+    expect(std::fabs(lowest + 5) < 0.03, "a bulge of 1 is a half circle, counter-clockwise");
+    const json &circle = objects.at(2).at("paths").at(0);
+    expect(circle.at(0) == json::array({52.0, 50.0}) && circle.at(0) == circle.at(circle.size() - 1) && circle.at(1).at(1).get<double>() < 50,
+           "a circle starts at angle 0, turns clockwise and closes");
+    expect(plate.at("layers").at(0).at("color") == json("#ff0000") && plate.at("warnings").at(0) == json("Skipped DXF entities: TEXT (1)"),
+           "a DXF layer's colour and the entities skipped");
+    expect(refusal("plate.dxf", "hello") == "Cannot read this ASCII DXF drawing", "text that is not a DXF");
+
+    // A PDF page, written by hand: a stroke, a closed fill with a hole, and text that is skipped.
+    const std::string content = "0 0 m 72 0 l S 10 10 50 50 re 20 20 10 10 re f* BT (Hi) Tj ET";
+    std::string pdf = "%PDF-1.4\n";
+    std::vector<size_t> offsets;
+    const auto object = [&](const std::string &body) {
+        offsets.push_back(pdf.size());
+        pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n";
+    };
+    object("<< /Type /Catalog /Pages 2 0 R >>");
+    object("<< /Type /Pages /Count 1 /Kids [3 0 R] >>");
+    object("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 144 144] /Contents 4 0 R >>");
+    object("<< /Length " + std::to_string(content.size()) + " >>\nstream\n" + content + "\nendstream");
+    const size_t xref = pdf.size();
+    pdf += "xref\n0 5\n0000000000 65535 f \n";
+    for (const size_t offset : offsets) {
+        char line[32];
+        std::snprintf(line, sizeof line, "%010zu 00000 n \n", offset);
+        pdf += line;
+    }
+    pdf += "trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n" + std::to_string(xref) + "\n%%EOF\n";
+    json pdf_request = json::object();
+    pdf_request["content"] = base64_text(pdf);
+    const json page = kerfkite::program_import_call("pdf-import", pdf_request);
+    const json &pdf_objects = page.at("objects");
+    expect(pdf_objects.size() == 2 && pdf_objects.at(1).at("paths").size() == 2, "a stroke, and a fill with its hole as one object");
+    expect(std::fabs(pdf_objects.at(0).at("paths").at(0).at(1).at(0).get<double>() - 25.4) < 1e-12, "72 points are 25.4 mm");
+    expect(page.at("pageCount") == json(1) && page.at("warnings").at(1) == json("1 \xc3\x97 text objects omitted; convert text to paths in the source."),
+           "the page count and the text skipped");
+}
+
+// A LightBurn bundle written by hand: a stored device file and a text file the reader leaves out.
+static void bundle_imports() {
+    struct Entry {
+        std::string name, data;
+        uint32_t crc;
+    };
+    const Entry entries[] = {{"dev/one.lbdev", "{\"a\":1}", 0x561bacafu}, {"notes.txt", "x", 0x8cdc1683u}};
+    const auto u16 = [](std::string &s, unsigned v) {
+        s += static_cast<char>(v & 255);
+        s += static_cast<char>((v >> 8) & 255);
+    };
+    const auto u32 = [&](std::string &s, uint32_t v) {
+        u16(s, v & 0xffff);
+        u16(s, v >> 16);
+    };
+    std::string zip, directory;
+    for (const Entry &e : entries) {
+        const size_t offset = zip.size();
+        zip += "PK\x03\x04";
+        u16(zip, 20), u16(zip, 0), u16(zip, 0), u16(zip, 0), u16(zip, 0x21);
+        u32(zip, e.crc), u32(zip, static_cast<uint32_t>(e.data.size())), u32(zip, static_cast<uint32_t>(e.data.size()));
+        u16(zip, static_cast<unsigned>(e.name.size())), u16(zip, 0);
+        zip += e.name + e.data;
+        directory += "PK\x01\x02";
+        u16(directory, 0x0314), u16(directory, 20), u16(directory, 0), u16(directory, 0), u16(directory, 0), u16(directory, 0x21);
+        u32(directory, e.crc), u32(directory, static_cast<uint32_t>(e.data.size())), u32(directory, static_cast<uint32_t>(e.data.size()));
+        u16(directory, static_cast<unsigned>(e.name.size())), u16(directory, 0), u16(directory, 0), u16(directory, 0), u16(directory, 0);
+        u32(directory, 0100644u << 16), u32(directory, static_cast<uint32_t>(offset));
+        directory += e.name;
+    }
+    const size_t start = zip.size();
+    zip += directory + "PK\x05\x06";
+    u16(zip, 0), u16(zip, 0), u16(zip, 2), u16(zip, 2);
+    u32(zip, static_cast<uint32_t>(directory.size())), u32(zip, static_cast<uint32_t>(start)), u16(zip, 0);
+    json request = json::object();
+    request["content"] = base64_text(zip);
+    const auto refusal = [&]() -> std::string {
+        try {
+            kerfkite::program_import_call("bundle-import", request);
+        } catch (const kerfkite::ValueError &error) {
+            return error.what();
+        }
+        return "";
+    };
+    const json listing = kerfkite::program_import_call("bundle-import", request);
+    expect(listing.at("files").size() == 1 && listing.at("files").at(0).at("name") == json("one.lbdev") &&
+               listing.at("skipped") == json(1),
+           "a bundle lists its LightBurn member by name and counts the other");
+    request["index"] = 0;
+    expect(kerfkite::program_import_call("bundle-import", request).at("text") == json("{\"a\":1}"), "a stored member's text");
+    request["index"] = 1;
+    expect(refusal() == "Select a supported member of this bundle", "a member without a LightBurn suffix is not read");
+    zip[30 + 13] ^= 1;  // the first member's data, which its CRC-32 no longer matches
+    request["content"] = base64_text(zip);
+    request["index"] = 0;
+    expect(refusal() == "Cannot read the bundle or selected text member", "a member whose CRC-32 does not match");
+}
+
+// A bilinear patch on the reference's 25 by 25 grid, and an outline with a hole cut from it.
+static void surfaces() {
+    const json patch = json::parse(R"({"poles": [[[0, 0, 0], [0, 12, 3]], [[20, 0, 4], [20, 12, 0]]]})");
+    json request = json::object();
+    request["surface"] = patch;
+    const json mesh = kerfkite::solid_cad_call("solid-cad-surface", request);
+    expect(mesh.at("triangles").size() == 1152 && mesh.at("vertices").at(12 * 25 + 12) == json::array({10.0, 6.0, 1.75}),
+           "a bilinear patch's grid and its midpoint");
+    json cut = patch;
+    cut["boundary"] = json::parse("[[[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]], [[0.4, 0.4], [0.4, 0.6], [0.6, 0.6], [0.6, 0.4]]]");
+    request["surface"] = cut;
+    const json trimmed = kerfkite::solid_cad_call("solid-cad-surface", request);
+    const double whole = mesh.at("area").get<double>(), kept = trimmed.at("area").get<double>();
+    expect(kept > 0.55 * whole && kept < 0.62 * whole, "an outline with a hole keeps 0.64 - 0.04 of the parameters");
+}
+
 int main() {
     // Ties round to even on the exact binary value, as Python's formatting does.
     expect(fixed(0.125, 2) == "0.12", "0.125 to two places");
@@ -1408,6 +1590,9 @@ int main() {
     stl_height_fields();
     solid_histories();
     cad_scripts();
+    program_imports();
+    bundle_imports();
+    surfaces();
     artwork_reliefs();
 
     std::printf(failures ? "%d checks failed\n" : "PASS native core self-test%.0d\n", failures);

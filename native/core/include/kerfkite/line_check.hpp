@@ -35,6 +35,11 @@ LineCheck check_line(const std::vector<std::array<double, 2>> &path, LineMethod 
 // The most work the usual method does before it declines a contour.
 std::uint64_t line_check_budget();
 
+// geos::algorithm::Orientation::index(p1, p2, q), as Shapely's predicates take it: 1 when q is to the left of
+// p1 -> p2, -1 to the right, 0 on the line. Throws NotPorted where GEOS's double-double arithmetic would give
+// another sign than the exact one.
+int geos_orientation(const std::array<double, 2> &p1, const std::array<double, 2> &p2, const std::array<double, 2> &q);
+
 }  // namespace kerfkite
 
 #endif

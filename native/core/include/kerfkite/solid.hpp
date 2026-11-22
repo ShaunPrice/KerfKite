@@ -182,6 +182,18 @@ std::vector<Ring> projection(const Solid &solid);
 // Rings (which may cross and nest) resolved by a fill rule into the boundary of the filled region.
 // This is the 2D helper behind extrude(), revolve() and projection(); see the documentation.
 std::vector<Ring> resolve_rings(const std::vector<Ring> &rings, FillRule fill);
+
+// The region where the rings' winding number is at least depth, triangulated with each line as an edge that
+// bounds nothing: points in millimetres, triangles counter-clockwise, grouped into pieces joined edge to edge,
+// with each piece's boundary loops (the region on their left). For trimmed surfaces: an outline within a
+// rectangle, cut along a grid of cells.
+struct RegionTriangles {
+    std::vector<Vec2> points;
+    std::vector<std::array<int, 3>> triangles;
+    std::vector<std::vector<int>> pieces;
+    std::vector<std::vector<Ring>> outlines;
+};
+RegionTriangles region_triangles(const std::vector<Ring> &rings, const std::vector<std::array<Vec2, 2>> &lines, int depth);
 double ring_area(const Ring &ring);  // signed, positive when counter-clockwise
 
 // ---- Queries for machining ------------------------------------------------------------------------

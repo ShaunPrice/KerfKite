@@ -131,6 +131,34 @@ previews a CAD script (`{"source", "parameters", "overrides"}`) as Studio's scri
 outlines, bounds and area, or the solid's mesh, bounds and volume, or the reference's message with the line
 and column.
 
+    kerfkite-cam program-import request.json
+
+reads posted G-code, an HP-GL plot, a LinuxCNC INI file or an ASCII DXF drawing (`{"name", "text", "unit"}`)
+as Studio's **Import** does (`core/src/program_import.cpp`, the port of `studio/program_import.py`, and the
+core's own DXF reader, `core/src/dxf.cpp`): the artwork, layers, presets, devices and warnings, or the
+reference's message. Program text that is not ASCII, and DXF splines given only by fit points, are declined.
+
+    kerfkite-cam pdf-import request.json
+
+reads one page of a PDF (`{"content": base64 text of the file, "page"}`) as Studio's **Import** does
+(`core/src/pdf_import.cpp`, the port of `studio/pdf_import.py`, with the core's own inflate,
+`core/src/inflate.cpp`): the page's vector paths as a draft in millimetres, with its warnings, page count and
+size, or the reference's message.
+
+    kerfkite-cam solid-cad-surface request.json
+
+tessellates an editable surface (`{"surface", "order", "orders"}`) as Studio's surface editor does
+(`core/src/surface.cpp`, the port of `studio/cad_exchange.py`'s `surface_mesh`): a rational Bézier or clamped
+B-spline patch, or a sheet of joined patches, within its trim bounds and drawn outline, as vertices, triangles,
+area and bounds, with a sheet's resolved patches, or the reference's message.
+
+    kerfkite-cam bundle-import request.json
+
+lists the LightBurn members of a user bundle (`{"content": base64 text of the ZIP archive}`), or reads the text
+of one (`{"content", "index"}`), as Studio's **Import** does (`core/src/bundle_import.cpp`, the port of
+`studio/import_bundle.py`): the members' indices and names and the number left out, or the member's name and
+text, or the reference's message.
+
     kerfkite-cam artwork-relief request.json
 
 turns closed artwork contours (`paths`) into a raised or recessed relief, as Studio's **Artwork relief**
