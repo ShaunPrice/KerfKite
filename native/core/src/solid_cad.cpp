@@ -4,12 +4,13 @@
 // The Python builds a model by asking the solid kernel for one operation at a time through the "solid"
 // command (studio/solid_kernel.py), keeping each solid for the next request. This file asks the same
 // command for the same operations, with the same requests, so the solids, measures and meshes are the
-// same to the bit. What is reproduced: models of boxes, cylinders and spheres, placed by rotation and
-// origin, repeated by linear and polar patterns, and combined in runs of additions, cuts and
-// intersections; named parameters and their expressions; the mesh, measures and silhouette of rebuild();
-// horizontal sections. Models with sketched, lofted, scripted or STEP features are declined (NotPorted),
-// as are dimension expressions outside numbers, names, + - * /, unary signs, parentheses and the sketch
-// crossing functions, which the reference reads with Python's own parser.
+// same to the bit. What is reproduced: models of boxes, cylinders, spheres, sketched extrusions and
+// revolutions, lofts and CAD scripts (scad.cpp), placed by rotation and origin, repeated by linear and polar
+// patterns, and combined in runs of additions, cuts and intersections; named parameters and their
+// expressions; the mesh, measures and silhouette of rebuild(); horizontal sections; and the /api/cad-script
+// preview. Models with STEP features or sketch constraints are declined (NotPorted), as are dimension
+// expressions outside numbers, names, + - * /, unary signs, parentheses and the sketch crossing functions,
+// which the reference reads with Python's own parser.
 #include "kerfkite/solid_cad.hpp"
 
 #include <algorithm>
