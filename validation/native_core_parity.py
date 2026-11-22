@@ -1918,10 +1918,59 @@ def solid_cad_cases(count, seed):
     def vector(known, low=1):
         return [expression(known) if rng.random() < 0.5 else rng.choice([low, 5, 12.5]) for _ in range(3)]
 
+    def sketch(item, known):
+        # A polygon (regular, or on a coarse grid), sometimes closed by repeating its first vertex, with fillets
+        # or one cubic edge with tangent options; positive radii for most revolutions.
+        n = rng.randint(3, 7)
+        if rng.random() < 0.5:
+            turn = rng.uniform(0, 1)
+            points = [
+                [
+                    round(10 + 8 * math.cos(2 * math.pi * k / n + turn), 3),
+                    round(10 + 8 * math.sin(2 * math.pi * k / n + turn), 3),
+                ]
+                for k in range(n)
+            ]
+        else:
+            points = [[rng.choice([0, 2, 5, 10, 15, 20]), rng.choice([0, 3, 7, 12, 20])] for _ in range(n)]
+        if item['kind'] == 'revolve' and rng.random() < 0.8:
+            points = [[abs(x) + 1, y] for x, y in points]
+        if rng.random() < 0.3 and known:
+            points[0] = [rng.choice(known), points[0][1]]
+        item['points'] = points
+        if rng.random() < 0.4:
+            item['fillets'] = [rng.choice([0, 0, 0.5, 1, rng.choice(known) if known else 2]) for _ in points]
+        elif rng.random() < 0.4:
+            curves = [None] * n
+            i = rng.randrange(n)
+            a, b = points[i], points[(i + 1) % n]
+            if isinstance(a[0], (int, float)) and isinstance(b[0], (int, float)):
+                curves[i] = {
+                    'controls': [
+                        [round(a[0] + rng.uniform(-3, 3), 2), round(a[1] + rng.uniform(-3, 3), 2)],
+                        [round(b[0] + rng.uniform(-3, 3), 2), round(b[1] + rng.uniform(-3, 3), 2)],
+                    ]
+                }
+                for option in ('tangentStart', 'tangentEnd'):
+                    if rng.random() < 0.3:
+                        curves[i][option] = True
+                item['curves'] = curves
+        if rng.random() < 0.1:
+            item['points'] = points + [list(points[0])]
+            for key, closing in (('fillets', 0), ('curves', None)):
+                if key in item:
+                    item[key] = item[key] + [closing]
+        if item['kind'] == 'extrude':
+            item['height'] = expression(known)
+        elif rng.random() < 0.7:
+            item['angle'] = rng.choice([360, 90, 180, 400, expression(known)])
+
     def feature(index, known, first):
-        kind = rng.choice(['box', 'box', 'cylinder', 'cylinder', 'sphere'])
+        kind = rng.choice(['box', 'box', 'cylinder', 'cylinder', 'sphere', 'extrude', 'revolve'])
         item = {'id': rng.choice([f'f{index}', f'Feature {index}', f'f{index}']), 'kind': kind}
-        if kind == 'box':
+        if kind in ('extrude', 'revolve'):
+            sketch(item, known)
+        elif kind == 'box':
             item['size'] = vector(known)
         elif kind == 'cylinder':
             item['radius'] = expression(known)

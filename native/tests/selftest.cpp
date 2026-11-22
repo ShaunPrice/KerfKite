@@ -1118,9 +1118,19 @@ static void solid_histories() {
     json power = request;
     power["model"]["features"][0]["size"][2] = "w ** 2";
     expect(refusal(power) == "declined", "an expression beyond the core's grammar is declined");
+    json lofted = request;
+    lofted["model"]["features"][1]["kind"] = "loft";
+    expect(refusal(lofted) == "declined", "a lofted feature is declined");
+    // A sketched triangle with a filleted corner, extruded: its volume is the triangle's area less what the
+    // fillet rounds off, times the height.
     json sketched = request;
-    sketched["model"]["features"][1]["kind"] = "extrude";
-    expect(refusal(sketched) == "declined", "a sketched feature is declined");
+    sketched["model"]["features"] = json::parse(R"([{"id": "wedge", "kind": "extrude", "height": 2,
+        "points": [[0, 0], [10, 0], [0, 10]], "fillets": [1, 0, 0]}])");
+    const double wedge = kerfkite::solid_cad_call("solid-cad", sketched).at("volume").get<double>();
+    expect(wedge < 100 && wedge > 99, "a filleted triangle extruded");
+    sketched["model"]["features"][0]["points"] = json::parse("[[0, 0], [10, 10], [10, 0], [0, 10]]");
+    sketched["model"]["features"][0].erase("fillets");
+    expect(refusal(sketched) == "wedge: Sketch must enclose an area without crossing itself", "a sketch that crosses itself is refused");
     json section = request;
     section["z"] = 2;
     const json cut = kerfkite::solid_cad_call("solid-cad-section", section);
