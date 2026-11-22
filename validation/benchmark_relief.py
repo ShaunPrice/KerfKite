@@ -1,6 +1,9 @@
-"""Time reliefs prepared by the native core on one thread, on all threads and on a GPU, and check they agree.
+"""Time reliefs prepared by the native core on one thread, on all threads, on a GPU, and as a calibration shares
+them out between the GPU and the threads, and check they agree.
 
-Each way runs in a process of its own, because the GPU is chosen once per process. Each job is a whole
+Each way runs in a process of its own, because the GPU is chosen once per process. The calibrated way first runs
+studio's start-up calibration (kerfkite::relief_calibrate), which may give large jobs to the GPU and the threads
+at once, and prints its report. Each job is a whole
 studio.relief.prepare_relief of an image heightmap, as the editor sends one: reading the image, the contact,
 and the paths and depths. For each job the script prints the contact checks, the best of several runs in each
 way, the first GPU run (which includes setting the GPU up) and a digest of the depths, which must be the same in
@@ -32,6 +35,7 @@ sys.path.insert(0, sys.argv[1])
 from studio import _relief_native as r
 from studio.relief import prepare_relief
 jobs, repeat = json.loads(sys.argv[2]), int(sys.argv[3])
+calibration = json.loads(r.calibrate()) if sys.argv[4] == 'calibrate' else None
 out = []
 for name, side, width, height, depth, diameter, step in jobs:
     # Ridges and a fixed pattern from whole-number arithmetic, so the image, and the digest, are the same on every
@@ -50,7 +54,7 @@ for name, side, width, height, depth, diameter, step in jobs:
         times.append(time.perf_counter() - began)
     digest = hashlib.sha256(json.dumps(depths).encode()).hexdigest()[:16]
     out.append({'name': name, 'times': times, 'digest': digest, 'path': r.last_contact()})
-print(json.dumps({'jobs': out, 'status': r.gpu_status()}))
+print(json.dumps({'jobs': out, 'status': r.gpu_status(), 'calibration': calibration}))
 '''
 
 
@@ -72,13 +76,13 @@ def checks(side, width, height, diameter, step):
     return total
 
 
-def way(threads, gpu, repeat):
+def way(threads, gpu, repeat, calibrate=False):
     env = {**os.environ, 'KERFKITE_GPU': gpu}
     env.pop('KERFKITE_THREADS', None)
     if threads:
         env['KERFKITE_THREADS'] = str(threads)
     done = subprocess.run(  # noqa: S603 - this interpreter, with a fixed script
-        [sys.executable, '-c', WORKER, str(ROOT), json.dumps(JOBS), str(repeat)],
+        [sys.executable, '-c', WORKER, str(ROOT), json.dumps(JOBS), str(repeat), 'calibrate' if calibrate else '-'],
         capture_output=True,
         text=True,
         env=env,
@@ -97,7 +101,9 @@ def main():
     args = parser.parse_args()
     ways = {'1 thread': way(1, 'off', max(1, args.repeat // 2)), 'threads': way(args.threads, 'off', args.repeat)}
     if not args.no_gpu:
-        ways['GPU'] = way(None, 'on', args.repeat)
+        ways['GPU'] = way(args.threads, 'on', args.repeat)
+        ways['calibrated'] = way(args.threads, 'auto', args.repeat, calibrate=True)
+        print('Calibration:', json.dumps(ways['calibrated']['calibration']))
     print('GPU:', ways.get('GPU', ways['threads'])['status'])
     first_header = f" {'GPU first':>10}" if 'GPU' in ways else ''
     print(f"{'job':24} {'checks':>14} " + ' '.join(f'{name:>10}' for name in ways) + f'{first_header}  digest')
