@@ -58,11 +58,13 @@ $('makeRelief').onclick=task(async()=>{
   if(!file) throw Error('Choose a grayscale image or STL');
   if(file.size>8e6) throw Error('File exceeds 8 MB');
   CNCSolidLinks.reliefStage(file);
-  const [x,y,width,height]=shape(), resolution=Number($('reliefResolution').value);
-  if(!Number.isInteger(resolution)||resolution<16||resolution>128) throw Error('Resolution must be 16–128');
+  // Image maps go to the server's limit (1024 with the compiled extension); STL maps are rasterised in Python.
+  const [x,y,width,height]=shape(), resolution=Number($('reliefResolution').value), stl=/\.stl$/i.test(file.name);
+  const most=stl?128:(window.studioSession?.relief_map||128);
+  if(!Number.isInteger(resolution)||resolution<16||resolution>most) throw Error(`${stl?'STL':'Image'} relief resolution must be 16–${most}`);
   const data={x,y,width,height,depth:Number($('reliefDepth').value),tool_diameter:Number($('tool_diameter').value),
     stepover:Number($('stepover').value),allowance:Number($('reliefAllowance').value),tool_shape:$('reliefTool').value,resolution};
-  if(/\.stl$/i.test(file.name)) {
+  if(stl) {
     data.content_base64=await CNCSolidLinks.stlContent(file);
   } else {
     const bitmap=await createImageBitmap(file), c=document.createElement('canvas');
@@ -71,7 +73,14 @@ $('makeRelief').onclick=task(async()=>{
     ctx.fillStyle='white';ctx.fillRect(0,0,resolution,resolution);ctx.drawImage(bitmap,0,0,resolution,resolution);
     bitmap.close();
     const pixels=ctx.getImageData(0,0,resolution,resolution).data;
-    data.heightmap=Array.from({length:resolution},(_,row)=>Array.from({length:resolution},(_,col)=>{
+    if(resolution>256) {
+      // Large maps travel as the canvas's RGB bytes, top row first; the server applies the same luminance.
+      const rgb=new Uint8Array(resolution*resolution*3);
+      for(let i=0,j=0;i<pixels.length;i+=4,j+=3){rgb[j]=pixels[i];rgb[j+1]=pixels[i+1];rgb[j+2]=pixels[i+2];}
+      let text='';
+      for(let i=0;i<rgb.length;i+=0x8000) text+=String.fromCharCode.apply(null,rgb.subarray(i,i+0x8000));
+      data.heightmap_rgb=btoa(text);data.heightmap_size=[resolution,resolution];
+    } else data.heightmap=Array.from({length:resolution},(_,row)=>Array.from({length:resolution},(_,col)=>{
       const i=((resolution-row-1)*resolution+col)*4;
       return (.2126*pixels[i]+.7152*pixels[i+1]+.0722*pixels[i+2])/255;
     }));
@@ -87,13 +96,13 @@ $('makeRelief').onclick=task(async()=>{
   objects.push({name:'Relief · '+file.name,paths:result.paths,depths:result.path_depths,surface:result.surface,...(link?{solidLink:link}:{})});
   selected=objects.length-1;
   invalidate();modeUI();draw();
-  message((result.surface?.backend==='cpp'?'C++ accelerated relief. ':'Python relief. ')+result.warnings.join(' '));
+  message((result.surface?.backend==='cpp'?(result.device==='gpu'?'C++ accelerated relief on the GPU. ':'C++ accelerated relief. '):'Python relief. ')+result.warnings.join(' '));
 });
 let yaw=.6,pitch=.8,drag3D=null;
 window.render3D=()=>{const c=$('preview3d'),ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);if(!preview)return;const left=preview.bounds[0]-5,bottom=preview.bounds[1]-5,w=preview.bounds[2]-left+5,h=preview.bounds[3]-bottom+5,scale=Math.min(c.width,c.height)*.8/Math.max(w,h,1);function project3(x,y,z){x-=left+w/2;y-=bottom+h/2;const a=x*Math.cos(yaw)-y*Math.sin(yaw),b=x*Math.sin(yaw)+y*Math.cos(yaw);return[c.width/2+a*scale,c.height/2-(b*Math.cos(pitch)-z*Math.sin(pitch))*scale];}if(window.stockPreview){const map=window.stockPreview.heights,n=map.length;for(let j=0;j<n-1;j++)for(let i=0;i<n-1;i++){const z=(map[j][i]+map[j][i+1]+map[j+1][i+1]+map[j+1][i])/4;ctx.fillStyle=`hsl(${38-Math.min(30,Math.abs(z)*5)} 42% ${60-Math.min(35,Math.abs(z)*5)}%)`;ctx.beginPath();for(const[a,b]of[[i,j],[i+1,j],[i+1,j+1],[i,j+1]])ctx.lineTo(...project3(window.stockPreview.x+a*window.stockPreview.width/(n-1),window.stockPreview.y+b*window.stockPreview.height/(n-1),map[b][a]));ctx.closePath();ctx.fill();}}ctx.strokeStyle='#587482';ctx.beginPath();ctx.moveTo(...project3(left,bottom,0));for(const[x,y]of[[left+w,bottom],[left+w,bottom+h],[left,bottom+h],[left,bottom]])ctx.lineTo(...project3(x,y,0));ctx.stroke();for(const s of preview.segments){if(preview.mode==='laser'&&s[5]===0)continue;ctx.strokeStyle=`hsl(${190+Math.min(100,Math.abs(s[4])*20)} 80% 65%)`;ctx.beginPath();ctx.moveTo(...project3(s[0],s[1],s[6]??s[4]));ctx.lineTo(...project3(s[2],s[3],s[4]));ctx.stroke();}};
 $('preview3d').onpointerdown=e=>{drag3D=[e.clientX,e.clientY];$('preview3d').setPointerCapture(e.pointerId);};$('preview3d').onpointermove=e=>{if(!drag3D)return;yaw+=(e.clientX-drag3D[0])*.01;pitch=Math.max(.05,Math.min(3.05,pitch+(e.clientY-drag3D[1])*.01));drag3D=[e.clientX,e.clientY];render3D();};$('preview3d').onpointerup=()=>drag3D=null;
 $('extrudeText').onclick=task(async()=>{const o=selectedObject(),r=await api('extrude',{paths:o.paths,height:Number($('textDepth').value)});download('artwork-solid.stl',r.stl,'model/stl');message(`Exported solid extrusion · ${r.triangles} triangles`);});
-async function artworkRelief(kind){const o=selectedObject(),[bx,by,mx,my]=bounds(o.paths),margin=Number($('tool_diameter').value),x=Math.max(0,bx-margin),y=Math.max(0,by-margin);const result=await api('artwork-relief',{paths:o.paths,kind,x,y,width:mx-x+margin,height:my-y+margin,depth:Number($('textDepth').value),tool_diameter:margin,tool_shape:$('reliefTool').value,stepover:Number($('stepover').value),resolution:Number($('reliefResolution').value)});$('mode').value='router';$('operation').value='line';objects.splice(selected,1);addGenerated(kind+' relief · '+o.name,result.paths);objects[selected].depths=result.path_depths;objects[selected].surface=result.surface;invalidate();modeUI();message((result.surface?.backend==='cpp'?'C++ accelerated relief. ':'Python relief. ')+result.warnings.join(' '));}
+async function artworkRelief(kind){const n=Number($('reliefResolution').value);if(!Number.isInteger(n)||n<16||n>128)throw Error('Artwork relief resolution must be 16–128');const o=selectedObject(),[bx,by,mx,my]=bounds(o.paths),margin=Number($('tool_diameter').value),x=Math.max(0,bx-margin),y=Math.max(0,by-margin);const result=await api('artwork-relief',{paths:o.paths,kind,x,y,width:mx-x+margin,height:my-y+margin,depth:Number($('textDepth').value),tool_diameter:margin,tool_shape:$('reliefTool').value,stepover:Number($('stepover').value),resolution:Number($('reliefResolution').value)});$('mode').value='router';$('operation').value='line';objects.splice(selected,1);addGenerated(kind+' relief · '+o.name,result.paths);objects[selected].depths=result.path_depths;objects[selected].surface=result.surface;invalidate();modeUI();message((result.surface?.backend==='cpp'?'C++ accelerated relief. ':'Python relief. ')+result.warnings.join(' '));}
 $('raisedText').onclick=task(()=>artworkRelief('raised'));$('recessedText').onclick=task(()=>artworkRelief('recessed'));
 
 $('simulateStock').onclick=task(async()=>{if(!preview)throw Error('Generate a preview first');if($('mode').value!=='router')throw Error('Stock removal preview is for router jobs');const tool=preview.simulation_tool,diameter=tool?.diameter??Number($('tool_diameter').value),radius=diameter/2,x=Math.max(0,preview.bounds[0]-radius),y=Math.max(0,preview.bounds[1]-radius);window.stockPreview=await api('simulate',{segments:preview.segments,x,y,width:preview.bounds[2]+radius-x,height:preview.bounds[3]+radius-y,tool_diameter:diameter,tool_shape:tool?.shape??($('operation').value==='vcarve'?'v':$('reliefTool').value),v_angle:tool?.angle??Number($('v_angle').value),stock_thickness:Number($('stock_thickness').value),resolution:48});render3D();message(window.stockPreview.warnings.join(' '));});

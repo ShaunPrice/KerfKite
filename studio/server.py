@@ -6,6 +6,7 @@ from flask import Flask, jsonify, request, send_from_directory, g
 from .windows_support import require_supported_windows
 from . import leveling
 from . import pcb_import
+from . import relief
 from .cam import generate, number
 from .design_api import register_design_routes
 from .machine_setup import describe as describe_machine
@@ -102,6 +103,7 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
             rotary_stream=True,
             probe_leveling=leveling.available(),
             pcb_import=pcb_import.isolation_available(),
+            relief_map=relief.map_limit(),
             machine_readback=True,
             hardware_enabled=allow_hardware,
         )

@@ -7,6 +7,8 @@
 #include <new>
 #include <vector>
 
+#include "kerfkite/parallel.hpp"
+
 namespace {
 constexpr int fields = 7;
 constexpr int segment_limit = 200000;
@@ -29,9 +31,15 @@ bool in_range(double value, double low, double high) {
     return std::isfinite(value) && value >= low && value <= high;
 }
 
+// The cells a segment can reach; x1 < x0 when it reaches none.
+struct Reach { int x0, x1, y0, y1; };
+
+// Every check first, in the reference's order, so that the same error stops the same job before any cell is
+// computed. Then the cells, shared out between threads by grid rows: each thread takes every segment in order
+// but changes only its own rows, so each cell sees the same minima in the same order as on one thread.
 const char* rasterize(const char* data, Py_ssize_t count, int n, double width, double height,
                       double x, double y, double radius, int shape, double angle, double stock,
-                      std::vector<double>& grid) {
+                      std::vector<Reach>& reach, std::vector<double>& grid) {
     const double dx = width / (n - 1), dy = height / (n - 1);
     const double slope = std::tan(angle * (std::acos(-1.0) / 180.0) / 2);
     int visits = 0;
@@ -52,24 +60,44 @@ const char* rasterize(const char* data, Py_ssize_t count, int n, double width, d
             return "Segment exceeds numeric preview range";
         const double x0 = std::max(0., std::floor(lo_x)), x1 = std::min(double(n-1), std::ceil(hi_x));
         const double y0 = std::max(0., std::floor(lo_y)), y1 = std::min(double(n-1), std::ceil(hi_y));
-        if (x1 < x0 || y1 < y0) continue;
+        if (x1 < x0 || y1 < y0) { reach[k] = {1, 0, 1, 0}; continue; }
         visits += (int(x1) - int(x0) + 1) * (int(y1) - int(y0) + 1);
         if (visits > visit_limit) return "Simulation too large; lower preview resolution";
-        const double vx = bx - ax, vy = by - ay, square = vx * vx + vy * vy;
-        for (int j = int(y0); j <= int(y1); ++j) {
-            for (int i = int(x0); i <= int(x1); ++i) {
-                const double rx = i * dx - ax, ry = j * dy - ay;
-                const double t = square ? std::max(0., std::min(1., (rx*vx + ry*vy) / square)) : 0.;
-                const double distance = std::hypot(rx - t*vx, ry - t*vy);
-                if (distance > radius) continue;
-                double sag = 0;
-                if (shape == 1) sag = radius - std::sqrt(std::max(0., radius*radius - distance*distance));
-                if (shape >= 2) sag = distance / slope;
-                const double tip = square ? start + t * (z - start) : std::min(z, start);
-                double& cell = grid[j*n+i];
-                cell = std::min(cell, tip + sag);
+        reach[k] = {int(x0), int(x1), int(y0), int(y1)};
+    }
+    auto rows = [&](std::size_t first, std::size_t last) {
+        for (Py_ssize_t k = 0; k < count; ++k) {
+            const Reach r = reach[k];
+            const int j0 = std::max(r.y0, int(first)), j1 = std::min(r.y1, int(last) - 1);
+            if (r.x1 < r.x0 || j1 < j0) continue;
+            double move[fields];
+            std::memcpy(move, data + k * sizeof(move), sizeof(move));
+            const double ax = move[0] - x, ay = move[1] - y, bx = move[2] - x, by = move[3] - y;
+            const double z = move[4], start = move[6];
+            const double vx = bx - ax, vy = by - ay, square = vx * vx + vy * vy;
+            for (int j = j0; j <= j1; ++j) {
+                for (int i = r.x0; i <= r.x1; ++i) {
+                    const double rx = i * dx - ax, ry = j * dy - ay;
+                    const double t = square ? std::max(0., std::min(1., (rx*vx + ry*vy) / square)) : 0.;
+                    const double distance = std::hypot(rx - t*vx, ry - t*vy);
+                    if (distance > radius) continue;
+                    double sag = 0;
+                    if (shape == 1) sag = radius - std::sqrt(std::max(0., radius*radius - distance*distance));
+                    if (shape >= 2) sag = distance / slope;
+                    const double tip = square ? start + t * (z - start) : std::min(z, start);
+                    double& cell = grid[j*n+i];
+                    cell = std::min(cell, tip + sag);
+                }
             }
         }
+    };
+    // A thread for each half million cell visits, about 2 ms of work.
+    const unsigned threads = kerfkite::parallel::threads_for(double(visits), 500000.0, std::size_t(n));
+    try {
+        kerfkite::parallel::for_ranges(std::size_t(n), threads, rows);
+    } catch (...) {
+        // Taking the minimum again changes nothing, so one thread can safely redo every row.
+        rows(0, std::size_t(n));
     }
     return nullptr;
 }
@@ -126,9 +154,10 @@ PyObject* stock_heights(PyObject*, PyObject* args) {
             data = reinterpret_cast<const char*>(owned.data());
         }
         std::vector<double> grid(resolution * resolution, 0.);
+        std::vector<Reach> reach(count);
         const char* error;
         Py_BEGIN_ALLOW_THREADS
-        error = rasterize(data, count, resolution, width, height, x, y, diameter/2, shape, angle, stock, grid);
+        error = rasterize(data, count, resolution, width, height, x, y, diameter/2, shape, angle, stock, reach, grid);
         Py_END_ALLOW_THREADS
         if (error) { PyErr_SetString(PyExc_ValueError, error); return nullptr; }
         PyObject* rows = PyList_New(resolution);
