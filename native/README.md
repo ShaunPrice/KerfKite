@@ -75,6 +75,16 @@ centre and a start angle out. Its `vcarve` operation carves the contours with a 
 interval, bit angle, depth and tool radius in, paths and the depth at each of their points out. `generate`
 runs the same code for a whole project.
 
+    kerfkite-cam rotary request.json
+    kerfkite-cam rotary-wrap request.json
+
+write a job for a rotary axis, as Studio's rotary export does (`core/src/rotary.cpp`, the port of
+`studio/rotary.py`). `rotary` takes `{"project": ..., "options": ...}`: the project and the rotary setup
+(postprocessor, wrap axis, diameter, drive axis, angle offset, direction, feed reference and fixture) that
+the editor sends. `rotary-wrap` takes `{"job": ..., "options": ...}`: a planar program given as G-code
+lines. The answer is the rotary job: the program with angles in place of the wrapped axis and inverse-time
+feeds, the planar preview segments, totals, warnings and the setup as worked out (`"rotary"`).
+
 ## What is ported
 
 | Area | State |
@@ -100,7 +110,8 @@ runs the same code for a whole project.
 | 3D solid modelling (`core/include/kerfkite/solid.hpp`, `core/src/solid/`) | Done as a kernel and a `solid` command. New in the core, and the only implementation of KerfKite's own: Studio's 3D CAD calls it through its extension (`studio/solid_kernel.py`), and keeps a third-party library only as the fallback where the extension is not installed. See `docs/SOLID-KERNEL.md`. |
 | The Delaunay triangulation and Voronoi diagram of points, and the distance from a point to a region's boundary (`core/src/polygon/voronoi.cpp`, `distance.cpp`) | Done, in the polygon kernel: exact tests in 128 and 256 bits, O(n log n), points on one line and on one circle as ordinary input. |
 | V-carving (`core/src/vcarve.cpp`) | Done, on the kernel's Voronoi diagram: the sampled medial axis of the reference, with its allowance of one sampling interval. This is the only implementation: Studio calls it through its extension (`studio/operations.py`), and keeps Shapely only as the fallback where the extension is not installed. No function of the C library but `sqrt` is behind a carve, so it is the same on every platform. |
-| Rotary output, relief, stock simulation, importers, sender, pendant, editors | Not yet. |
+| Rotary output for a fourth axis (`core/src/rotary.cpp`): a planar job or a given program wrapped onto a cylinder for LinuxCNC, grblHAL and xPRO V5, on A, B or C, with inverse-time feeds at the surface or cut radius and the fixture's checks | Done, for generated jobs and given G-code. A given program with text that is not ASCII is declined. The cut length uses CPython's `hypot` (`pymath::vector_norm`) and the C library's `asinh`, which CPython calls, so it is Python's on each platform. Studio still runs its Python version, with its extension's loop for cutting runs; it will call the core when its planar CAM does. |
+| Relief, stock simulation, importers, sender, pendant, editors | Not yet. |
 
 Every operation of a job (lines, drilling, knife paths, offsets, pockets, fills, V-carving, entries and
 tabs) is now ported, so no job is declined for its operation. A request the core cannot fully reproduce is

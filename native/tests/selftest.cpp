@@ -15,6 +15,7 @@
 #include "kerfkite/number_text.hpp"
 #include "kerfkite/operation_command.hpp"
 #include "kerfkite/pcb.hpp"
+#include "kerfkite/rotary.hpp"
 
 using json = kerfkite::Json;
 using namespace kerfkite;
@@ -676,6 +677,117 @@ static void circuit_boards() {
            "isolation needs the tool width");
 }
 
+// Rotary output (studio/rotary.py): small jobs as the reference writes them, a given program, and refusals.
+static void rotary() {
+    const auto program = [](const json &job) {
+        std::string text;
+        for (const json &line : job.at("lines")) text += line.get<std::string>() + "\n";
+        return text;
+    };
+    const char *router_project = R"({"mode":"router","protocol":"grbl","width":100,"height":60,"feed":600,"plunge":200,
+        "power":10000,"safe":3,"depth":1,"step":0.5,"paths":[[[10,20],[30,20],[30,40]]]})";
+    const json router = generate_rotary(
+        json::parse(router_project),
+        json::parse(R"({"diameter":40,"wrap_axis":"X","postprocessor":"xpro-v5","direction":1,"angle_offset":10})"));
+    expect(program(router) ==
+               "G21\nG90\nG17\nG94\nG54\nM5\nG0 Z3.000000\nM3 S10000\nG4 P2\nG0 Z3.000000\n"
+               "G0 A38.647890 X20.000000\nG93\nG1 Z-0.500000 F57.142857143\n"
+               "G1 A95.943669 X20.000000 F30.000000000\nG1 A95.943669 X40.000000 F30.000000000\nG94\n"
+               "G0 Z3.000000\nG0 Z3.000000\nG0 A38.647890 X20.000000\nG93\nG1 Z-1.000000 F50.000000000\n"
+               "G1 A95.943669 X20.000000 F30.000000000\nG1 A95.943669 X40.000000 F30.000000000\nG94\n"
+               "G0 Z3.000000\nM5\nG94 F600.000000\n",
+           "a router job on a 40 mm cylinder for xPRO V5");
+    expect(router.at("rotary").at("angle_bounds").dump() == "[38.64788975654116,95.94366926962348]" &&
+               router.at("rotary").at("radial_bounds").dump() == "[-1.0,3.0]" &&
+               router.at("rotary").at("feed_minutes").dump() == "0.17083333333333334" &&
+               router.at("cut_length").dump() == "80.0" && router.at("cut_minutes").dump() == "0.13",
+           "a router job on a 40 mm cylinder for xPRO V5: its rotary setup and totals");
+    const json laser = generate_rotary(json::parse(R"({"mode":"laser","protocol":"grblhal","width":100,"height":60,"feed":1200,
+        "power":500,"passes":1,"paths":[[[10,20],[30,20],[30,40]]]})"),
+                                      json::parse(R"({"diameter":50,"wrap_axis":"Y","postprocessor":"grblhal","output_axis":"B","feed_reference":"cut","direction":-1})"));
+    expect(program(laser) ==
+               "G21\nG90\nG17\nG93\nG54\nM5\nM5\nG0 Y10.000000 B-45.836624\nM4 S500\n"
+               "G1 Y30.000000 B-45.836624 F60.000000000 S500\nG1 Y30.000000 B-91.673247 F60.000000000 S500\nM5\n"
+               "M5\nG94 F1200.000000\n",
+           "a laser job on B, reversed, fed at the cut radius");
+    expect(laser.at("rotary").at("angle_bounds").dump() == "[-91.67324722093171,-45.83662361046586]" &&
+               laser.at("rotary").at("radial_bounds").dump() == "[0.0,0.0]" &&
+               laser.at("rotary").at("feed_minutes").dump() == "0.03333333333333333" &&
+               laser.at("cut_length").dump() == "40.0" && laser.at("cut_minutes").dump() == "0.03",
+           "a laser job on B, reversed, fed at the cut radius: its rotary setup and totals");
+    const json relief = generate_rotary(json::parse(R"({"mode":"router","width":100,"height":60,"feed":600,"plunge":200,
+        "power":10000,"safe":3,"depth":1,"step":0.5,"paths":[[[10,20],[30,20],[30,40]]],"protocol":"linuxcnc",
+        "path_depths":[[-0.25,-0.5,-1]]})"),
+                                       json::parse(R"({"diameter":60,"wrap_axis":"X","postprocessor":"linuxcnc","output_axis":"C","feed_reference":"cut","fixture":{"axial_min":0,"axial_max":50,"min_radius":5}})"));
+    expect(program(relief) ==
+               "G21\nG90\nG40\nG49\nG80\nG61\nG17\nG93\nG54\nM5\nG0 X3.000000\nM3 S10000\nG4 P2\nG0 X3.000000\n"
+               "G0 C19.098593 Z20.000000\nG1 X-0.250000 F61.538461538\n"
+               "G1 C57.295780 Z20.000000 X-0.500000 F10.125771076\n"
+               "G1 C57.295780 Z40.000000 X-0.500000 F10.000000000\nG0 X3.000000\nG0 X3.000000\n"
+               "G0 C19.098593 Z20.000000\nG1 X-0.250000 F61.538461538\n"
+               "G1 C57.295780 Z20.000000 X-0.500000 F10.125771076\n"
+               "G1 C57.295780 Z40.000000 X-1.000000 F9.996876464\nG0 X3.000000\nM5\nG94 F200.000000\n",
+           "a job with depths on C for LinuxCNC, in a fixture");
+    expect(relief.at("rotary").at("angle_bounds").dump() == "[19.098593171027442,57.29577951308233]" &&
+               relief.at("rotary").at("radial_bounds").dump() == "[-1.0,3.0]" &&
+               relief.at("rotary").at("feed_minutes").dump() == "0.43004706736362863" &&
+               relief.at("cut_length").dump() == "80.01" && relief.at("cut_minutes").dump() == "0.4",
+           "a job with depths on C for LinuxCNC, in a fixture: its rotary setup and totals");
+    // A given program: each block wrapped as it stands, and the job's other keys kept.
+    const json given = wrap_job(json::parse(R"({"mode":"router","note":"kept","lines":["G21","G90","G94","M3 S1000","G0 Z5",
+        "G0 X0 Y0","G1 Z-1 F100","G1 X10 Y5 F500","G1 X10 Y30 Z-2 F500","M5"]})"),
+                                json::parse(R"({"diameter":20,"wrap_axis":"Y","postprocessor":"grblhal"})"));
+    expect(program(given) ==
+               "G21\nG90\nG93\nM3 S1000\nG0 Z5.000000\nG0 X0.000000 A0.000000\nG1 Z-1.000000 F16.666666667\n"
+               "G1 X10.000000 A28.647890 F44.721359550\nG1 X10.000000 A171.887339 Z-2.000000 F19.984019174\nM5\n"
+               "G94 F500.000000\n" &&
+               given.at("note").dump() == "\"kept\"" && given.at("warnings").size() == 2 &&
+               given.at("rotary").at("feed_minutes").dump() == "0.13240066378778512",
+           "a given program wrapped onto a 20 mm cylinder");
+
+    const auto refusal = [](const char *project, const char *options) -> std::string {
+        try {
+            generate_rotary(json::parse(project), json::parse(options));
+        } catch (const ValueError &error) {
+            return error.what();
+        } catch (const std::exception &) {
+            return "(another exception)";
+        }
+        return "(nothing thrown)";
+    };
+    expect(refusal(router_project, R"({"diameter":0.5,"wrap_axis":"X","postprocessor":"grblhal"})") ==
+               "Diameter must be a finite number in 1..2000",
+           "a diameter below the range");
+    expect(refusal(router_project, R"({"diameter":40,"wrap_axis":"X","postprocessor":"xpro-v5","output_axis":"B"})") ==
+               "Use A on xPRO V5, or A/B/C on grblHAL and LinuxCNC",
+           "a drive xPRO V5 does not have");
+    expect(refusal(router_project, R"({"diameter":40,"wrap_axis":"X","postprocessor":"grblhal",
+               "fixture":{"axial_min":0,"axial_max":10,"min_radius":1}})") == "Rotary toolpath exceeds the fixture axial window",
+           "a toolpath outside the fixture");
+    expect(refusal(R"({"mode":"router","protocol":"marlin"})", R"({"diameter":40,"wrap_axis":"X","postprocessor":"grblhal"})") ==
+               "Select a GRBL-family or LinuxCNC source for rotary CAM",
+           "a source the rotary post does not take");
+    const auto given_refusal = [](const char *job) -> std::string {
+        try {
+            wrap_job(json::parse(job), json::parse(R"({"diameter":20,"wrap_axis":"Y","postprocessor":"grblhal"})"));
+        } catch (const ValueError &error) {
+            return error.what();
+        } catch (const NotPorted &error) {
+            return std::string("declined: ") + error.what();
+        } catch (const std::exception &) {
+            return "(another exception)";
+        }
+        return "(nothing thrown)";
+    };
+    const std::string canonical = "Rotary requires canonical generated G-code without comments or duplicate words";
+    expect(given_refusal(R"j({"mode":"router","lines":["G21","G90","G94","(note)","M5"]})j") == canonical, "a comment");
+    expect(given_refusal(R"({"mode":"router","lines":["G21","G90","G94","G1 X1 X2","M5"]})") == canonical, "a word given twice");
+    expect(given_refusal(R"({"mode":"router","lines":["G21","M3 S100"]})") == "Rotary source must end with spindle off (M5)",
+           "a program that leaves the spindle on");
+    expect(given_refusal("{\"mode\":\"router\",\"lines\":[\"G21\",\"G1 X1\xc2\xa0Y2\",\"M5\"]}") == "declined: G-code text that is not ASCII",
+           "text that is not ASCII is declined, not guessed");
+}
+
 int main() {
     // Ties round to even on the exact binary value, as Python's formatting does.
     expect(fixed(0.125, 2) == "0.12", "0.125 to two places");
@@ -851,6 +963,7 @@ int main() {
     helical_entries();
     v_carving();
     circuit_boards();
+    rotary();
 
     std::printf(failures ? "%d checks failed\n" : "PASS native core self-test%.0d\n", failures);
     return failures ? 1 : 0;

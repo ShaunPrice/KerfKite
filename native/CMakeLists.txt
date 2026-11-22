@@ -15,7 +15,8 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${KERFKITE_PROTOC
 configure_file(core/src/protocols_data.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/generated/protocols_data.hpp @ONLY)
 
 add_library(kerfkite_core STATIC core/src/api.cpp core/src/cam.cpp core/src/drilling.cpp core/src/knife.cpp core/src/laser.cpp
-  core/src/leveling.cpp core/src/protocols.cpp core/src/router_entry.cpp core/src/simple_line.cpp core/src/tabs.cpp)
+  core/src/leveling.cpp core/src/protocols.cpp core/src/rotary.cpp core/src/router_entry.cpp core/src/simple_line.cpp
+  core/src/tabs.cpp)
 # The core's own JSON reader and writer.
 target_sources(kerfkite_core PRIVATE core/src/json.cpp)
 # Circuit board import: Gerber layers and Excellon drill files.

@@ -3,7 +3,7 @@
     cmake -S native -B build/native && cmake --build build/native --config Release
     python validation/native_core_parity.py --cli build/native/kerfkite-cam
 
-Three comparisons, all against values computed by Python in this run:
+Four comparisons, all against values computed by Python in this run:
 
 1. Number text and arithmetic: fixed-point formatting, round() and repr() for several hundred thousand
    values, including decimal ties and values next to them; and math.dist and sum(), which Python computes
@@ -18,10 +18,15 @@ Three comparisons, all against values computed by Python in this run:
    (helix_pocket_cases): pockets of many shapes, with and without islands, for a range of cutters, depths
    and helix radii. And so are V-carves (vcarve_cases): words of block letters, shapes with holes, thin
    strokes, flat areas and round shapes, with settings from valid to invalid.
+4. Rotary jobs: studio.rotary's generate_rotary for every post, wrap axis, feed reference, direction and
+   drive on each kind of planar job, then for generated projects of all the kinds above with rotary setups
+   that are sometimes refused (rotary_cases); and wrap_job for planar programs given as G-code, as generated
+   or with lines added, removed or changed (rotary_wrap_cases). The suite's own calls are recorded as well.
 
 For each job the native core must either reproduce the reference exactly (program lines, preview segments,
-length, time, bounds and warnings, or the same error message) or decline it as not ported yet. A different
-answer is a failure. The report gives the share of cases reproduced, which is the measure of the port.
+length, time, bounds and warnings, and for a rotary job its rotary setup; or the same error message) or
+decline it as not ported yet. A different answer is a failure. The report gives the share of cases
+reproduced, which is the measure of the port.
 
 Offsets, pockets and fills have one implementation, the core's polygon kernel, which the Python reference
 calls through the compiled extension (studio/operations.py). For those jobs the geometry of the operation
@@ -1400,6 +1405,241 @@ def drill_knife_cases(count, seed):
         yield project
 
 
+def rotary_projects():
+    """Planar jobs of each kind the rotary post takes: router levels, depths along the paths, and laser."""
+
+    def wave(count, x0, y0, width, height, phase=0.0):
+        return [
+            [x0 + width * i / (count - 1), y0 + height * (0.5 + 0.5 * math.sin(phase + i * 0.37))] for i in range(count)
+        ]
+
+    router = dict(
+        mode='router', protocol='grbl', width=300, height=200, feed=900, plunge=250, power=12000, safe=5, depth=2,
+        step=1, paths=[wave(40, 10, 10, 250, 60), wave(25, 20, 90, 200, 80, 1.3), [[5, 5], [5, 5.0625], [6.5, 5]]],
+    )  # fmt: skip
+    relief = dict(
+        router, depth=3, step=1.5, paths=[wave(60, 10, 20 + 10 * row, 260, 6, row) for row in range(8)],
+        path_depths=[[-3 * (0.5 + 0.5 * math.cos(0.21 * i + row)) for i in range(60)] for row in range(8)],
+    )  # fmt: skip
+    laser = {key: value for key, value in router.items() if key not in ('depth', 'step', 'plunge', 'safe')}
+    laser.update(mode='laser', power=800, passes=1)
+    leads = dict(laser, laser_lead_in=2, laser_lead_out=1.5, laser_ramp_in=3, laser_ramp_out=2, passes=2)
+    return {'router': router, 'relief': relief, 'laser': laser, 'laser leads': leads}
+
+
+def rotary_options(rng):
+    """A rotary setup, mostly valid, with zero to two settings replaced by values the post must refuse."""
+    options = dict(
+        diameter=rng.choice([20, 50.8, 80, 300]), wrap_axis=rng.choice('XY'),
+        postprocessor=rng.choice(['grblhal', 'xpro-v5', 'linuxcnc']), feed_reference=rng.choice(['surface', 'cut']),
+        direction=rng.choice([1, -1]), angle_offset=rng.choice([0, 90, -45.5, 12.5]),
+    )  # fmt: skip
+    if rng.random() < 0.4:
+        options['fixture'] = rng.choice(
+            [dict(axial_min=-1, axial_max=400, min_radius=1), dict(axial_min=0, axial_max=60, min_radius=2)]
+        )
+    if options['postprocessor'] != 'xpro-v5' and rng.random() < 0.3:
+        options['output_axis'] = rng.choice('ABC')
+    changes = [
+        ('diameter', [1, 2000, 0.5, 2001, '80', True, None, 37.5, 1e-3]),
+        ('wrap_axis', ['X', 'Y', 'Z', None, 1, 'x']),
+        ('output_axis', ['A', 'B', 'C', 'D', None, 3]),
+        ('postprocessor', ['linuxcnc', 'grblhal', 'xpro-v5', 'grbl', None]),
+        ('angle_offset', [0, -360000, 360001, 7.25, '1', 359.9999]),
+        ('direction', [1, -1, 0, 0.5, 1.0, -1.0, True]),
+        ('feed_reference', ['surface', 'cut', 'radius', None]),
+        ('fixture', [None, 5, dict(axial_min=0, axial_max=0, min_radius=1), dict(axial_min=-5, axial_max=50, min_radius=60),
+                     dict(axial_min=-2000, axial_max=2000, min_radius=0), dict(axial_min=10, axial_max=60, min_radius=2),
+                     dict(axial_min=0)]),
+    ]  # fmt: skip
+    for _ in range(rng.choice([0, 0, 0, 1, 1, 2])):
+        key, choices = rng.choice(changes)
+        if rng.random() < 0.85:
+            options[key] = rng.choice(choices)
+        else:
+            options.pop(key, None)
+    return options
+
+
+def rotary_cases(count, seed):
+    """Projects with a rotary setup: every post, wrap axis, feed reference, direction and drive for each kind
+    of planar job, then count generated projects of every kind above, each with a rotary setup that is
+    sometimes refused."""
+    rng = random.Random(seed)
+    for project in rotary_projects().values():
+        for wrap, reference, post, direction, drive in itertools.product(
+            'XY', ('surface', 'cut'), ('xpro-v5', 'grblhal', 'linuxcnc'), (1, -1), 'ABC'
+        ):
+            options = dict(
+                diameter=80, wrap_axis=wrap, postprocessor=post, feed_reference=reference, direction=direction,
+                angle_offset=12.5, output_axis=drive, fixture=dict(axial_min=-1, axial_max=400, min_radius=5),
+            )  # fmt: skip
+            yield (dict(project, protocol='linuxcnc') if post == 'linuxcnc' else project), options
+    sources = itertools.chain(
+        generated_cases(count // 2, seed + 1), drill_knife_cases(count // 6, seed + 2),
+        entry_tab_cases(count // 6, seed + 3), polygon_cases(count // 10, seed + 4),
+        helix_pocket_cases(count // 30, seed + 5), vcarve_cases(count // 30, seed + 6),
+    )  # fmt: skip
+    for project in sources:
+        options = rotary_options(rng)
+        if isinstance(project, dict) and rng.random() < 0.7:
+            # Mostly a source the post takes, so that most of these reach the post's own checks.
+            if project.get('mode') == 'laser' and options.get('postprocessor') == 'linuxcnc':
+                options['postprocessor'] = 'grblhal'
+            stream = options.get('postprocessor') in ('grblhal', 'xpro-v5')
+            project = dict(
+                project, protocol=rng.choice(['grbl', 'grblhal', 'xpro-v5', 'fluidnc']) if stream else 'linuxcnc'
+            )
+        yield project, options
+
+
+# Lines put into a planar program to test the rotary post's reading of given G-code: comments, duplicate and
+# lowercase words, blank and oversized lines, unusual numbers and separators, and commands it does not take.
+ODD_LINES = [
+    '(comment)',
+    'G1 X1 X2',
+    'g1 x1',
+    '',
+    '   ',
+    'G1 X1;',
+    'M3 S1000',
+    'M4 S100',
+    'G4 P1',
+    'G4 P0.5',
+    'G0 X1e3',
+    'G1 X+1.5',
+    'G1 X.5',
+    'G1 X1.',
+    'G1 X-0',
+    'M30',
+    'G93',
+    'G20',
+    'G91',
+    'G2 X1 Y1 I1 J0',
+    'T1 M6',
+    'G1 A10',
+    'G1 X1 F0',
+    'G1 F-1',
+    'M8',
+    'S1000',
+    'G0 Z5',
+    'G1 Z-1 F100',
+    '%',
+    'N10 G1 X1',
+    'G1 X1\tY2',
+    'G1 X1\x0bY2',
+    '\x1cG1 X1',
+    'G1 X1\u00a0Y2',
+    'X' * 300,
+    'G1 X' + '1' * 250,
+    'G0 X5 Y5',
+    'G1 X5 Y5 F300',
+    'G1 X10 Y10 Z-0.5 F300',
+    'G1 X10 Y10 S500 F300',
+    'M5',
+    'G21',
+    'G90',
+    'G94',
+    'G17',
+    'G54',
+    'G40',
+    'G49',
+    'G80',
+    'G61',
+    'G0 Z-3',
+    'G1 X0 Y0 F100000',
+    'G1 X-3000 Y0 F100',
+    'G1 X1 Y1 F0.0001',
+    'M3 S0',
+    'M3 S200000',
+    'M4 S0',
+    'M3',
+    'G0',
+    'G1',
+    'G4',
+    'G4 P-1',
+    'G4 P100000',
+    'G1 X1 Y2 Z3 F4 S5',
+    'G0 X1 Y2 Z3 F4',
+    'G1 Y400 F100',
+    'G1 X0.0005 F100',
+    'G1 X999999999 F1',
+    'G1 X1000000001 F1',
+    'G00 X1',
+    'G01 X1 F10',
+    'M05',
+    'M03 S100',
+    'G1 X1 F10 S-1',
+]
+
+
+def rotary_wrap_cases(count, seed, generate):
+    """Planar jobs given to the rotary post as G-code, as generated or with lines added, removed, swapped
+    or changed, or with the job itself replaced, so that each check of the given program is compared."""
+    rng = random.Random(seed)
+    jobs = [
+        {'mode': 'router', 'lines': ['G21', 'G90', 'G94', 'M3 S1000', 'G0 X0 Y0', 'G1 Z-1 F100', 'G1 X10 Y5 F500',
+                                     'G1 X10 Y30 Z-2 F500', 'M5']},
+        {'mode': 'laser', 'lines': ['G21', 'G90', 'G94', 'M5', 'G0 X0 Y0', 'M4 S100', 'G1 X10 Y5 F500 S300',
+                                    'G1 X10 Y30 F500 S0', 'M5']},
+    ]  # fmt: skip
+    sources = itertools.chain(
+        rotary_projects().values(), generated_cases(count // 3, seed + 1), drill_knife_cases(count // 10, seed + 2),
+        entry_tab_cases(count // 10, seed + 3),
+    )  # fmt: skip
+    for project in sources:
+        try:
+            job = generate(project)
+        except Exception:  # noqa: BLE001 - only programs are wanted here
+            continue
+        if isinstance(job['segments'], list):
+            jobs.append(job)
+
+    def changed(job):
+        job = json.loads(json.dumps(job))
+        lines = job['lines']
+        kind = rng.randrange(11)
+        if kind < 3 and lines:
+            for _ in range(rng.randrange(1, 4)):
+                lines.insert(rng.randrange(len(lines) + 1), rng.choice(ODD_LINES))
+        elif kind == 3 and len(lines) > 1:
+            del lines[rng.randrange(len(lines))]
+        elif kind == 4 and len(lines) > 2:
+            i, j = rng.sample(range(len(lines)), 2)
+            lines[i], lines[j] = lines[j], lines[i]
+        elif kind == 5 and lines:
+            i = rng.randrange(len(lines))
+            words = lines[i].split()
+            if len(words) > 1:
+                k = rng.randrange(1, len(words))
+                words[k] = words[k][0] + rng.choice(['0', '-0', '1e2', '12.3456789', '-999', '.25', '1.', '+3'])
+                lines[i] = ' '.join(words)
+        elif kind == 6 and lines:
+            lines.pop()
+        elif kind == 7:
+            job['lines'] = rng.choice([[], 'G1 X1', None, lines + [5], [None] + lines, ['M5'], ['M30'], ['M5', 'M30']])
+        elif kind == 8:
+            job['mode'] = rng.choice(['knife', None, 'laser', 'router', 1])
+        elif kind == 9:
+            job = rng.choice([[], 'job', None, {key: value for key, value in job.items() if key != 'mode'}])
+        elif lines:
+            i = rng.randrange(len(lines))
+            lines[i] = '  ' + lines[i] + rng.choice([' ', '\t', '\r', '\x0c'])
+        return job
+
+    for _ in range(count):
+        job, options = rng.choice(jobs), rotary_options(rng)
+        if rng.random() < 0.7:
+            # Mostly a post that takes the program: LinuxCNC for its own setup commands, and a stream post for laser.
+            own = any(line in ('G40', 'G49', 'G80', 'G61') for line in job['lines'])
+            if job['mode'] == 'laser' or not own:
+                options['postprocessor'] = rng.choice(['grblhal', 'xpro-v5'])
+                options.pop('output_axis', None)
+            else:
+                options['postprocessor'] = 'linuxcnc'
+        yield (job if rng.random() < 0.3 else changed(job)), options
+
+
 def strict_equal(a, b):
     """Equality that tells 0 from 0.0 and True from 1, and compares floats by value and sign."""
     if type(a) is not type(b):
@@ -1422,6 +1662,9 @@ def main():
     parser.add_argument('--lines', type=int, default=20000, help='lines for the self-crossing test')
     parser.add_argument('--helix', type=int, default=5000, help='generated pockets entered by a helix')
     parser.add_argument('--vcarve', type=int, default=4000, help='generated V-carves')
+    parser.add_argument(
+        '--rotary', type=int, default=3000, help='generated rotary jobs, and half as many given programs'
+    )
     parser.add_argument('--skip-suite', action='store_true', help='do not replay the calls made by the test suite')
     parser.add_argument(
         '--without-polygon-operations',
@@ -1450,8 +1693,9 @@ def main():
         ' lines within the bound on work'
     )
 
-    from native_core_recorder import reference
+    from native_core_recorder import reference, rotary_reference
     from studio.cam import generate
+    from studio.rotary import generate_rotary, wrap_job
     from studio.operations import kernel_available, kernel_vcarve_available
 
     os.environ.pop('KERFKITE_POLYGON_BACKEND', None)  # the reference as Studio runs it
@@ -1517,6 +1761,14 @@ def main():
             line, _ = reference(generate, project)
             if line is not None:
                 lines.setdefault(line, 'entry/tabs')
+        for project, options in rotary_cases(args.rotary, 95):
+            line, _ = rotary_reference(generate_rotary, project, options, 'project')
+            if line is not None:
+                lines.setdefault(line, 'rotary')
+        for job, options in rotary_wrap_cases(args.rotary // 2, 97, generate):
+            line, _ = rotary_reference(wrap_job, job, options, 'job')
+            if line is not None:
+                lines.setdefault(line, 'rotary-wrap')
         tally = collections.Counter()
         declined = collections.Counter()
         failures = []
@@ -1530,8 +1782,8 @@ def main():
             assert len(answers) == len(lines), 'The native core did not answer every case.'
             for (line, origin), answer in zip(lines.items(), answers, strict=True):
                 case, got = json.loads(line), json.loads(answer)
-                expect = case['expect']
-                if not shared and uses_polygon_operation(case['project']):
+                expect, subject = case['expect'], case.get('project', case.get('job'))
+                if not shared and 'project' in case and uses_polygon_operation(subject):
                     tally[origin, 'left out'] += 1
                 elif 'declined' in got:
                     tally[origin, 'declined'] += 1
@@ -1540,11 +1792,11 @@ def main():
                     # The reference stopped with something other than a rejection; there is no behaviour to match.
                     tally[origin, 'reference raised ' + expect['raises']] += 1
                     if 'invalid' not in got and 'error' not in got:
-                        failures.append((case['project'], expect, got))
+                        failures.append((subject, expect, got))
                 elif strict_equal(expect, got):
                     tally[origin, 'program' if 'ok' in got else 'rejection'] += 1
                 else:
-                    failures.append((case['project'], expect, got))
+                    failures.append((subject, expect, got))
 
         compare(lines)
         # A helix into a pocket is a long program, and so is a V-carve, so these are compared a few hundred at
@@ -1569,7 +1821,7 @@ def main():
                 if lines:
                     compare(lines)
 
-    for origin in ('suite', 'generated', 'entry/tabs', 'helix', 'v-carve'):
+    for origin in ('suite', 'generated', 'entry/tabs', 'helix', 'v-carve', 'rotary', 'rotary-wrap'):
         total = sum(n for (o, _), n in tally.items() if o == origin)
         if not total:
             continue
@@ -1588,6 +1840,8 @@ def main():
         raise SystemExit(f'{len(failures)} cases differ from the reference.')
     if not tally['generated', 'program'] or (suite and not tally['suite', 'program']):
         raise SystemExit('No program was reproduced: the comparison did not exercise the native core.')
+    if args.rotary and not (tally['rotary', 'program'] and tally['rotary-wrap', 'program']):
+        raise SystemExit('No rotary program was reproduced: the comparison did not exercise the rotary post.')
     if not shared:
         print(
             'PASS for the cases compared; offsets, pockets, fills and V-carves were NOT COMPARED (no compiled extension).'

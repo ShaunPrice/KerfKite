@@ -39,6 +39,8 @@ Evidence: `validation/native-installed-pi5-2026-09-11.json` and `validation/nati
 * Squares use the same `pow` call that Python's `**` operator makes.
 * The rotary cut length is computed by the Python function itself, called from C++, because Python's `hypot` and `asinh` are its own implementations. Laser path preparation stays in Python for the same reason (`math.dist`).
 
+The native core has the whole rotary post as well (`native/core/src/rotary.cpp`, `kerfkite-cam rotary` and `rotary-wrap`), for use without Python. It computes the cut length itself: CPython's `hypot` of three values is reproduced step for step (`pymath::vector_norm` in `kerfkite/py_math.hpp`), `asinh` is the C library's, which is what CPython 3.11 and later call, and squares use `pow` as Python's `**` does. `validation/native_core_parity.py` compares it with `studio.rotary` on every rotary call the test suite makes and on generated jobs and given programs (`--rotary`: 3,000 generated jobs and 1,500 programs by default, about a quarter of them accepted).
+
 ```python
 from studio.cam import generate
 from studio.rotary import generate_rotary
