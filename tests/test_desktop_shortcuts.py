@@ -73,7 +73,14 @@ class LauncherTests(unittest.TestCase):
 
     def test_launcher_builds_for_each_release_platform(self):
         with tempfile.TemporaryDirectory() as tmp:
-            for goos, arch in (("windows", "amd64"), ("darwin", "arm64"), ("linux", "arm64")):
+            targets = (
+                ("windows", "amd64"),
+                ("darwin", "arm64"),
+                ("darwin", "amd64"),
+                ("linux", "arm64"),
+                ("linux", "amd64"),
+            )
+            for goos, arch in targets:
                 run = go("build", "-o", str(Path(tmp) / f"{goos}-{arch}"), ".", GOOS=goos, GOARCH=arch)
                 self.assertEqual(run.returncode, 0, f"{goos}/{arch}: {run.stderr}")
 
