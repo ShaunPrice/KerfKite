@@ -1680,7 +1680,7 @@ def relief_cases(count, seed):
             raw = bytes(rng.randrange(256) for _ in range(rows * columns * 3))
             data['heightmap_rgb'] = base64.b64encode(raw).decode()
             if rng.random() < 0.04:
-                # Whole groups and then =, which Python 3.12 reads and 3.13 refuses: the core declines it.
+                # Whole groups and then =, which some Python releases read and others refuse: the core declines it.
                 data['heightmap_rgb'] += '=' * rng.randint(1, 4)
             data['heightmap_size'] = [columns, rows]
         for _ in range(rng.choice([0, 0, 0, 1, 2])):
@@ -1928,7 +1928,7 @@ def stl_cases(count, seed):
         raw = ascii_stl(triangles) if rng.random() < 0.5 else binary_stl(triangles)
         data = {'content_base64': base64.b64encode(raw).decode(), 'resolution': rng.choice([2, 3, 8, 16, 33, 64, 128])}
         if len(raw) % 3 == 0 and rng.random() < 0.03:
-            data['content_base64'] += '='  # read by Python 3.12, refused by 3.13: declined by the core
+            data['content_base64'] += '='  # read by some Python releases, refused by others: declined
         roll = rng.random()
         if roll < 0.03:
             data['resolution'] = rng.choice([1, 129, 64.0, True, None, '64'])

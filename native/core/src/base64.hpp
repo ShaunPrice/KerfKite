@@ -19,9 +19,9 @@ namespace detail {
 // reference refuses as well; the reference's messages for those differ, but its caller gives one message for all.
 // A byte of text that is not ASCII is not in the alphabet, so such text is refused here too.
 //
-// Whole groups followed by nothing but = ("AAAA=", "AAAA====") are read differently by the reference's Pythons:
-// 3.12 (and 3.11) decode the groups and ignore the =, 3.13 refuses the text. Such text is declined (NotPorted),
-// so that the Python in use answers it.
+// Whole groups followed by nothing but = ("AAAA=", "AAAA====") are read differently by different Python releases:
+// 3.11.18 and 3.12.3 decode the groups and ignore the =, while 3.12.10 and 3.13 refuse the text. Such text is
+// declined (NotPorted), so that the Python in use answers it.
 inline bool base64(const std::string &text, std::vector<unsigned char> &out) {
     // 0 to 63 for the alphabet, 64 for =, and 255 for every other byte: a group that holds either has bit 6 or 7.
     static const std::array<unsigned char, 256> table = [] {
@@ -44,7 +44,7 @@ inline bool base64(const std::string &text, std::vector<unsigned char> &out) {
     if (data < size && data > 0 && data % 4 == 0) {
         bool alphabet = true;
         for (size_t i = 0; i < data && alphabet; ++i) alphabet = table[static_cast<unsigned char>(text[i])] < 64;
-        if (alphabet) throw NotPorted("base64 text with = after its last whole group, which Python 3.12 and 3.13 read differently");
+        if (alphabet) throw NotPorted("base64 text with = after its last whole group, which Python releases read differently");
     }
     if (size % 4) return false;
     if (size == 0) return true;

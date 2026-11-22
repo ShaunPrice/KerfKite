@@ -133,8 +133,8 @@ class NativeReliefTests(unittest.TestCase):
                 self.assertEqual(self.both(data)[0], 'error')
 
     def test_padding_after_whole_groups_goes_to_the_reference(self):
-        # Python 3.12 reads "...=" after whole groups and 3.13 refuses it: the core declines, so the Python in use
-        # answers. (Within the length the image allows; longer text is refused before it is read.)
+        # Some Python releases read "...=" after whole groups (3.11.18, 3.12.3) and others refuse it (3.12.10, 3.13):
+        # the core declines, so the Python in use answers. (Within the length the image allows; longer text is refused before it is read.)
         raw = base64.b64encode(bytes(range(6))).decode()
         data = dict(sample(heightmap=None), heightmap_rgb=raw + '==', heightmap_size=[2, 2])
         del data['heightmap']
