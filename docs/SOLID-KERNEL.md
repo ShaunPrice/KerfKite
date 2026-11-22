@@ -59,7 +59,7 @@ A translation is rounded to the grid and is then exact. A map whose matrix is wh
 The kernel computes the **arrangement** of the operands' triangles and reads the result from it. The method is that of mesh arrangements with winding numbers (Zhou, Grinspun, Zorin and Jacobson, *Mesh arrangements for solid geometry*, 2016), written from the published description.
 
 1. **Intersect.** A bounding-box tree over each operand finds the pairs of triangles that may meet. Each pair is intersected exactly: where two triangles cross, the segment they share is recorded on both, its ends being grid vertices or exact rational points. Triangles that lie in one plane and overlap are grouped, to be subdivided together.
-2. **Subdivide.** Each triangle with records is triangulated again, so that every recorded point is a vertex and every recorded segment an edge (an incremental triangulation with edge recovery by flips, then Delaunay flips for shape). A group of coplanar triangles is triangulated as one, so that where they overlap they are cut into the *same* pieces. After this step, triangles meet only in whole edges and vertices.
+2. **Subdivide.** Each triangle with records is triangulated again, so that every recorded point is a vertex and every recorded segment an edge (an incremental Delaunay triangulation: points inserted in the order of a Hilbert curve, flips decided by an in-circle test on interval enclosures, then edge recovery by flips; see [Stage two](#stage-two-the-same-solids-divided-differently)). A group of coplanar triangles is triangulated as one, so that where they overlap they are cut into the *same* pieces. After this step, triangles meet only in whole edges and vertices.
 3. **Cells.** Identical triangles are merged into faces. Around every edge the faces are put in exact angular order, which joins their sides into the regions of space (cells) that the faces bound.
 4. **Winding numbers.** Crossing a face changes, by a known amount, the number of times each operand's surface winds around a point. One exact ray count for each connected piece fixes the winding numbers of every cell.
 5. **Extract.** A cell is solid or empty by the rule of the operation (union: inside either; intersection: inside both; difference: inside the first and not the second). The faces between a solid cell and an empty one are the result. They are paired at each edge across the solid side, so that the mesh is closed and oriented by construction and bodies that only touch stay separate.
@@ -191,6 +191,8 @@ Correctness is shown in two independent ways.
 
 `--stress N SEED` runs N cases of each kind with full verification; `--digest N SEED` prints one hash of every resulting mesh, for comparing compilers.
 
+**Two builds as solids** (`kerfkite_solid_shapes`, `native/tools/solid_shapes.cpp`). For a change that may divide a solid into other triangles but must leave it the same solid: one build records every Boolean operation of generated models with operands and results (`record CASES SEED FILE`, `models FILE`), the other replays them (`replay FILE OUT`), and either compares the two files (`compare FILE_A FILE_B`), record by record, as the same mesh, the same set of points or within the grid. [Stage two](#stage-two-the-same-solids-divided-differently) gives the results for the change it was written for.
+
 **The shorter ways against the full computation** (the same self-test). Each way the kernel has of avoiding exact work (see [Performance](#performance)) is checked against the computation it stands in for: the 256-bit product and the three-word sum against the big integer; the flat tables against the standard ones; a tree over part of the boxes against a scan; a pool that leaves crossings pending against one that computes each at once, over requests with crossings on the grid, repeats and points reached two ways (the same ids, the same intervals once computed, the same answer from every predicate); the turn and the plane side decided in doubles against the exact ones, on triples in one line and points on and beside the plane; a probing arrangement against a counting one on triangles that touch. And whole operations are computed twice, with every shorter way taken and with none (`detail::plain_paths()`), and must give the same vertices, triangles and counts. `--plain N SEED` does that for N generated pairs of solids.
 
 **Comparison with the third-party library as an oracle** (`validation/solid_kernel_check.py`). It builds every solid twice, in the oracle and as a request to the kernel, from the same leaves, and compares volume, bounding box, number of bodies and section areas at three heights. Tolerances follow from the grid: a layer of 4 nm for each operation on the area of the leaves. It also runs Studio's own tests for solids, scripts, assemblies and lofts on a stand-in for the library, so that those tests run on the kernel's primitives and every solid they make is compared.
@@ -231,7 +233,7 @@ What these runs do not show: the hash comparison was not made with MSVC, nor on 
 
 ## Performance
 
-The kernel was made several times faster without changing a result: every digest recorded for it is what it was, and so is every answer of the `solid` command on the models measured below, to the last character (their measures, meshes, outlines and the counts of each operation). This section says what was measured, where the time went, what was changed and why none of it can change a result, and what is left.
+The kernel was made faster in two stages. The first changed no result: every digest recorded for it stayed what it was, and so did every answer of the `solid` command on the models measured below, to the last character (their measures, meshes, outlines and the counts of each operation). The second, [below](#stage-two-the-same-solids-divided-differently), changes how some faces are divided into triangles and so the recorded digests, once and deliberately, while every solid stays the same set of points; a tool written for it checks that. This section says what was measured, where the time went, what was changed and why, and what is left.
 
 ### What was measured
 
@@ -329,15 +331,50 @@ Both use only additions, subtractions, multiplications and comparisons of double
 
 **Less work for the same integers.** 128-bit products are computed on the two's complement bits without separating the signs. Faces, edge uses and the triangles of a solid are put in order by a counting pass on the first key and small sorts within it (the order `std::sort` gives). The node-based hash tables are flat ones; none is ever walked in its own order. Coplanar triangles separated by an edge of one of them are told apart after three turns, and the turns of two triangles are computed once each where the tests asked for them up to three times. One triangulation object serves every triangle of an operation. The centroid is summed in three machine words. A mesh crosses from the kernel to numpy as bytes (`solid_mesh`), with the numbers the text had.
 
+### Stage two: the same solids, divided differently
+
+The work above kept every integer the kernel gives. The second stage takes the gains that change how a solid is divided into triangles but not the solid, with the recorded digests re-recorded once (the owner's decision, 22 November 2026).
+
+- **Runs of features in Studio.** Studio applied each feature as it came, so a plate with 60 bores was 60 differences, each arranging the whole plate again. Consecutive features with one operation are now applied as one batch (`studio/solid_cad.py`): cuts as the solid less the union of their tools, additions as one union, intersections as one intersection. That is most of what makes lazily evaluated solid libraries fast. A run can only shrink the solid (cuts, intersections) or only grow it (additions), so the solid after a run is empty only if one after a feature would have been. When the batch fails, or its result does not pass Studio's checks, the run is done again feature by feature, so that the error names the feature that causes it, and errors are reported in the order of the features. The triangle limit applies to the solid after each run.
+- **Faces triangulated by Delaunay insertion** (`planar.cpp`). The points of a face are inserted in the order of a Hilbert curve over their bounding box (by the middles of their intervals), so each is found by a short walk from the one before. After each insertion the edges around the new point are flipped while the point across one of them is proved strictly inside the circle through the triangle on this side (Lawson's flips), then each required edge is recovered by flips as before (Sloan), and the edges that are not required are flipped by the same rule until none can be. The in-circle test is evaluated on the interval enclosures of the four points with outward rounding; where the intervals cannot tell, which includes every point on the circle, the edge stays. Every flip is then a true Delaunay flip, so the flipping ends, and the triangulation is a fixed function of the points, the required edges and the order of insertion, which is fixed: the same on every platform. Before, the triangulation had no Delaunay step during insertion and inserted points in order of their coordinates, so the walks were long where triangles were long and thin, the first two items that were left under [What is left](#what-is-left).
+- **Pairs apart on the line of their planes** (`Arrangement::apart_on_line`). Two triangles that each cross the other's plane, with no corner in it, have a point in common exactly when their segments on the line where the two planes meet overlap. Four orientations of their corners, exact in 128 bits, decide that before any point is made for the pair. It changes no result.
+- **Edge owners found by index.** The faces of a cluster that own each edge are found through a sorted index instead of a scan of every face for every piece of edge. It changes no result.
+- **Unions composed.** A batch union groups its solids by whether their bounding boxes meet (overlap or touch), joins each group pair by pair, and puts the groups side by side as one mesh: solids of different groups are a whole grid unit apart in some coordinate, so no triangle of one meets one of another. A difference leaves out the tools whose box is apart from the solid's.
+
+**How the solids were shown to be the same.** `kerfkite_solid_shapes` (`native/tools/solid_shapes.cpp`) records every Boolean operation that generated models make on one build of the kernel, with its operands and result, replays the same operations on the same operands on another build, and compares the results: as meshes, as sets of points (`same_shape()`, the exact arrangement of the two meshes, in which no region may be inside one alone), or, failing that, as within what the grid holds (each difference of the two is empty to the kernel, whose Boolean operations leave out what is thinner than the grid). Recorded on the kernel before this stage and replayed on it after:
+
+| Of 7532 operations of 1500 generated models (10 kinds), 958 of them empty | |
+| --- | --- |
+| The same mesh | 6463 |
+| The same set of points, exactly | 7480 |
+| Within the grid: each difference empty to the kernel | 52; thickest layer 0.15 nm, furthest vertex 34 nm from the other surface |
+| Different | **0** |
+| Refused as too fine | 1, in both |
+
+The 52 are where a different division of a face leads the rounding to the grid to drop a different sliver; the furthest vertex lies on such a sliver, which is far thinner than it is long. Through Studio, every model of `validation/benchmark_solid.py` built in runs was compared with the same model built feature by feature: in every one, both differences of the two are empty to the kernel. Only the block with 21 cuts is divided differently, into 14 614 triangles instead of 12 834 (the cavity's faces), with a volume 2.3·10⁻⁶ mm³ apart. The self-test still passes, `--plain 200 7` finds no difference between the shorter ways and none, and `--stress 300 77` and the oracle comparison (`solid_kernel_check.py --trees 2000 --seed 1`, with Studio's 32 solid tests on the stand-in) find no failure. The new triangulation gives the same hashes on every platform it was built on: MSVC 2022 on Windows x64, and GCC 13.3 on x86-64 Linux and on ARM64 Linux, print `4b462149515efb4b` for `--digest 700 2026`, `30aa2a95a9dd185e` for `--digest 500 11` and `f91cdc30edb8e0c2` for `--stress 1000 77` (0 failed in each), and the CTest digest passes there; `--stress 350 23` under AddressSanitizer and UndefinedBehaviorSanitizer has no failure and no report.
+
+**What was re-recorded.** The generated-case digest of the self-test (`--digest 150 2026`, run by CTest) is now `e150789607e7145b` (it was `d606943f815a575d`), and the hash of the model "64 separate bores, one pattern" of `kerfkite_solid_bench` changed. The part pinned by the installed-wheel check (`6c12e0b4dd788bbb`) and every other benchmark model kept their hashes.
+
+**Times.** The kernel alone, best of several runs on the two-core sandbox:
+
+| Model | Before stage two | After |
+| --- | --- | --- |
+| A plate less 64 separate bores, as one pattern | 523 ms | 266 ms |
+| The same plate cut by one bore after another, 64 operations | 1.57 s | 1.04 s |
+| A plate less 64 bores in a row, each overlapping the next | 1.30 s | 1.13 s |
+| The pinned part | 204 ms | 196 ms |
+| A block less 8 slots, 16 bores and a sphere, 21 operations | 84 ms | 82 ms |
+
+The small models of the benchmark are within the noise of the machine, except the revolved and extruded parts, about 8 per cent slower: on faces of few points the flips cost more than the shorter walks save. Through Studio the runs of features give most of the gain; see the table under [What differs for a user](#what-differs-for-a-user).
+
 ### What is left
 
 Where the kernel still spends its time, and what could be done about it:
 
-- **Many surfaces in one plane.** The 64 overlapping bores spend two thirds of their time triangulating the caps, which all lie in two planes and are cut by one another. The triangulation inserts each point by walking from the last one, and the walk is long where triangles are long and thin. A different order of insertion or a search structure would shorten it, but it would change which of two triangles a point on their common edge is found in, and with it the triangulation where four points lie on a circle. That is a change of output and was left alone. Expected gain: half the time of this case.
-- **Long thin triangles on flat faces.** The faces of a plate with many holes are triangulated by cutting ears, which leaves triangles spanning the plate, and each new cut then finds hundreds of them as candidates. A better-shaped triangulation of flat faces would cut the candidates of later operations several times over (the chain of 64 bores spends half its time on pairs that do not meet), and it too changes output.
+- **Many surfaces in one plane.** The 64 overlapping bores still spend more than half their time subdividing the caps, which all lie in two planes and are cut by one another, after stage two shortened the walks (627 ms of 1.08 s in the profiled build, against 873 ms of 1.36 s before).
 - **Checking the rounded result** is a quarter of the pinned part. Triangles of one flat face are still compared pair by pair; a check of each flat patch as a whole (every triangle keeps its turn and the boundary does not cross itself) would be linear, and needs a proof before it replaces the pairwise one.
 - **The examination of a sphere or a tapered cylinder against itself** (about a third of two spheres) cannot be skipped as an inert shape's can. Marking primitives as free of self-intersection when they are made would save it, and would change the recorded count of pairs examined and, in rare ties, the order of points.
-- **Threads.** The kernel uses one, and none were added. Operations that do not depend on one another (the pairs at one level of a batch union, the features of a pattern) could run on several threads with the same result whatever the scheduling, since no operation's result depends on another's state. That would help batches and patterns only, by at most the number of cores, and it was left out: a chain of features, which is what Studio mostly builds, gains nothing from it, the counts of the last operation are kept for each thread and would have to be gathered in a fixed order, and a gain could not have been measured reliably on two cores shared with other builds. Within one operation the points are numbered in the order the pairs are examined, so the examination itself cannot be split without a second pass that restores the order.
+- **Threads.** The kernel uses one, and none were added. Operations that do not depend on one another (the groups and the pairs at one level of a batch union, the features of a pattern) could run on several threads with the same result whatever the scheduling, since no operation's result depends on another's state. Since Studio now applies runs of features as batches, that is where its time goes, so threads are the next step; the counts of the last operation are kept for each thread and would have to be gathered in a fixed order. Within one operation the points are numbered in the order the pairs are examined, so the examination itself cannot be split without a second pass that restores the order.
 
 ## How Studio uses the kernel
 
@@ -382,24 +419,25 @@ The kernel refuses a result it cannot represent validly on its grid ("the result
 - **Twisted extrusions.** The side of a twisted extrusion is made of quadrilaterals that are not flat, and the two kernels may split them along different diagonals. The outlines at each layer are the same; the volume between layers is not, and with few slices the difference is large (a 4.5 by 5.7 mm outline turned 30° and tapered in a single slice: 15% above the true volume on the kernel, 24% below it on the library). More slices bring both to the true shape.
 - **Coordinates** are whole nanometres. A value such as `14.649999998509884` is now `14.65`.
 - **Section outlines** have a point at each corner and none along straight sides. The library's sections carry points along straight sides too: a turned box cut through five of its faces gave 10 points there and gives 5 here.
-- **Speed.** The exact checks cost time: the kernel is slower than the library, by a factor of 2 to 3 on plates with bores, boxes, revolved and extruded parts, 4 to 6 where spheres or tapered and turned tools are cut (every vertex made by such a cut has to be rounded and the result checked), and 14 on a pattern of bores that overlap one another, whose caps are many surfaces in one plane. Before the work described under [Performance](#performance) the factors were about 6 to 45.
+- **Speed.** The exact checks cost time: the kernel is slower than the library, by a factor of 2 to 4 on plates with bores, boxes, revolved and extruded parts, 4 to 8 where spheres or tapered and turned tools are cut (every vertex made by such a cut has to be rounded and the result checked), and 9 on a pattern of bores that overlap one another, whose caps are many surfaces in one plane. Before the work described under [Performance](#performance) the factors were about 6 to 45.
+- **Runs of features.** Consecutive features with one operation are applied together (see [Stage two](#stage-two-the-same-solids-divided-differently)), on either backend. The solid is the same; where tools overlap one another, its faces can be divided differently from the feature-by-feature way, and the triangle limit applies after each run of features rather than after each feature.
 
-Time for one rebuild through Studio, on the two-core sandbox this was developed in. The machine was shared with other builds; each figure is the best of 3 to 5 rebuilds (18 to 30 of a model under 50 ms). The models are those of `validation/benchmark_solid.py`, which prints this table.
+Time for one rebuild through Studio, on the two-core sandbox this was developed in. The machine was shared with other builds; each figure is the best of 5 rebuilds (18 to 30 of a model under 50 ms). The models are those of `validation/benchmark_solid.py`, which prints this table. Both backends run the same Studio code, so the library's times now include the runs of features as well; "before" is the kernel of the first stage with features applied one by one.
 
 | Model | Library | Kernel before | Kernel now | Now, against the library |
 | --- | --- | --- | --- | --- |
-| A plate with one bore | 2 ms | 11 ms | 4 ms | 2.4 |
-| The pinned bracket of the installed check: seven features, a sphere, tapered bores, a turned rib, a revolved groove, a scripted post | 47 ms | 1.23 s | 290 ms | 6.2 |
-| A plate with 64 overlapping bores in one pattern | 124 ms | 5.39 s | 1.78 s | 14 |
-| A plate with 64 separate bores in eight patterns | 558 ms | 8.69 s | 1.60 s | 2.9 |
-| A plate with 24 separate bores, one feature each | 201 ms | 2.35 s | 447 ms | 2.2 |
-| A plate with 60 separate bores, one feature each | 815 ms | 13.3 s | 2.18 s | 2.7 |
-| Two spheres, `$fn = 48` | 4 ms | 29 ms | 14 ms | 3.7 |
-| Two spheres, `$fn = 96` | 12 ms | 110 ms | 53 ms | 4.5 |
-| A union of 50 turned boxes | 19 ms | 123 ms | 49 ms | 2.5 |
-| A block with 21 cuts: slots, tapered bores, cross bores, a sphere | 67 ms | 1.86 s | 345 ms | 5.1 |
-| A revolved profile with two cuts | 5 ms | 33 ms | 13 ms | 2.4 |
-| A twisted extrusion, bored and trimmed | 5 ms | 32 ms | 15 ms | 2.8 |
+| A plate with one bore | 2 ms | 4 ms | 5 ms | 2.5 |
+| The pinned bracket of the installed check: seven features, a sphere, tapered bores, a turned rib, a revolved groove, a scripted post | 61 ms | 259 ms | 259 ms | 4.3 |
+| A plate with 64 overlapping bores in one pattern | 135 ms | 1.47 s | 1.22 s | 9.0 |
+| A plate with 64 separate bores in eight patterns | 144 ms | 1.45 s | 390 ms | 2.7 |
+| A plate with 24 separate bores, one feature each | 44 ms | 385 ms | 143 ms | 3.3 |
+| A plate with 60 separate bores, one feature each | 101 ms | 1.94 s | 357 ms | 3.5 |
+| Two spheres, `$fn = 48` | 3 ms | 12 ms | 12 ms | 3.8 |
+| Two spheres, `$fn = 96` | 10 ms | 48 ms | 47 ms | 4.6 |
+| A union of 50 turned boxes | 17 ms | 44 ms | 45 ms | 2.6 |
+| A block with 21 cuts: slots, tapered bores, cross bores, a sphere | 37 ms | 293 ms | 286 ms | 7.7 |
+| A revolved profile with two cuts | 6 ms | 12 ms | 13 ms | 2.1 |
+| A twisted extrusion, bored and trimmed | 5 ms | 13 ms | 13 ms | 2.8 |
 
 ### How the switch is tested
 

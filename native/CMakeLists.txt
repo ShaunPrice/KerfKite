@@ -60,6 +60,10 @@ if(KERFKITE_SOLID_PROFILE)
 endif()
 add_executable(kerfkite_solid_bench tools/solid_bench.cpp)
 target_link_libraries(kerfkite_solid_bench PRIVATE kerfkite_core)
+# Two builds of the solid kernel compared as solids: one records the operations of generated models, the
+# other does them again, and either says whether the results are the same sets of points.
+add_executable(kerfkite_solid_shapes tools/solid_shapes.cpp)
+target_link_libraries(kerfkite_solid_shapes PRIVATE kerfkite_core)
 
 enable_testing()
 add_executable(kerfkite_selftest tests/selftest.cpp)
@@ -74,7 +78,7 @@ add_test(NAME solid COMMAND kerfkite_solid_selftest)
 # Generated Boolean cases, with a digest of every result. The digest is recorded, so each platform and
 # compiler the checks run on has to produce the same solids to the last vertex.
 add_test(NAME solid_same_everywhere COMMAND kerfkite_solid_selftest --digest 150 2026)
-set_tests_properties(solid_same_everywhere PROPERTIES PASS_REGULAR_EXPRESSION "0 failed.*digest d606943f815a575d")
+set_tests_properties(solid_same_everywhere PROPERTIES PASS_REGULAR_EXPRESSION "0 failed.*digest e150789607e7145b")
 add_executable(kerfkite_parallel_selftest tests/parallel_selftest.cpp)
 target_link_libraries(kerfkite_parallel_selftest PRIVATE kerfkite_core)
 add_test(NAME parallel COMMAND kerfkite_parallel_selftest)

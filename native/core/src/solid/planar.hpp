@@ -61,6 +61,12 @@ public:
     static Local local_of(const Interval &u, const Interval &v, bool grid);
     // The sign of the turn a b c from those doubles when they suffice to be certain of it, otherwise 2.
     static int filtered_turn(const Local &a, const Local &b, const Local &c);
+    // Whether d lies inside the circle through a, b, c, from the intervals of the two coordinates of each:
+    // 1 when certainly inside, -1 when certainly outside, 2 when the intervals cannot tell (which includes
+    // every point on the circle). Taken relative to the turn of a b c, so the order of a, b, c does not matter.
+    static int filtered_in_circle(const Interval a[2], const Interval b[2], const Interval c[2], const Interval d[2]);
+    // The cell of a point on a Hilbert curve over a square grid of 2^16 by 2^16 cells.
+    static uint64_t hilbert_index(uint32_t x, uint32_t y);
 
 private:
     struct Tri {
@@ -74,6 +80,7 @@ private:
     std::vector<int> vtri_;  // local vertex -> one triangle that has it
     int last_ = 0;
     std::vector<Local> local_;  // by local vertex
+    std::vector<std::array<Interval, 2>> iv_;  // by local vertex: the intervals of its two coordinates
     // The segments each point is known to lie on the line of: split() notes them by pool id, triangulate()
     // files them by local vertex (the segments of vertex k are line_ids_[line_start_[k]] up to
     // line_ids_[line_start_[k + 1]], ascending).
@@ -86,13 +93,14 @@ private:
     std::vector<Bounds> box_;
     std::vector<std::pair<int, int>> on_, filed_, wanted_, todo_, crossed_, flip_stack_;  // on_: (segment, point on it)
     std::vector<int> order_, created_, ends_, list_, rest_, ids_, fan_;
-    std::vector<std::array<double, 2>> at_;
 
     bool between(int a, int b, int p) const;
     int o(int a, int b, int c) const;
     bool one_line(int a, int b, int c) const;
     void relink(int neighbour, int from, int to);
     void insert(int p);
+    int in_circle(int a, int b, int c, int d) const;  // filtered_in_circle() of four local vertices
+    void legalize(int p);
     void split_face(int t, int p);
     void split_edge(int t, int i, int p);
     void flip(int t, int i);
