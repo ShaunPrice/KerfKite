@@ -3,7 +3,7 @@
     cmake -S native -B build/native && cmake --build build/native --config Release
     python validation/native_core_parity.py --cli build/native/kerfkite-cam
 
-Seven comparisons, all against values computed by Python in this run:
+Eight comparisons, all against values computed by Python in this run:
 
 1. Number text and arithmetic: fixed-point formatting, round() and repr() for several hundred thousand
    values, including decimal ties and values next to them; and math.dist and sum(), which Python computes
@@ -30,6 +30,8 @@ Seven comparisons, all against values computed by Python in this run:
    with the job the Python CAM generates for it.
 7. Fixture clearance: studio.fixture_collision.check_fixtures for generated programs, with lines added or changed,
    swept against generated boxes (fixture_cases). Lines that are not ASCII are declined.
+8. STL height fields: studio.mesh_import.stl_heightmap for binary and ASCII meshes, at every resolution, damaged
+   in the ways the reader must refuse (stl_cases).
 
 For each job the native core must either reproduce the reference exactly (program lines, preview segments,
 length, time, bounds and warnings, and for a rotary job its rotary setup; or the same error message) or
@@ -1863,6 +1865,75 @@ def fixture_cases(count, seed, generate):
         yield payload
 
 
+def stl_cases(count, seed):
+    """STL meshes for relief height fields, binary and ASCII, of 1 to 60 triangles (some degenerate or flat), with
+    the spellings, spacing and line breaks ASCII files have, at every resolution, damaged in the ways the reader
+    must refuse."""
+    rng = random.Random(seed)
+
+    def triangle():
+        base = [rng.uniform(-50, 50), rng.uniform(-50, 50), rng.uniform(-5, 5)]
+        size = rng.choice([0.5, 3, 10, 40])
+        points = [[base[i] + rng.uniform(-size, size) for i in range(3)] for _ in range(3)]
+        if rng.random() < 0.05:
+            points[1] = list(points[0])
+        if rng.random() < 0.05:
+            points = [[p[0], p[1], 0.0] for p in points]
+        return points
+
+    def written(value):
+        return rng.choice([repr(value), f'{value:.6e}', f'{value:.4f}', f'{value:E}'])
+
+    def ascii_stl(triangles):
+        gap = lambda: rng.choice([' ', '  ', '\t', ' \t '])  # noqa: E731
+        lines = [rng.choice(['solid', 'solid part', 'SOLID x', 'Solid'])]
+        for points in triangles:
+            lines.append(f"{rng.choice(['facet', 'FACET', 'Facet'])}{gap()}normal{gap()}0 0 1")
+            lines.append(f'{gap()}outer{gap()}loop')
+            lines += [f'{gap()}vertex{gap()}' + gap().join(written(v) for v in p) for p in points]
+            lines += [f'{gap()}endloop', 'endfacet']
+        lines.append(rng.choice(['endsolid', 'endsolid part', 'ENDSOLID']))
+        text = rng.choice(['\n', '\r\n', '\r', '\n\n', '\x0c']).join(lines)
+        damage = rng.random()
+        for limit, before, after in (
+            (0.03, 'endloop', 'endlop'), (0.05, 'vertex', 'vertex1e'), (0.07, 'solid', 'soli'),
+            (0.09, 'endsolid', 'endsolid\nextra'), (0.11, '0 0 1', '0 0 1e400'), (0.13, 'endfacet', 'endfacetX'),
+        ):  # fmt: skip
+            if damage < limit:
+                text = text.replace(before, after, 1)
+                break
+        else:
+            if damage < 0.15:
+                text = '  ' + text + '\n\n'
+        return text.encode('ascii')
+
+    def binary_stl(triangles):
+        raw = bytearray(b'solid binary header'.ljust(80, b' ')) + struct.pack('<I', len(triangles))
+        for points in triangles:
+            raw += struct.pack('<3f', 0, 0, 1) + b''.join(struct.pack('<3f', *p) for p in points) + b'\0\0'
+        damage = rng.random()
+        if damage < 0.03:
+            raw = raw[:-1]
+        elif damage < 0.05:
+            raw[96:100] = struct.pack('<f', float('inf'))
+        elif damage < 0.06:
+            raw = raw[:80] + struct.pack('<I', 0)
+        return bytes(raw)
+
+    for _ in range(count):
+        triangles = [triangle() for _ in range(rng.choice([1, 2, 5, 20, 60]))]
+        raw = ascii_stl(triangles) if rng.random() < 0.5 else binary_stl(triangles)
+        data = {'content_base64': base64.b64encode(raw).decode(), 'resolution': rng.choice([2, 3, 8, 16, 33, 64, 128])}
+        roll = rng.random()
+        if roll < 0.03:
+            data['resolution'] = rng.choice([1, 129, 64.0, True, None, '64'])
+        elif roll < 0.05:
+            del data['resolution']
+        elif roll < 0.07:
+            data['content_base64'] = rng.choice(['', '!!!!', 'AAAA=', None, 'QUFB'])
+        yield data
+
+
 def strict_equal(a, b):
     """Equality that tells 0 from 0.0 and True from 1, and compares floats by value and sign."""
     if type(a) is not type(b):
@@ -1891,6 +1962,7 @@ def main():
     parser.add_argument('--relief', type=int, default=1500, help='generated reliefs, and as many stock previews')
     parser.add_argument('--tool-changes', type=int, default=1500, help='generated plans for manual tool changes')
     parser.add_argument('--fixtures', type=int, default=1500, help='generated fixture clearance checks')
+    parser.add_argument('--stl', type=int, default=1000, help='generated STL meshes for relief height fields')
     parser.add_argument('--skip-suite', action='store_true', help='do not replay the calls made by the test suite')
     parser.add_argument(
         '--without-polygon-operations',
@@ -2011,6 +2083,10 @@ def main():
             line = preview_reference('fixtures', payload)
             if line is not None:
                 lines.setdefault(line, 'fixtures')
+        for data in stl_cases(args.stl, 102):
+            line = preview_reference('stl', data)
+            if line is not None:
+                lines.setdefault(line, 'stl')
         tally = collections.Counter()
         declined = collections.Counter()
         failures = []
@@ -2025,7 +2101,9 @@ def main():
             for (line, origin), answer in zip(lines.items(), answers, strict=True):
                 case, got = json.loads(line), json.loads(answer)
                 expect = case['expect']
-                subject = case.get('project', case.get('job', case.get('tool_changes', case.get('fixtures'))))
+                subject = case.get(
+                    'project', case.get('job', case.get('tool_changes', case.get('fixtures', case.get('stl'))))
+                )
                 if 'relief' in case and 'ok' in got:
                     got = {'ok': where_computed_left_out(got['ok'])}
                 if not shared and 'project' in case and uses_polygon_operation(subject):
@@ -2067,7 +2145,7 @@ def main():
                     compare(lines)
 
     origins = ('suite', 'generated', 'entry/tabs', 'helix', 'v-carve', 'rotary', 'rotary-wrap', 'relief', 'stock')
-    for origin in (*origins, 'tool-changes', 'fixtures'):
+    for origin in (*origins, 'tool-changes', 'fixtures', 'stl'):
         total = sum(n for (o, _), n in tally.items() if o == origin)
         if not total:
             continue
@@ -2094,6 +2172,8 @@ def main():
         raise SystemExit('No tool-change plan was reproduced: the comparison did not exercise the planner.')
     if args.fixtures and not tally['fixtures', 'program']:
         raise SystemExit('No fixture check was reproduced: the comparison did not exercise it.')
+    if args.stl and not tally['stl', 'program']:
+        raise SystemExit('No STL height field was reproduced: the comparison did not exercise the reader.')
     if not shared:
         print(
             'PASS for the cases compared; offsets, pockets, fills and V-carves were NOT COMPARED (no compiled extension).'

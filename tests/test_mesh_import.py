@@ -1,8 +1,13 @@
 import base64
+import json
 import math
+import os
+import random
 import struct
 import unittest
+from unittest.mock import patch
 
+from studio import cam
 from studio.mesh_import import stl_heightmap
 
 
@@ -101,6 +106,58 @@ class MeshImportTests(unittest.TestCase):
             convert(binary_mesh(RAMP * 100), resolution=128)
         with self.assertRaises(ValueError):
             convert(binary_mesh(RAMP * 25001))
+
+
+def exact(value):
+    """A form that tells 0 from 0.0 and -0.0 from 0.0."""
+    return json.loads(json.dumps(value), parse_float=lambda text: ('f', text), parse_int=lambda text: ('i', text))
+
+
+def answer(data, backend):
+    try:
+        return 'ok', exact(stl_heightmap(data, backend=backend))
+    except ValueError as error:
+        return 'error', str(error)
+
+
+@unittest.skipIf(cam._core_cam is None, 'Build the extension to compare the native core with the reference')
+class NativeMeshImportTests(unittest.TestCase):
+    """The native core's height fields against this module's Python, the reference: to the bit."""
+
+    def setUp(self):
+        environment = patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        os.environ.pop('KERFKITE_GCODE_BACKEND', None)
+
+    def test_height_fields_and_refusals_are_the_reference(self):
+        rng = random.Random(31)
+        bumps = [[tuple(rng.uniform(-20, 20) for _ in range(3)) for _ in range(3)] for _ in range(40)]
+        meshes = [ascii_mesh(RAMP), binary_mesh(RAMP), ascii_mesh(bumps), binary_mesh(bumps)]
+        meshes.append(
+            b'  SOLID x\r\nFACET\tnormal 0 0 1 outer loop vertex 0 0 0 vertex 1.e1 0 1E1 vertex +.5 10 -0\n'
+            b'endloop endfacet\x0cendsolid\n\n'
+        )
+        meshes += [
+            b'solid\nfacet normal 0 0 1e400\nendsolid',
+            b'solid x\nendsolid',
+            b'solid\nfacet\nendsolid',
+            b'\xff' * 90,
+        ]
+        for raw in meshes:
+            for resolution in (2, 9, 64, 128):
+                data = {'content_base64': base64.b64encode(raw).decode(), 'resolution': resolution}
+                with self.subTest(raw=raw[:40], resolution=resolution):
+                    self.assertEqual(answer(data, 'native'), answer(data, 'python'))
+        for data in ({'content_base64': 'AAAA', 'resolution': 64.0}, {'content_base64': 'AA=A'}, {}, None):
+            with self.subTest(data=data):
+                self.assertEqual(answer(data, 'native'), answer(data, 'python'))
+
+    def test_the_work_limit_is_the_reference_s(self):
+        wide = [[(0, 0, 0), (100, 0, 1), (100, 100, 2)]] * 130
+        data = {'content_base64': base64.b64encode(binary_mesh(wide)).decode(), 'resolution': 128}
+        self.assertEqual(answer(data, 'native'), answer(data, 'python'))
+        self.assertEqual(answer(data, 'native')[0], 'error')
 
 
 if __name__ == '__main__':
