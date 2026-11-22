@@ -37,6 +37,18 @@ def map_limit():
     return NATIVE_MAX_MAP if _native('auto') else MAX_MAP
 
 
+def relief_json(data):
+    """prepare_relief(data) as UTF-8 JSON text written by the native core, for a web response to send as it is, or
+    None when the reference must answer it: no extension, or a request that cannot cross to the core unchanged.
+    Python's json module then does not encode every point of the result. A rejection is the reference's ValueError."""
+    if not _native('auto') or not hasattr(_relief_native, 'core_cam_text'):
+        return None
+    try:
+        return _relief_native.core_cam_text('relief', data)
+    except NotImplementedError:
+        return None
+
+
 def gpu_status():
     """The GPU the compiled contact uses for large jobs, or why there is none. Looks for it if not yet done."""
     if _relief_native is None or not hasattr(_relief_native, 'gpu_status'):

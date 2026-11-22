@@ -8,9 +8,11 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <iterator>
 #include <new>
 #include <string>
 #include <vector>
@@ -293,12 +295,12 @@ PyObject *segment_list(const std::vector<kerfkite::Segment> &segments, Rows form
             Py_INCREF(Py_None);
             values[5] = Py_None;
         }
-        bool failed = false;
-        for (Py_ssize_t k = 0; k < 7; ++k) {
-            if (!values[k]) failed = true;
-            PyList_SET_ITEM(row.object, k, values[k]);  // the list releases what it holds, nulls included
+        // A value that could not be made (MemoryError is set): release the others and fill no row with a null.
+        if (std::find(std::begin(values), std::end(values), nullptr) != std::end(values)) {
+            for (PyObject *value : values) Py_XDECREF(value);
+            return nullptr;
         }
-        if (failed) return nullptr;
+        for (Py_ssize_t k = 0; k < 7; ++k) PyList_SET_ITEM(row.object, k, values[k]);
         last = row.object;
         PyList_SET_ITEM(list.object, static_cast<Py_ssize_t>(i), row.release());
     }

@@ -3,7 +3,7 @@
 from flask import Response, request, jsonify
 from shapely.ops import unary_union
 from .operations import region, outlines, value
-from .relief import prepare_relief
+from .relief import prepare_relief, relief_json
 
 
 def register_design_routes(app):
@@ -230,6 +230,11 @@ def register_design_routes(app):
     @app.post('/api/relief')
     def relief():
         data = body('Expected relief settings')
+        if not data.get('content_base64'):
+            # A map of heights or an image's bytes: the core's own JSON text is the response.
+            text = relief_json(data)
+            if text is not None:
+                return app.response_class(text, mimetype='application/json')
         warnings = []
         if data.get('content_base64'):
             from .mesh_import import stl_heightmap

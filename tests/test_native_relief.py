@@ -89,7 +89,9 @@ class NativeReliefTests(unittest.TestCase):
             for shape in ('flat', 'ball'):
                 for allowance in (0, 0.17):
                     with self.subTest(shape=shape, allowance=allowance):
-                        status, _ = self.both(sample(heightmap=matrix, tool_shape=shape, allowance=allowance, stepover=0.73))
+                        status, _ = self.both(
+                            sample(heightmap=matrix, tool_shape=shape, allowance=allowance, stepover=0.73)
+                        )
                         self.assertEqual(status, 'ok')
         result = relief.prepare_relief(sample())
         self.assertEqual(result['surface']['backend'], 'cpp')

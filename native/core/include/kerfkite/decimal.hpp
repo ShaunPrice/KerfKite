@@ -21,6 +21,9 @@
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
+#if defined(_MSC_VER) && defined(_M_X64)
+#include <intrin.h>
+#endif
 
 namespace kerfkite {
 namespace text {
@@ -227,13 +230,24 @@ inline uint64_t ten_to(int n) {
     return TABLE[n];
 }
 
-// a x b in full: the high and low 64 bits of the 128-bit product.
+// a x b in full: the high and low 64 bits of the 128-bit product. The compiler's 128-bit type or MSVC's
+// intrinsic is used where there is one; the portable branch gives the same integers.
 inline void multiply_wide(uint64_t a, uint64_t b, uint64_t &high, uint64_t &low) {
+#if defined(__SIZEOF_INT128__)
+    const unsigned __int128 product = static_cast<unsigned __int128>(a) * b;
+    high = static_cast<uint64_t>(product >> 64);
+    low = static_cast<uint64_t>(product);
+#elif defined(_MSC_VER) && defined(_M_X64)
+    unsigned long long top;
+    low = _umul128(a, b, &top);
+    high = top;
+#else
     const uint64_t a0 = a & 0xffffffffULL, a1 = a >> 32, b0 = b & 0xffffffffULL, b1 = b >> 32;
     const uint64_t p00 = a0 * b0, p01 = a0 * b1, p10 = a1 * b0, p11 = a1 * b1;
     const uint64_t middle = (p00 >> 32) + (p01 & 0xffffffffULL) + (p10 & 0xffffffffULL);
     high = p11 + (p01 >> 32) + (p10 >> 32) + (middle >> 32);
     low = (middle << 32) | (p00 & 0xffffffffULL);
+#endif
 }
 
 // The quotient of number x 2^64 by divisor, for number below divisor and a divisor with its top bit set;
@@ -566,14 +580,37 @@ inline int shortest_digits(double value, char *digits, int &point) {
             least = middle + 1;
         }
     }
-    char reversed[20];
-    int n = 0;
-    for (; q; q /= 10) reversed[n++] = static_cast<char>('0' + q % 10);
+    if (!q) {
+        point = -most;
+        return 0;
+    }
+    // q's digits, most significant first, written from the last two at a time. q has at most 17 digits, the
+    // room the caller gives; the zeros that end a whole number are written but not counted.
+    static const char pairs[] =
+        "00010203040506070809101112131415161718192021222324252627282930313233343536373839"
+        "40414243444546474849505152535455565758596061626364656667686970717273747576777879"
+        "8081828384858687888990919293949596979899";
+    int n = 1;
+    while (n < 17 && q >= ten_to(n)) ++n;
     point = n - most;
-    int skip = 0;
-    while (skip < n - 1 && reversed[skip] == '0') ++skip;  // only a whole number ends in zeros
-    for (int i = n - 1; i >= skip; --i) *digits++ = reversed[i];
-    return n - skip;
+    char *end = digits + n;
+    while (q >= 100) {
+        const uint64_t rest = q / 100;
+        const size_t pair = 2 * static_cast<size_t>(q - rest * 100);
+        end -= 2;
+        end[0] = pairs[pair];
+        end[1] = pairs[pair + 1];
+        q = rest;
+    }
+    if (q >= 10) {
+        end[-2] = pairs[2 * q];
+        end[-1] = pairs[2 * q + 1];
+    } else {
+        end[-1] = static_cast<char>('0' + q);
+    }
+    int kept = n;
+    while (kept > 1 && digits[kept - 1] == '0') --kept;  // only a whole number ends in zeros
+    return kept;
 }
 
 }  // namespace text

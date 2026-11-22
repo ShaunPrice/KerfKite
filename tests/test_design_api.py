@@ -1,8 +1,9 @@
+import json
 import math
 import unittest
 
 from studio.operations import region
-from studio.relief import prepare_relief
+from studio.relief import prepare_relief, relief_json
 from studio.server import create_app
 from test_relief import sample as relief_sample
 from test_solid_cad import plate
@@ -77,8 +78,14 @@ class DesignApiTests(unittest.TestCase):
         self.rejected('/api/artwork-relief', {**base, 'paths': 5})
 
     def test_relief_route_matches_the_library_and_reports_mesh_errors(self):
-        flat = self.ok('/api/relief', relief_sample()).json
-        self.assertEqual(flat['path_depths'], prepare_relief(relief_sample())['path_depths'])
+        response = self.ok('/api/relief', relief_sample())
+        # The whole result, as JSON gives it back: with the extension the body is the core's own text.
+        self.assertEqual(response.json, json.loads(json.dumps(prepare_relief(relief_sample()))))
+        text = relief_json(relief_sample())
+        if text is not None:
+            self.assertEqual(response.data, text)
+        self.assertIsNone(relief_json({'width': math.inf}))  # cannot cross unchanged: the reference answers
+        self.assertIn('width', self.rejected('/api/relief', relief_sample(width='wide')))
         self.rejected('/api/relief', relief_sample(depth=True))
         self.rejected('/api/relief', relief_sample(content_base64='not an stl'))
 
