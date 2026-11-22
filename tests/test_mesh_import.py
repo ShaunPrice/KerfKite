@@ -153,6 +153,13 @@ class NativeMeshImportTests(unittest.TestCase):
             with self.subTest(data=data):
                 self.assertEqual(answer(data, 'native'), answer(data, 'python'))
 
+    def test_padding_after_whole_groups_goes_to_the_reference(self):
+        # Python 3.12 reads "AAAA=" as three bytes and 3.13 refuses it: the core declines, so the Python in use answers.
+        data = {'content_base64': 'AAAA=', 'resolution': 8}
+        with self.assertRaises(NotImplementedError):
+            stl_heightmap(data, backend='native')
+        self.assertEqual(answer(data, 'auto'), answer(data, 'python'))
+
     def test_the_work_limit_matches_the_reference(self):
         wide = [[(0, 0, 0), (100, 0, 1), (100, 100, 2)]] * 130
         data = {'content_base64': base64.b64encode(binary_mesh(wide)).decode(), 'resolution': 128}
