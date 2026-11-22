@@ -165,7 +165,7 @@ class NativeFixtureTests(unittest.TestCase):
             len(check_fixtures(many, backend='native')['events']), len(check_fixtures(many, backend='python')['events'])
         )
 
-    def test_text_that_is_not_ascii_is_the_reference_s(self):
+    def test_text_that_is_not_ascii_goes_to_the_reference(self):
         payload = setup(['G21', 'G90', 'G0 X\u0661'])
         with self.assertRaises(NotImplementedError):
             check_fixtures(payload, backend='native')
