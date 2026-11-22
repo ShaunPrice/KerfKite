@@ -108,6 +108,14 @@ turns an STL mesh (`content_base64`, binary or ASCII) into the height field of a
 of 2 to 128 points a side, as Studio's STL relief does (`core/src/stl_heightmap.cpp`, the port of
 `studio/mesh_import.py`), with the mesh's bounds.
 
+    kerfkite-cam solid-cad request.json
+
+rebuilds a parametric solid history (`{"model": ...}`) as Studio's 3D CAD does (`core/src/solid_cad.cpp`,
+the port of `studio/solid_cad.py`): parameters and their expressions, boxes, cylinders and spheres,
+patterns and runs of Boolean operations on the solid kernel, with the mesh, measures and silhouette.
+`solid-cad-section` (`{"model", "z"}`) gives the material at a height. Sketched, lofted, scripted and STEP
+features are still Python's.
+
     kerfkite-cam fixture-collision request.json
 
 sweeps a posted program's linear moves against fixture boxes, as Studio's fixture check does

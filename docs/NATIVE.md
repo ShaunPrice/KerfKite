@@ -48,6 +48,23 @@ core = simulate(data, backend='native')        # the core only: an error without
 
 `studio.fixture_collision.check_fixtures` and `/api/fixture-collision` are answered by the native core too (`native/core/src/fixture_collision.cpp`). It reads the posted program line by line as the reference's generator does, so a refusal names the same first line, and the check of two million sweeps is made at the same move; each move is swept against each box with the reference's arithmetic (CPython's `hypot`, the C library's `sqrt`, Python's `min` and `max`), and the positions of the contacts are Python's `round(x, 5)`. A line that is not ASCII is declined: the reference reads it with Unicode's rules for case, spaces and digits. `validation/native_core_parity.py` compares 1,500 generated checks by default (generated programs with lines added or changed, boxes and setups from valid to invalid) and the test suite's own, and `tests/test_fixture_collision.py` compares checks, refusals and the route. The core's `round` now takes up to nine places; compared with Python on 12.9 million roundings from zero to nine places, it gave the same bits.
 
+## Parametric solids
+
+The front end of Studio's 3D CAD is moving into the native core too, starting with the parametric solid history (`native/core/src/solid_cad.cpp`, the port of `studio/solid_cad.py`). `/api/solid-cad` and `/api/solid-cad/section` are answered by the core, and `kerfkite-cam solid-cad` and `solid-cad-section` rebuild a model without Python. The port reproduces the following:
+
+* the model's checks and messages, in the reference's order;
+* named parameters, resolved in the order of the model's dictionary;
+* dimension expressions: numbers written as Python writes them, names, `+ - * /`, signs, parentheses, and `cross_x` / `cross_y`, with Python's counting of the expression's nodes for the limit of 48;
+* boxes, cylinders and spheres, turned and placed;
+* linear and polar patterns;
+* runs of additions, cuts and intersections applied together, done again feature by feature when a run fails so that the error names its feature;
+* the mesh, measures and silhouette of the answer;
+* horizontal sections, with the straightening of turned faces.
+
+The Python asks the solid kernel for one operation at a time through the `solid` command, and the core asks the same command for the same operations with the same requests. The meshes, volumes, bounds and outlines are therefore the reference's to the bit, and the work stays the kernel's: a plate of 10,716 triangles took 71 ms in the core and 74 ms in Python, with the response's JSON written by the core.
+
+Some models and expressions are declined, and Python answers them as before. On the model side, these are sketched profiles, extrusions, revolutions, lofts, CAD scripts and STEP parts. On the expression side, they are any expression that Python's own parser might read otherwise than the small grammar here, such as powers, floor division, attributes, tuples, keywords other than `True`, `False` and `None`, comments and non-ASCII text. Python's dictionaries keep their order but the core's JSON objects keep theirs by name, so Studio sends the parameters' order with the model. A circular reference is then reported from the same parameter. `validation/native_core_parity.py` now replays the solid calls of the test suite and 300 generated histories and sections by default (`--solid-cad`). In the measurement for this change, 174 of the generated cases were reproduced as models, 123 as rejections and 3 declined. `tests/test_solid_cad_core.py` compares models, errors, parameter order, expressions and the route.
+
 ## Threads, and a GPU for large reliefs
 
 The relief contact and the stock preview share their work out over the processor's threads. The split is fixed: rasters (relief) or rows of the height map (stock preview) go to the threads in equal runs, each value is written by one thread with the arithmetic of a single thread, and errors are found by a first pass in the order one thread would meet them. The number of threads therefore changes no bit of any result and no error message. A job starts a thread only for enough work (two million contact checks a thread, for the relief), and both release the GIL while they compute. `KERFKITE_THREADS=n` caps the threads; `1` runs everything on the calling thread.

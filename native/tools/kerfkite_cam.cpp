@@ -11,6 +11,8 @@
 //   kerfkite-cam tool-changes PROJECT.json   a router project split into stages for manual tool changes (studio.tool_changes)
 //   kerfkite-cam fixture-collision REQUEST.json   a posted program's moves swept against fixture boxes (studio.fixture_collision)
 //   kerfkite-cam stl-heightmap REQUEST.json  an STL mesh as a relief height field (studio.mesh_import)
+//   kerfkite-cam solid-cad REQUEST.json      {"model"}: a parametric solid history rebuilt (studio.solid_cad)
+//   kerfkite-cam solid-cad-section REQUEST.json   {"model", "z"}: its material at a height
 //   kerfkite-cam calibrate                   measure the relief contact on the threads and any GPU, and how to share
 //   kerfkite-cam gerber FILE [--arc-tolerance MM]            a Gerber layer as drawn objects in millimetres
 //   kerfkite-cam gerber-outline FILE [--tolerance MM] [--offset [X,Y]]   a profile layer as closed paths
@@ -53,6 +55,7 @@
 
 #include "kerfkite/cam.hpp"
 #include "kerfkite/relief.hpp"
+#include "kerfkite/solid_cad.hpp"
 #include "kerfkite/rotary.hpp"
 #include "kerfkite/stock.hpp"
 #include "kerfkite/tool_changes.hpp"
@@ -213,6 +216,10 @@ int batch(const std::string &path) {
                 job = kerfkite::check_fixtures(request.at("fixtures"));
             else if (request.contains("stl"))
                 job = kerfkite::stl_heightmap(request.at("stl"));
+            else if (request.contains("solid_cad"))
+                job = kerfkite::solid_cad_call("solid-cad", request.at("solid_cad"));
+            else if (request.contains("solid_cad_section"))
+                job = kerfkite::solid_cad_call("solid-cad-section", request.at("solid_cad_section"));
             else if (request.contains("relief"))
                 job = kerfkite::prepare_relief(request.at("relief"));
             else if (request.contains("stock"))
@@ -339,7 +346,8 @@ int main(int argc, char **argv) {
     if (command == "batch" && argc == 3) return batch(argv[2]);
     if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "polygon" || command == "operation" ||
          command == "solid" || command == "rotary" || command == "rotary-wrap" || command == "relief" || command == "stock" ||
-         command == "tool-changes" || command == "fixture-collision" || command == "stl-heightmap") &&
+         command == "tool-changes" || command == "fixture-collision" || command == "stl-heightmap" ||
+         command == "solid-cad" || command == "solid-cad-section") &&
         argc == 3)
         return request(command, argv[2]);
     if ((command == "polygon-batch" || command == "solid-batch") && argc == 3)

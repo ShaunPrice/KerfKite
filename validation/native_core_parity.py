@@ -1868,6 +1868,117 @@ def fixture_cases(count, seed, generate):
         yield payload
 
 
+def solid_cad_cases(count, seed):
+    """Parametric solid histories of boxes, cylinders and spheres: named parameters with expressions (some
+    circular, unknown, dividing by zero or too long), rotations and origins, linear and polar patterns, runs of
+    additions, cuts and intersections, disabled features and the model errors; and horizontal sections."""
+    rng = random.Random(seed)
+    names = ['w', 'h', 'd', 'r', 'gap', 'n', 'angle', '_t2']
+
+    def number():
+        return rng.choice([rng.randint(1, 40), round(rng.uniform(0.5, 40), rng.choice([0, 1, 3])), 2.5, 10])
+
+    def expression(known):
+        if not known or rng.random() < 0.3:
+            return number()
+        pick = lambda: rng.choice(known) if rng.random() < 0.7 else str(number())  # noqa: E731
+        forms = [
+            lambda: f'{pick()}',
+            lambda: f'{pick()} + {pick()}',
+            lambda: f'{pick()} * 2',
+            lambda: f'({pick()} + {pick()}) / 2',
+            lambda: f'-{pick()} + 100',
+            lambda: f' {pick()}*0.5 + 0.25 ',
+            lambda: f'{pick()} / 2 + 1',
+            lambda: f'1_0.5 + {pick()}',
+            lambda: f'+{pick()} - -{pick()}',
+        ]
+        rare = [
+            lambda: f'{pick()}/{pick()}',
+            lambda: f'{pick()} - {pick()} - {pick()}',
+            lambda: f'cross_x(0, 0, {pick()}, {pick()}, 0, {pick()}, {pick()}, 0)',
+            lambda: 'cross_y(0, 0, 10, 10, 0, 10, 10, 0) + 1',
+        ]
+        if rng.random() < 0.15:
+            forms = rare
+        text = rng.choice(forms)()
+        trouble = rng.random()
+        if trouble < 0.008:
+            text = text + ' / 0'
+        elif trouble < 0.012:
+            text = 'missing + ' + text
+        elif trouble < 0.016:
+            text = ' + '.join([text] * 20)
+        elif trouble < 0.02:
+            text = text + ' ** 2'
+        elif trouble < 0.024:
+            text = '1e9 * ' + text
+        return text
+
+    def vector(known, low=1):
+        return [expression(known) if rng.random() < 0.5 else rng.choice([low, 5, 12.5]) for _ in range(3)]
+
+    def feature(index, known, first):
+        kind = rng.choice(['box', 'box', 'cylinder', 'cylinder', 'sphere'])
+        item = {'id': rng.choice([f'f{index}', f'Feature {index}', f'f{index}']), 'kind': kind}
+        if kind == 'box':
+            item['size'] = vector(known)
+        elif kind == 'cylinder':
+            item['radius'] = expression(known)
+            item['height'] = expression(known)
+            if rng.random() < 0.3:
+                item['topRadius'] = rng.choice([0, 1.5, 'r / 2' if 'r' in known else 2])
+        else:
+            item['radius'] = expression(known)
+        if not first:
+            item['op'] = rng.choice(['add', 'add', 'cut', 'cut', 'intersect'])
+        if rng.random() < 0.4:
+            item['origin'] = [rng.choice([0, -2, 5, 7.5]) for _ in range(3)]
+        if rng.random() < 0.3:
+            item['rotation'] = [rng.choice([0, 15, 30, 45, 90]) for _ in range(3)]
+        if rng.random() < 0.2:
+            if rng.random() < 0.5:
+                item['pattern'] = {
+                    'kind': 'linear',
+                    'count': rng.choice([1, 2, 3]),
+                    'step': [rng.choice([0, 6, 10, 10]), rng.choice([0, 3]), 0],
+                }
+            else:
+                item['pattern'] = {
+                    'kind': 'polar',
+                    'count': rng.choice([2, 3, 4]),
+                    'angle': rng.choice([45, 90, 120, 72, 360]),
+                    'center': [rng.choice([0, 10]), 0, 0],
+                }
+        if not first and rng.random() < 0.1:
+            item['enabled'] = False
+        return item
+
+    for case in range(count):
+        parameters, known = {}, []
+        for name in rng.sample(names, rng.randint(0, 5)):
+            parameters[name] = expression(known + ([name] if rng.random() < 0.03 else []))
+            known.append(name)
+        features = [feature(i, known, i == 0) for i in range(rng.randint(1, 5))]
+        model = {'version': 1, 'parameters': parameters, 'features': features}
+        damage = rng.random()
+        if damage < 0.02:
+            model['version'] = 2
+        elif damage < 0.04:
+            features[0]['op'] = 'cut'
+        elif damage < 0.06 and len(features) > 1:
+            features[1]['id'] = features[0]['id']
+        elif damage < 0.07:
+            features[0]['kind'] = 'cone'
+        elif damage < 0.08:
+            model['features'] = []
+        request = {'model': model, 'order': list(parameters)}
+        if case % 4 == 3:
+            yield 'solid_cad_section', {**request, 'z': rng.choice([0, 1, 2.5, 6, 'h / 2' if 'h' in known else 3, -1])}
+        else:
+            yield 'solid_cad', request
+
+
 def stl_cases(count, seed):
     """STL meshes for relief height fields, binary and ASCII, of 1 to 60 triangles (some degenerate or flat), with
     the spellings, spacing and line breaks ASCII files have, at every resolution, damaged in the ways the reader
@@ -1968,6 +2079,7 @@ def main():
     parser.add_argument('--tool-changes', type=int, default=1500, help='generated plans for manual tool changes')
     parser.add_argument('--fixtures', type=int, default=1500, help='generated fixture clearance checks')
     parser.add_argument('--stl', type=int, default=1000, help='generated STL meshes for relief height fields')
+    parser.add_argument('--solid-cad', type=int, default=300, help='generated parametric solid histories and sections')
     parser.add_argument('--skip-suite', action='store_true', help='do not replay the calls made by the test suite')
     parser.add_argument(
         '--without-polygon-operations',
@@ -2092,6 +2204,11 @@ def main():
             line = preview_reference('stl', data)
             if line is not None:
                 lines.setdefault(line, 'stl')
+        if shared:
+            for kind, data in solid_cad_cases(args.solid_cad, 103):
+                line = preview_reference(kind, data)
+                if line is not None:
+                    lines.setdefault(line, 'solid-cad')
         tally = collections.Counter()
         declined = collections.Counter()
         failures = []
@@ -2109,6 +2226,8 @@ def main():
                 subject = case.get(
                     'project', case.get('job', case.get('tool_changes', case.get('fixtures', case.get('stl'))))
                 )
+                if subject is None:
+                    subject = case.get('solid_cad', case.get('solid_cad_section'))
                 if 'relief' in case and 'ok' in got:
                     got = {'ok': where_computed_left_out(got['ok'])}
                 if not shared and 'project' in case and uses_polygon_operation(subject):
@@ -2150,7 +2269,7 @@ def main():
                     compare(lines)
 
     origins = ('suite', 'generated', 'entry/tabs', 'helix', 'v-carve', 'rotary', 'rotary-wrap', 'relief', 'stock')
-    for origin in (*origins, 'tool-changes', 'fixtures', 'stl'):
+    for origin in (*origins, 'tool-changes', 'fixtures', 'stl', 'solid-cad'):
         total = sum(n for (o, _), n in tally.items() if o == origin)
         if not total:
             continue
@@ -2179,6 +2298,8 @@ def main():
         raise SystemExit('No fixture check was reproduced: the comparison did not exercise it.')
     if args.stl and not tally['stl', 'program']:
         raise SystemExit('No STL height field was reproduced: the comparison did not exercise the reader.')
+    if shared and args.solid_cad and not tally['solid-cad', 'program']:
+        raise SystemExit('No solid was rebuilt: the comparison did not exercise the parametric history.')
     if not shared:
         print(
             'PASS for the cases compared; offsets, pockets, fills and V-carves were NOT COMPARED (no compiled extension).'

@@ -27,9 +27,14 @@ def register_design_routes(app):
 
     @app.post('/api/solid-cad')
     def rebuild_solid():
-        from .solid_cad import rebuild
+        from .solid_cad import model_json, rebuild
 
-        return jsonify(rebuild(submitted_model()))
+        model = submitted_model()
+        # The core's own JSON text is the response; the Python answers what the core declines.
+        text = model_json(model)
+        if text is not None:
+            return app.response_class(text, mimetype='application/json')
+        return jsonify(rebuild(model, backend='python'))
 
     @app.post('/api/cad-script')
     def preview_script():

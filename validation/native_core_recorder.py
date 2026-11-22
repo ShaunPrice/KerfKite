@@ -116,7 +116,15 @@ def preview_reference(kind, data):
         return None
     given = '"%s": %s' % (kind, json.dumps(data, allow_nan=False))
     try:
-        if kind == 'relief':
+        if kind == 'solid_cad':
+            from studio.solid_cad import rebuild
+
+            result = rebuild(data['model'], backend='python')
+        elif kind == 'solid_cad_section':
+            from studio.solid_cad import horizontal_section
+
+            result = horizontal_section(data['model'], data.get('z'), backend='python')
+        elif kind == 'relief':
             result = where_computed_left_out(prepare_relief(data, backend='python', _native_limits=True))
         elif kind == 'tool_changes':
             result = plan_tool_changes(data, backend='python')
@@ -153,6 +161,36 @@ def _record_preview(module, name, kind):
         return original(data, *args, **kwargs)
 
     setattr(module, name, recorded)
+
+
+def _record_solid_cad():
+    """Studio's solid routes: a rebuild asked of the core (model_json), and a horizontal section."""
+    import studio.solid_cad as solid_cad
+
+    original_json, original_section = solid_cad.model_json, solid_cad.horizontal_section
+
+    def record(kind, request):
+        if _DEPTH[0] == 0 and _studio_as_left_alone():
+            _DEPTH[0] += 1
+            try:
+                line = preview_reference(kind, request)
+            finally:
+                _DEPTH[0] -= 1
+            if line is not None:
+                CASES.setdefault(line, None)
+
+    @functools.wraps(original_json)
+    def model_json(model):
+        record('solid_cad', solid_cad._request(model))
+        return original_json(model)
+
+    @functools.wraps(original_section)
+    def horizontal_section(model, z, **kwargs):
+        if not kwargs:
+            record('solid_cad_section', solid_cad._request(model, z=z))
+        return original_section(model, z, **kwargs)
+
+    solid_cad.model_json, solid_cad.horizontal_section = model_json, horizontal_section
 
 
 def _studio_as_left_alone():
@@ -242,6 +280,7 @@ def pytest_configure(config):
     import studio.mesh_import as mesh_import
 
     _record_preview(mesh_import, 'stl_heightmap', 'stl')
+    _record_solid_cad()
 
 
 def pytest_sessionfinish(session):

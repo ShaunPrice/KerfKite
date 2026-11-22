@@ -352,8 +352,9 @@ class KernelInterfaceTests(unittest.TestCase):
             with mock.patch.dict(os.environ, KERFKITE_SOLID_BACKEND=wanted):
                 with mock.patch.object(solid_kernel, '_solid_call', side_effect=refusal):
                     with mock.patch.object(solid_kernel, '_kernel_installed', True):
+                        # The Python history asks this interface; the core's port meets the kernel directly.
                         with self.assertRaisesRegex(ValueError, 'base: The solid kernel cannot represent this result'):
-                            rebuild(plate())
+                            rebuild(plate(), backend='python')
                         with self.assertRaisesRegex(
                             ValueError, r'Line 1, column 1: cube: .*too fine for the 1 nm grid'
                         ):
