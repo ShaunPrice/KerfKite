@@ -229,7 +229,8 @@ bool stand_in_contacts(const Prepared &prepared, std::size_t items, double *out,
     for (std::size_t item = 0; item < items; ++item)
         out[item] = segment_contact(prepared, static_cast<int>(item / nx), static_cast<int>(item % nx));
     const long long wrong = stand_in_wrong;
-    if (wrong >= 0 && static_cast<std::size_t>(wrong) < items) out[wrong] = std::nextafter(out[wrong], 1.0);
+    // A contact is never above zero, so 1 shows in the depths whatever its neighbours are.
+    if (wrong >= 0 && static_cast<std::size_t>(wrong) < items) out[wrong] = 1.0;
     seconds = since(began);
     const double slowdown = stand_in_slowdown;
     if (slowdown > 1) {
@@ -324,6 +325,9 @@ struct Outcome {
     std::string path;
     unsigned threads = 0;
     double thread_checks = 0, thread_seconds = 0;
+    // The device's rasters redone on the threads after it failed or differed: a measurement of its own.
+    unsigned redo_threads = 0;
+    double redo_checks = 0, redo_seconds = 0;
     bool device_ok = false;
     double device_checks = 0, device_seconds = 0;
 };
@@ -409,10 +413,13 @@ Outcome share_out(const Prepared &prepared, const std::vector<double> &before, C
         outcome.device_checks = before[split];
     } else if (split > 0) {
         const unsigned again = parallel::threads_for(before[split], kChecksPerThread, split);
+        const auto began = std::chrono::steady_clock::now();
         parallel::for_ranges(split, again, [&](std::size_t first, std::size_t last) {
             contact_rows(prepared, first, last, output.data());
         });
-        outcome.threads = std::max(outcome.threads, again);
+        outcome.redo_seconds = since(began);
+        outcome.redo_threads = again;
+        outcome.redo_checks = before[split];
         outcome.device_seconds = 0;
     }
     if (outcome.device_ok && split == rasters) {
@@ -422,7 +429,7 @@ Outcome share_out(const Prepared &prepared, const std::vector<double> &before, C
         outcome.path = "GPU+CPU, " + std::to_string(percent) + "% of the work on " + device.name() + ", the rest on " +
                        threads_text(outcome.threads);
     } else {
-        outcome.path = "CPU, " + threads_text(outcome.threads);
+        outcome.path = "CPU, " + threads_text(std::max(outcome.threads, outcome.redo_threads));
     }
     return outcome;
 }
@@ -430,9 +437,13 @@ Outcome share_out(const Prepared &prepared, const std::vector<double> &before, C
 // Folds what a job measured into the speeds.
 void learn(const Outcome &outcome) {
     std::lock_guard<std::mutex> guard(speed_lock);
-    if (outcome.thread_checks >= 10000000 && outcome.thread_seconds > 0)
-        speeds.cpu = 0.8 * speeds.cpu + 0.2 * (outcome.thread_seconds * outcome.threads / outcome.thread_checks);
-    if (outcome.thread_checks >= kGpuChecks) speeds.large_seconds += outcome.thread_seconds;
+    // The threads' part and any part they redid for the device, each timed on its own.
+    auto observe = [](double checks, double seconds, unsigned threads) {
+        if (checks >= 10000000 && seconds > 0) speeds.cpu = 0.8 * speeds.cpu + 0.2 * (seconds * threads / checks);
+        if (checks >= kGpuChecks) speeds.large_seconds += seconds;
+    };
+    observe(outcome.thread_checks, outcome.thread_seconds, outcome.threads);
+    observe(outcome.redo_checks, outcome.redo_seconds, outcome.redo_threads);
     if (!outcome.device_ok) return;
     speeds.device_checks += outcome.device_checks;
     speeds.device_seconds += outcome.device_seconds;
