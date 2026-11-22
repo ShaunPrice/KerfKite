@@ -661,7 +661,7 @@ def machine_script():
 VOLATILE = {'fragment', 'token', 'url', 'urls', 'addresses', 'arm_id', 'challenge', 'expires'}
 # Members the C++ server answers differently on purpose, with the reason; reported, not counted as differences.
 KNOWN = {
-    'can_encrypt': 'the phone pendant has no TLS in the C++ server yet: it offers unencrypted pairing only',
+    'can_encrypt': 'the C++ server encrypts pairing through its TLS relay (kerfkite-pendant-tls), when it is built',
 }
 
 

@@ -114,15 +114,37 @@ std::string routed_address() {
 }  // namespace
 
 PhoneMonitor::PhoneMonitor(Device &device, PhoneJobs &jobs, std::string static_dir, int port, bool plaintext, bool allow_physical,
-                           std::string host)
-    : device_(device), jobs_(jobs), static_dir_(std::move(static_dir)), host_(std::move(host)), port_(port), bound_port_(port),
-      plaintext_(plaintext), allow_physical_(allow_physical) {}
+                           std::string host, std::string relay, std::string certificate, std::string key)
+    : device_(device), jobs_(jobs), static_dir_(std::move(static_dir)), host_(std::move(host)), relay_program_(std::move(relay)),
+      certificate_(std::move(certificate)), key_(std::move(key)), port_(port), bound_port_(port), plaintext_(plaintext),
+      allow_physical_(allow_physical) {}
+
+bool PhoneMonitor::can_encrypt() const { return !relay_program_.empty() && file_exists(relay_program_); }
+
+bool PhoneMonitor::pinned() const { return certificate_.empty() && !plaintext_ && can_encrypt(); }
+
+std::string PhoneMonitor::fragment() const {
+    if (token_.empty()) return std::string();
+    return "token=" + token_ + (fingerprint_.empty() ? std::string() : "&fp=" + fingerprint_);
+}
 
 PhoneMonitor::~PhoneMonitor() {
     std::lock_guard<std::recursive_mutex> hold(lock_);
+    relay_.reset();
     if (listener_) listener_->stop();
     if (worker_.joinable()) worker_.join();
 }
+
+namespace {
+
+// socket.gethostname(): the name the certificate made for a pairing carries beside the addresses.
+std::string host_name() {
+    char name[256] = {0};
+    if (::gethostname(name, sizeof name - 1) != 0) return std::string();
+    return name;
+}
+
+}  // namespace
 
 std::vector<std::string> PhoneMonitor::addresses() {
     std::set<std::string> found;
@@ -159,13 +181,14 @@ Json PhoneMonitor::info() {
     if (listener_)
         for (const std::string &ip : addresses()) hosts.push_back(ip);
     out["hosts"] = hosts;
-    out["scheme"] = "http";
+    const std::string encryption = !certificate_.empty() ? "certificate" : !fingerprint_.empty() ? "pinned" : "none";
+    out["scheme"] = encryption == "none" ? "http" : "https";
     out["token"] = token_.empty() ? json() : json(token_);
-    out["encryption"] = "none";
-    out["fingerprint"] = json();
-    out["fragment"] = token_.empty() ? json() : json("token=" + token_);
+    out["encryption"] = encryption;
+    out["fingerprint"] = fingerprint_.empty() ? json() : json(fingerprint_);
+    out["fragment"] = token_.empty() ? json() : json(fragment());
     // What the next enable will do, so the workstation can offer the unencrypted option.
-    out["can_encrypt"] = false;
+    out["can_encrypt"] = !certificate_.empty() || can_encrypt();
     out["plaintext"] = plaintext_;
     return out;
 }
@@ -175,6 +198,8 @@ void PhoneMonitor::set_plaintext(const Json &plaintext) {
     std::lock_guard<std::recursive_mutex> hold(lock_);
     if (plaintext.get<bool>() != plaintext_) {
         if (listener_) throw ValueError("Disable phone pairing before changing its encryption.");
+        if (plaintext.get<bool>() && !certificate_.empty())
+            throw ValueError("This server was started with a monitor certificate; pairing stays on HTTPS.");
         plaintext_ = plaintext.get<bool>();
     }
 }
@@ -188,13 +213,48 @@ Json PhoneMonitor::enable() {
         std::lock_guard<std::mutex> hold_recent(recent_mutex_);
         recent_.clear();
     }
+    const bool encrypted = !certificate_.empty() || pinned();
     try {
-        listener_ = std::make_unique<http::Server>(host_, port_);
+        // Behind the relay the monitor app is reached only through the loopback interface.
+        listener_ = std::make_unique<http::Server>(encrypted ? std::string("127.0.0.1") : host_, encrypted ? 0 : port_);
     } catch (const std::exception &) {
         token_.clear();
         throw ValueError("Phone listener could not start. Check the monitor port and TLS certificate.");
     }
     bound_port_ = listener_->port();
+    fingerprint_.clear();
+    if (encrypted) {
+        std::vector<std::string> arguments = {"-listen", host_ + ":" + std::to_string(port_), "-upstream", "127.0.0.1:" + std::to_string(bound_port_)};
+        if (!certificate_.empty()) {
+            arguments.insert(arguments.end(), {"-cert", certificate_, "-key", key_});
+        } else {
+            std::string hosts = host_name();
+            for (const std::string &ip : addresses()) hosts += "," + ip;
+            arguments.insert(arguments.end(), {"-hosts", hosts});
+        }
+        std::string line, fingerprint;
+        int port = 0;
+        try {
+            relay_ = std::make_unique<ChildProcess>(relay_program_, arguments);
+            while (port == 0 && relay_->readline(line, 10)) {
+                if (line.compare(0, 12, "fingerprint ") == 0) fingerprint = line.substr(12);
+                else if (line.compare(0, 5, "port ") == 0) port = std::atoi(line.c_str() + 5);
+            }
+        } catch (const std::exception &) {
+            port = 0;
+        }
+        const bool pin_ok = !certificate_.empty() || (fingerprint.size() == 64 && fingerprint.find_first_not_of("0123456789abcdef") == std::string::npos);
+        if (port <= 0 || !pin_ok) {
+            relay_.reset();
+            listener_->stop();
+            listener_.reset();
+            token_.clear();
+            throw ValueError(certificate_.empty() ? "The phone listener could not create its certificate."
+                                                  : "Phone listener could not start. Check the monitor port and TLS certificate.");
+        }
+        fingerprint_ = certificate_.empty() ? fingerprint : std::string();
+        bound_port_ = port;
+    }
     http::Server *server = listener_.get();
     worker_ = std::thread([this, server] {
         server->serve([this](const http::Request &request) { return handle(request); },
@@ -211,10 +271,12 @@ Json PhoneMonitor::disable() {
             revoked_ = true;
             jobs_.invalidate_controls();
         }
+        relay_.reset();  // its input closes and it ends
         listener_->stop();
         if (worker_.joinable()) worker_.join();
         listener_.reset();
         token_.clear();
+        fingerprint_.clear();
     }
     return info();
 }

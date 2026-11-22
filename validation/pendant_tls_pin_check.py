@@ -4,6 +4,10 @@ Compiles the plain-Java pinning class Pocket uses (PinnedTls) with a JDK, then m
 phone listeners started here on the simulator. Requires `javac` and `java` on PATH and Studio's web extra.
 
     python validation/pendant_tls_pin_check.py
+    python validation/pendant_tls_pin_check.py --server build/native/kerfkite-studio [--relay PROGRAM]
+
+With --server the listeners are those of the C++ workstation server and its TLS relay (kerfkite-pendant-tls,
+beside the server unless --relay names it), started on the loopback interface only.
 """
 
 import shutil
@@ -22,13 +26,61 @@ SOURCES = ROOT / 'android/app/src'
 PACKAGE = 'au/cncstudio/pocket'
 
 
+class NativeListener:
+    """A kerfkite-studio process whose phone listener is enabled through its own route, as the editor does."""
+
+    def __init__(self, program, relay, plaintext):
+        import json
+        import urllib.request
+
+        self.json, self.request = json, urllib.request
+        command = [program, '--port', '0', '--monitor-host', '127.0.0.1', '--monitor-port', '0']
+        command += ['--pendant-tls', relay] + (['--monitor-plaintext'] if plaintext else [])
+        self.process = subprocess.Popen(command, stdout=subprocess.PIPE, text=True)  # noqa: S603
+        line = self.process.stdout.readline()
+        self.url = line.split(' at ', 1)[1].strip()
+        self.token = self.call('GET', 'api/session')['token']
+
+    def call(self, method, path, body=None):
+        data = None if body is None else self.json.dumps(body).encode()
+        headers = {'Content-Type': 'application/json', 'X-Studio-Token': getattr(self, 'token', '')}
+        with self.request.urlopen(
+            self.request.Request(self.url + path, data, headers, method=method), timeout=30
+        ) as reply:  # noqa: S310
+            return self.json.loads(reply.read())
+
+    def enable(self):
+        return self.call('POST', 'api/phone-monitor', {'action': 'enable'})
+
+    def disable(self):
+        try:
+            self.call('POST', 'api/phone-monitor', {'action': 'disable'})
+        finally:
+            self.process.terminate()
+            self.process.wait(10)
+
+
 def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
+    parser.add_argument('--server', help='a kerfkite-studio program to check in place of the Python listener')
+    parser.add_argument('--relay', help='its TLS relay, kerfkite-pendant-tls')
+    arguments = parser.parse_args()
     if not shutil.which('javac') or not shutil.which('java'):
         raise SystemExit('A JDK (javac and java) is required.')
-    controller = DeviceController()
-    controller.connect('simulator')
-    jobs = PhoneJobs(controller)
-    genuine, impostor, plain = (PhoneMonitor(controller, jobs, port=0, plaintext=flag) for flag in (False, False, True))
+    controller = None
+    if arguments.server:
+        server = Path(arguments.server).resolve()
+        relay = arguments.relay or str(server.with_name('kerfkite-pendant-tls' + server.suffix))
+        genuine, impostor, plain = (NativeListener(str(server), relay, flag) for flag in (False, False, True))
+    else:
+        controller = DeviceController()
+        controller.connect('simulator')
+        jobs = PhoneJobs(controller)
+        genuine, impostor, plain = (
+            PhoneMonitor(controller, jobs, port=0, plaintext=flag) for flag in (False, False, True)
+        )
     with tempfile.TemporaryDirectory() as classes:
         files = [SOURCES / 'main/java' / PACKAGE / 'PinnedTls.java']
         files += [SOURCES / 'test/java' / PACKAGE / name for name in ('PinnedTlsCheck.java', 'PinnedTlsProbe.java')]
@@ -69,7 +121,8 @@ def main():
         finally:
             for monitor in (genuine, impostor, plain):
                 monitor.disable()
-            controller.disconnect()
+            if controller:
+                controller.disconnect()
     print('PASS Pocket certificate pinning against the Studio phone listener')
 
 

@@ -2,10 +2,11 @@
 // a paired phone and takes its bounded job and pendant actions (studio/phone_monitor_service.py and
 // studio/monitor.py). Pairing hands the phone a bearer token in the link's fragment.
 //
-// This listener speaks HTTP. Studio's pinned-certificate HTTPS for Pocket 0.5 and later is not built into
-// this program (it is not written here: TLS comes from a vetted library), so enabling pairing reports
-// can_encrypt false and the workstation offers unencrypted pairing, as the Python server did without its TLS
-// extra.
+// The monitor app speaks HTTP. For HTTPS (Pocket 0.5 and later pins the certificate), the listener binds the
+// loopback interface and the pendant's TLS relay (packaging/pendant-tls, Go's standard library: TLS is not
+// written here) listens for the phone, with a certificate made for the pairing whose fingerprint goes in the
+// pairing link, or with an operator's certificate. Without the relay program, pairing is HTTP only and
+// reports can_encrypt false, as the Python server did without its TLS extra.
 #ifndef KERFKITE_SERVER_PHONE_MONITOR_HPP
 #define KERFKITE_SERVER_PHONE_MONITOR_HPP
 
@@ -15,6 +16,7 @@
 #include <string>
 #include <thread>
 
+#include "child_process.hpp"
 #include "http.hpp"
 #include "kerfkite/json.hpp"
 #include "machine.hpp"
@@ -25,9 +27,11 @@ namespace server {
 
 class PhoneMonitor {
 public:
-    // host is the address the listener binds: every interface for a phone on the LAN, the loopback one for tests.
+    // host is the address the phone reaches: every interface for a phone on the LAN, the loopback one for tests.
+    // relay is the path of kerfkite-pendant-tls, or empty; certificate and key are an operator's PEM files, or empty.
     PhoneMonitor(Device &device, PhoneJobs &jobs, std::string static_dir, int port, bool plaintext, bool allow_physical,
-                 std::string host = "0.0.0.0");
+                 std::string host = "0.0.0.0", std::string relay = std::string(), std::string certificate = std::string(),
+                 std::string key = std::string());
     ~PhoneMonitor();
 
     Json info();
@@ -42,9 +46,13 @@ public:
 
 private:
     void begin_action(const Json &data, bool required);
+    bool can_encrypt() const;
+    bool pinned() const;  // whether enabling makes a certificate pinned by the pairing link
+    std::string fragment() const;
     Device &device_;
     PhoneJobs &jobs_;
-    std::string static_dir_, host_;
+    std::string static_dir_, host_, relay_program_, certificate_, key_, fingerprint_;
+    std::unique_ptr<ChildProcess> relay_;
     int port_, bound_port_;
     bool plaintext_, allow_physical_;
     std::recursive_mutex lock_;

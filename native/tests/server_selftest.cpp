@@ -3,9 +3,10 @@
 // the phone pendant's armed start and its confirmation at the workstation, the design routes' own code, the
 // key order of a request's parameters, and the HTTP server on the loopback interface.
 //
-//     kerfkite_server_selftest STATIC_DIR
+//     kerfkite_server_selftest STATIC_DIR [PENDANT_TLS_RELAY]
 //
-// STATIC_DIR is studio/static. Nothing here opens a serial port or listens beyond 127.0.0.1.
+// STATIC_DIR is studio/static; PENDANT_TLS_RELAY, when given, is kerfkite-pendant-tls, for the pendant's HTTPS.
+// Nothing here opens a serial port or listens beyond 127.0.0.1.
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -98,6 +99,15 @@ Json parsed(const http::Response &response) {
 std::string error_of(const http::Response &response) {
     const Json value = parsed(response);
     return value.is_object() && value.contains("error") && value.at("error").is_string() ? value.at("error").get<std::string>() : std::string();
+}
+
+std::string error_of_value(PhoneMonitor &monitor, bool plaintext) {
+    try {
+        monitor.set_plaintext(Json(plaintext));
+    } catch (const std::exception &e) {
+        return e.what();
+    }
+    return std::string();
 }
 
 Json sample() {
@@ -503,6 +513,55 @@ void key_order_reading() {
     CHECK(!key_order("{not json").object);
 }
 
+// ---- the pendant's HTTPS through the TLS relay ---------------------------------------------------------------
+
+std::string relay_program;
+
+std::string round_trip(int port, const std::string &raw);
+
+void pendant_tls() {
+    {
+        // Without the relay, pairing is HTTP and says it cannot encrypt.
+        Studio studio(options());
+        const Json info = studio.monitor().info();
+        CHECK(info.at("can_encrypt") == Json(false));
+        const Json pairing = studio.monitor().enable();
+        CHECK(pairing.at("scheme") == Json("http"));
+        CHECK(pairing.at("encryption") == Json("none"));
+        CHECK(pairing.at("fingerprint").is_null());
+        studio.monitor().disable();
+    }
+    if (relay_program.empty()) {
+        std::printf("pendant TLS: no relay program given, HTTPS checks skipped\n");
+        return;
+    }
+    Options o = options();
+    o.pendant_tls = relay_program;
+    Studio studio(o);
+    CHECK(studio.monitor().info().at("can_encrypt") == Json(true));
+    const Json pairing = studio.monitor().enable();
+    CHECK(pairing.at("scheme") == Json("https"));
+    CHECK(pairing.at("encryption") == Json("pinned"));
+    const std::string fingerprint = pairing.at("fingerprint").get<std::string>();
+    CHECK(fingerprint.size() == 64 && fingerprint.find_first_not_of("0123456789abcdef") == std::string::npos);
+    CHECK_TEXT(pairing.at("fragment").get<std::string>(), "&fp=" + fingerprint);
+    const int port = static_cast<int>(pairing.at("port").get<long long>());
+    CHECK(port > 0);
+    // The relay speaks TLS only: plain HTTP on the phone's port gets no answer from the monitor app.
+    const std::string plain = round_trip(port, "GET /api/status HTTP/1.1\r\nHost: x\r\n\r\n");
+    CHECK(plain.find("HTTP/1.1 200") == std::string::npos && plain.find("401") == std::string::npos);
+    // Encryption cannot change while a pairing is live; a second pairing has its own certificate.
+    CHECK_TEXT(error_of_value(studio.monitor(), true), "Disable phone pairing");
+    studio.monitor().disable();
+    CHECK(round_trip(port, "GET / HTTP/1.1\r\n\r\n").empty());  // the relay ended with the pairing
+    const Json again = studio.monitor().enable();
+    CHECK(again.at("fingerprint").get<std::string>() != fingerprint);
+    studio.monitor().disable();
+    studio.monitor().set_plaintext(Json(true));
+    CHECK(studio.monitor().enable().at("encryption") == Json("none"));
+    studio.monitor().disable();
+}
+
 // ---- the HTTP server on the loopback interface -------------------------------------------------------------
 
 std::string round_trip(int port, const std::string &raw) {
@@ -558,6 +617,8 @@ void http_server() {
     CHECK_TEXT(round_trip(port, "POST /api/generate HTTP/1.1\r\n" + host + "Content-Length: 99999999\r\n\r\n"), "413");
     CHECK_TEXT(round_trip(port, "GET / HTTP/1.1\r\n" + host + "X-Long: " + std::string(70000, 'a') + "\r\n\r\n"), "431");
     CHECK_TEXT(round_trip(port, "NONSENSE\r\n\r\n"), "400");
+    // A TLS handshake sent to the HTTP listener is refused at once: a pinned client then fails fast.
+    CHECK_TEXT(round_trip(port, std::string("\x16\x03\x01\x00\x05hello", 10)), "400");
     server.stop();
     worker.join();
 }
@@ -565,11 +626,12 @@ void http_server() {
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (argc != 2) {
-        std::fprintf(stderr, "usage: kerfkite_server_selftest STATIC_DIR\n");
+    if (argc != 2 && argc != 3) {
+        std::fprintf(stderr, "usage: kerfkite_server_selftest STATIC_DIR [PENDANT_TLS_RELAY]\n");
         return 2;
     }
     static_dir = argv[1];
+    if (argc == 3) relay_program = argv[2];
 #ifdef _WIN32
     WSADATA data;
     WSAStartup(MAKEWORD(2, 2), &data);
@@ -582,6 +644,7 @@ int main(int argc, char **argv) {
     phone_start();
     design_routes();
     key_order_reading();
+    pendant_tls();
     http_server();
     std::printf("%d checks, %d failed\n", checks, failures);
     return failures ? 1 : 0;

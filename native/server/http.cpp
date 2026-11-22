@@ -320,6 +320,11 @@ void Server::serve(const Handler &handler, const Limit &limit, int connections) 
                 while ((end = data.find("\r\n\r\n")) == std::string::npos) {
                     if (data.size() > kMaxHead) throw 431;
                     if (!receive(client, data)) throw 0;
+                    // A request starts with its method, a token of capital letters, and a space. Anything else
+                    // (a TLS handshake sent to this HTTP listener, say) is answered at once, not after a timeout.
+                    size_t i = 0;
+                    while (i < data.size() && i < 16 && data[i] >= 'A' && data[i] <= 'Z') ++i;
+                    if (i < data.size() && (i == 0 || i == 16 || data[i] != ' ')) throw 400;
                 }
                 if (end > kMaxHead) throw 431;
                 const std::string head = data.substr(0, end);

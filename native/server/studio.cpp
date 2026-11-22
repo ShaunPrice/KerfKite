@@ -108,7 +108,8 @@ double number(const Json *value, const std::string &name, double low, double hig
 Studio::Studio(Options options, MachineOptions machine)
     : options_(std::move(options)), token_(token_urlsafe(32)), device_(std::move(machine)), jobs_(device_, options_.enable_hardware) {
     monitor_ = std::make_unique<PhoneMonitor>(device_, jobs_, options_.static_dir, options_.monitor_port, options_.monitor_plaintext,
-                                              options_.enable_hardware, options_.monitor_host);
+                                              options_.enable_hardware, options_.monitor_host, options_.pendant_tls, options_.monitor_cert,
+                                              options_.monitor_key);
     add("GET", "/api/session", [this](const http::Request &) {
         json out = json::object();
         out["token"] = token_;

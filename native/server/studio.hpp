@@ -27,6 +27,8 @@ struct Options {
     bool monitor = false;
     int monitor_port = 8766;
     std::string monitor_host = "0.0.0.0";  // the phone pendant's listener: every interface, so a phone on the LAN reaches it
+    std::string pendant_tls;               // the pendant's TLS relay program (kerfkite-pendant-tls), or empty for HTTP only
+    std::string monitor_cert, monitor_key; // an operator's certificate for the pendant, in place of one made for each pairing
     bool monitor_plaintext = false;
     std::string static_dir;  // the editor's files (studio/static)
 };

@@ -58,7 +58,7 @@ target_link_libraries(kerfkite-cam PRIVATE kerfkite_core)
 # KerfKite Studio's workstation server (server/): the editor in studio/static served with every route of the
 # Studio API over the core, KerfKite's own HTTP/1.1 server, the controller's serial link and the phone pendant.
 # The C++ standard library and the operating system only; it fetches nothing.
-set(KERFKITE_SERVER_SOURCES server/design_extra.cpp server/design_routes.cpp server/device.cpp server/http.cpp
+set(KERFKITE_SERVER_SOURCES server/child_process.cpp server/design_extra.cpp server/design_routes.cpp server/device.cpp server/http.cpp
   server/key_order.cpp server/machine.cpp server/machine_routes.cpp server/machine_setup.cpp server/os_random.cpp
   server/phone_jobs.cpp server/phone_monitor.cpp server/protocols.cpp server/serial_port.cpp server/static_files.cpp
   server/studio.cpp)
@@ -71,6 +71,18 @@ endif()
 add_executable(kerfkite-studio server/main.cpp)
 target_include_directories(kerfkite-studio PRIVATE core/src ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(kerfkite-studio PRIVATE kerfkite_server)
+# The phone pendant's TLS relay (../packaging/pendant-tls) is Go's standard library and nothing else: built
+# beside kerfkite-studio when Go is installed, without fetching anything. Without it pairing is HTTP only.
+find_program(KERFKITE_GO go)
+if(KERFKITE_GO)
+  add_custom_target(kerfkite-pendant-tls ALL
+    COMMAND ${CMAKE_COMMAND} -E env CGO_ENABLED=0 GO111MODULE=off
+      ${KERFKITE_GO} build -trimpath -buildvcs=false -o $<TARGET_FILE_DIR:kerfkite-studio>/kerfkite-pendant-tls${CMAKE_EXECUTABLE_SUFFIX} .
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../packaging/pendant-tls
+    COMMENT "Building the phone pendant's TLS relay with Go"
+    VERBATIM)
+  add_dependencies(kerfkite-pendant-tls kerfkite-studio)
+endif()
 add_executable(kerfkite_server_selftest tests/server_selftest.cpp)
 target_include_directories(kerfkite_server_selftest PRIVATE core/src ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(kerfkite_server_selftest PRIVATE kerfkite_server)
@@ -94,7 +106,12 @@ add_executable(kerfkite_selftest tests/selftest.cpp)
 target_link_libraries(kerfkite_selftest PRIVATE kerfkite_core)
 add_test(NAME selftest COMMAND kerfkite_selftest)
 # The workstation server against the editor's files: a simulator and a scripted controller, the loopback only.
-add_test(NAME server COMMAND kerfkite_server_selftest ${CMAKE_CURRENT_SOURCE_DIR}/../studio/static)
+if(KERFKITE_GO)
+  add_test(NAME server COMMAND kerfkite_server_selftest ${CMAKE_CURRENT_SOURCE_DIR}/../studio/static
+    $<TARGET_FILE_DIR:kerfkite-studio>/kerfkite-pendant-tls${CMAKE_EXECUTABLE_SUFFIX})
+else()
+  add_test(NAME server COMMAND kerfkite_server_selftest ${CMAKE_CURRENT_SOURCE_DIR}/../studio/static)
+endif()
 add_executable(kerfkite_json_selftest tests/json_selftest.cpp)
 target_link_libraries(kerfkite_json_selftest PRIVATE kerfkite_core)
 add_test(NAME json COMMAND kerfkite_json_selftest)

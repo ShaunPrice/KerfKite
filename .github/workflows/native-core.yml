@@ -8,6 +8,8 @@ on:
       - validation/native_core_parity.py
       - validation/native_core_recorder.py
       - validation/server_route_parity.py
+      - validation/pendant_tls_pin_check.py
+      - packaging/pendant-tls/**
       # The workstation server is compared route by route with the Flask app.
       - studio/server.py
       - studio/design_api.py
@@ -43,6 +45,9 @@ jobs:
           cmake --build build/native --config Release --parallel 4
       - name: Self-test without Python
         run: ctest --test-dir build/native -C Release --output-on-failure
+      - name: Test the phone pendant's TLS relay
+        shell: bash
+        run: cd packaging/pendant-tls && GO111MODULE=off CGO_ENABLED=0 go test -count=1 .
       - name: Compare with the Python reference
         shell: bash
         run: |
@@ -55,3 +60,6 @@ jobs:
           server=build/native/kerfkite-studio
           if [ -f build/native/Release/kerfkite-studio.exe ]; then server=build/native/Release/kerfkite-studio.exe; fi
           python validation/server_route_parity.py --server "$server" --mutations 12
+      - name: Check Pocket's certificate pinning against the workstation server
+        if: runner.os == 'Linux'
+        run: python validation/pendant_tls_pin_check.py --server build/native/kerfkite-studio
