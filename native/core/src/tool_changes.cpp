@@ -10,6 +10,7 @@
 
 #include "kerfkite/cam.hpp"
 #include "project.hpp"
+#include "python_text.hpp"
 
 namespace kerfkite {
 namespace {
@@ -104,37 +105,17 @@ double numeric(const json *value, const std::string &name, double low, double hi
     return result;
 }
 
-// Whether Python's str.isspace() is true of a code point: category Zs, or bidirectional class WS, B or S.
-bool python_space(uint32_t c) {
-    return (c >= 0x09 && c <= 0x0d) || (c >= 0x1c && c <= 0x20) || c == 0x85 || c == 0xa0 || c == 0x1680 ||
-           (c >= 0x2000 && c <= 0x200a) || c == 0x2028 || c == 0x2029 || c == 0x202f || c == 0x205f || c == 0x3000;
-}
-
 // The tool name as the reference checks and keeps it: 1..80 characters (code points, before stripping), none
 // below U+0020, and something left after str.strip(), which is what the plan keeps.
 std::string tool_name(const std::string &text) {
     static const char *const message = "Tool name must contain 1..80 printable characters";
-    struct Point {
-        uint32_t code;
-        size_t begin, end;  // its bytes
-    };
-    std::vector<Point> points;
-    for (size_t i = 0; i < text.size();) {
-        const unsigned char lead = static_cast<unsigned char>(text[i]);
-        const size_t length = lead < 0x80 ? 1 : lead < 0xe0 ? 2 : lead < 0xf0 ? 3 : 4;
-        uint32_t code = length == 1 ? lead : length == 2 ? lead & 0x1f : length == 3 ? lead & 0x0f : lead & 0x07;
-        for (size_t k = 1; k < length; ++k) code = code << 6 | (static_cast<unsigned char>(text[i + k]) & 0x3f);
-        points.push_back({code, i, i + length});  // the core's text is well-formed UTF-8
-        i += length;
-    }
+    const std::vector<detail::CodePoint> points = detail::code_points(text);
     if (points.size() > 80) throw ValueError(message);
-    for (const Point &point : points)
+    for (const detail::CodePoint &point : points)
         if (point.code < 32) throw ValueError(message);
-    size_t first = 0, last = points.size();
-    while (first < last && python_space(points[first].code)) ++first;
-    while (last > first && python_space(points[last - 1].code)) --last;
-    if (first == last) throw ValueError(message);
-    return text.substr(points[first].begin, points[last - 1].end - points[first].begin);
+    std::string kept = detail::python_strip(text, points);
+    if (kept.empty()) throw ValueError(message);
+    return kept;
 }
 
 struct Tool {

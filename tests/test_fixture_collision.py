@@ -1,7 +1,11 @@
+import json
+import os
 import unittest
+from unittest.mock import patch
 
+from studio import cam
 from studio.cam import generate
-from studio.fixture_collision import check_fixtures
+from studio.fixture_collision import check_fixtures, fixtures_json
 from studio.protocols import PROTOCOLS
 
 
@@ -108,3 +112,78 @@ class FixtureCollisionTests(unittest.TestCase):
         payload['fixtures'][0]['max'] = [30, 3, 10]
         with self.assertRaisesRegex(ValueError, 'positive size'):
             check_fixtures(payload)
+
+
+def exact(value):
+    """A form that tells 0 from 0.0 and -0.0 from 0.0."""
+    return json.loads(json.dumps(value), parse_float=lambda text: ('f', text), parse_int=lambda text: ('i', text))
+
+
+def answer(payload, backend):
+    try:
+        return 'ok', exact(check_fixtures(payload, backend=backend))
+    except ValueError as error:
+        return 'error', str(error)
+
+
+@unittest.skipIf(cam._core_cam is None, 'Build the extension to compare the native core with the reference')
+class NativeFixtureTests(unittest.TestCase):
+    """The native core's checks against this module's Python, the reference: every member, with its type."""
+
+    def setUp(self):
+        environment = patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        for key in ('KERFKITE_GCODE_BACKEND', 'KERFKITE_POLYGON_BACKEND'):
+            os.environ.pop(key, None)
+
+    def test_checks_and_refusals_are_the_reference(self):
+        many = {**setup(generated()), 'fixtures': [
+            {'name': f'Clamp {i}', 'min': [5 + 9 * i, 18, -2], 'max': [8 + 9 * i, 22, 1]} for i in range(10)
+        ]}  # fmt: skip
+        cases = [
+            setup(),
+            setup(generated()),
+            setup(generated('linuxcnc')),
+            many,
+            setup(['G21', 'G90', 'G0 X-0 Y.5', 'g1 x31 y2 z8 f300', 'G4 P1', 'M30']),
+            setup(['G21', 'G90', 'G0 X31 Y2', 'G0 Z0']),
+            setup(['G21', 'G90', 'G0 X1 X2']),
+            setup(['G21', 'G0 X1']),
+            setup(['G21', 'G90', 'M30', 'G0 X1']),
+            setup(['G21', 'G90', 'G0 X' + '9' * 300]),
+            {**setup(), 'fixtures': [{'name': ' \u3000 ', 'min': [0, 0, 0], 'max': [1, 1, 1]}]},
+            {**setup(), 'fixtures': [{'name': 'caf\u00e9', 'min': [30, 1, 7], 'max': [32, 3, True]}]},
+            {**setup(), 'tool': {'diameter': 2, 'stickout': 4, 'holder_diameter': 12}},
+            {**setup(), 'start': [0, 0]},
+        ]
+        for case in cases:
+            with self.subTest(case=json.dumps(case)[:120]):
+                self.assertEqual(answer(case, 'native'), answer(case, 'python'))
+        # Many contacts: the report keeps the first hundred, in the order of each move's instants.
+        self.assertEqual(
+            len(check_fixtures(many, backend='native')['events']), len(check_fixtures(many, backend='python')['events'])
+        )
+
+    def test_text_that_is_not_ascii_is_the_reference_s(self):
+        payload = setup(['G21', 'G90', 'G0 X\u0661'])
+        with self.assertRaises(NotImplementedError):
+            check_fixtures(payload, backend='native')
+        self.assertEqual(answer(payload, 'auto'), answer(payload, 'python'))
+
+    def test_route_sends_the_core_text(self):
+        from studio.server import create_app
+
+        client = create_app().test_client()
+        headers = {'X-Studio-Token': client.get('/api/session').get_json()['token']}
+        response = client.post('/api/fixture-collision', json=setup(), headers=headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, fixtures_json(setup()))
+        self.assertEqual(exact(response.get_json()), exact(check_fixtures(setup(), backend='python')))
+        refused = client.post('/api/fixture-collision', json={**setup(), 'fixtures': []}, headers=headers)
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn('fixture boxes', refused.get_json()['error'])
+
+
+if __name__ == '__main__':
+    unittest.main()

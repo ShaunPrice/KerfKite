@@ -105,10 +105,11 @@ inline bool fixed(std::string &out, double value, int decimals) {
     return true;
 }
 
-// Python's round(value, decimals) for decimals 0..3: the double nearest the correctly rounded decimal.
+// Python's round(value, decimals) for decimals 0..9: the double nearest the correctly rounded decimal. q and the
+// scale are exact doubles, so their quotient, correctly rounded, is that double. False beyond 2^53 units.
 inline bool rounded(double value, int decimals, double &result) {
     uint64_t q;
-    if (decimals < 0 || decimals > 3 || !scaled_round(value, scale_of(decimals), q) || q > (1ULL << 53)) return false;
+    if (decimals < 0 || decimals > 9 || !scaled_round(value, scale_of(decimals), q) || q > (1ULL << 53)) return false;
     result = std::copysign(static_cast<double>(q) / scale_of(decimals), value);
     return true;
 }

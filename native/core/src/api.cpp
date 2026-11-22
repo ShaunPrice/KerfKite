@@ -8,6 +8,7 @@
 #include "kerfkite/rotary.hpp"
 #include "kerfkite/stock.hpp"
 #include "kerfkite/tool_changes.hpp"
+#include "kerfkite/fixture_collision.hpp"
 
 namespace kerfkite {
 
@@ -17,6 +18,7 @@ Json call(const std::string &command, const Json &request) {
     if (relief_command(command)) return relief_call(command, request);
     if (stock_command(command)) return stock_call(command, request);
     if (tool_changes_command(command)) return tool_changes_call(command, request);
+    if (fixture_command(command)) return fixture_call(command, request);
     if (pcb_command(command)) return pcb_call(command, request);
     if (command == "solid") return solid_call(request);
     if (polygon_command(command)) return polygon_call(command, request);

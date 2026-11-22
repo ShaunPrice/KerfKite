@@ -16,7 +16,7 @@ configure_file(core/src/protocols_data.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/genera
 
 add_library(kerfkite_core STATIC core/src/api.cpp core/src/cam.cpp core/src/drilling.cpp core/src/knife.cpp core/src/laser.cpp
   core/src/leveling.cpp core/src/protocols.cpp core/src/relief.cpp core/src/rotary.cpp core/src/router_entry.cpp
-  core/src/simple_line.cpp core/src/stock.cpp core/src/tabs.cpp core/src/tool_changes.cpp)
+  core/src/simple_line.cpp core/src/stock.cpp core/src/tabs.cpp core/src/tool_changes.cpp core/src/fixture_collision.cpp)
 # The core's own JSON reader and writer.
 target_sources(kerfkite_core PRIVATE core/src/json.cpp)
 # Circuit board import: Gerber layers and Excellon drill files.

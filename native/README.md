@@ -102,6 +102,13 @@ plans a router project for manual tool changes, as Studio's **Manual tool change
 tool (number, diameter, shape, V angle and drill point angle) becomes a stage, a whole job of its own with
 the tool, the operations' numbers, a file name and what to do before running it.
 
+    kerfkite-cam fixture-collision request.json
+
+sweeps a posted program's linear moves against fixture boxes, as Studio's fixture check does
+(`core/src/fixture_collision.cpp`, the port of `studio/fixture_collision.py`): the cutter and its holder are
+upright cylinders, and the answer lists the first contacts of each move (up to 100) with the line, the motion,
+the part that touches and where, or refuses the first line it cannot read.
+
 ## What is ported
 
 | Area | State |
@@ -132,6 +139,7 @@ the tool, the operations' numbers, a file name and what to do before running it.
 | Relief finishing (`core/src/relief.cpp`): the settings, height fields as numbers or as RGB image bytes, the flat and ball cutter contact on threads or a GPU, the raster paths and their depths | Done, to the bit. Studio's `prepare_relief` calls it through the extension and keeps its Python as the reference and the fallback. STL and artwork height fields are still rasterised in Python. |
 | Stock preview (`core/src/stock.cpp`): the height map a job's segments leave in the stock, for flat, ball, V and drill cutters | Done, to the bit: distances are CPython's `hypot` and minima Python's `min`. Studio's stock preview calls it through the extension; a segment row with text that is not a number is declined. |
 | Manual tool-change plans (`core/src/tool_changes.cpp`): stages for runs of operations with one tool, each a whole job | Done, to the byte, with every refusal. Studio's `plan_tool_changes` and `/api/tool-changes` call it through the extension and keep the Python as the reference and the fallback. A stage of fewer than two program lines, where the reference fails with an IndexError, is declined. |
+| Fixture clearance (`core/src/fixture_collision.cpp`): a posted program's moves swept against fixture boxes, continuously | Done, to the byte: CPython's `hypot`, Python's `min` and `max`, and `round(x, 5)` for the positions. Studio's `check_fixtures` and `/api/fixture-collision` call it through the extension and keep the Python as the reference and the fallback. A program line that is not ASCII, which the reference reads with Unicode's rules, is declined. |
 | Importers, sender, pendant, editors | Not yet. |
 
 Every operation of a job (lines, drilling, knife paths, offsets, pockets, fills, V-carving, entries and

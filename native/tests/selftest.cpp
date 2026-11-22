@@ -19,6 +19,7 @@
 #include "kerfkite/rotary.hpp"
 #include "kerfkite/stock.hpp"
 #include "kerfkite/tool_changes.hpp"
+#include "kerfkite/fixture_collision.hpp"
 
 using json = kerfkite::Json;
 using namespace kerfkite;
@@ -889,6 +890,35 @@ static void tool_change_plans() {
            "a rotary project is refused");
 }
 
+// The fixture clearance check (studio/fixture_collision.py): contacts as the reference reports them, and refusals.
+static void fixture_checks() {
+    const char *payload = R"({"start":[0,0,4],"lines":["G21","G90","G0 X100"],"tool":{"diameter":2,"stickout":4,
+        "holder_diameter":12,"holder_length":15},"fixtures":[{"name":"Bridge clamp","min":[30,1,7],"max":[32,3,10]}]})";
+    const json result = check_fixtures(json::parse(payload));
+    expect(result.dump() ==
+               R"({"collision":true,"contact_count":2,"events":[{"component":"holder","fixture":"Bridge clamp","line":3,)"
+               R"("motion":"G0","position":[24.08392,0.0,4.0]},{"component":"tool","fixture":"Bridge clamp","line":3,)"
+               R"("motion":"G0","position":[30.0,0.0,4.0]}],"fixtures_checked":1,"moves_checked":1})",
+           "a rapid past a clamp: the holder touches first, at the reference's rounded position");
+    const auto refusal = [&](const std::string &changed) -> std::string {
+        json given = json::parse(payload);
+        const json change = json::parse(changed);
+        for (const auto &item : change.items()) given[item.key()] = item.value();
+        try {
+            check_fixtures(given);
+        } catch (const ValueError &error) {
+            return error.what();
+        }
+        return "(nothing thrown)";
+    };
+    expect(refusal(R"({"lines":["G21","G90","G2 X1"]})") == "Cannot check line 3: unsupported instruction G2",
+           "an arc is refused with its line number");
+    expect(refusal(R"({"fixtures":[{"name":"Jaw","min":[0,0,0],"max":[0,1,1]}]})") ==
+               "Jaw requires a positive size on every axis",
+           "a box of no width is refused");
+    expect(refusal(R"({"lines":[]})") == "Check a generated program with 1–250000 lines", "an empty program is refused");
+}
+
 int main() {
     // Ties round to even on the exact binary value, as Python's formatting does.
     expect(fixed(0.125, 2) == "0.12", "0.125 to two places");
@@ -899,9 +929,12 @@ int main() {
     expect(fixed(0.1 + 0.2, 9) == "0.300000000", "0.1 + 0.2 to nine places");
     double r = 0;
     expect(text::rounded(2.675, 2, r) && r == 2.67, "round(2.675, 2)");
+    expect(text::rounded(24.083920997, 5, r) && r == 24.08392 && text::rounded(-0.000001, 5, r) && r == 0 && std::signbit(r),
+           "round to five places, a small negative to -0.0 as Python gives it");
     std::string untouched = "x";
-    expect(!text::fixed(untouched, 1.0, 10) && !text::fixed(untouched, 1.0, -1) && untouched == "x" && !text::rounded(1.0, 4, r),
-           "places outside the supported range are refused");
+    expect(!text::fixed(untouched, 1.0, 10) && !text::fixed(untouched, 1.0, -1) && untouched == "x" && !text::rounded(1.0, 10, r) &&
+               !text::rounded(1.0, -1, r) && !text::rounded(1e10, 9, r),
+           "places outside the supported range, and values beyond 2^53 units, are refused");
     expect(text::repr(680.0) == "680.0" && text::repr(0.1) == "0.1" && text::repr(1e16) == "1e+16" &&
                text::repr(0.00001) == "1e-05" && text::repr(-2.5) == "-2.5" && text::repr(123456789.125) == "123456789.125",
            "repr");
@@ -1077,6 +1110,7 @@ int main() {
     rotary();
     reliefs_and_stock();
     tool_change_plans();
+    fixture_checks();
 
     std::printf(failures ? "%d checks failed\n" : "PASS native core self-test%.0d\n", failures);
     return failures ? 1 : 0;

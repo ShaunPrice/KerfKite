@@ -76,11 +76,11 @@ PyObject *fixed_text(PyObject *, PyObject *args) {
     return PyUnicode_FromStringAndSize(text.data(), static_cast<Py_ssize_t>(text.size()));
 }
 
-// rounded_value(value, decimals) -> float or None. Python's round(value, decimals) for 0..3 decimals.
+// rounded_value(value, decimals) -> float or None. Python's round(value, decimals) for 0..9 decimals.
 PyObject *rounded_value(PyObject *, PyObject *args) {
     double value, result;
     int decimals;
     if (!PyArg_ParseTuple(args, "di", &value, &decimals)) return nullptr;
-    if (decimals < 0 || decimals > 3 || !rounded(value, decimals, result)) Py_RETURN_NONE;
+    if (decimals < 0 || decimals > 9 || !rounded(value, decimals, result)) Py_RETURN_NONE;
     return PyFloat_FromDouble(result);
 }
