@@ -41,6 +41,8 @@ public:
 
     // This machine's IPv4 addresses, the likeliest for a phone first.
     static std::vector<std::string> addresses();
+    // The order addresses() gives: the address on the default route first, self-assigned 169.254 ones last.
+    static std::vector<std::string> order_addresses(const std::vector<std::string> &found, const std::string &routed);
     // The answer of the monitor app to one request (for the listener, and for tests).
     http::Response handle(const http::Request &request);
 

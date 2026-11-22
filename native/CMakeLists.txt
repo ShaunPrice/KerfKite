@@ -83,6 +83,8 @@ if(KERFKITE_GO)
     VERBATIM)
   add_dependencies(kerfkite-pendant-tls kerfkite-studio)
 endif()
+add_executable(kerfkite_machine_selftest tests/machine_selftest.cpp)
+target_link_libraries(kerfkite_machine_selftest PRIVATE kerfkite_server)
 add_executable(kerfkite_server_selftest tests/server_selftest.cpp)
 target_include_directories(kerfkite_server_selftest PRIVATE core/src ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(kerfkite_server_selftest PRIVATE kerfkite_server)
@@ -105,6 +107,8 @@ enable_testing()
 add_executable(kerfkite_selftest tests/selftest.cpp)
 target_link_libraries(kerfkite_selftest PRIVATE kerfkite_core)
 add_test(NAME selftest COMMAND kerfkite_selftest)
+# The controller transports against scripted firmware on a virtual clock.
+add_test(NAME machine COMMAND kerfkite_machine_selftest)
 # The workstation server against the editor's files: a simulator and a scripted controller, the loopback only.
 if(KERFKITE_GO)
   add_test(NAME server COMMAND kerfkite_server_selftest ${CMAKE_CURRENT_SOURCE_DIR}/../studio/static

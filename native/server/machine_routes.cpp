@@ -108,8 +108,10 @@ double lowest_of(const Job &job) {
     return lowest;
 }
 
+}  // namespace
+
 // studio.rotary.validate_rotary_machine.
-void validate_rotary_machine(const json &rotary, const json &status) {
+void validate_rotary_machine(const Json &rotary, const Json &status) {
     const std::string post = text_of(member(rotary, "postprocessor"), ""), drive = text_of(member(rotary, "output_axis"), "");
     if ((post != "grblhal" && post != "xpro-v5") || post != text_of(member(status, "protocol"), ""))
         throw ValueError("Rotary stream requires the selected grblHAL or independent-A xPRO V5 protocol");
@@ -133,6 +135,8 @@ void validate_rotary_machine(const json &rotary, const json &status) {
         if (std::max(hi, 0.0) - std::min(lo, 0.0) > travel->get<double>() + 1e-6) throw ValueError("Rotary job exceeds configured " + axis + " travel");
     }
 }
+
+namespace {
 
 // validate_machine(project, job): the job against the connected controller's readback; the status.
 json validate_machine(Studio &studio, const json &project, const Prepared &job) {

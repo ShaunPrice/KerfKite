@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "design_extra.hpp"
+#include "kerfkite/errors.hpp"
 #include "http.hpp"
 #include "key_order.hpp"
 #include "kerfkite/json.hpp"
@@ -103,6 +104,8 @@ std::string error_of(const http::Response &response) {
     const Json value = parsed(response);
     return value.is_object() && value.contains("error") && value.at("error").is_string() ? value.at("error").get<std::string>() : std::string();
 }
+
+std::string text_value(const Json &value) { return value.is_string() ? value.get<std::string>() : std::string(); }
 
 std::string error_of_value(PhoneMonitor &monitor, bool plaintext) {
     try {
@@ -185,6 +188,11 @@ public:
         return std::string();
     }
     void close() override {}
+    // A line the controller sends of its own accord, such as an alarm.
+    void inject(const std::string &line) {
+        std::lock_guard<std::mutex> hold(m_);
+        replies_.push_back(line);
+    }
 
 private:
     std::vector<std::string> *written_;
@@ -192,9 +200,13 @@ private:
     std::deque<std::string> replies_;
 };
 
-MachineOptions synthetic(std::vector<std::string> *written) {
+MachineOptions synthetic(std::vector<std::string> *written, SyntheticGrbl **opened = nullptr) {
     MachineOptions machine;
-    machine.open = [written](const std::string &) { return std::unique_ptr<Link>(new SyntheticGrbl(written)); };
+    machine.open = [written, opened](const std::string &) {
+        auto link = std::make_unique<SyntheticGrbl>(written);
+        if (opened) *opened = link.get();
+        return std::unique_ptr<Link>(std::move(link));
+    };
     machine.ports = [] { return std::vector<PortInfo>{{"KK-SYNTHETIC", "Synthetic Grbl controller"}}; };
     // Twenty times faster than the wall clock: the controller's two-second boot pause takes a tenth of one.
     const auto start = std::chrono::steady_clock::now();
@@ -418,6 +430,385 @@ void phone_start() {
     // Disabling the listener ends the pairing.
     studio.monitor().disable();
     CHECK(phone("GET", "/api/status", "").status == 401);
+}
+
+// ---- the phone's jobs, monitor and pendant: test_phone_jobs.py, test_monitor.py, test_phone_pendant.py ------
+
+struct Phone {
+    Studio &studio;
+    Client client{studio};
+    std::string bearer;
+    explicit Phone(Studio &s) : studio(s) {
+        client.post("/api/connect", Json::parse(R"({"port": "simulator"})"));
+        bearer = "Bearer " + studio.monitor().enable().at("token").get<std::string>();
+    }
+    http::Response get(const std::string &path, bool paired = true) {
+        http::Request r = request("GET", path);
+        if (paired) r.headers.emplace_back("authorization", bearer);
+        return studio.monitor().handle(r);
+    }
+    http::Response post(const std::string &path, const Json &body, bool paired = true) {
+        http::Request r = request("POST", path, body.dump());
+        if (paired) r.headers.emplace_back("authorization", bearer);
+        return studio.monitor().handle(r);
+    }
+    std::string epoch() { return text_of(parsed(get("/api/status")).at("control_epoch")); }
+    http::Response action(const std::string &name) {
+        Json body = Json::object();
+        body["action"] = name;
+        body["control_epoch"] = epoch();
+        return post("/api/action", body);
+    }
+    std::string arm() {
+        Json arm = Json::object();
+        arm["project"] = sample();
+        arm["confirmed"] = true;
+        arm["phone_arm_challenge"] = true;
+        const http::Response armed = client.post("/api/arm", arm);
+        CHECK(armed.status == 200);
+        return text_of(parsed(armed).at("arm_id"));
+    }
+    http::Response editor(const std::string &path, const std::string &arm_id, Json extra = Json::object()) {
+        extra["arm_id"] = arm_id;
+        return client.post("/api/" + path, extra);
+    }
+    bool active() { return parsed(client.get("/api/status")).at("active") == Json(true); }
+    bool armed() { return parsed(get("/api/status")).at("armed") == Json(true); }
+    static std::string text_of(const Json &value) { return value.is_string() ? value.get<std::string>() : std::string(); }
+};
+
+// The phone's Start on its own thread, waiting for the workstation; the challenge the workstation then sees.
+struct PendingStart {
+    std::thread worker;
+    std::atomic<int> status{0};
+    std::string challenge;
+    PendingStart(Phone &phone, const std::string &arm_id) {
+        const std::string epoch = phone.epoch();
+        worker = std::thread([this, &phone, epoch] {
+            Json body = Json::object();
+            body["action"] = "start";
+            body["control_epoch"] = epoch;
+            status = phone.post("/api/action", body).status;
+        });
+        wait_until([&] {
+            const Json seen = parsed(phone.editor("arm/check", arm_id));
+            if (seen.contains("challenge") && seen.at("challenge").is_string()) challenge = seen.at("challenge").get<std::string>();
+            return !challenge.empty();
+        }, 2);
+        CHECK(!challenge.empty());
+    }
+    int finish() {
+        if (worker.joinable()) worker.join();
+        return status;
+    }
+    ~PendingStart() {
+        if (worker.joinable()) worker.join();
+    }
+};
+
+Json with_challenge(const std::string &challenge) {
+    Json extra = Json::object();
+    extra["challenge"] = challenge;
+    return extra;
+}
+
+void phone_jobs() {
+    {
+        // An armed preview starts once from the phone, after the workstation confirms.
+        Studio studio(options());
+        Phone phone(studio);
+        CHECK(phone.action("start").status == 400);
+        const std::string arm_id = phone.arm();
+        CHECK(phone.armed());
+        PendingStart start(phone, arm_id);
+        CHECK(!phone.active());
+        CHECK(phone.action("start").status == 400);  // a second Start while one waits
+        CHECK(phone.editor("arm/confirm", arm_id, with_challenge(start.challenge)).status == 200);
+        CHECK(start.finish() == 200);
+        CHECK(!phone.armed());
+        CHECK(phone.editor("arm/confirm", arm_id, with_challenge(start.challenge)).status == 400);
+        CHECK(phone.action("start").status == 400);
+    }
+    {
+        // Another tab cannot confirm, and an unconfirmed Start expires without moving anything.
+        Studio studio(options());
+        Phone phone(studio);
+        const std::string arm_id = phone.arm();
+        PendingStart start(phone, arm_id);
+        CHECK(parsed(phone.editor("arm/check", "another-editor")).at("armed") == Json(false));
+        CHECK(phone.editor("arm/confirm", "another-editor", with_challenge(start.challenge)).status == 400);
+        CHECK(start.finish() == 400);
+        CHECK(!phone.armed());
+        CHECK(phone.editor("arm/confirm", arm_id, with_challenge(start.challenge)).status == 400);
+        CHECK(!phone.active());
+    }
+    {
+        // A new preview replaces the old one; the old page's late disarm and confirm do nothing to it.
+        Studio studio(options());
+        Phone phone(studio);
+        const std::string first = phone.arm();
+        PendingStart start(phone, first);
+        const std::string replacement = phone.arm();
+        CHECK(start.finish() == 400);
+        CHECK(first != replacement);
+        CHECK(parsed(phone.editor("disarm", first)).at("removed") == Json(false));
+        CHECK(phone.editor("arm/confirm", replacement, with_challenge(start.challenge)).status == 400);
+        CHECK(parsed(phone.editor("arm/check", replacement)).at("armed") == Json(true));
+        CHECK(!phone.active());
+    }
+    {
+        // Stop cancels a Start the workstation has not answered, at once.
+        Studio studio(options());
+        Phone phone(studio);
+        const std::string arm_id = phone.arm();
+        PendingStart start(phone, arm_id);
+        const auto began = std::chrono::steady_clock::now();
+        CHECK(phone.action("stop").status == 200);
+        CHECK(std::chrono::duration<double>(std::chrono::steady_clock::now() - began).count() < 1.8);
+        CHECK(start.finish() == 400);
+        CHECK(phone.editor("arm/confirm", arm_id, with_challenge(start.challenge)).status == 400);
+        CHECK(!phone.active());
+    }
+    {
+        // A Start or a jog sent with the controls of before a stop is refused.
+        Studio studio(options());
+        Phone phone(studio);
+        const std::string old = phone.epoch();
+        CHECK(!parsed(phone.client.get("/api/status")).contains("control_epoch"));
+        CHECK(phone.post("/api/action", Json::parse(R"({"action": "stop"})")).status == 200);
+        CHECK(phone.epoch() != old);
+        phone.arm();
+        Json start = Json::object();
+        start["action"] = "start";
+        start["control_epoch"] = old;
+        CHECK(phone.post("/api/action", start).status == 400);
+        Json jog = Json::parse(R"({"action": "jog", "axis": "X", "distance": 0.1, "feed": 20,
+                                   "request_id": "6f1f4b5e-3c3a-4b1e-9a77-2f1f1d6c0a11"})");
+        jog["control_epoch"] = old;
+        CHECK(phone.post("/api/pendant", jog).status == 400);
+        CHECK(phone.armed());
+        CHECK(!phone.active());
+        CHECK(!parsed(phone.get("/api/status")).contains("arm_id"));
+        const http::Response legacy = phone.post("/api/action", Json::parse(R"({"action": "resume"})"));
+        CHECK(legacy.status == 400);
+        CHECK_TEXT(error_of(legacy), "Update");
+    }
+    {
+        // Ending the pairing cancels a Start that waits.
+        Studio studio(options());
+        Phone phone(studio);
+        const std::string arm_id = phone.arm();
+        PendingStart start(phone, arm_id);
+        studio.monitor().disable();
+        CHECK(start.finish() == 400);
+        CHECK(phone.editor("arm/confirm", arm_id, with_challenge(start.challenge)).status == 400);
+        CHECK(!phone.active());
+    }
+    {
+        // A preview whose editor has gone quiet for eight seconds expires; a late check cannot revive it.
+        std::atomic<double> now{100};
+        Options o = options();
+        o.clock = [&now] { return now.load(); };
+        Studio studio(o);
+        Phone phone(studio);
+        const std::string arm_id = phone.arm();
+        now = now.load() + 9;
+        CHECK(parsed(phone.editor("arm/check", arm_id)).at("armed") == Json(false));
+        CHECK(!phone.armed());
+        CHECK(phone.action("start").status == 400);
+    }
+    {
+        // The machine is checked again after the workstation confirms: here the controller has raised an alarm.
+        std::vector<std::string> written;
+        SyntheticGrbl *link = nullptr;
+        MachineOptions machine = synthetic(&written, &link);
+        Studio studio(options(true), machine);
+        Client client{studio};
+        CHECK(client.post("/api/connect", Json::parse(R"({"port": "KK-SYNTHETIC"})")).status == 200);
+        CHECK(wait_until([&] { return parsed(client.get("/api/status")).at("ready") == Json(true); }));
+        const std::string bearer = "Bearer " + studio.monitor().enable().at("token").get<std::string>();
+        Json arm = Json::object();
+        Json laser = sample();
+        laser["mode"] = "laser";
+        laser["power"] = 500;
+        arm["project"] = laser;
+        arm["confirmed"] = true;
+        arm["phone_arm_challenge"] = true;
+        const http::Response armed = client.post("/api/arm", arm);
+        CHECK(armed.status == 200);
+        const std::string arm_id = parsed(armed).contains("arm_id") ? text_value(parsed(armed).at("arm_id")) : std::string();
+        http::Request look = request("GET", "/api/status");
+        look.headers.emplace_back("authorization", bearer);
+        const std::string epoch = text_value(parsed(studio.monitor().handle(look)).at("control_epoch"));
+        std::atomic<int> status{0};
+        std::thread phone([&] {
+            Json body = Json::object();
+            body["action"] = "start";
+            body["control_epoch"] = epoch;
+            http::Request r = request("POST", "/api/action", body.dump());
+            r.headers.emplace_back("authorization", bearer);
+            status = studio.monitor().handle(r).status;
+        });
+        Json check = Json::object();
+        check["arm_id"] = arm_id;
+        std::string challenge;
+        CHECK(wait_until([&] {
+            const Json seen = parsed(client.post("/api/arm/check", check));
+            if (seen.contains("challenge") && seen.at("challenge").is_string()) challenge = seen.at("challenge").get<std::string>();
+            return !challenge.empty();
+        }, 2));
+        if (link) link->inject("ALARM:1");
+        CHECK(wait_until([&] { return text_value(parsed(client.get("/api/status")).at("state")) == "Fault"; }));
+        Json confirm = Json::object();
+        confirm["arm_id"] = arm_id;
+        confirm["challenge"] = challenge;
+        CHECK(client.post("/api/arm/confirm", confirm).status == 200);
+        phone.join();
+        CHECK(status == 400);
+        CHECK(parsed(client.post("/api/arm/check", check)).at("armed") == Json(false));
+        CHECK(parsed(client.get("/api/status")).at("active") == Json(false));
+    }
+    {
+        // An editor without the challenge neither arms nor disarms another tab's preview.
+        Studio studio(options());
+        Phone phone(studio);
+        Json legacy = Json::object();
+        legacy["project"] = sample();
+        legacy["confirmed"] = true;
+        CHECK(phone.client.post("/api/arm", legacy).status == 400);
+        const std::string arm_id = phone.arm();
+        CHECK(phone.client.post("/api/disarm", Json::object()).status == 400);
+        CHECK(parsed(phone.editor("arm/check", arm_id)).at("armed") == Json(true));
+        CHECK(parsed(phone.editor("disarm", arm_id)).at("removed") == Json(true));
+        CHECK(!phone.armed());
+    }
+    {
+        // Pause, resume and stop from the phone; nothing but those, and nothing unpaired.
+        Studio studio(options());
+        Phone phone(studio);
+        studio.jobs().arm(std::vector<std::string>(100, "M5"), nullptr, false);
+        {
+            Hold machine(studio.device().lock);
+            studio.jobs().start();
+        }
+        CHECK(phone.action("pause").status == 200);
+        CHECK(text_value(parsed(phone.client.get("/api/status")).at("state")) == "Hold");
+        CHECK(phone.action("resume").status == 200);
+        CHECK(phone.action("stop").status == 200);
+        CHECK(!phone.active());
+        CHECK(phone.action("resume").status == 400);
+        CHECK(phone.post("/api/action", Json::parse(R"({"action": "stop"})"), false).status == 401);
+        CHECK(phone.action("home").status == 400);
+        CHECK(phone.action("G1 X100").status == 400);
+    }
+    {
+        // A start whose job no longer validates consumes the preview and moves nothing.
+        Studio studio(options());
+        Phone phone(studio);
+        studio.jobs().arm({"M5"}, [] { throw kerfkite::ValueError("Changed setup"); }, false);
+        bool refused = false;
+        try {
+            Hold machine(studio.device().lock);
+            studio.jobs().start();
+        } catch (const kerfkite::ValueError &) {
+            refused = true;
+        }
+        CHECK(refused);
+        CHECK(!phone.armed());
+        CHECK(!phone.active());
+    }
+}
+
+void monitor_app() {
+    Studio studio(options());
+    Phone phone(studio);
+    CHECK(phone.get("/api/status", false).status == 401);
+    http::Request wrong = request("GET", "/api/status");
+    wrong.headers.emplace_back("authorization", "Bearer wrong");
+    CHECK(studio.monitor().handle(wrong).status == 401);
+    const http::Response snapshot = phone.get("/api/status");
+    CHECK(snapshot.status == 200);
+    CHECK(parsed(snapshot).at("simulated") == Json(true));
+    CHECK(!parsed(snapshot).contains("settings"));
+    bool no_store = false;
+    for (const auto &h : snapshot.headers) no_store = no_store || (h.first == "Cache-Control" && h.second == "no-store");
+    CHECK(no_store);
+    for (const char *route : {"/api/run", "/api/command", "/api/connect", "/api/disconnect"})
+        CHECK(phone.post(route, Json::object()).status == 404);
+    http::Request post_status = request("POST", "/api/status", "{}");
+    post_status.headers.emplace_back("authorization", phone.bearer);
+    CHECK(studio.monitor().handle(post_status).status == 405);
+    const http::Response page = phone.get("/", false);
+    CHECK(page.status == 200);
+    CHECK(page.body.find(phone.bearer.substr(7)) == std::string::npos);  // the page holds no secret
+    bool frame_ancestors = false;
+    for (const auto &h : page.headers) frame_ancestors = frame_ancestors || h.second.find("frame-ancestors") != std::string::npos;
+    CHECK(frame_ancestors);
+    CHECK(phone.get("/monitor.js", false).status == 200);
+    CHECK(phone.get("/monitor.css", false).status == 200);
+}
+
+void pendant_actions() {
+    Studio studio(options());
+    Phone phone(studio);
+    const auto pendant = [&](Json body, const char *id) {
+        body["request_id"] = id;
+        body["control_epoch"] = phone.epoch();
+        return phone.post("/api/pendant", body);
+    };
+    // A step disarms a preview; the same request again is refused.
+    studio.jobs().arm({"M5"}, nullptr, false);
+    Json step = Json::parse(R"({"action": "jog", "axis": "X", "distance": 0.5, "feed": 100})");
+    step["request_id"] = "0b8f6a3e-8f5d-4a59-9a39-6b1f0a2d7c11";
+    step["control_epoch"] = phone.epoch();
+    CHECK(phone.post("/api/pendant", step, false).status == 401);
+    CHECK(phone.post("/api/pendant", step).status == 200);
+    CHECK(!phone.armed());
+    CHECK(idle(phone.client));
+    CHECK_TEXT(error_of(phone.post("/api/pendant", step)), "already");
+    // Only a single jog, home or zero, with exactly their fields and within the bounds.
+    CHECK(pendant(Json::parse(R"({"action": "raw"})"), "1d6b7c1e-0f3a-4c5b-8d2e-7a9b0c1d2e31").status == 400);
+    CHECK(pendant(Json::parse(R"({"action": "home", "value": "extra"})"), "1d6b7c1e-0f3a-4c5b-8d2e-7a9b0c1d2e32").status == 400);
+    CHECK(pendant(Json::parse(R"({"action": "jog", "axis": "A", "distance": 1, "feed": 200})"), "1d6b7c1e-0f3a-4c5b-8d2e-7a9b0c1d2e33").status == 400);
+    CHECK(pendant(Json::parse(R"({"action": "jog", "axis": "Y", "distance": 12, "feed": 100})"), "1d6b7c1e-0f3a-4c5b-8d2e-7a9b0c1d2e34").status == 400);
+    CHECK(pendant(Json::parse(R"({"action": "jog", "axis": "X", "distance": 1, "feed": 100})"), "not a uuid").status == 400);
+    // Nothing while a job runs.
+    studio.jobs().arm(std::vector<std::string>(60, "M5"), nullptr, false);
+    {
+        Hold machine(studio.device().lock);
+        studio.jobs().start();
+    }
+    CHECK(pendant(Json::parse(R"({"action": "zero"})"), "1d6b7c1e-0f3a-4c5b-8d2e-7a9b0c1d2e35").status == 400);
+}
+
+void pairing_routes() {
+    Studio studio(options());
+    Client{studio}.post("/api/connect", Json::parse(R"({"port": "simulator"})"));
+    const auto pairing = [&](Json body, bool token = true) {
+        http::Request r = request("POST", "/api/phone-monitor", body.dump());
+        if (token) r.headers.emplace_back("x-studio-token", studio.token());
+        return studio.handle(r);
+    };
+    CHECK(pairing(Json::parse(R"({"action": "enable"})"), false).status == 403);
+    const Json first = parsed(pairing(Json::parse(R"({"action": "enable"})")));
+    CHECK(first.at("enabled") == Json(true));
+    CHECK(first.at("token") == parsed(pairing(Json::parse(R"({"action": "status"})"))).at("token"));
+    http::Request old = request("GET", "/api/status");
+    old.headers.emplace_back("authorization", "Bearer " + first.at("token").get<std::string>());
+    CHECK(parsed(studio.monitor().handle(old)).at("pendant") == Json(true));
+    CHECK(parsed(pairing(Json::parse(R"({"action": "disable"})"))).at("enabled") == Json(false));
+    CHECK(studio.monitor().handle(old).status == 401);
+    CHECK(parsed(pairing(Json::parse(R"({"action": "enable"})"))).at("token") != first.at("token"));
+    pairing(Json::parse(R"({"action": "disable"})"));
+    CHECK(pairing(Json::parse(R"({"action": "enable", "plaintext": "yes"})")).status == 400);
+    CHECK(pairing(Json::parse(R"({"action": "open"})")).status == 400);
+    // The order of the addresses offered for pairing: the routed one first, self-assigned ones last.
+    const std::vector<std::string> listed = {"172.27.144.1", "192.168.0.243", "169.254.108.138", "127.0.0.1"};
+    CHECK(PhoneMonitor::order_addresses(listed, "192.168.0.243") ==
+          std::vector<std::string>({"192.168.0.243", "172.27.144.1", "169.254.108.138"}));
+    CHECK(PhoneMonitor::order_addresses(listed, "10.0.0.7").front() == "10.0.0.7");
+    CHECK(PhoneMonitor::order_addresses(listed, "") == std::vector<std::string>({"172.27.144.1", "192.168.0.243", "169.254.108.138"}));
+    CHECK(PhoneMonitor::order_addresses({}, "").empty());
 }
 
 void design_routes() {
@@ -645,6 +1036,10 @@ int main(int argc, char **argv) {
     synthetic_controller();
     levelling();
     phone_start();
+    phone_jobs();
+    monitor_app();
+    pendant_actions();
+    pairing_routes();
     design_routes();
     key_order_reading();
     pendant_tls();

@@ -28,6 +28,10 @@ struct MachineOptions {
     std::function<std::vector<PortInfo>()> ports = serial_ports;
     std::function<double()> clock;  // monotonic seconds; the steady clock when empty
     double timeout = 15;            // seconds an acknowledgement may take
+    // In place of the transport loop's 10 ms pause, for tests that step the loop: true ends the loop.
+    std::function<bool()> wait;
+    // The stock surface the Grbl simulator probes, Z at machine X and Y; the simulator's own when empty.
+    std::function<double(double, double)> surface;
 };
 
 class Machine {
@@ -71,6 +75,9 @@ private:
 
 // studio.rotary.controller_rotary_axes: the rotary axes the current readback supports for this connection.
 std::vector<std::string> controller_rotary_axes(const std::string &protocol, const Json &state);
+// studio.rotary.validate_rotary_machine: a rotary job's setup against the controller's readback; ValueError when
+// the axis, its calibration or its travel is not confirmed (machine_routes.cpp).
+void validate_rotary_machine(const Json &rotary, const Json &status);
 
 }  // namespace server
 }  // namespace kerfkite

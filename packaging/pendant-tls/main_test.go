@@ -4,14 +4,20 @@ import (
 	"bufio"
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/hex"
+	"encoding/pem"
 	"errors"
 	"io"
+	"math/big"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -172,5 +178,105 @@ func TestRefusals(t *testing.T) {
 		if err := run(args, strings.NewReader(""), io.Discard); err == nil {
 			t.Fatalf("%v must be refused", args)
 		}
+	}
+}
+
+// startRelay runs the relay in front of a stand-in listener that answers "ok"; it returns the address, the
+// announced fingerprint and the function that ends the relay.
+func startRelay(t *testing.T, extra ...string) (string, string, func()) {
+	t.Helper()
+	upstream, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		for {
+			conn, err := upstream.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer conn.Close()
+				bufio.NewReader(conn).ReadString('\n')
+				io.WriteString(conn, "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+			}()
+		}
+	}()
+	stdin, closeStdin := io.Pipe()
+	output, stdout := io.Pipe()
+	finished := make(chan error, 1)
+	args := append([]string{"-listen", "127.0.0.1:0", "-upstream", upstream.Addr().String()}, extra...)
+	go func() { finished <- run(args, stdin, stdout) }()
+	lines := bufio.NewReader(output)
+	first, _ := lines.ReadString('\n')
+	second, _ := lines.ReadString('\n')
+	go io.Copy(io.Discard, lines)
+	stop := func() {
+		closeStdin.Close()
+		<-finished
+		upstream.Close()
+	}
+	return "127.0.0.1:" + strings.TrimSpace(strings.TrimPrefix(second, "port ")), strings.TrimSpace(strings.TrimPrefix(first, "fingerprint ")), stop
+}
+
+func get(t *testing.T, conn *tls.Conn) string {
+	t.Helper()
+	io.WriteString(conn, "GET /api/status HTTP/1.1\r\nHost: x\r\n\r\n")
+	reply, _ := io.ReadAll(conn)
+	conn.Close()
+	return string(reply)
+}
+
+func TestStalledConnectionDoesNotBlockOthers(t *testing.T) {
+	address, pin, stop := startRelay(t, "-hosts", "kerfkite-pi")
+	defer stop()
+	stalled, err := net.Dial("tcp", address) // connects and never starts a handshake
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stalled.Close()
+	conn, err := pinned(address, pin)
+	if err != nil {
+		t.Fatalf("a request behind a stalled connection failed: %v", err)
+	}
+	if reply := get(t, conn); !strings.HasSuffix(reply, "ok") {
+		t.Fatalf("reply %q", reply)
+	}
+}
+
+func TestOperatorCertificate(t *testing.T) {
+	// An operator's certificate and key, as PEM files: served as they are, with no fingerprint announced.
+	directory := t.TempDir()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(7),
+		Subject:      pkix.Name{CommonName: "workshop.example"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		DNSNames:     []string{"localhost"},
+		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, _ := x509.MarshalPKCS8PrivateKey(key)
+	certFile, keyFile := filepath.Join(directory, "server.pem"), filepath.Join(directory, "server-key.pem")
+	os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600)
+	os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: encoded}), 0o600)
+	address, pin, stop := startRelay(t, "-cert", certFile, "-key", keyFile)
+	defer stop()
+	if pin != "" {
+		t.Fatalf("an operator's certificate is not pinned, got %q", pin)
+	}
+	conn, err := pinned(address, fingerprint(der))
+	if err != nil {
+		t.Fatalf("the operator's certificate was not served: %v", err)
+	}
+	if reply := get(t, conn); !strings.HasSuffix(reply, "ok") {
+		t.Fatalf("reply %q", reply)
 	}
 }

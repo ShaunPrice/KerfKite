@@ -411,7 +411,10 @@ private:
         return std::regex_match(word, pattern);
     }
 
-    double surface(double x, double y) const { return 0.0015 * x - 0.001 * y + 0.00001 * std::pow(x - 40, 2); }
+    double surface(double x, double y) const {
+        if (options_.surface) return options_.surface(x, y);
+        return 0.0015 * x - 0.001 * y + 0.00001 * std::pow(x - 40, 2);
+    }
 
     // _simulate: the simulated position through one line; false when a probe finds no surface.
     bool simulate(const std::string &line) {
@@ -626,14 +629,23 @@ private:
         }
     }
 
+    // stop.wait(0.01) of the Python loop: true when the loop is to end. A test steps the loop through options_.wait.
+    bool pause() {
+        if (options_.wait) {
+            if (options_.wait()) return true;
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return stop_;
+    }
+
     void loop() {
         const double started = options_.clock();
         double polled = started;
         bool initialized = false;
         try {
             for (;;) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
-                if (stop_) return;
+                if (pause()) return;
                 std::lock_guard<std::recursive_mutex> hold(m_);
                 if (stop_) return;
                 double now = options_.clock();
@@ -1043,13 +1055,21 @@ private:
         }
     }
 
+    bool pause() {
+        if (options_.wait) {
+            if (options_.wait()) return true;
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return stop_;
+    }
+
     void loop() {
         const double started = options_.clock();
         bool initialized = simulated_;
         try {
             for (;;) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
-                if (stop_) return;
+                if (pause()) return;
                 std::lock_guard<std::recursive_mutex> hold(m_);
                 if (stop_) return;
                 const double now = options_.clock();

@@ -164,9 +164,15 @@ std::vector<std::string> PhoneMonitor::addresses() {
             freeaddrinfo(list);
         }
     }
-    const std::string routed = routed_address();
-    if (!routed.empty()) found.insert(routed);
-    std::vector<std::string> out(found.begin(), found.end());
+    return order_addresses(std::vector<std::string>(found.begin(), found.end()), routed_address());
+}
+
+std::vector<std::string> PhoneMonitor::order_addresses(const std::vector<std::string> &found, const std::string &routed) {
+    std::set<std::string> all;
+    for (const std::string &ip : found)
+        if (!loopback(ip)) all.insert(ip);
+    if (!routed.empty()) all.insert(routed);
+    std::vector<std::string> out(all.begin(), all.end());
     std::sort(out.begin(), out.end(), [&](const std::string &a, const std::string &b) {
         const auto key = [&](const std::string &ip) { return std::make_tuple(ip != routed, link_local(ip), numeric(ip)); };
         return key(a) < key(b);
@@ -387,7 +393,12 @@ http::Response PhoneMonitor::handle(const http::Request &request) {
             ok["ok"] = true;
             return with_headers(http::Response::json(ok.dump()));
         }
-        return with_headers(http::Response::error(request.method == "POST" || get ? 404 : 405, "Not Found"));
+        // A route that is there for another method is 405, as Flask answers; anything else is 404.
+        const bool page = request.path == "/" || request.path == "/monitor.js" || request.path == "/monitor.css" || request.path == "/api/status";
+        const bool control = request.path == "/api/action" || request.path == "/api/pendant";
+        if ((page && !get) || (control && request.method != "POST"))
+            return with_headers(http::Response::error(405, "The method is not allowed for the requested URL."));
+        return with_headers(http::Response::error(404, "Not Found"));
     } catch (const ValueError &e) {
         return with_headers(http::Response::error(400, e.what()));
     } catch (const RuntimeError &e) {
