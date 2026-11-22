@@ -7,7 +7,7 @@ from .windows_support import require_supported_windows
 from . import leveling
 from . import pcb_import
 from . import relief
-from .cam import generate, number
+from .cam import generate, job_json, number
 from .design_api import register_design_routes
 from .machine_setup import describe as describe_machine
 from .device import DeviceController as Controller
@@ -371,7 +371,12 @@ def create_app(controller=None, phone_jobs=None, allow_hardware=False, phone_mon
 
     @app.post('/api/generate')
     def preview():
-        return jsonify(generate(payload()))
+        project = payload()
+        # The core writes the job as JSON itself: for a large job that is most of the time of the request.
+        text = job_json(project)
+        if text is not None:
+            return app.response_class(text, mimetype='application/json')
+        return jsonify(generate(project, backend='python'))
 
     @app.post('/api/run')
     def run():

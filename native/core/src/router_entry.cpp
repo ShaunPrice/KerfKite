@@ -226,7 +226,7 @@ Job entry_job(const json &project, const std::vector<Contour> &source, const std
     lines.push_back("M5");
 
     const json *protocol = get(project, "protocol");
-    job.lines = postprocess(lines, protocol, "router", get(project, "dwell_units"));
+    job.lines = postprocess(std::move(lines), protocol, "router", get(project, "dwell_units"));
     job.cut_length = rounded(length, 2);
     job.cut_minutes = rounded(minutes, 2);
     job.warnings.push_back(get_protocol(protocol).notes);

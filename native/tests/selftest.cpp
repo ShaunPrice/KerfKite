@@ -817,6 +817,9 @@ int main() {
         "M5\n";
     expect(program == expected, "a two-level router program");
     expect(job.cut_length == 61.0 && job.segments.size() == 4 && job.warnings.size() == 3, "its summary");
+    expect(to_json(job).at("prepared_paths").dump() == "[[[10.0,10.0],[20.5,10.0],[20.5,30.0]]]" &&
+               to_json(job).at("prepared_depths").is_null(),
+           "the paths it cut");
     expect(job.bounds[0] == 10 && job.bounds[1] == 10 && job.bounds[2] == 20.5 && job.bounds[3] == 30, "its bounds");
 
     expect(message<ValueError>(R"({"mode":"plasma"})") == "Choose router, laser or knife", "an unknown head");
@@ -839,6 +842,13 @@ int main() {
                drilled.segments[0].end_z == -0.4 && drilled.segments[0].start_z == 5 && drilled.warnings.size() == 2 &&
                drilled.bounds[0] == 10 && drilled.bounds[1] == 10 && drilled.bounds[2] == 30.5 && drilled.bounds[3] == 20,
            "its summary");
+    // What Studio's stock simulation reads from the job: each hole with the drill's diameter, and the drill.
+    const json drill_data = to_json(drilled);
+    expect(drill_data.at("drill_holes").dump() == "[[10.0,10.0,3.175],[30.5,20.0,3.175]]" &&
+               drill_data.at("simulation_tool").dump() == R"({"angle":118.0,"diameter":3.175,"shape":"drill"})" &&
+               drill_data.at("prepared_depths").is_null() && drill_data.at("prepared_paths").size() == 2 &&
+               !drill_data.contains("operations"),
+           "its holes and drill");
     expect(message<ValueError>(R"({"mode":"router","operation":"drill","width":100,"height":50,"feed":600,"power":1,
         "paths":[[[10,10],[11,10]]]})") == "Drill requires point markers or closed circular hole outlines",
            "a line is not a hole");

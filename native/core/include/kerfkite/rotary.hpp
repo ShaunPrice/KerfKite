@@ -16,9 +16,20 @@
 namespace kerfkite {
 
 // studio.rotary.generate_rotary(project, options): the project's planar job, generated here, wrapped onto the
-// cylinder. The answer is the job (lines, segments, cut_length, cut_minutes, mode, bounds, warnings) with the
-// rotary program as its lines, the rotary warnings added and the setup under "rotary".
+// cylinder. The answer is the job (lines, segments, cut_length, cut_minutes, mode, bounds, warnings and the
+// rest of what generate() gives) with the rotary program as its lines, the rotary warnings added and the
+// setup under "rotary". The preview segments are those of the planar job, as the reference packs them.
 Json generate_rotary(const Json &project, const Json &options);
+
+// The same job before it is written as JSON: the planar job, whose lines and warnings the rotary ones
+// replace, and those.
+struct RotaryJob {
+    Job planar;
+    std::vector<std::string> lines;  // the rotary program
+    Json warnings;                   // the planar job's warnings and the rotary ones
+    Json rotary;                     // the setup as worked out
+};
+RotaryJob rotary_job(const Json &project, const Json &options);
 
 // studio.rotary.wrap_job(job, options): a job of canonical G-code lines, as an earlier generation or a file
 // gave them, wrapped onto the cylinder. Every other member of the job is kept.

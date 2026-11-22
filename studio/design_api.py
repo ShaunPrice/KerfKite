@@ -132,12 +132,16 @@ def register_design_routes(app):
 
     @app.post('/api/rotary')
     def rotary_export():
-        from .rotary import generate_rotary
+        from .rotary import generate_rotary, rotary_json
 
         data = body('Provide a project and rotary setup')
         if not isinstance(data.get('project'), dict):
             raise ValueError('Provide a project and rotary setup')
-        return jsonify(generate_rotary(data['project'], data.get('options', {})))
+        project, options = data['project'], data.get('options', {})
+        text = rotary_json(project, options)
+        if text is not None:
+            return Response(text, mimetype='application/json')
+        return jsonify(generate_rotary(project, options, backend='python'))
 
     @app.post('/api/geometry')
     def geometry():

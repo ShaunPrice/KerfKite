@@ -51,48 +51,32 @@ Setting the GPU up in a new process took 210 to 280 ms, on top of the first job.
 
 The stock preview stays on the threads: it uses `hypot` and `tan`, whose last bits differ between mathematics libraries and between GPUs, so a GPU could not give the same preview. The solid and polygon kernels make their decisions in exact integer arithmetic and do not use a GPU either.
 
-## G-code and rotary loops
+## G-code and rotary output
 
-`studio/_gcode_native.cpp` is compiled into the same extension. It ports the per-move loops that were the largest remaining Python stages:
+Studio's G-code and rotary output come from the native core (`native/core/src/cam.cpp`, `rotary.cpp` and the files beside them), compiled into the extension and called through `core_cam` in `studio/_core_native.cpp`. `studio.cam.generate`, `studio.rotary.generate_rotary` and `studio.rotary.wrap_job` hand the request over and return the core's job; the Python modules behind them stay as the reference that the core is compared with, and as the fallback:
 
-| Function | Replaces |
-| --- | --- |
-| `plain_points`, `plain_depths` | the per-point input checks, for designs made only of plain in-range numbers |
-| `gcode_moves` | the loop that writes each cutting move, its preview segment and the cut length |
-| `rotary_run` | the translation of each generated cutting run to rotary blocks |
-| `segment_rows` | unpacking packed segments at the JSON boundary |
-
-**Python stays the reference.** Each function handles only the plain case. When it meets anything else (an unexpected type, a non-finite number, a fixture or travel limit) it returns `None` and changes nothing, and the caller runs the Python loop from the same state. Every error message, and every unusual input, is therefore handled by the reference by construction.
-
-**The output is identical, not merely close.** Three choices make that hold on every platform:
-
-* Fixed-point text is produced with exact integer arithmetic, rounding half to even on the exact binary value as Python does. The C library is not used, because its rounding has differed between platforms.
-* Squares use the same `pow` call that Python's `**` operator makes.
-* The rotary cut length is computed by the Python function itself, called from C++, because Python's `hypot` and `asinh` are its own implementations. Laser path preparation stays in Python for the same reason (`math.dist`).
-
-The native core has the whole rotary post as well (`native/core/src/rotary.cpp`, `kerfkite-cam rotary` and `rotary-wrap`), for use without Python. It computes the cut length itself: CPython's `hypot` of three values is reproduced step for step (`pymath::vector_norm` in `kerfkite/py_math.hpp`), `asinh` is the C library's, which is what CPython 3.11 and later call, and squares use `pow` as Python's `**` does. `validation/native_core_parity.py` compares it with `studio.rotary` on every rotary call the test suite makes and on generated jobs and given programs (`--rotary`: 3,000 generated jobs and 1,500 programs by default, about a quarter of them accepted).
+* **What crosses to the core.** A request goes to the core only when JSON would carry it unchanged: `None`, booleans, integers within 64 bits, finite floats, text, and lists and dicts with text keys, each of exactly that type. A tuple, a float subclass, a non-finite number or a key that is not text stays with the Python reference, which gives its own answer or message.
+* **What the core declines.** The few cases it does not reproduce exactly (numbers written in non-ASCII digits, a contour whose self-crossing test turns on rounding inside GEOS, given G-code that is not ASCII) raise `NotImplementedError` inside the call, and the Python reference answers them.
+* **The job is Studio's job.** The core gives every member the Python job has: the program lines, the preview segments with the reference's number types (the integer 0 of a laser move's height and of a beam-off gap), the cut length and time, bounds and warnings, the paths and depths cut, and for drilling the holes and the drill, or for an ordered job the number of operations. The job is built as Python objects directly from the C++ one, not written as text and read back, and the rows of the preview share the float objects of the points they have in common.
+* **Previews as text.** The preview routes (`/api/generate` in both servers and `/api/rotary`) send the core's own JSON text of the job (`studio.cam.job_json`, `studio.rotary.rotary_json`), with names in byte order and numbers written as Python writes them, as Flask's `jsonify` would give them. For a large job that is most of the time of the request.
 
 ```python
 from studio.cam import generate
 from studio.rotary import generate_rotary
-job = generate(project)                      # auto: C++ loops if importable, otherwise Python
-reference = generate(project, backend='python')
-accelerated = generate(project, backend='native')  # explicit error if the extension is absent
+job = generate(project)                            # auto: the native core if installed, otherwise Python
+reference = generate(project, backend='python')    # the Python reference
+core = generate(project, backend='native')         # the core only: an error without the extension, and
+                                                   # NotImplementedError for what the core declines
 rotary = generate_rotary(project, options, backend='python')
 ```
 
-Set `KERFKITE_GCODE_BACKEND=python` in the server's environment to make `auto` use the Python loops without reinstalling. The functions hold the GIL.
+`KERFKITE_GCODE_BACKEND=python` in the server's environment makes `auto` use the Python CAM without reinstalling, and so does `KERFKITE_POLYGON_BACKEND=shapely`, since only the Python CAM can take offsets, pockets and fills from Shapely. The core runs without the GIL.
 
-Verification on Linux x86-64 (GCC, Python 3.13):
+**The output is identical, not merely close.** The core writes fixed-point text with exact integer arithmetic, rounding half to even on the exact binary value as Python does; squares use the same `pow` call that Python's `**` makes; `math.dist`, `sum()` and `math.hypot` are reproduced step for step as CPython 3.12 computes them (`kerfkite/py_math.hpp`); and the rotary post's `asinh` is the C library's, which is what CPython 3.11 and later call. `validation/native_core_parity.py` compares the core with the Python reference on every generator and rotary call the test suite makes, on 20,000 generated projects, 6,000 ramp, helix and tab jobs, 5,000 helical pockets, 4,000 V-carves, and 3,000 rotary jobs with 1,500 given programs, on Linux, macOS, Windows and ARM in CI: every case is reproduced or declined.
 
-* 10.4 million formatted and rounded values, including decimal ties, binary fractions and random bit patterns, matched Python with no difference.
-* `tests/test_native_gcode.py` compares both backends for router, relief, laser, perforated and bridged jobs, in list, packed and rotary forms, with number types included; 96 rotary option combinations; and the limit conditions that make the translator hand a run back.
-* Every generator call made by the regression suite (578 calls, 174 of which must fail) returns the same result or error as the Python-only baseline. The suite also passes with the Python loops forced and with the extension removed.
-* The extension was rebuilt with the address and undefined-behaviour sanitizers and the CAM tests and benchmark jobs were run under them without a report.
+`tests/test_native_gcode.py` compares the two for router, relief, laser, perforated and bridged jobs, in list and packed forms, with number types and every member of the job; drilling, ordered, ramp, pocket and knife jobs; what may cross to the core and what stays with the reference; the environment switches; the JSON text; 96 rotary option combinations, the rotary limits and given programs. `validation/benchmark_gcode.py` times the Python reference against the core and fails if their program hashes differ.
 
-On Windows x64 (MSVC 2022 Build Tools, Python 3.10 and 3.12) the extension builds without compiler warnings, the parity tests and the installed-wheel check pass, and the five benchmark programs have the same hashes as on Linux. macOS and ARM builds have not been run.
-
-`validation/benchmark_gcode.py` times both backends and fails if their program hashes differ; `validation/check_installed_cam.py` repeats the parity check on an installed wheel.
+The extension keeps two small pieces of its own here (`studio/_gcode_native.cpp`): unpacking packed preview rows at the JSON boundary, and the core's fixed-point text and `round()`, which the tests compare with Python's formatting. The per-move loops and the rotary run translator it had before, written for the Python generator, are gone: the core generates the whole job.
 
 ## Python-free core
 

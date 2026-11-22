@@ -1,4 +1,5 @@
-"""The optional C++ move loops must reproduce the Python reference exactly: text, numbers and number types."""
+"""Studio's CAM through the native core must be the Python reference's to the byte: program text, numbers and
+number types, every member of the job, and every refusal with its message."""
 
 import json
 import math
@@ -8,17 +9,17 @@ import struct
 import unittest
 from unittest.mock import patch
 
-from studio import cam, rotary
-from studio.cam import generate
+from studio import cam
+from studio.cam import generate, job_json
 from studio.cam_moves import CutRun, PackedSegments
-from studio.rotary import generate_rotary
+from studio.rotary import generate_rotary, rotary_json, wrap_job
 
 try:
     from studio import _relief_native as native
 except ImportError:
     native = None
 
-HAS_NATIVE = native is not None and hasattr(native, 'gcode_moves')
+HAS_NATIVE = native is not None and hasattr(native, 'core_cam')
 
 
 def exact(value):
@@ -83,7 +84,7 @@ PROJECTS = {
 }
 
 
-@unittest.skipUnless(HAS_NATIVE, 'Optional C++ extension is not installed')
+@unittest.skipUnless(native is not None, 'Optional C++ extension is not installed')
 class ExactNumberTextTests(unittest.TestCase):
     def values(self):
         rng = random.Random(20261121)
@@ -130,29 +131,34 @@ class ExactNumberTextTests(unittest.TestCase):
         self.assertEqual(native.fixed_text(1.8e10, 9), format(1.8e10, '.9f'))
 
 
+class Calls:
+    """The core's CAM wrapped so that a test can see what it answered."""
+
+    def __init__(self):
+        self.answers = []
+
+    def __call__(self, *args):
+        self.answers.append(native.core_cam(*args))
+        return self.answers[-1]
+
+
 @unittest.skipUnless(HAS_NATIVE, 'Optional C++ extension is not installed')
-class MoveLoopParityTests(unittest.TestCase):
+class CoreParityTests(unittest.TestCase):
     def both(self, project, **options):
         reference = generate(project, backend='python', **options)
-        accelerated = generate(project, backend='native', **options)
-        self.assertEqual(exact(accelerated), exact(reference))
+        core = generate(project, backend='native', **options)
+        self.assertEqual(exact(core), exact(reference))
         return reference
 
     def test_every_mode_and_segment_form_matches_the_reference(self):
         for name, build in PROJECTS.items():
-            for options in ({}, {'packed_segments': True}, {'_rotary_blocks': True}):
+            for options in ({}, {'packed_segments': True}):
                 with self.subTest(name, **options):
-                    results = []
-                    loop = cam._native_moves
-
-                    def recording(*args, results=results, loop=loop):
-                        results.append(loop(*args))
-                        return results[-1]
-
-                    with patch.object(cam, '_native_moves', recording):
+                    calls = Calls()
+                    with patch.object(cam, '_core_cam', calls):
                         job = self.both(build(), **options)
-                    self.assertTrue(results)
-                    self.assertNotIn(None, results, 'the C++ loop declined a plain job')
+                    self.assertTrue(calls.answers)
+                    self.assertNotIn(None, calls.answers, 'the core was not given a plain job')
                     self.assertGreater(job['cut_length'], 0)
 
     def test_list_rows_keep_the_reference_number_types(self):
@@ -189,62 +195,75 @@ class MoveLoopParityTests(unittest.TestCase):
             project = base(paths=paths, depth=4, step=rng.choice([0.5, 1, 4]), feed=rng.uniform(100, 3000))
             if case % 2:
                 project['path_depths'] = depths
-            for options in ({}, {'packed_segments': True}, {'_rotary_blocks': True}):
+            for options in ({}, {'packed_segments': True}):
                 with self.subTest(case=case, **options):
                     self.both(project, **options)
 
-    def test_inputs_outside_the_plain_case_fall_back_to_the_reference(self):
-        class Float(float):
-            pass
-
-        # The C++ loop accepts exact floats and ints only. Called directly with a float subclass it declines.
-        paths = [[[Float(1.0), 2.0], [3.0, 4.0]]]
-        self.assertIsNone(native.gcode_moves(paths, None, [-1.0], False, False, False, 5.0, 100.0, 300.0))
-        self.assertIsNone(native.gcode_moves([[[1.0, 2.0]]], None, [-1.0], False, False, False, 5.0, 100.0, 300.0))
-        self.assertIsNone(
-            native.gcode_moves([[[1.0, 2.0], [math.inf, 4.0]]], None, [-1.0], False, False, False, 5.0, 100.0, 300.0)
-        )
-        self.assertIsNone(native.gcode_moves(paths[:0], None, [-1.0], False, False, False, 5.0, 100.0, 300.0))
-        accepted = native.gcode_moves([[[1.0, 2.0], [3.0, 4.0]]], None, [-1.0], False, False, False, 5.0, 100.0, 300.0)
-        self.assertEqual(
-            accepted[0].split('\n'),
-            ['G0 Z5.000', 'G0 X1.000 Y2.000', 'G1 Z-1.000 F100.0', 'G1 X3.000 Y4.000 F300.0', 'G0 Z5.000'],
-        )
-        # A declined loop leaves the job to Python, with the same result.
-        with patch.object(cam, '_native_moves', return_value=None):
-            self.assertEqual(exact(generate(base(), backend='native')), exact(generate(base(), backend='python')))
+    def test_every_member_of_the_job_matches(self):
+        square = [[20, 20], [60, 20], [60, 50], [20, 50], [20, 20]]
+        jobs = {
+            # The holes and the drill that the stock simulation reads, and the number of operations.
+            'ordered drilling': base(
+                tool_diameter=3,
+                operations=[
+                    dict(
+                        operation='drill',
+                        depth=1.5,
+                        drill_peck=0.5,
+                        paths=[[[10, 10], [10, 10]], [[30.5, 20], [30.5, 20]]],
+                    ),
+                    dict(operation='drill', depth=1, paths=[[[50, 25], [50, 25]]]),
+                ],
+            ),
+            'drilling': base(operation='drill', tool_diameter=2, paths=[[[10, 10], [10, 10]]]),
+            # The paths a ramp follows and their depths.
+            'ramp': base(paths=[square], router_entry='ramp', tool_diameter=3),
+            'pocket': base(paths=[square], operation='pocket', tool_diameter=3, stepover=1.2),
+            'knife': base(mode='knife', paths=[square], knife_offset=0.25),
+        }
+        for name, project in jobs.items():
+            with self.subTest(name):
+                job = self.both(project)
+                for key in ('drill_holes', 'simulation_tool', 'operations', 'prepared_paths', 'prepared_depths'):
+                    if key in job:
+                        self.assertIn(key, generate(project, backend='native'))
 
 
 @unittest.skipUnless(HAS_NATIVE, 'Optional C++ extension is not installed')
-class PlainInputTests(unittest.TestCase):
-    """The C++ input checks accept only the plain case and leave every other input, and its message, to Python."""
+class CrossingTests(unittest.TestCase):
+    """Only what JSON carries unchanged is given to the core; the rest, and its message, stays the reference's."""
 
-    def test_plain_points_are_copied_as_floats(self):
-        source = [[[1, 2.5], [3.0, 4]], [[0, 0], [10.0, 20.0], [5, 5]]]
-        clean = native.plain_points(source, 10.0, 20.0, 100)
-        self.assertEqual(clean, source)
-        self.assertEqual({type(v) for path in clean for point in path for v in point}, {float})
-        self.assertIs(clean[0][0][1], source[0][0][1])  # float(x) is x for an exact float
-        self.assertIsNot(clean[0], source[0])
+    def outcomes(self, project):
+        found = []
+        for backend in ('python', 'auto'):
+            try:
+                found.append(('ok', exact(generate(project, backend=backend))))
+            except Exception as error:  # noqa: BLE001 - an int beyond the double range raises OverflowError
+                found.append((type(error).__name__, str(error)))
+        return found
 
-    def test_anything_else_is_declined(self):
+    def test_values_json_would_change_stay_with_the_reference(self):
+        class Float(float):
+            pass
+
         good = [[1.0, 2.0], [3.0, 4.0]]
-        for name, paths in {
-            'not a list': ([tuple(good)]),
-            'tuple point': [[(1.0, 2.0), [3.0, 4.0]]],
-            'one point': [[[1.0, 2.0]]],
-            'three numbers': [[[1.0, 2.0, 3.0], [3.0, 4.0]]],
-            'bool': [[[True, 2.0], [3.0, 4.0]]],
-            'numeric text': [[['1.0', 2.0], [3.0, 4.0]]],
-            'outside the work area': [[[1.0, 2.0], [10.5, 4.0]]],
-            'negative': [[[-0.1, 2.0], [3.0, 4.0]]],
-            'not finite': [[[math.nan, 2.0], [3.0, 4.0]]],
-            'huge int': [[[10**400, 2.0], [3.0, 4.0]]],
+        for name, project in {
+            'tuple path': base(paths=[tuple(good)]),
+            'tuple point': base(paths=[[(1.0, 2.0), [3.0, 4.0]]]),
+            'float subclass': base(paths=[[[Float(1.0), 2.0], [3.0, 4.0]]]),
+            'not finite': base(paths=[[[math.nan, 2.0], [3.0, 4.0]]]),
+            'infinite feed': base(feed=math.inf),
+            'huge int': base(paths=[[[10**400, 2.0], [3.0, 4.0]]]),
+            'key that is not text': {**base(), 7: 'seven'},
+            'lone surrogate': base(protocol='\ud800'),
         }.items():
             with self.subTest(name):
-                self.assertIsNone(native.plain_points(paths, 10.0, 20.0, 100))
-        self.assertIsNone(native.plain_points([good, good], 10.0, 20.0, 3))  # more points than the limit
-        self.assertIsNone(native.plain_points((good,), 10.0, 20.0, 100))
+                self.assertIsNone(native.core_cam('generate', project))
+                self.assertIsNone(job_json(project))
+                found = self.outcomes(project)
+                self.assertEqual(found[0], found[1])
+                with self.assertRaises(NotImplementedError):
+                    generate(project, backend='native')
 
     def test_declined_input_gets_the_reference_message(self):
         cases = {
@@ -252,38 +271,27 @@ class PlainInputTests(unittest.TestCase):
             'bool': [[[True, 2.0], [3.0, 4.0]]],
             'outside': [[[1.0, 2.0], [900.0, 4.0]]],
             'short': [[[1.0, 2.0]]],
+            'three numbers': [[[1.0, 2.0, 3.0], [3.0, 4.0]]],
         }
         for name, paths in cases.items():
             with self.subTest(name):
-                outcomes = []
-                for backend in ('python', 'native'):
-                    try:
-                        outcomes.append(('ok', exact(generate(base(paths=paths), backend=backend))))
-                    except ValueError as error:
-                        outcomes.append(('error', str(error)))
-                self.assertEqual(outcomes[0], outcomes[1])
+                found = self.outcomes(base(paths=paths))
+                self.assertEqual(found[0], found[1])
 
-    def test_plain_depths(self):
-        paths = [[[0.0, 0.0], [1.0, 1.0]], [[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]]
-        depths = [[-1, -0.5], [0, -50.0, -2.25]]
-        clean = native.plain_depths(depths, paths)
-        self.assertEqual(clean, depths)
-        self.assertEqual({type(v) for row in clean for v in row}, {float})
-        for name, bad in {
-            'above the surface': [[-1, 0.5], [0, -1, -2]],
-            'too deep': [[-1, -50.5], [0, -1, -2]],
-            'wrong length': [[-1], [0, -1, -2]],
-            'missing path': [[-1, -0.5]],
-            'bool': [[-1, False], [0, -1, -2]],
-            'tuple row': [(-1, -0.5), [0, -1, -2]],
-        }.items():
-            with self.subTest(name):
-                self.assertIsNone(native.plain_depths(bad, paths))
+    def test_a_case_the_core_does_not_reproduce_is_answered_by_the_reference(self):
+        numbers = base(feed='\uff16\uff10\uff10')  # 600 in full-width digits: the core declines such text
+        with self.assertRaises(NotImplementedError):
+            native.core_cam('generate', numbers)
+        self.assertIsNone(job_json(numbers))
+        found = self.outcomes(numbers)
+        self.assertEqual(found[0], found[1])
+        self.assertEqual(found[0][0], 'ok')
 
     def test_packed_rows_unpack_to_the_same_lists(self):
-        job = generate(relief_project(), packed_segments=True, backend='python')
+        job = generate(relief_project(), packed_segments=True, backend='native')
+        self.assertIsInstance(job['segments'], PackedSegments)
         self.assertEqual(exact(job['segments'].to_list()), exact(list(job['segments'])))
-        laser = generate(laser_project(), packed_segments=True, backend='python')
+        laser = generate(laser_project(), packed_segments=True, backend='native')
         self.assertEqual(exact(laser['segments'].to_list()), exact(list(laser['segments'])))
         self.assertIsNone(native.segment_rows(b'12345'))
 
@@ -308,29 +316,50 @@ class BackendSelectionTests(unittest.TestCase):
             generate_rotary(base(), dict(diameter=100, wrap_axis='X', postprocessor='grblhal'), backend='fast')
 
     def test_missing_extension_uses_python_unless_native_is_demanded(self):
-        with patch.object(cam, '_native_moves', None), patch.object(rotary, '_native_run', None):
+        options = dict(diameter=100, wrap_axis='X', postprocessor='grblhal')
+        with patch.object(cam, '_core_cam', None), patch.object(cam, '_core_cam_text', None):
             self.assertEqual(exact(generate(base())), exact(generate(base(), backend='python')))
+            self.assertIsNone(job_json(base()))
+            self.assertIsNone(rotary_json(base(), options))
             with self.assertRaisesRegex(ValueError, 'not installed'):
                 generate(base(), backend='native')
             with self.assertRaisesRegex(ValueError, 'not installed'):
-                generate_rotary(base(), dict(diameter=100, wrap_axis='X', postprocessor='grblhal'), backend='native')
+                generate_rotary(base(), options, backend='native')
 
     @unittest.skipUnless(HAS_NATIVE, 'Optional C++ extension is not installed')
-    def test_environment_switch_selects_the_python_loops(self):
+    def test_environment_switches_select_the_python_cam(self):
         options = dict(diameter=100, wrap_axis='X', postprocessor='grblhal')
-        with patch.object(cam, '_native_moves', wraps=cam._native_moves) as moves:
-            with patch.object(rotary, '_native_run', wraps=rotary._native_run) as runs:
-                with patch.dict(os.environ, {'KERFKITE_GCODE_BACKEND': 'python'}):
+        for switch in ({'KERFKITE_GCODE_BACKEND': 'python'}, {'KERFKITE_POLYGON_BACKEND': 'shapely'}):
+            with self.subTest(**switch):
+                calls = Calls()
+                with patch.object(cam, '_core_cam', calls), patch.dict(os.environ, switch):
                     generate(base())
                     generate_rotary(base(), options)
-                self.assertFalse(moves.called or runs.called)
-                with patch.dict(os.environ, {'KERFKITE_GCODE_BACKEND': ''}):
-                    generate_rotary(base(), options)
-                self.assertTrue(moves.called and runs.called)
+                    self.assertIsNone(job_json(base()))
+                self.assertFalse(calls.answers)
+        calls = Calls()
+        with patch.object(cam, '_core_cam', calls), patch.dict(os.environ, {'KERFKITE_GCODE_BACKEND': ''}):
+            generate(base())
+            generate_rotary(base(), options)
+        self.assertEqual(len(calls.answers), 2)
+
+    @unittest.skipUnless(HAS_NATIVE, 'Optional C++ extension is not installed')
+    @patch.dict(os.environ, {'KERFKITE_GCODE_BACKEND': '', 'KERFKITE_POLYGON_BACKEND': ''})
+    def test_json_text_is_the_job(self):
+        for name, build in PROJECTS.items():
+            with self.subTest(name):
+                project = build()
+                self.assertEqual(json.loads(job_json(project)), json.loads(json.dumps(generate(project))))
+        options = dict(diameter=80, wrap_axis='Y', postprocessor='grblhal', feed_reference='cut')
+        self.assertEqual(
+            json.loads(rotary_json(base(), options)), json.loads(json.dumps(generate_rotary(base(), options)))
+        )
+        with self.assertRaisesRegex(ValueError, 'Choose router, laser or knife'):
+            job_json(base(mode='plasma'))
 
 
 @unittest.skipUnless(HAS_NATIVE, 'Optional C++ extension is not installed')
-class RotaryRunParityTests(unittest.TestCase):
+class RotaryParityTests(unittest.TestCase):
     def outcome(self, project, options, backend):
         try:
             return 'ok', exact(generate_rotary(project, options, backend=backend))
@@ -362,15 +391,15 @@ class RotaryRunParityTests(unittest.TestCase):
                             )
                             source = dict(project, protocol='linuxcnc') if post == 'linuxcnc' else project
                             with self.subTest(name, wrap=wrap, reference=reference, post=post, direction=direction):
-                                with patch.object(rotary, '_native_run', wraps=rotary._native_run) as run:
+                                calls = Calls()
+                                with patch.object(cam, '_core_cam', calls):
                                     status, _ = self.both(source, options)
                                 self.assertEqual(status, 'ok')
-                                self.assertTrue(run.called)
+                                self.assertTrue(calls.answers)
 
-    def test_conditions_the_translator_declines_give_the_reference_error(self):
+    def test_limits_give_the_reference_error(self):
         plain = dict(diameter=80, wrap_axis='X', postprocessor='grblhal')
-        # Each job starts inside its limits and breaks them part-way along a cutting run, so the C++ translator
-        # is entered and must hand the run back for the reference to raise.
+        # Each job starts inside its limits and breaks them part-way along a cutting run.
         deepening = base(paths=[wave(30, 10, 20, 200, 10)], path_depths=[[-0.1 - 0.12 * i for i in range(30)]], depth=4)
         leaving = base(paths=[[[10, 20], [30, 20], [90, 20]]])
         turning = base(paths=[[[1, 20], [3, 20], [60, 20]]])
@@ -386,22 +415,8 @@ class RotaryRunParityTests(unittest.TestCase):
         }
         for name, (project, options) in cases.items():
             with self.subTest(name):
-                results = []
-                translator = rotary._native_run
-
-                def recording(*args, results=results, translator=translator):
-                    results.append(translator(*args))
-                    return results[-1]
-
-                with patch.object(rotary, '_native_run', recording):
-                    status, message = self.both(project, options)
-                if name.endswith('legal'):
-                    self.assertEqual(status, 'ok')
-                    self.assertNotIn(None, results)
-                else:
-                    self.assertEqual(status, 'error', name)
-                    self.assertTrue(message)
-                    self.assertIn(None, results, 'the translator was not the one to meet the limit')
+                status, message = self.both(project, options)
+                self.assertEqual(status, 'ok' if name.endswith('legal') else 'error', name)
 
     def test_zero_length_moves_and_seam_snap_match(self):
         circumference = math.pi * 80
@@ -415,24 +430,31 @@ class RotaryRunParityTests(unittest.TestCase):
         status, _ = self.both(project, dict(diameter=80, wrap_axis='X', postprocessor='grblhal'))
         self.assertEqual(status, 'ok')
 
-    def test_translator_changes_nothing_when_it_declines(self):
-        job = generate(base(), _rotary_blocks=True, backend='python')
-        run = next(line for line in job['lines'] if isinstance(line, CutRun))
-        arguments = [
-            run.segments.buffer(), run.start, run.stop, round(run.feed, 1), run.variable_z, False, True,
-            math.pi * 80, 0.0, 1.0, 40.0, False, 0.0, 0.0, 0.0, 'AXZ', 10.0, 10.0, -1.0, False, False, 0.0,
-            math.inf, -math.inf, math.inf, -math.inf, math.inf, -math.inf, rotary._cut_length, 40.0, 'surface',
-        ]  # fmt: skip
-        self.assertIsNotNone(native.rotary_run(*arguments))
-        unknown_start = list(arguments)
-        unknown_start[16] = None
-        self.assertIsNone(native.rotary_run(*unknown_start))
-        tiny = list(arguments)
-        tiny[10] = 0.5  # radius smaller than the cut depth
-        self.assertIsNone(native.rotary_run(*tiny))
-        failing = list(arguments)
-        failing[28] = lambda *args: (_ for _ in ()).throw(RuntimeError('length failed'))
-        self.assertIsNone(native.rotary_run(*failing))
+    def test_given_programs_match_the_reference(self):
+        planar = json.loads(json.dumps(generate(base(), backend='python')))
+        options = dict(diameter=80, wrap_axis='X', postprocessor='grblhal')
+        given = {
+            'as generated': planar['lines'],
+            'a comment': planar['lines'][:3] + ['(note)'] + planar['lines'][3:],
+            'a word twice': planar['lines'][:12] + ['G1 X1 X2'] + planar['lines'][12:],
+            'no spindle off': planar['lines'][:-1],
+            'odd spacing': ['  ' + line + '\t' for line in planar['lines']],
+        }
+        for name, lines in given.items():
+            with self.subTest(name):
+                job = dict(planar, lines=lines, note='kept')
+                outcomes = []
+                for backend in ('python', 'native'):
+                    try:
+                        outcomes.append(('ok', exact(wrap_job(job, options, backend=backend))))
+                    except ValueError as error:
+                        outcomes.append(('error', str(error)))
+                self.assertEqual(outcomes[0], outcomes[1])
+        # Text that is not ASCII is the reference's alone: Python splits words on any Unicode space.
+        foreign = dict(planar, lines=planar['lines'][:12] + ['G1 X10\u00a0Y20 F900'] + planar['lines'][12:])
+        with self.assertRaises(NotImplementedError):
+            wrap_job(foreign, options, backend='native')
+        self.assertEqual(exact(wrap_job(foreign, options)), exact(wrap_job(foreign, options, backend='python')))
 
 
 if __name__ == '__main__':

@@ -30,10 +30,15 @@ def plain(value):
     return False
 
 
+# Members a job has beside its program, when its generator gives them: the paths and depths it cut, the holes
+# and the drill of a drilling job, and the number of operations of an ordered one.
+EXTRA = ('prepared_paths', 'prepared_depths', 'drill_holes', 'simulation_tool', 'operations')
+
+
 def outcome(result):
-    """The parts of a job the native core is compared on."""
+    """The parts of a job the native core is compared on: all of them."""
     segments = result['segments']
-    return {
+    shown = {
         'lines': result['lines'],
         'segments': segments.to_list() if hasattr(segments, 'to_list') else list(segments),
         'cut_length': result['cut_length'],
@@ -42,6 +47,8 @@ def outcome(result):
         'bounds': result['bounds'],
         'warnings': result['warnings'],
     }
+    shown.update((key, result[key]) for key in EXTRA if key in result)
+    return shown
 
 
 def reference(generate, project):

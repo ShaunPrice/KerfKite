@@ -391,26 +391,22 @@ static PyObject *last_contact(PyObject *, PyObject *) {
 }
 
 PyObject* stock_heights(PyObject*, PyObject*);
-PyObject* gcode_moves(PyObject*, PyObject*);
-PyObject* rotary_run(PyObject*, PyObject*);
 PyObject* fixed_text(PyObject*, PyObject*);
 PyObject* rounded_value(PyObject*, PyObject*);
-PyObject* plain_points(PyObject*, PyObject*);
-PyObject* plain_depths(PyObject*, PyObject*);
 PyObject* segment_rows(PyObject*, PyObject*);
 PyObject* core_call(PyObject*, PyObject*);
+PyObject* core_cam(PyObject*, PyObject*);
+PyObject* core_cam_text(PyObject*, PyObject*);
 PyObject* solid_call(PyObject*, PyObject*);
 PyObject* solid_mesh(PyObject*, PyObject*);
 
 static PyMethodDef methods[]={{"stock_heights",stock_heights,METH_VARARGS,"Compute a bounded stock-removal grid from planar moves."},
-    {"gcode_moves",gcode_moves,METH_VARARGS,"Emit the cutting moves of one operation; None when the Python loop must run."},
-    {"rotary_run",rotary_run,METH_VARARGS,"Translate one generated cutting run to rotary blocks; None when the Python loop must run."},
     {"fixed_text",fixed_text,METH_VARARGS,"Format a float with a fixed number of decimals exactly as Python does."},
     {"rounded_value",rounded_value,METH_VARARGS,"Round a float to 0..3 decimals exactly as Python does."},
-    {"plain_points",plain_points,METH_VARARGS,"Copy plain in-range XY paths; None when the Python validator must run."},
-    {"plain_depths",plain_depths,METH_VARARGS,"Copy plain per-vertex depths; None when the Python validator must run."},
     {"segment_rows",segment_rows,METH_VARARGS,"Unpack a packed segment buffer into list rows."},
     {"core_call",core_call,METH_VARARGS,"Run a command of the native core: (command, JSON request) -> JSON answer."},
+    {"core_cam",core_cam,METH_VARARGS,"G-code or rotary output from the native core: (command, request, packed=False) -> job, or None when the request cannot cross unchanged."},
+    {"core_cam_text",core_cam_text,METH_VARARGS,"The answer of core_cam as UTF-8 JSON text written by the core: (command, request) -> bytes, or None."},
     {"solid_call",solid_call,METH_VARARGS,"Run a solid request of the native core with solids kept from earlier calls: (JSON request, kept) -> (JSON answer, solid)."},
     {"solid_mesh",solid_mesh,METH_VARARGS,"The mesh of a kept solid as bytes: (solid) -> (float64 vertices, uint32 triangles)."},
     {"contact",contact,METH_VARARGS,"Compute bounded conservative cutter contact depths from cell maxima."},

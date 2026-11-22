@@ -35,6 +35,13 @@ struct Segment {
     bool packed = false;       // a row the reference packs as seven floats for the rotary post (moves and entries)
 };
 
+// The drill a drilling job is simulated with.
+struct SimulationTool {
+    double diameter = 0;
+    std::string shape;  // "drill" or "flat"
+    double angle = 0;   // the point angle in degrees
+};
+
 struct Job {
     std::vector<std::string> lines;
     std::vector<Segment> segments;
@@ -42,6 +49,18 @@ struct Job {
     std::string mode;
     std::array<double, 4> bounds{};
     std::vector<std::string> warnings;
+    // What Studio's job carries beside the program, for its editors and stock simulation. A job of one
+    // operation has the paths it cut (after offsets, pockets, fills, the drag knife's corners and holding
+    // tabs) and their depths, or none; an ordered job has neither, and says how many operations it has.
+    bool prepared = false;
+    std::vector<std::vector<std::array<double, 2>>> prepared_paths;
+    bool has_prepared_depths = false;  // the depths are a list, not None
+    std::vector<std::vector<double>> prepared_depths;
+    bool drilled = false;  // drill_holes is in the job: always for drilling, for an ordered job when any hole is
+    std::vector<std::array<double, 3>> drill_holes;  // x, y and diameter of each hole
+    bool has_simulation_tool = false;
+    SimulationTool simulation_tool;
+    size_t operations = 0;  // of an ordered job; 0 for a job of one operation
 };
 
 // The job for a project, as studio.cam.generate(project) returns it.
@@ -62,6 +81,9 @@ const Protocol &get_protocol(const Json *protocol);
 // The program as the selected controller family expects it.
 std::vector<std::string> postprocess(const std::vector<std::string> &lines, const Json *protocol,
                                      const std::string &mode, const Json *dwell_units);
+// The same, taking the lines over: a Grbl program is the lines themselves, and no line is copied.
+std::vector<std::string> postprocess(std::vector<std::string> &&lines, const Json *protocol, const std::string &mode,
+                                     const Json *dwell_units);
 
 }  // namespace kerfkite
 

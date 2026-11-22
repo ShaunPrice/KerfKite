@@ -148,9 +148,15 @@ Job single(const json &project) {
         }
         if (depth <= 0) throw ValueError("No contour cuts below the stock surface");
     }
-    if (router && !entry_plunge)
-        return entry_job(project, drawn, clean, has_depths ? &depths : nullptr, depth, step, safe, feed, plunge, power,
-                         width, height, operation_warnings);
+    if (router && !entry_plunge) {
+        Job job = entry_job(project, drawn, clean, has_depths ? &depths : nullptr, depth, step, safe, feed, plunge,
+                            power, width, height, operation_warnings);
+        job.prepared = true;
+        job.prepared_paths = std::move(clean);
+        job.has_prepared_depths = has_depths;
+        if (has_depths) job.prepared_depths = std::move(depths);
+        return job;
+    }
 
     std::vector<std::vector<LaserVertex>> laser_paths;
     bool leads = false;
@@ -301,7 +307,7 @@ Job single(const json &project) {
     if (laser && leads)
         job.warnings.push_back("Tangent leads are cutting moves and may mark outside the design. Power ramps use steps "
                                "of at most 0.5 mm; M4 also scales power with speed.");
-    job.lines = postprocess(lines, protocol, mode, get(project, "dwell_units"));
+    job.lines = postprocess(std::move(lines), protocol, mode, get(project, "dwell_units"));
     job.cut_length = rounded(length, 2);
     job.cut_minutes = rounded(length / cut_feed, 2);
     // [min x, min y, max x, max y] over every vertex of what is cut: for a laser, the paths with their leads.
@@ -324,6 +330,10 @@ Job single(const json &project) {
                 first = false;
             }
     }
+    job.prepared = true;
+    job.prepared_paths = std::move(clean);
+    job.has_prepared_depths = has_depths;
+    if (has_depths) job.prepared_depths = std::move(depths);
     return job;
 }
 
@@ -436,6 +446,18 @@ Job ordered(const json &project) {
     job.cut_length = rounded(pymath::sum(lengths.begin(), lengths.end()), 2);
     job.cut_minutes = rounded(pymath::sum(minutes.begin(), minutes.end()), 2);
     job.mode = project.at("mode").get<std::string>();
+    job.operations = jobs.size();
+    for (const Job &part : jobs) job.drill_holes.insert(job.drill_holes.end(), part.drill_holes.begin(), part.drill_holes.end());
+    job.drilled = !job.drill_holes.empty();
+    // The reference keeps the first part's drill when every part has one equal to it.
+    const auto same = [&jobs](const Job &part) {
+        const SimulationTool &a = part.simulation_tool, &b = jobs[0].simulation_tool;
+        return part.has_simulation_tool && a.diameter == b.diameter && a.shape == b.shape && a.angle == b.angle;
+    };
+    if (job.drilled && jobs[0].has_simulation_tool && std::all_of(jobs.begin(), jobs.end(), same)) {
+        job.has_simulation_tool = true;
+        job.simulation_tool = jobs[0].simulation_tool;
+    }
     return job;
 }
 
@@ -458,9 +480,30 @@ json to_json(const Job &job) {
         if (s.has_power) row[5] = s.whole_power ? json(0) : json(s.power);
         segments.push_back(std::move(row));
     }
-    return json{{"lines", job.lines},           {"segments", std::move(segments)}, {"cut_length", job.cut_length},
+    json result{{"lines", job.lines},           {"segments", std::move(segments)}, {"cut_length", job.cut_length},
                 {"cut_minutes", job.cut_minutes}, {"mode", job.mode},                {"bounds", job.bounds},
                 {"warnings", job.warnings}};
+    if (job.prepared) {
+        json paths = json::array();
+        for (const auto &path : job.prepared_paths) {
+            json points = json::array();
+            for (const auto &point : path) points.push_back(json::array({point[0], point[1]}));
+            paths.push_back(std::move(points));
+        }
+        result["prepared_paths"] = std::move(paths);
+        result["prepared_depths"] = job.has_prepared_depths ? json(job.prepared_depths) : json();
+    }
+    if (job.drilled) {
+        json holes = json::array();
+        for (const auto &hole : job.drill_holes) holes.push_back(json::array({hole[0], hole[1], hole[2]}));
+        result["drill_holes"] = std::move(holes);
+    }
+    if (job.has_simulation_tool)
+        result["simulation_tool"] = json{{"diameter", job.simulation_tool.diameter},
+                                         {"shape", job.simulation_tool.shape},
+                                         {"angle", job.simulation_tool.angle}};
+    if (job.operations) result["operations"] = job.operations;
+    return result;
 }
 
 }  // namespace kerfkite
