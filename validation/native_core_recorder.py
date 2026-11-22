@@ -5,8 +5,9 @@ project exactly as it was passed and what the Python reference did with it. Call
 written as JSON without changing its meaning (tuples, non-finite numbers, non-text keys) are left out, as
 are the rotary generator's internal calls. Top-level calls of studio.rotary's generate_rotary and wrap_job
 are recorded the same way, with their rotary setup, and so are those of studio.relief.prepare_relief,
-studio.simulation.simulate, studio.tool_changes.plan_tool_changes and studio.fixture_collision.check_fixtures,
-whose expected answers come from their Python, as the native core is compared with.
+studio.simulation.simulate, studio.tool_changes.plan_tool_changes, studio.fixture_collision.check_fixtures and
+studio.mesh_import.stl_heightmap, whose expected answers come from their Python, as the native core is compared
+with.
 """
 
 import functools
@@ -102,12 +103,13 @@ def where_computed_left_out(result):
 
 
 def preview_reference(kind, data):
-    """One case line for a relief ("relief"), a stock preview ("stock"), a tool-change plan ("tool_changes") or a
-    fixture check ("fixtures") from the Python reference, with the native core's limits for a relief; or None when
-    the request cannot be carried as JSON."""
+    """One case line for a relief ("relief"), a stock preview ("stock"), a tool-change plan ("tool_changes"), a
+    fixture check ("fixtures") or an STL height field ("stl") from the Python reference, with the native core's
+    limits for a relief; or None when the request cannot be carried as JSON."""
     from studio.relief import prepare_relief
     from studio.simulation import simulate
     from studio.fixture_collision import check_fixtures
+    from studio.mesh_import import stl_heightmap
     from studio.tool_changes import plan_tool_changes
 
     if not plain(data):
@@ -120,6 +122,8 @@ def preview_reference(kind, data):
             result = plan_tool_changes(data, backend='python')
         elif kind == 'fixtures':
             result = check_fixtures(data, backend='python')
+        elif kind == 'stl':
+            result = stl_heightmap(data, backend='python')
         else:
             result = simulate(data, backend='python')
     except ValueError as error:
@@ -234,6 +238,10 @@ def pytest_configure(config):
     import studio.fixture_collision as fixture_collision
 
     _record_preview(fixture_collision, 'check_fixtures', 'fixtures')
+
+    import studio.mesh_import as mesh_import
+
+    _record_preview(mesh_import, 'stl_heightmap', 'stl')
 
 
 def pytest_sessionfinish(session):

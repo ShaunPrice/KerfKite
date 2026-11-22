@@ -10,6 +10,7 @@
 //   kerfkite-cam stock REQUEST.json          the stock-removal preview of a job's segments (studio.simulation)
 //   kerfkite-cam tool-changes PROJECT.json   a router project split into stages for manual tool changes (studio.tool_changes)
 //   kerfkite-cam fixture-collision REQUEST.json   a posted program's moves swept against fixture boxes (studio.fixture_collision)
+//   kerfkite-cam stl-heightmap REQUEST.json  an STL mesh as a relief height field (studio.mesh_import)
 //   kerfkite-cam gerber FILE [--arc-tolerance MM]            a Gerber layer as drawn objects in millimetres
 //   kerfkite-cam gerber-outline FILE [--tolerance MM] [--offset [X,Y]]   a profile layer as closed paths
 //   kerfkite-cam gerber-isolation FILE --tool-width MM [--passes N] [--overlap F] [--mirror-x X]   isolation paths
@@ -34,7 +35,7 @@
 // line (with "rotary": options, the project as a rotary job; {"job": ..., "rotary": options}, given G-code
 // lines wrapped onto the cylinder; {"relief": data} and {"stock": data}, a relief and a stock preview;
 // {"tool_changes": project}, a plan of stages for manual tool changes; {"fixtures": payload}, the fixture
-// clearance check) and
+// clearance check; {"stl": data}, an STL height field) and
 // answers each with {"ok": answer}, {"error": message} or {"declined": feature}. numbers reads
 // "HEXFLOAT DECIMALS" lines and writes the fixed-point text, round() and repr() of each value. arithmetic
 // answers "dist" and "sum" requests with the core's versions of Python's math.dist and sum(). simple reads a
@@ -55,6 +56,7 @@
 #include "kerfkite/stock.hpp"
 #include "kerfkite/tool_changes.hpp"
 #include "kerfkite/fixture_collision.hpp"
+#include "kerfkite/stl_heightmap.hpp"
 #include "kerfkite/leveling.hpp"
 #include "kerfkite/line_check.hpp"
 #include "kerfkite/number_text.hpp"
@@ -208,6 +210,8 @@ int batch(const std::string &path) {
                 job = kerfkite::plan_tool_changes(request.at("tool_changes"));
             else if (request.contains("fixtures"))
                 job = kerfkite::check_fixtures(request.at("fixtures"));
+            else if (request.contains("stl"))
+                job = kerfkite::stl_heightmap(request.at("stl"));
             else if (request.contains("relief"))
                 job = kerfkite::prepare_relief(request.at("relief"));
             else if (request.contains("stock"))
@@ -334,7 +338,7 @@ int main(int argc, char **argv) {
     if (command == "batch" && argc == 3) return batch(argv[2]);
     if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "polygon" || command == "operation" ||
          command == "solid" || command == "rotary" || command == "rotary-wrap" || command == "relief" || command == "stock" ||
-         command == "tool-changes" || command == "fixture-collision") &&
+         command == "tool-changes" || command == "fixture-collision" || command == "stl-heightmap") &&
         argc == 3)
         return request(command, argv[2]);
     if ((command == "polygon-batch" || command == "solid-batch") && argc == 3)

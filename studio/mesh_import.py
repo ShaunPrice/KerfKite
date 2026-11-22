@@ -1,4 +1,8 @@
-"""Bounded STL-to-height-field conversion; no solid or undercut interpretation."""
+"""Bounded STL-to-height-field conversion; no solid or undercut interpretation.
+
+The native core converts the mesh (native/core/src/stl_heightmap.cpp) when the compiled extension is installed;
+this module is the reference it is compared with, and the fallback.
+"""
 
 import base64
 import binascii
@@ -89,7 +93,7 @@ def _clip(points, x, y):
     return polygon
 
 
-def stl_heightmap(data):
+def stl_heightmap(data, *, backend='auto'):
     """Normalize STL top-access envelope to 0..1, with conservative cell heights.
 
     resolution is the vertex count on each axis (2..128). Every intersected
@@ -97,7 +101,22 @@ def stl_heightmap(data):
     Its four vertices are at least this high, so bilinear interpolation cannot
     miss thin peaks. Vertices adjacent to empty cells stay at stock top (1).
     The result may leave substantial extra stock and is not a solid model.
+
+    backend='auto' runs the native core when the extension is installed and Python otherwise, or when the core
+    declines; 'python' runs this module, the reference; 'native' requires the core.
     """
+    from .cam import cam_backend, core_answer
+
+    core = cam_backend(backend, 'STL height-field')
+    if core is not None:
+        answer = core_answer(core, 'stl-heightmap', data, backend)
+        if answer is not None:
+            return answer
+    return _heightmap(data)
+
+
+def _heightmap(data):
+    """stl_heightmap in Python: the reference the native core is compared with."""
     if not isinstance(data, dict):
         raise ValueError('STL input must be an object')
     resolution = data.get('resolution', 64)

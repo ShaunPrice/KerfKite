@@ -20,6 +20,7 @@
 #include "kerfkite/stock.hpp"
 #include "kerfkite/tool_changes.hpp"
 #include "kerfkite/fixture_collision.hpp"
+#include "kerfkite/stl_heightmap.hpp"
 
 using json = kerfkite::Json;
 using namespace kerfkite;
@@ -919,6 +920,36 @@ static void fixture_checks() {
     expect(refusal(R"({"lines":[]})") == "Check a generated program with 1–250000 lines", "an empty program is refused");
 }
 
+// STL height fields (studio/mesh_import.py): a ramp of two facets as the reference rasterises it, and refusals.
+static void stl_height_fields() {
+    const std::string ramp =
+        "c29saWQgcmFtcApmYWNldCBub3JtYWwgMCAwIDEKb3V0ZXIgbG9vcAp2ZXJ0ZXggMCAwIDAKdmVydGV4IDEwIDAgMTAKdmVydGV4IDEwIDEwIDEw"
+        "CmVuZGxvb3AKZW5kZmFjZXQKZmFjZXQgbm9ybWFsIDAgMCAxCm91dGVyIGxvb3AKdmVydGV4IDAgMCAwCnZlcnRleCAxMCAxMCAxMAp2ZXJ0ZXgg"
+        "MCAxMCAwCmVuZGxvb3AKZW5kZmFjZXQKZW5kc29saWQgcmFtcA==";
+    json request = json::object();
+    request["content_base64"] = ramp;
+    request["resolution"] = 3;
+    const json field = stl_heightmap(request);
+    expect(field.at("heightmap").dump() == "[[0.5,1.0,1.0],[0.5,1.0,1.0],[0.5,1.0,1.0]]" &&
+               field.at("source_bounds").dump() ==
+                   R"({"max":[10.0,10.0,10.0],"min":[0.0,0.0,0.0],"size":[10.0,10.0,10.0],"triangles":2,"units":"unspecified"})",
+           "an ASCII ramp as a height field: cells raised to the highest point clipped to them");
+    const auto refusal = [](const json &given) -> std::string {
+        try {
+            stl_heightmap(given);
+        } catch (const ValueError &error) {
+            return error.what();
+        }
+        return "(nothing thrown)";
+    };
+    json low = request;
+    low["resolution"] = 1;
+    expect(refusal(low) == "resolution must be an integer in 2..128", "a resolution below two is refused");
+    json empty = json::object();
+    empty["content_base64"] = "c29saWQgeAplbmRzb2xpZA==";  // "solid x\nendsolid"
+    expect(refusal(empty) == "ASCII STL requires solid and endsolid lines", "an ASCII file of two lines is refused");
+}
+
 int main() {
     // Ties round to even on the exact binary value, as Python's formatting does.
     expect(fixed(0.125, 2) == "0.12", "0.125 to two places");
@@ -1111,6 +1142,7 @@ int main() {
     reliefs_and_stock();
     tool_change_plans();
     fixture_checks();
+    stl_height_fields();
 
     std::printf(failures ? "%d checks failed\n" : "PASS native core self-test%.0d\n", failures);
     return failures ? 1 : 0;

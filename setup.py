@@ -54,6 +54,8 @@ setup(
                 # Plans of stages for manual tool changes, and the fixture clearance check.
                 'native/core/src/tool_changes.cpp',
                 'native/core/src/fixture_collision.cpp',
+                # STL height fields for reliefs.
+                'native/core/src/stl_heightmap.cpp',
                 # Circuit board import: Gerber layers and Excellon drill files.
                 'native/core/src/excellon.cpp',
                 'native/core/src/gerber.cpp',
