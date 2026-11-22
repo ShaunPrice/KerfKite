@@ -1118,9 +1118,15 @@ static void solid_histories() {
     json power = request;
     power["model"]["features"][0]["size"][2] = "w ** 2";
     expect(refusal(power) == "declined", "an expression beyond the core's grammar is declined");
+    json scripted = request;
+    scripted["model"]["features"][1]["kind"] = "script";
+    expect(refusal(scripted) == "declined", "a scripted feature is declined");
+    // A loft from a 20 mm square to a circle of 20 mm: its volume lies between the circular and square prisms'.
     json lofted = request;
-    lofted["model"]["features"][1]["kind"] = "loft";
-    expect(refusal(lofted) == "declined", "a lofted feature is declined");
+    lofted["model"]["features"] = json::parse(R"([{"id": "funnel", "kind": "loft", "height": 10, "baseShape": "rectangle",
+        "baseWidth": 20, "baseDepth": 20, "topShape": "circle", "topWidth": 20}])");
+    const double funnel = kerfkite::solid_cad_call("solid-cad", lofted).at("volume").get<double>();
+    expect(funnel > 3141 && funnel < 4000, "a loft from a square to a circle");
     // A sketched triangle with a filleted corner, extruded: its volume is the triangle's area less what the
     // fillet rounds off, times the height.
     json sketched = request;

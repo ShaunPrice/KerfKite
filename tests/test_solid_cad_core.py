@@ -168,8 +168,8 @@ class NativeSolidCadTests(unittest.TestCase):
                 }
             ],
         }
-        loft = {'version': 1, 'features': [{'id': 'l', 'kind': 'loft', 'height': 5}]}
-        for model in (constrained, loft):
+        script = {'version': 1, 'features': [{'id': 's', 'kind': 'script', 'source': 'cube(2);'}]}
+        for model in (constrained, script):
             with self.subTest(model=model):
                 with self.assertRaises(NotImplementedError):
                     rebuild(model, backend='native')
@@ -216,6 +216,23 @@ class NativeSolidCadTests(unittest.TestCase):
         for feature in refusals:
             with self.subTest(feature=feature):
                 self.same({'version': 1, 'parameters': {'w': 16}, 'features': [feature]})
+
+    def test_lofts(self):
+        lofts = [
+            {'baseShape': 'rectangle', 'baseWidth': 40, 'baseDepth': 24, 'topShape': 'circle', 'topWidth': 'w', 'height': 20},
+            {'baseShape': 'ellipse', 'baseWidth': 30, 'baseDepth': 18, 'topShape': 'ellipse', 'topWidth': 12, 'topDepth': 20,
+             'height': 25, 'offset': [4, -3]},
+            {'baseShape': 'rectangle', 'baseWidth': 10, 'baseDepth': 10, 'topShape': 'rectangle', 'topWidth': 4, 'topDepth': 6,
+             'height': 8, 'offset': [1, 1]},
+            {'baseShape': 'circle', 'baseWidth': 300, 'topShape': 'circle', 'topWidth': 'w', 'height': 50},
+            {'baseShape': 'oval', 'baseWidth': 3, 'topShape': 'circle', 'topWidth': 3, 'height': 5},
+            {'baseShape': 'circle', 'baseWidth': 0, 'topShape': 'circle', 'topWidth': 3, 'height': 5},
+            {'baseShape': 'circle', 'baseWidth': 4000, 'topShape': 'circle', 'topWidth': 4000, 'height': 5},
+        ]  # fmt: skip
+        for loft in lofts:
+            with self.subTest(loft=loft):
+                feature = {'id': 'l', 'kind': 'loft', 'rotation': [0, 0, 20], **loft}
+                self.same({'version': 1, 'parameters': {'w': 18}, 'features': [feature]})
 
     def test_the_route_sends_the_core_text(self):
         client = create_app().test_client()

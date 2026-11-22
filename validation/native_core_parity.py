@@ -1966,10 +1966,19 @@ def solid_cad_cases(count, seed):
             item['angle'] = rng.choice([360, 90, 180, 400, expression(known)])
 
     def feature(index, known, first):
-        kind = rng.choice(['box', 'box', 'cylinder', 'cylinder', 'sphere', 'extrude', 'revolve'])
+        kind = rng.choice(['box', 'box', 'cylinder', 'cylinder', 'sphere', 'extrude', 'revolve', 'loft'])
         item = {'id': rng.choice([f'f{index}', f'Feature {index}', f'f{index}']), 'kind': kind}
         if kind in ('extrude', 'revolve'):
             sketch(item, known)
+        elif kind == 'loft':
+            for level in ('base', 'top'):
+                item[level + 'Shape'] = rng.choice(['rectangle', 'ellipse', 'circle', 'circle', 'rectangle', 'oval'])
+                item[level + 'Width'] = expression(known)
+                if rng.random() < 0.9:
+                    item[level + 'Depth'] = expression(known)
+            item['height'] = expression(known)
+            if rng.random() < 0.4:
+                item['offset'] = [rng.choice([0, 3, -5]), rng.choice([0, 2])]
         elif kind == 'box':
             item['size'] = vector(known)
         elif kind == 'cylinder':

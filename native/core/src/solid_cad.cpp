@@ -817,6 +817,126 @@ std::vector<json> sketch_rings(const json &feature, Dimensions &dimensions) {
     return normalised({ring}, "evenodd");
 }
 
+// ---- lofts: studio/solid_loft.py's loft_mesh -----------------------------------------------------------
+
+const double kChordTolerance = 0.025;
+
+// solid_loft.Section: a rectangle, ellipse or circle at a height, as four quarter arcs or sides.
+struct Section {
+    std::string kind;
+    double x_radius = 0, y_radius = 0;
+    std::array<double, 3> center{};
+
+    // coefficients(quadrant): x, y, z, a, b mapping a unit-circle quadrant onto an arc or a side.
+    std::array<double, 5> coefficients(int quadrant) const {
+        const double weight = std::sqrt(0.5);
+        const double x = center[0], y = center[1], z = center[2], a = x_radius, b = y_radius;
+        if (kind == "rectangle") {
+            if (quadrant == 0 || quadrant == 2) return {x, y + (quadrant == 0 ? -b : b), z, a / weight, 0.0};
+            return {x + (quadrant == 1 ? a : -a), y, z, 0.0, b / weight};
+        }
+        return {x, y, z, a, b};
+    }
+
+    std::array<double, 3> point(int quadrant, double angle) const {
+        const std::array<double, 5> k = coefficients(quadrant);
+        const double px = k[0] + k[3] * pytrig::cosine(angle) / 1.0;
+        return {px, k[1] + k[4] * pytrig::sine(angle) / 1.0, k[2]};
+    }
+};
+
+// solid_loft.sections: the base at z = 0 and the top at its offset and height.
+std::array<Section, 2> loft_sections(const json &feature, Dimensions &dimensions) {
+    std::array<Section, 2> result;
+    for (int level = 0; level < 2; ++level) {
+        const std::string prefix = level ? "top" : "base";
+        const json *kind = get(feature, (prefix + "Shape").c_str());
+        if (!is_text(kind, "rectangle") && !is_text(kind, "ellipse") && !is_text(kind, "circle"))
+            throw ValueError("Choose a rectangle, ellipse or circle for each loft section");
+        Section &section = result[level];
+        section.kind = kind->get<std::string>();
+        section.x_radius = dimensions.positive(get(feature, (prefix + "Width").c_str())) / 2;
+        section.y_radius = section.kind == "circle" ? section.x_radius : dimensions.positive(get(feature, (prefix + "Depth").c_str())) / 2;
+        if (level == 1) {
+            static const json no_offset = json::array({0, 0});
+            const json *offset = get(feature, "offset");
+            const std::vector<double> shift = dimensions.vector(offset ? offset : &no_offset, 2);
+            section.center = {shift[0], shift[1], dimensions.positive(get(feature, "height"))};
+        }
+    }
+    return result;
+}
+
+// solid_loft.loft_mesh: a ruled loft as a closed mesh of strips and two caps.
+Shape loft(const json &feature, Dimensions &dimensions) {
+    const std::array<Section, 2> sections = loft_sections(feature, dimensions);
+    const Section &base = sections[0], &top = sections[1];
+    long long steps = 1, tiers = 1;
+    if (!(base.kind == "rectangle" && top.kind == "rectangle")) {
+        double radius = 0;
+        bool first = true;
+        double mixed = 0.0;
+        std::array<std::array<double, 4>, 4> pairs{};
+        for (int i = 0; i < 4; ++i) {
+            const std::array<double, 5> low = base.coefficients(i), high = top.coefficients(i);
+            pairs[i] = {low[3], low[4], high[3], high[4]};
+            const double most = py_max(py_max(py_max(low[3], low[4]), high[3]), high[4]);
+            radius = first ? most : py_max(radius, most);
+            first = false;
+        }
+        steps = static_cast<long long>(py_max(2.0, 2 * std::ceil(pytrig::PI / 4 * std::sqrt(radius / (4 * kChordTolerance)))));
+        const double angle = pytrig::PI / (2 * steps);
+        for (const auto &pair : pairs) {
+            const double a = pair[0], b = pair[1], c = pair[2], d = pair[3];
+            // Parallel chords form planar strips; otherwise Z is refined to bound the triangulation's error.
+            if (std::fabs(a * d - b * c) > 1e-14 * py_max(std::fabs(a * d), std::fabs(b * c)))
+                mixed = py_max(py_max(mixed, std::fabs(a - c)), std::fabs(b - d));
+        }
+        tiers = static_cast<long long>(py_max(1.0, std::ceil(angle * mixed / (2 * kChordTolerance))));
+    }
+    const long long count = 4 * steps;
+    if (2 * count * (tiers + 1) > kMaxFaces)
+        throw ValueError("Loft exceeds the solid triangle budget at 0.025 mm tolerance. Reduce its section size or taper.");
+    std::array<std::vector<std::array<double, 3>>, 2> rings;
+    for (int level = 0; level < 2; ++level)
+        for (int i = 0; i < 4; ++i)
+            for (long long j = 0; j < steps; ++j)
+                rings[level].push_back(sections[level].point(i, (i - 1.5 + static_cast<double>(j) / steps) * pytrig::PI / 2));
+    json vertices = json::array();
+    for (long long t = 0; t <= tiers; ++t) {
+        // numpy.linspace(0, 1, tiers + 1): t times the step, and exactly 1 at the end.
+        const double v = t == tiers ? 1.0 : static_cast<double>(t) * (1.0 / static_cast<double>(tiers));
+        for (long long k = 0; k < count; ++k) {
+            json point = json::array();
+            for (int axis = 0; axis < 3; ++axis) point.push_back((1 - v) * rings[0][k][axis] + v * rings[1][k][axis]);
+            vertices.push_back(std::move(point));
+        }
+    }
+    const long long base_center = (tiers + 1) * count;
+    vertices.push_back(json::array({base.center[0], base.center[1], base.center[2]}));
+    vertices.push_back(json::array({top.center[0], top.center[1], top.center[2]}));
+    json faces = json::array();
+    auto face = [&](long long a, long long b, long long c) {
+        faces.push_back(json::array({static_cast<std::uint64_t>(a), static_cast<std::uint64_t>(b), static_cast<std::uint64_t>(c)}));
+    };
+    for (long long tier = 0; tier < tiers; ++tier)
+        for (long long edge = 0; edge < count; ++edge) face(tier * count + edge, tier * count + (edge + 1) % count, tier * count + (edge + 1) % count + count);
+    for (long long tier = 0; tier < tiers; ++tier)
+        for (long long edge = 0; edge < count; ++edge) face(tier * count + edge, tier * count + (edge + 1) % count + count, tier * count + edge + count);
+    for (long long edge = 0; edge < count; ++edge) face(base_center, (edge + 1) % count, edge);
+    for (long long edge = 0; edge < count; ++edge) face(base_center + 1, edge + tiers * count, (edge + 1) % count + tiers * count);
+    json mesh = json::object();
+    mesh["vertices"] = std::move(vertices);
+    mesh["triangles"] = std::move(faces);
+    mesh["weld"] = false;
+    // A mesh that is not a closed solid is the empty solid, as manifold3d's status would report it.
+    try {
+        return ask(json{{"mesh", mesh}}, {});
+    } catch (const ValueError &) {
+        return ask(json{{"union", json::array()}}, {});
+    }
+}
+
 // ---- features --------------------------------------------------------------------------------------
 
 const json *field(const json &object, const char *key) { return get(object, key); }
@@ -849,6 +969,8 @@ Shape primitive(const json &feature, Dimensions &dimensions) {
         sphere["radius"] = dimensions.positive(field(feature, "radius"));
         sphere["segments"] = kSegments;
         shape = ask(json{{"sphere", sphere}}, {});
+    } else if (is_text(kind, "loft")) {
+        shape = loft(feature, dimensions);
     } else if (is_text(kind, "extrude")) {
         // CrossSection.extrude(height): one layer, no twist, no scaling.
         const std::vector<json> rings = sketch_rings(feature, dimensions);
@@ -994,7 +1116,7 @@ Built build(const json *model, const json *order) {
         for (const json &feature : *features)
             if (feature.is_object()) {
                 const json *kind = field(feature, "kind");
-                for (const char *other : {"step", "script", "loft"})
+                for (const char *other : {"step", "script"})
                     if (is_text(kind, other)) throw NotPorted(std::string("solid features of kind ") + other);
             }
     static const json no_parameters = json::object();
