@@ -1,11 +1,16 @@
 """Smoke-test a compiled wheel with its installed interpreter in isolated mode."""
 
 from studio import _relief_native
+from studio.relief import prepare_relief as _relief
 from studio.simulation import simulate
 
-depths = _relief_native.contact([[-1.0]], 2.0, 2.0, 1.0, 1.0, 0.0, 1, 1, "flat")
-assert depths == [[-1.0, -1.0], [-1.0, -1.0]], depths
-assert callable(_relief_native.stock_heights)
+# The native core's contact: a flat cutter on a map of zeros 1 mm below the top stands 1 mm down at each point.
+flat = _relief(
+    dict(heightmap=[[0, 0], [0, 0]], width=2, height=2, depth=1, tool_diameter=1, stepover=1, tool_shape="flat"),
+    backend="native",
+)
+assert flat["path_depths"] == [[-1.0, -1.0, -1.0], [-1.0, -1.0, -1.0], [-1.0, -1.0, -1.0]], flat["path_depths"]
+assert callable(_relief_native.core_cam)
 stock = {
     "segments": [[0, 0, 8, 0, -1, 0, -1]],
     "tool_shape": "flat",

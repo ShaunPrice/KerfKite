@@ -20,8 +20,8 @@ def main():
     if args.worker:
         print(json.dumps(workload(backend=args.worker, capture_grid=True, measure_rotary=True)))
         return
-    if relief._relief_native is None or simulation.stock_heights is None:
-        parser.error('Build the relief and stock extension before benchmarking')
+    if not relief._native('auto') or simulation._core_cam is None:
+        parser.error('Build the compiled extension before benchmarking')
     result = {
         'platform': platform.platform(),
         'python_version': sys.version,

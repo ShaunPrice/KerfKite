@@ -1,8 +1,10 @@
-"""Time the compiled relief contact on one thread, on all threads and on a GPU, and check they agree.
+"""Time reliefs prepared by the native core on one thread, on all threads and on a GPU, and check they agree.
 
-Each way runs in a process of its own, because the GPU is chosen once per process. For each job the script
-prints the contact checks, the best of several runs in each way, the first GPU run (which includes setting the
-GPU up) and a digest of the depths, which must be the same in every way. Synthetic maps only.
+Each way runs in a process of its own, because the GPU is chosen once per process. Each job is a whole
+studio.relief.prepare_relief of an image heightmap, as the editor sends one: reading the image, the contact,
+and the paths and depths. For each job the script prints the contact checks, the best of several runs in each
+way, the first GPU run (which includes setting the GPU up) and a digest of the depths, which must be the same in
+every way. Synthetic images only.
 
     python validation/benchmark_relief.py [--repeat 5] [--no-gpu] [--threads N]
 """
@@ -25,26 +27,26 @@ JOBS = [
 ]
 
 WORKER = r'''
-import hashlib, json, math, random, sys, time
-import numpy as np
+import base64, hashlib, json, sys, time
 sys.path.insert(0, sys.argv[1])
 from studio import _relief_native as r
+from studio.relief import prepare_relief
 jobs, repeat = json.loads(sys.argv[2]), int(sys.argv[3])
 out = []
 for name, side, width, height, depth, diameter, step in jobs:
-    # Ridges and noise from exact operations and a fixed generator, so the map, and the digest, are the same on
-    # every computer.
-    rng = np.random.default_rng(side)
-    u = np.arange(side) / (side - 1)
-    grid = -depth * (0.6 * ((3 * u[None, :] + 2 * u[:, None]) % 1.0) + 0.4 * rng.random((side, side)))
-    maxima = np.maximum(np.maximum(grid[:-1, :-1], grid[:-1, 1:]), np.maximum(grid[1:, :-1], grid[1:, 1:]))
-    packed = np.ascontiguousarray(maxima).tobytes()
-    dx = width / (side - 1)
-    nx, ny = math.ceil(width / min(dx, step)), math.ceil(height / step)
+    # Ridges and a fixed pattern from whole-number arithmetic, so the image, and the digest, are the same on every
+    # computer.
+    pixels = bytearray()
+    for j in range(side):
+        for i in range(side):
+            ridge, noise = (3 * i + 2 * j) % 256, (i * 7919 + j * 104729) % 251
+            pixels += bytes(((ridge * 3 + noise) % 256, (ridge + 2 * noise) % 256, (ridge * 5 + noise * 3) % 256))
+    data = dict(heightmap_rgb=base64.b64encode(bytes(pixels)).decode(), heightmap_size=[side, side], width=width,
+                height=height, depth=depth, tool_diameter=diameter, stepover=step, tool_shape='ball')
     times = []
     for _ in range(repeat):
         began = time.perf_counter()
-        depths = r.contact_packed(packed, side - 1, side - 1, width, height, depth, diameter, 0.0, nx, ny, 'ball')
+        depths = prepare_relief(data, backend='native')['path_depths']
         times.append(time.perf_counter() - began)
     digest = hashlib.sha256(json.dumps(depths).encode()).hexdigest()[:16]
     out.append({'name': name, 'times': times, 'digest': digest, 'path': r.last_contact()})

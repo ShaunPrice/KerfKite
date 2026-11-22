@@ -62,6 +62,12 @@ inline double vector_norm(size_t n, double *vec, double max) {
     return h / scale;
 }
 
+// math.hypot(a, b) for finite values.
+inline double hypot(double a, double b) {
+    double values[2] = {std::fabs(a), std::fabs(b)};
+    return vector_norm(2, values, values[0] > values[1] ? values[0] : values[1]);
+}
+
 // math.dist((ax, ay), (bx, by)) for finite coordinates.
 inline double dist(double ax, double ay, double bx, double by) {
     double diffs[2] = {std::fabs(ax - bx), std::fabs(ay - by)};

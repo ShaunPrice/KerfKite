@@ -15,7 +15,9 @@
 #include "kerfkite/number_text.hpp"
 #include "kerfkite/operation_command.hpp"
 #include "kerfkite/pcb.hpp"
+#include "kerfkite/relief.hpp"
 #include "kerfkite/rotary.hpp"
+#include "kerfkite/stock.hpp"
 
 using json = kerfkite::Json;
 using namespace kerfkite;
@@ -788,6 +790,58 @@ static void rotary() {
            "text that is not ASCII is declined, not guessed");
 }
 
+// Relief finishing and the stock preview (studio/relief.py, studio/simulation.py): small cases as the reference
+// computes them, to the bit, and refusals.
+static void reliefs_and_stock() {
+    const json numbers = prepare_relief(json::parse(R"({"heightmap":[[0,0.5,1],[1,0.5,0],[0.25,0.75,0.5]],"width":4,
+        "height":2,"depth":2,"tool_diameter":1,"stepover":1,"tool_shape":"ball","allowance":0.1,"x":1,"y":2})"));
+    expect(numbers.at("paths").dump() ==
+               "[[[1.0,2.0],[2.0,2.0],[3.0,2.0],[4.0,2.0],[5.0,2.0]],[[5.0,3.0],[4.0,3.0],[3.0,3.0],[2.0,3.0],[1.0,3.0]],"
+               "[[1.0,4.0],[2.0,4.0],[3.0,4.0],[4.0,4.0],[5.0,4.0]]]" &&
+               numbers.at("path_depths").dump() == "[[0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0,-0.4]]" &&
+               numbers.at("surface").at("sample_spacing").dump() == "[2.0,1.0]" && numbers.at("surface").at("rows").dump() == "3",
+           "a relief from numbers: raster paths run back and forth, depths capped at the top");
+    // White is a luminance of 0.9999999999999999 in the reference's order of arithmetic, not 1.
+    const json image = prepare_relief(json::parse(R"({"heightmap_rgb":"AAAA////CsgeWlpa","heightmap_size":[2,2],"width":2,
+        "height":2,"depth":1,"tool_diameter":1,"stepover":1,"tool_shape":"flat"})"));
+    expect(image.at("path_depths").at(0).dump() == "[-1.1102230246251565e-16,-1.1102230246251565e-16,-1.1102230246251565e-16]",
+           "a relief from image bytes, to the bit");
+    const auto refusal = [](const char *text) -> std::string {
+        try {
+            prepare_relief(json::parse(text));
+        } catch (const ValueError &error) {
+            return error.what();
+        }
+        return "(nothing thrown)";
+    };
+    expect(refusal(R"({"width":4})") == "height must be a finite number", "a relief with no height");
+    expect(refusal(R"({"heightmap":[[0,1],[1,0]],"width":4,"height":2,"depth":2,"tool_diameter":1,"stepover":2})") ==
+               "stepover must not exceed tool_diameter",
+           "a stepover wider than the cutter");
+    expect(refusal(R"({"heightmap_rgb":"AA=AAAAA","heightmap_size":[2,1],"width":2,"height":2,"depth":1,"tool_diameter":1,
+               "stepover":1})") == "heightmap_size must be [columns, rows], each 2..1024",
+           "an image size outside the limits");
+    expect(refusal(R"({"heightmap_rgb":"AA=AAAAAAAAAAAAA","heightmap_size":[2,2],"width":2,"height":2,"depth":1,
+               "tool_diameter":1,"stepover":1})") == "heightmap_rgb must be base64 of columns x rows x 3 bytes",
+           "padding inside the base64 text");
+
+    const json stock = simulate_stock(json::parse(R"({"segments":[[0,0,8,0,-1,null,-1],[4,0,4,8,-2]],"width":8,"height":8,
+        "resolution":16,"tool_diameter":2,"tool_shape":"ball","stock_thickness":3})"));
+    const json &heights = stock.at("heights");
+    std::string first, eighth;
+    for (size_t i = 0; i < 6; ++i) first += (i ? "," : "") + heights.at(0).at(i).dump();
+    for (size_t i = 0; i < 9; ++i) eighth += (i ? "," : "") + heights.at(7).at(i).dump();
+    expect(heights.size() == 16 && first == "-1.0,-1.0,-1.0,-1.0,-1.0,-1.0" &&
+               eighth == "0.0,0.0,0.0,0.0,0.0,0.0,-1.6000000000000003,-1.9637888196533972,-1.9637888196533972",
+           "a stock preview with a ball cutter, to the bit");
+    try {
+        simulate_stock(json::parse(R"({"segments":[[0,0,1,1,-20]]})"));
+        expect(false, "a cut below the stock is refused");
+    } catch (const ValueError &error) {
+        expect(std::string(error.what()) == "Cut exceeds simulated stock thickness", "a cut below the stock is refused");
+    }
+}
+
 int main() {
     // Ties round to even on the exact binary value, as Python's formatting does.
     expect(fixed(0.125, 2) == "0.12", "0.125 to two places");
@@ -974,6 +1028,7 @@ int main() {
     v_carving();
     circuit_boards();
     rotary();
+    reliefs_and_stock();
 
     std::printf(failures ? "%d checks failed\n" : "PASS native core self-test%.0d\n", failures);
     return failures ? 1 : 0;

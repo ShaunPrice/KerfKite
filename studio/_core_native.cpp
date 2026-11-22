@@ -20,8 +20,10 @@
 #include "kerfkite/operation_command.hpp"
 #include "kerfkite/pcb.hpp"
 #include "kerfkite/polygon_command.hpp"
+#include "kerfkite/relief.hpp"
 #include "kerfkite/rotary.hpp"
 #include "kerfkite/solid_command.hpp"
+#include "kerfkite/stock.hpp"
 
 PyObject *core_call(PyObject *, PyObject *args) {
     const char *command_text, *request_text;
@@ -356,29 +358,43 @@ PyObject *job_object(const kerfkite::Job &job, Rows form) {
 
 }  // namespace
 
-// core_cam(command, request, packed=False) -> the answer as Python objects, or None
+// core_cam(command, request, packed=False, rows=None) -> the answer as Python objects, or None
 //   "generate": request is a project; the job as studio.cam.generate returns it, its segments packed when
 //               packed is true.
 //   "rotary": request is {"project", "options"}; "rotary-wrap": {"job", "options"}: the rotary job as
 //               studio.rotary.generate_rotary and wrap_job return it.
+//   "relief": studio.relief.prepare_relief; "stock": studio.simulation.simulate, whose segments may come as
+//               rows, bytes of seven native doubles a segment as packed preview rows hold them.
 // None when the request cannot cross to the core unchanged (see to_core), so that the reference answers it.
 // A rejected request raises ValueError with the reference's message; one the core does not reproduce raises
 // NotImplementedError naming what it lacks. The work runs without the GIL.
 PyObject *core_cam(PyObject *, PyObject *args) {
     const char *command_text = nullptr;
-    PyObject *request = nullptr;
+    PyObject *request = nullptr, *rows_given = nullptr;
     int packed = 0;
-    if (!PyArg_ParseTuple(args, "sO|p", &command_text, &request, &packed)) return nullptr;
+    if (!PyArg_ParseTuple(args, "sO|pO", &command_text, &request, &packed, &rows_given)) return nullptr;
     const std::string command = command_text;
     const bool generating = command == "generate";
-    if (!generating && !kerfkite::rotary_command(command)) {
+    if (!generating && !kerfkite::rotary_command(command) && !kerfkite::relief_command(command) &&
+        !kerfkite::stock_command(command)) {
         PyErr_SetString(PyExc_ValueError, "Unknown CAM command");
         return nullptr;
     }
     kerfkite::Json given;
+    std::vector<double> rows;
+    const bool has_rows = rows_given && rows_given != Py_None;
+    if (has_rows && (!kerfkite::stock_command(command) || !PyBytes_Check(rows_given) ||
+                     PyBytes_GET_SIZE(rows_given) % Py_ssize_t(7 * sizeof(double)))) {
+        PyErr_SetString(PyExc_ValueError, "Rows must be bytes of seven doubles a segment, for the stock preview");
+        return nullptr;
+    }
     // No C++ exception may leave this function: Python's caller is C.
     try {
         if (!to_core(request, given, 0)) Py_RETURN_NONE;
+        if (has_rows) {
+            rows.resize(size_t(PyBytes_GET_SIZE(rows_given)) / sizeof(double));
+            std::memcpy(rows.data(), PyBytes_AS_STRING(rows_given), rows.size() * sizeof(double));
+        }
     } catch (const std::bad_alloc &) {
         return PyErr_NoMemory();
     }
@@ -391,6 +407,10 @@ PyObject *core_cam(PyObject *, PyObject *args) {
     try {
         if (generating) {
             job = kerfkite::generate(given);
+        } else if (kerfkite::relief_command(command)) {
+            answer = kerfkite::prepare_relief(given);
+        } else if (kerfkite::stock_command(command)) {
+            answer = kerfkite::simulate_stock(given, has_rows ? &rows : nullptr);
         } else if (command == "rotary") {
             // rotary_call's reading of the request, kept apart so that the job need not be written as JSON.
             if (!given.is_object()) throw kerfkite::ValueError("Supply a project and rotary setup");
@@ -463,7 +483,8 @@ PyObject *core_cam_text(PyObject *, PyObject *args) {
     PyObject *request = nullptr;
     if (!PyArg_ParseTuple(args, "sO", &command_text, &request)) return nullptr;
     const std::string command = command_text;
-    if (command != "generate" && !kerfkite::rotary_command(command)) {
+    if (command != "generate" && !kerfkite::rotary_command(command) && !kerfkite::relief_command(command) &&
+        !kerfkite::stock_command(command)) {
         PyErr_SetString(PyExc_ValueError, "Unknown CAM command");
         return nullptr;
     }
@@ -477,8 +498,10 @@ PyObject *core_cam_text(PyObject *, PyObject *args) {
     enum { done, rejected, declined, failed, memory } outcome = done;
     Py_BEGIN_ALLOW_THREADS
     try {
-        text = (command == "generate" ? kerfkite::to_json(kerfkite::generate(given))
-                                      : kerfkite::rotary_call(command, given))
+        text = (command == "generate"                     ? kerfkite::to_json(kerfkite::generate(given))
+                : kerfkite::relief_command(command) ? kerfkite::prepare_relief(given)
+                : kerfkite::stock_command(command)  ? kerfkite::simulate_stock(given)
+                                                     : kerfkite::rotary_call(command, given))
                    .dump();
     } catch (const kerfkite::ValueError &error) {
         outcome = rejected;
@@ -510,6 +533,18 @@ PyObject *core_cam_text(PyObject *, PyObject *args) {
     }
     return PyBytes_FromStringAndSize(text.data(), static_cast<Py_ssize_t>(text.size()));
 }
+
+// gpu_status(): the GPU the relief contact uses, or why there is none (looking for it if that has not been done);
+// last_contact(): what the calling thread's last contact ran on.
+PyObject *gpu_status(PyObject *, PyObject *) {
+    std::string text;
+    Py_BEGIN_ALLOW_THREADS
+    text = kerfkite::relief_gpu_status();
+    Py_END_ALLOW_THREADS
+    return PyUnicode_FromString(text.c_str());
+}
+
+PyObject *last_contact(PyObject *, PyObject *) { return PyUnicode_FromString(kerfkite::last_relief_contact().c_str()); }
 
 // A solid kept between calls. Python holds it as a capsule and hands it back in the `kept` list of a later
 // request; the capsule owns a copy of the Solid, which shares the mesh and never changes it, so any

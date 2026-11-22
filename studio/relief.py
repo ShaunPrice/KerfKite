@@ -21,15 +21,15 @@ MAX_VERTICES = 100_000
 # Without the compiled extension the contact runs in Python, so its maps and work stay small.
 MAX_CONTACT_CHECKS = 10_000_000
 MAX_MAP = 256
-# The compiled contact shares the work between threads, and between them and a capable GPU. Its largest job
-# is about 4.5 s on one thread of a 2026 laptop core and a quarter of a second on 24 threads.
+# The native core's contact shares the work between threads, and between them and a capable GPU. Its largest
+# job is about 4.5 s on one thread of a 2026 laptop core and a quarter of a second on 24 threads.
 NATIVE_MAX_CONTACT_CHECKS = 2_000_000_000
 NATIVE_MAX_MAP = 1024
 
 
 def _native(backend):
-    """Whether the compiled contact, with its larger limits, will run this job."""
-    return backend != 'python' and _relief_native is not None and hasattr(_relief_native, 'contact_packed')
+    """Whether the native core, with its larger limits, will run this job."""
+    return backend != 'python' and _relief_native is not None and hasattr(_relief_native, 'core_cam')
 
 
 def map_limit():
@@ -87,7 +87,7 @@ def _number(data, key, default=None, *, minimum=0, positive=False, maximum=10000
     return value
 
 
-def prepare_relief(data, *, backend="auto"):
+def prepare_relief(data, *, backend="auto", _native_limits=False):
     """Return XY paths and corresponding (nonpositive) cutter-tip Z values.
 
     heightmap rows advance in +Y and columns in +X. Values 0..1 map to
@@ -95,11 +95,21 @@ def prepare_relief(data, *, backend="auto"):
     (the stock top). Separate raster rows require the caller to retract
     before traversing, and apply its normal step-down, feed and machine bounds
     checks. This function emits geometry only, never machine commands.
+
+    backend='auto' runs the native core when the extension is installed and Python otherwise, or when the core
+    declines; 'python' runs this module, the reference, with its smaller limits ('_native_limits' gives it the
+    core's, for comparison); 'native' requires the core.
     """
     if backend not in ('auto', 'python', 'native'):
         raise ValueError('Relief backend must be auto, python or native')
-    if backend == 'native' and _relief_native is None:
+    if backend == 'native' and not _native('native'):
         raise ValueError('Native relief backend is not installed')
+    if _native(backend):
+        from .cam import core_answer
+
+        answer = core_answer(_relief_native.core_cam, 'relief', data, backend)
+        if answer is not None:
+            return answer
     if not isinstance(data, dict):
         raise ValueError('Relief input must be an object')
     width = _number(data, 'width', positive=True)
@@ -117,7 +127,7 @@ def prepare_relief(data, *, backend="auto"):
     shape = data.get('tool_shape', 'ball')
     if shape not in ('flat', 'ball'):
         raise ValueError('tool_shape must be flat or ball')
-    native = _native(backend)
+    native = _native_limits
     limit = NATIVE_MAX_MAP if native else MAX_MAP
     # A map the compiled extension could take, but which must run in Python here.
     hint = '' if native else '; larger maps need the compiled extension'
@@ -134,7 +144,7 @@ def prepare_relief(data, *, backend="auto"):
         ):
             raise ValueError(f'heightmap_size must be [columns, rows], each 2..{MAX_MAP}{hint}')
         grid, rows, columns = _rgb_heights(data, depth, limit)
-        values = grid if native else grid.tolist()
+        values = grid.tolist()
     else:
         matrix = data.get('heightmap')
         if not isinstance(matrix, list) or not 2 <= len(matrix) <= limit:
@@ -172,64 +182,37 @@ def prepare_relief(data, *, backend="auto"):
     cells_y = min(rows - 1, math.ceil(diameter / dy) + 2)
     if nx * (ny + 1) * cells_x * cells_y > (NATIVE_MAX_CONTACT_CHECKS if native else MAX_CONTACT_CHECKS):
         raise ValueError('Relief contact calculation too large; reduce map resolution or tool diameter')
-    native_depths = None
-    if grid is not None and native:
-        import numpy as np
-
-        # Each cell's highest corner, as the list form below computes it.
-        maxima = np.maximum(np.maximum(grid[:-1, :-1], grid[:-1, 1:]), np.maximum(grid[1:, :-1], grid[1:, 1:]))
-        native_depths = _relief_native.contact_packed(
-            np.ascontiguousarray(maxima).tobytes(),
-            rows - 1,
-            columns - 1,
-            width,
-            height,
-            depth,
-            diameter,
-            allowance,
-            nx,
-            ny,
-            shape,
-        )
-    else:
-        maxima = [
-            [max(values[j][i], values[j][i + 1], values[j + 1][i], values[j + 1][i + 1]) for i in range(columns - 1)]
-            for j in range(rows - 1)
-        ]
-        if native or (backend != 'python' and _relief_native is not None):
-            native_depths = _relief_native.contact(maxima, width, height, depth, diameter, allowance, nx, ny, shape)
-    device = None
-    if native_depths is not None:
-        device = 'gpu' if getattr(_relief_native, 'last_contact', str)().startswith('GPU') else 'cpu'
+    maxima = [
+        [max(values[j][i], values[j][i + 1], values[j + 1][i], values[j + 1][i + 1]) for i in range(columns - 1)]
+        for j in range(rows - 1)
+    ]
+    work_limit = NATIVE_MAX_CONTACT_CHECKS if native else MAX_CONTACT_CHECKS
     paths, depths = [], []
     checks = 0
     for raster in range(ny + 1):
         py = height * raster / ny
         xs = [width * i / nx for i in range(nx + 1)]
-        if native_depths is not None:
-            z = native_depths[raster]
-        else:
-            contact = []
-            for start, end in zip(xs, xs[1:]):
-                best = -depth
-                lo_i = max(0, math.floor((start - radius) / dx))
-                hi_i = min(columns - 2, math.floor((end + radius) / dx))
-                lo_j = max(0, math.floor((py - radius) / dy))
-                hi_j = min(rows - 2, math.floor((py + radius) / dy))
-                for j in range(lo_j, hi_j + 1):
-                    yd = max(j * dy - py, py - (j + 1) * dy, 0)
-                    for i in range(lo_i, hi_i + 1):
-                        checks += 1
-                        if checks > MAX_CONTACT_CHECKS:
-                            raise ValueError('Relief contact calculation exceeds supported work limit')
-                        xd = max(i * dx - end, start - (i + 1) * dx, 0)
-                        distance_sq = xd * xd + yd * yd
-                        if distance_sq > radius * radius:
-                            continue
-                        sag = 0 if shape == 'flat' else radius - math.sqrt(max(0, radius * radius - distance_sq))
-                        best = max(best, maxima[j][i] - sag)
-                contact.append(min(0.0, best + allowance))
-            z = [contact[0]] + [max(contact[i - 1], contact[i]) for i in range(1, nx)] + [contact[-1]]
+        contact = []
+        for start, end in zip(xs, xs[1:]):
+            best = -depth
+            lo_i = max(0, math.floor((start - radius) / dx))
+            hi_i = min(columns - 2, math.floor((end + radius) / dx))
+            lo_j = max(0, math.floor((py - radius) / dy))
+            hi_j = min(rows - 2, math.floor((py + radius) / dy))
+            for j in range(lo_j, hi_j + 1):
+                yd = max(j * dy - py, py - (j + 1) * dy, 0)
+                for i in range(lo_i, hi_i + 1):
+                    checks += 1
+                    if checks > work_limit:
+                        raise ValueError('Relief contact calculation exceeds supported work limit')
+                    xd = max(i * dx - end, start - (i + 1) * dx, 0)
+                    distance_sq = xd * xd + yd * yd
+                    if distance_sq > radius * radius:
+                        continue
+                    sag = 0 if shape == 'flat' else radius - math.sqrt(max(0, radius * radius - distance_sq))
+                    best = max(best, maxima[j][i] - sag)
+            contact.append(min(0.0, best + allowance))
+        z = [contact[0]] + [max(contact[i - 1], contact[i]) for i in range(1, nx)] + [contact[-1]]
         path = [[x + px, y + py] for px in xs]
         if raster % 2:
             path.reverse()
@@ -241,7 +224,7 @@ def prepare_relief(data, *, backend="auto"):
         'path_depths': depths,
         # Where the contact was computed: 'gpu', 'cpu' (C++ threads) or 'python'. Not part of the surface, which is
         # saved with the design: the same design gives the same surface on any computer.
-        'device': device or 'python',
+        'device': 'python',
         'surface': {
             'kind': 'bilinear-heightmap',
             'width': width,
@@ -257,7 +240,7 @@ def prepare_relief(data, *, backend="auto"):
             'tool_diameter': diameter,
             'allowance': allowance,
             'compensation': 'conservative-cell-envelope',
-            'backend': 'cpp' if native_depths is not None else 'python',
+            'backend': 'python',
         },
         'warnings': [
             'Top-access finishing geometry only; caller must apply safe retracts, step-downs and machine limits.',

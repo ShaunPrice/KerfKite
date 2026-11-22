@@ -1,6 +1,7 @@
-"""Native parity is exercised when the optional extension is built."""
+"""The native core's relief must be the Python reference's to the bit, and refuse what it refuses."""
 
-import math
+import base64
+import json
 import random
 import unittest
 from unittest.mock import patch
@@ -24,11 +25,25 @@ def sample(**changes):
     return result
 
 
+def exact(value):
+    """A form that tells 0 from 0.0 and -0.0 from 0.0."""
+    return json.loads(json.dumps(value), parse_float=lambda text: ('f', text), parse_int=lambda text: ('i', text))
+
+
+def without_backend(result):
+    """The result without what says where it was computed: the same design gives the same surface anywhere."""
+    result = dict(result, surface=dict(result['surface']))
+    result.pop('device')
+    result['surface'].pop('backend')
+    return result
+
+
 class ReliefFallbackTests(unittest.TestCase):
     def test_python_fallback_and_explicit_backend(self):
         with patch.object(relief, '_relief_native', None):
             result = relief.prepare_relief(sample())
             self.assertEqual(result['surface']['backend'], 'python')
+            self.assertEqual(result['device'], 'python')
             with self.assertRaises(ValueError):
                 relief.prepare_relief(sample(), backend='native')
         with self.assertRaises(ValueError):
@@ -46,9 +61,21 @@ class ReliefFallbackTests(unittest.TestCase):
                     relief.prepare_relief(sample(**changes), backend=backend)
 
 
-@unittest.skipIf(relief._relief_native is None, 'Optional C++ extension is not installed')
+@unittest.skipUnless(relief._native('auto'), 'Optional C++ extension is not installed')
 class NativeReliefTests(unittest.TestCase):
-    def test_full_path_and_depth_parity(self):
+    def both(self, data):
+        """The core's answer and the reference's with the core's limits, as ('ok', result) or ('error', message)."""
+        found = []
+        for backend in ('native', 'python'):
+            try:
+                result = relief.prepare_relief(data, backend=backend, _native_limits=True)
+                found.append(('ok', exact(without_backend(result))))
+            except ValueError as error:
+                found.append(('error', str(error)))
+        self.assertEqual(found[0], found[1])
+        return found[0]
+
+    def test_paths_and_depths_are_the_reference_to_the_bit(self):
         rng = random.Random(4567)
         maps = [
             [[0.5] * 11 for _ in range(11)],
@@ -61,53 +88,56 @@ class NativeReliefTests(unittest.TestCase):
         for matrix in maps:
             for shape in ('flat', 'ball'):
                 for allowance in (0, 0.17):
-                    data = sample(heightmap=matrix, tool_shape=shape, allowance=allowance, stepover=0.73)
-                    py = relief.prepare_relief(data, backend='python')
-                    cpp = relief.prepare_relief(data, backend='native')
-                    self.assertEqual(cpp['surface']['backend'], 'cpp')
-                    self.assertEqual(cpp['paths'], py['paths'])
-                    self.assertEqual(cpp['warnings'], py['warnings'])
-                    for a, b in zip(cpp['path_depths'], py['path_depths']):
-                        self.assertEqual(len(a), len(b))
-                        for x, y in zip(a, b):
-                            self.assertAlmostEqual(x, y, delta=1e-9)
-                    cpp['surface'].pop('backend')
-                    py['surface'].pop('backend')
-                    self.assertEqual(cpp['surface'], py['surface'])
-        self.assertEqual(relief.prepare_relief(sample())['surface']['backend'], 'cpp')
+                    with self.subTest(shape=shape, allowance=allowance):
+                        status, _ = self.both(sample(heightmap=matrix, tool_shape=shape, allowance=allowance, stepover=0.73))
+                        self.assertEqual(status, 'ok')
+        result = relief.prepare_relief(sample())
+        self.assertEqual(result['surface']['backend'], 'cpp')
+        self.assertIn(result['device'], ('cpu', 'gpu'))
 
-    def test_native_boundary_validates_values_shapes_and_caps(self):
-        valid = [[[[-1.0] * 10 for _ in range(10)], 10.0, 10.0, 2.0, 2.0, 0.0, 10, 10, 'ball']]
-        base = valid[0]
-        self.assertEqual(len(relief._relief_native.contact(*base)), 11)
-        for index, value in [
-            (0, []),
-            (0, [[0], [0, 0]]),
-            (0, [[True]]),
-            (0, [[float('nan')]]),
-            (0, [[1.0]]),
-            (0, [[-3.0]]),
-            (1, True),
-            (1, float('inf')),
-            (2, 0),
-            (3, -1),
-            (4, 0),
-            (5, 3),
-            (6, 10.5),
-            (6, True),
-            (6, 100000),
-            (7, -1),
-            (8, 'other'),
-            (8, 'ball\0other'),
-            (8, None),
-        ]:
-            args = base.copy()
-            args[index] = value
-            with self.subTest(index=index, value=value), self.assertRaises(ValueError):
-                relief._relief_native.contact(*args)
-        args = [[[0.0] * 255 for _ in range(255)], 10.0, 10.0, 2.0, 100.0, 0.0, 255, 255, 'flat']
-        with self.assertRaises(ValueError):
-            relief._relief_native.contact(*args)
+    def test_image_heights_are_the_reference_to_the_bit(self):
+        rng = random.Random(8)
+        for columns, rows in ((2, 2), (7, 3), (16, 9)):
+            raw = bytes(rng.randrange(256) for _ in range(columns * rows * 3))
+            data = sample(heightmap=None, heightmap_rgb=base64.b64encode(raw).decode(), heightmap_size=[columns, rows])
+            del data['heightmap']
+            with self.subTest(columns=columns, rows=rows):
+                self.assertEqual(self.both(data)[0], 'ok')
+
+    def test_refusals_are_the_reference_refusals(self):
+        image = base64.b64encode(bytes(12)).decode()
+        cases = {
+            'no settings': {},
+            'text width': sample(width='10'),
+            'negative x': sample(x=-1),
+            'wide stepover': sample(stepover=3),
+            'deep allowance': sample(allowance=3),
+            'unknown cutter': sample(tool_shape='v'),
+            'both maps': sample(heightmap_rgb=image, heightmap_size=[2, 2]),
+            'one row': sample(heightmap=[[0, 1]]),
+            'ragged': sample(heightmap=[[0, 1], [1]]),
+            'above one': sample(heightmap=[[0, 2], [1, 0]]),
+            'a flag': sample(heightmap=[[0, True], [1, 0]]),
+            'too many vertices': sample(stepover=0.01, tool_diameter=0.02),
+            'float size': dict(sample(heightmap=None), heightmap_rgb=image, heightmap_size=[2.0, 2]),
+            'map too large': dict(sample(heightmap=None), heightmap_rgb=image, heightmap_size=[1025, 2]),
+            'short image': dict(sample(heightmap=None), heightmap_rgb=image[:-4], heightmap_size=[2, 2]),
+            'padding inside': dict(sample(heightmap=None), heightmap_rgb='AA=A' + image[4:], heightmap_size=[2, 2]),
+            'not base64': dict(sample(heightmap=None), heightmap_rgb='!' * 16, heightmap_size=[2, 2]),
+            'not ascii': dict(sample(heightmap=None), heightmap_rgb='é' * 16, heightmap_size=[2, 2]),
+        }
+        for name, data in cases.items():
+            with self.subTest(name):
+                self.assertEqual(self.both(data)[0], 'error')
+
+    def test_the_core_takes_the_larger_maps(self):
+        matrix = [[(i * j) % 7 / 7 for i in range(300)] for j in range(300)]
+        data = sample(heightmap=matrix, width=60, height=60, stepover=1.5, tool_diameter=3)
+        with self.assertRaisesRegex(ValueError, 'larger maps need the compiled extension'):
+            relief.prepare_relief(data, backend='python')
+        result = relief.prepare_relief(data)
+        self.assertEqual(result['surface']['rows'], 300)
+        self.assertEqual(relief.map_limit(), 1024)
 
 
 if __name__ == '__main__':

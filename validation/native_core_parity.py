@@ -3,7 +3,7 @@
     cmake -S native -B build/native && cmake --build build/native --config Release
     python validation/native_core_parity.py --cli build/native/kerfkite-cam
 
-Four comparisons, all against values computed by Python in this run:
+Five comparisons, all against values computed by Python in this run:
 
 1. Number text and arithmetic: fixed-point formatting, round() and repr() for several hundred thousand
    values, including decimal ties and values next to them; and math.dist and sum(), which Python computes
@@ -22,6 +22,9 @@ Four comparisons, all against values computed by Python in this run:
    drive on each kind of planar job, then for generated projects of all the kinds above with rotary setups
    that are sometimes refused (rotary_cases); and wrap_job for planar programs given as G-code, as generated
    or with lines added, removed or changed (rotary_wrap_cases). The suite's own calls are recorded as well.
+5. Reliefs and stock previews: studio.relief.prepare_relief for height fields given as numbers and as image
+   bytes (relief_cases), compared with the Python reference given the core's limits, and studio.simulation's
+   simulate for the segments of generated jobs (stock_cases). Where the contact ran (CPU or GPU) is left out.
 
 For each job the native core must either reproduce the reference exactly (program lines, preview segments,
 length, time, bounds and warnings, and for a rotary job its rotary setup; or the same error message) or
@@ -44,6 +47,7 @@ unless --without-polygon-operations is given, which leaves those jobs out and sa
 """
 
 import argparse
+import base64
 import collections
 import hashlib
 import itertools
@@ -1640,6 +1644,74 @@ def rotary_wrap_cases(count, seed, generate):
         yield (job if rng.random() < 0.3 else changed(job)), options
 
 
+def relief_cases(count, seed):
+    """Reliefs from height fields given as numbers and as image bytes, of every size up to 40 points a side,
+    with settings from valid to invalid, and base64 text the reader must refuse."""
+    rng = random.Random(seed)
+    weird = [
+        None, True, '5', -1, 0, 1e9, 2000, 0.0000001, 'ball', [], [[0, 1], [1]], [[0, 2], [1, 0]], 'AAAA', 'AA=A',
+        '!!!!', 'AAAA====', [3, 2], [2.0, 2], [1025, 2], [True, 2], 'v', 10001,
+    ]  # fmt: skip
+    keys = [
+        'width', 'height', 'depth', 'tool_diameter', 'stepover', 'allowance', 'tool_shape', 'x', 'y', 'heightmap',
+        'heightmap_rgb', 'heightmap_size',
+    ]  # fmt: skip
+    for _ in range(count):
+        rows, columns = rng.randint(2, 40), rng.randint(2, 40)
+        data = dict(
+            width=rng.choice([10, 25.5, 60, 100]), height=rng.choice([8, 20, 50.25]), depth=rng.choice([1, 2.5, 6]),
+            tool_diameter=rng.choice([0.5, 1, 3.175, 6]), stepover=rng.choice([0.3, 0.5, 1, 2.5]),
+            allowance=rng.choice([0, 0.1, 0.5]), tool_shape=rng.choice(['ball', 'flat', 'ball']),
+            x=rng.choice([0, 5, 12.5]), y=rng.choice([0, 3]),
+        )  # fmt: skip
+        if rng.random() < 0.5:
+            data['heightmap'] = [
+                [rng.choice([0, 1, 0.5, rng.random(), round(rng.random(), 3)]) for _ in range(columns)]
+                for _ in range(rows)
+            ]
+        else:
+            raw = bytes(rng.randrange(256) for _ in range(rows * columns * 3))
+            data['heightmap_rgb'] = base64.b64encode(raw).decode()
+            data['heightmap_size'] = [columns, rows]
+        for _ in range(rng.choice([0, 0, 0, 1, 2])):
+            key = rng.choice(keys)
+            if rng.random() < 0.8:
+                data[key] = rng.choice(weird)
+            else:
+                data.pop(key, None)
+        yield data
+
+
+def stock_cases(count, seed, generate):
+    """Stock previews of the segments of generated jobs, for every cutter, with settings and rows from valid to
+    invalid."""
+    rng = random.Random(seed)
+    weird = [
+        None, True, '20', 'x', -5, 1e9, 15.9, 96.9, [[1, 2, 3]], [[0, 0, 1, 1, '-0.5']], [[0, 0, 1, 1, None]],
+        [[0, 0, 1, 1, -0.5, None, '-1.5']], [[0, 0, 1, 1, -50]], [[1e308, 0, 1e308, 0, 0]], 'drill', [],
+    ]  # fmt: skip
+    made = 0
+    for project in itertools.chain(generated_cases(count * 3, seed + 1), drill_knife_cases(count, seed + 2)):
+        if made >= count:
+            break
+        try:
+            job = generate(project)
+        except Exception:  # noqa: BLE001, S112 - only programs are wanted here
+            continue
+        made += 1
+        data = dict(
+            segments=job['segments'], width=rng.choice([100, 50, 300]), height=rng.choice([50, 80]),
+            resolution=rng.choice([16, 24, 48, 96]), tool_diameter=rng.choice([1, 3.175, 6]),
+            tool_shape=rng.choice(['flat', 'ball', 'v', 'drill']), v_angle=rng.choice([30, 60, 90.5]),
+            stock_thickness=rng.choice([10, 1, 0.5]), x=rng.choice([0, 2]), y=0,
+        )  # fmt: skip
+        for _ in range(rng.choice([0, 0, 1])):
+            data[rng.choice(['width', 'resolution', 'tool_shape', 'stock_thickness', 'segments', 'v_angle'])] = (
+                rng.choice(weird)
+            )
+        yield data
+
+
 def strict_equal(a, b):
     """Equality that tells 0 from 0.0 and True from 1, and compares floats by value and sign."""
     if type(a) is not type(b):
@@ -1665,6 +1737,7 @@ def main():
     parser.add_argument(
         '--rotary', type=int, default=3000, help='generated rotary jobs, and half as many given programs'
     )
+    parser.add_argument('--relief', type=int, default=1500, help='generated reliefs, and as many stock previews')
     parser.add_argument('--skip-suite', action='store_true', help='do not replay the calls made by the test suite')
     parser.add_argument(
         '--without-polygon-operations',
@@ -1693,7 +1766,7 @@ def main():
         ' lines within the bound on work'
     )
 
-    from native_core_recorder import reference, rotary_reference
+    from native_core_recorder import preview_reference, reference, rotary_reference, where_computed_left_out
     from studio.cam import generate
     from studio.rotary import generate_rotary, wrap_job
     from studio.operations import kernel_available, kernel_vcarve_available
@@ -1769,6 +1842,14 @@ def main():
             line, _ = rotary_reference(wrap_job, job, options, 'job')
             if line is not None:
                 lines.setdefault(line, 'rotary-wrap')
+        for data in relief_cases(args.relief, 98):
+            line = preview_reference('relief', data)
+            if line is not None:
+                lines.setdefault(line, 'relief')
+        for data in stock_cases(args.relief, 99, generate):
+            line = preview_reference('stock', data)
+            if line is not None:
+                lines.setdefault(line, 'stock')
         tally = collections.Counter()
         declined = collections.Counter()
         failures = []
@@ -1783,6 +1864,8 @@ def main():
             for (line, origin), answer in zip(lines.items(), answers, strict=True):
                 case, got = json.loads(line), json.loads(answer)
                 expect, subject = case['expect'], case.get('project', case.get('job'))
+                if 'relief' in case and 'ok' in got:
+                    got = {'ok': where_computed_left_out(got['ok'])}
                 if not shared and 'project' in case and uses_polygon_operation(subject):
                     tally[origin, 'left out'] += 1
                 elif 'declined' in got:
@@ -1821,7 +1904,7 @@ def main():
                 if lines:
                     compare(lines)
 
-    for origin in ('suite', 'generated', 'entry/tabs', 'helix', 'v-carve', 'rotary', 'rotary-wrap'):
+    for origin in ('suite', 'generated', 'entry/tabs', 'helix', 'v-carve', 'rotary', 'rotary-wrap', 'relief', 'stock'):
         total = sum(n for (o, _), n in tally.items() if o == origin)
         if not total:
             continue
@@ -1842,6 +1925,8 @@ def main():
         raise SystemExit('No program was reproduced: the comparison did not exercise the native core.')
     if args.rotary and not (tally['rotary', 'program'] and tally['rotary-wrap', 'program']):
         raise SystemExit('No rotary program was reproduced: the comparison did not exercise the rotary post.')
+    if args.relief and not (tally['relief', 'program'] and tally['stock', 'program']):
+        raise SystemExit('No relief or stock preview was reproduced: the comparison did not exercise them.')
     if not shared:
         print(
             'PASS for the cases compared; offsets, pockets, fills and V-carves were NOT COMPARED (no compiled extension).'
