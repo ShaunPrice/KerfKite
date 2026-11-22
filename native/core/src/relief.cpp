@@ -3,18 +3,21 @@
 //
 // The contact places the cutter at each segment of each raster as deep as the conservative field of cell maxima
 // allows. Rasters are shared out between threads, each raster computed entirely by one thread, so the number of
-// threads changes no bit. Large jobs may run on a discrete GPU instead, with the same arithmetic in OpenCL C and
-// a sample of every result checked bit for bit against the processor's; see try_gpu for when.
+// threads changes no bit. Large jobs may also go to a GPU, alone or beside the threads, with the same arithmetic
+// in OpenCL C and a sample of every result checked bit for bit against the processor's. relief_calibrate measures
+// both on this computer and decides how to share; see choose and share_out.
 #include "kerfkite/relief.hpp"
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "kerfkite/cam.hpp"  // NotPorted
@@ -89,32 +92,6 @@ __kernel void relief_contact(__global const double *maxima, __global const doubl
 
 // What the last job of the calling thread ran on.
 thread_local std::string last_path = "none yet";
-// The processor's measured speed, in seconds a check on one thread, and the seconds the large jobs of this
-// process have spent on the threads.
-std::mutex speed_lock;
-double cpu_seconds_per_check = 2.5e-9;
-double cpu_large_seconds = 0;
-
-// Whether to try the GPU for a job of this many checks that the processor would run on `threads` threads.
-// KERFKITE_GPU=on tries it for every job and KERFKITE_GPU=off for none. Otherwise only large jobs are
-// considered, and the GPU is set up as a skier rents skis until the rent would have bought them: the threads run
-// the large jobs until they have taken as long as setting the GPU up does, or until one job is expected to. From
-// then on each job goes to whichever has been measured faster.
-bool try_gpu(double checks, unsigned threads) {
-    const std::string mode = gpu::mode();
-    if (mode == "off") return false;
-    if (mode == "on") return gpu::available();
-    if (checks < kGpuChecks) return false;
-    if (!gpu::started()) {
-        std::lock_guard<std::mutex> guard(speed_lock);
-        if (cpu_large_seconds + checks * cpu_seconds_per_check / threads < kSetupSeconds) return false;
-    }
-    if (!gpu::available()) return false;
-    const double seconds = gpu::seconds_per_unit();
-    if (seconds <= 0) return true;
-    std::lock_guard<std::mutex> guard(speed_lock);
-    return seconds < cpu_seconds_per_check / threads;
-}
 
 // A contact job with the cell edges worked out once: i * dx for i = 0..cols and j * dy for j = 0..rows, each the
 // product the reference computes for it.
@@ -130,25 +107,25 @@ struct Prepared {
     }
 };
 
-// The checks the loops of contact_rows make, counted exactly with the same ranges.
-double count_checks(const ReliefContact &job) {
+// The checks the loops of contact_rows make, counted exactly with the same ranges: before[r] is the number made
+// for rasters 0..r-1, so before[ny + 1] is the whole job.
+std::vector<double> raster_checks(const ReliefContact &job) {
     const double dx = job.width / job.cols, dy = job.height / job.rows, radius = job.diameter / 2;
-    double total = 0;
+    double across = 0;  // the checks of one row of cells along a raster, the same for every raster
+    for (int segment = 0; segment < job.nx; segment++) {
+        const double start = job.width * segment / job.nx, end = job.width * (segment + 1) / job.nx;
+        const int lo_i = static_cast<int>(std::max(0.0, std::floor((start - radius) / dx)));
+        const int hi_i = static_cast<int>(std::min(double(job.cols - 1), std::floor((end + radius) / dx)));
+        if (hi_i >= lo_i) across += hi_i - lo_i + 1;
+    }
+    std::vector<double> before(std::size_t(job.ny) + 2, 0.0);
     for (int raster = 0; raster <= job.ny; raster++) {
         const double py = job.height * raster / job.ny;
         const int lo_j = static_cast<int>(std::max(0.0, std::floor((py - radius) / dy)));
         const int hi_j = static_cast<int>(std::min(double(job.rows - 1), std::floor((py + radius) / dy)));
-        if (hi_j < lo_j) continue;
-        double across = 0;
-        for (int segment = 0; segment < job.nx; segment++) {
-            const double start = job.width * segment / job.nx, end = job.width * (segment + 1) / job.nx;
-            const int lo_i = static_cast<int>(std::max(0.0, std::floor((start - radius) / dx)));
-            const int hi_i = static_cast<int>(std::min(double(job.cols - 1), std::floor((end + radius) / dx)));
-            if (hi_i >= lo_i) across += hi_i - lo_i + 1;
-        }
-        total += across * (hi_j - lo_j + 1);
+        before[raster + 1] = before[raster] + (hi_j < lo_j ? 0 : across * (hi_j - lo_j + 1));
     }
-    return total;
+    return before;
 }
 
 // The deepest the cutter may go at one segment of one raster.
@@ -193,14 +170,24 @@ void contact_rows(const Prepared &prepared, std::size_t first, std::size_t last,
     }
 }
 
-// The depths on the GPU, or false to compute them on the processor. A spread sample of the GPU's contacts (the four
-// corners and kGuardSamples - 4 others) is computed again on the processor and compared bit for bit: on any
-// difference the result is not used and the GPU is turned off for the rest of the process.
-bool gpu_rows(const Prepared &prepared, double checks, std::vector<double> &output) {
+double since(std::chrono::steady_clock::time_point began) {
+    return std::chrono::duration<double>(std::chrono::steady_clock::now() - began).count();
+}
+
+// What computes contacts beside the processor's threads: the GPU, through kerfkite/gpu.hpp. The self-test puts
+// a stand-in in its place (relief_test_device) to exercise the sharing on computers without a GPU.
+struct Device {
+    bool (*started)();
+    bool (*usable)();
+    bool (*shared)();  // shares the processor's memory: an integrated GPU
+    std::string (*name)();
+    // Contacts 0..items-1, numbered raster by raster, into `out`; `seconds` from upload to read-back.
+    bool (*contacts)(const Prepared &, std::size_t items, double *out, double &seconds, std::string &why);
+    void (*turn_off)(const std::string &why);
+};
+
+bool gpu_contacts(const Prepared &prepared, std::size_t items, double *out, double &seconds, std::string &why) {
     const ReliefContact &job = prepared.job;
-    const int nx = job.nx, ny = job.ny;
-    const std::size_t items = std::size_t(nx) * (ny + 1);
-    std::vector<double> contacts(items);
     const std::vector<gpu::Argument> arguments = {
         gpu::Argument::in(job.maxima.data(), job.maxima.size() * sizeof(double)),
         gpu::Argument::in(prepared.xs.data(), prepared.xs.size() * sizeof(double)),
@@ -208,29 +195,302 @@ bool gpu_rows(const Prepared &prepared, double checks, std::vector<double> &outp
         gpu::Argument::whole(job.rows), gpu::Argument::whole(job.cols),
         gpu::Argument::number(job.width), gpu::Argument::number(job.height),
         gpu::Argument::number(job.depth), gpu::Argument::number(job.diameter),
-        gpu::Argument::number(job.allowance), gpu::Argument::whole(nx),
-        gpu::Argument::whole(ny), gpu::Argument::whole(job.ball ? 1 : 0),
-        gpu::Argument::out(contacts.data(), contacts.size() * sizeof(double))};
-    std::string why;
-    double seconds = 0;
-    if (!gpu::run("relief_contact", kReliefKernel, arguments, items, why, seconds)) return false;
-    std::vector<std::size_t> sample = {0, std::size_t(nx - 1), std::size_t(ny) * nx, items - 1};
+        gpu::Argument::number(job.allowance), gpu::Argument::whole(job.nx),
+        gpu::Argument::whole(job.ny), gpu::Argument::whole(job.ball ? 1 : 0),
+        gpu::Argument::out(out, items * sizeof(double))};
+    return gpu::run("relief_contact", kReliefKernel, arguments, items, why, seconds);
+}
+
+const Device kGpu = {gpu::started, gpu::available, gpu::shared_memory, gpu::describe, gpu_contacts, gpu::disable};
+
+// The stand-in: the processor's arithmetic on the driving thread, taking `slowdown` times as long, and wrong at
+// item `wrong` when that is not negative.
+std::atomic<bool> stand_in_on{true};
+std::atomic<double> stand_in_slowdown{1};
+std::atomic<long long> stand_in_wrong{-1};
+std::atomic<double> stand_in_share{-1};  // a share every job is given, when not negative
+std::string stand_in_status = "test device";
+std::mutex stand_in_lock;
+
+bool stand_in_started() { return true; }
+bool stand_in_usable() { return stand_in_on; }
+bool stand_in_shared() { return false; }
+std::string stand_in_name() {
+    std::lock_guard<std::mutex> guard(stand_in_lock);
+    return stand_in_status;
+}
+bool stand_in_contacts(const Prepared &prepared, std::size_t items, double *out, double &seconds, std::string &why) {
+    if (!stand_in_on) {
+        why = stand_in_name();
+        return false;
+    }
+    const auto began = std::chrono::steady_clock::now();
+    const int nx = prepared.job.nx;
+    for (std::size_t item = 0; item < items; ++item)
+        out[item] = segment_contact(prepared, static_cast<int>(item / nx), static_cast<int>(item % nx));
+    const long long wrong = stand_in_wrong;
+    if (wrong >= 0 && static_cast<std::size_t>(wrong) < items) out[wrong] = std::nextafter(out[wrong], 1.0);
+    seconds = since(began);
+    const double slowdown = stand_in_slowdown;
+    if (slowdown > 1) {
+        std::this_thread::sleep_for(std::chrono::duration<double>(seconds * (slowdown - 1)));
+        seconds *= slowdown;
+    }
+    return true;
+}
+void stand_in_turn_off(const std::string &why) {
+    stand_in_on = false;
+    std::lock_guard<std::mutex> guard(stand_in_lock);
+    stand_in_status = "turned off: " + why;
+}
+
+const Device kStandIn = {stand_in_started, stand_in_usable, stand_in_shared, stand_in_name, stand_in_contacts,
+                         stand_in_turn_off};
+std::atomic<const Device *> in_use{&kGpu};
+
+// What is known of this computer's speed. Until a calibration, the GPU is set up as a skier rents skis until the
+// rent would have bought them (see choose); a calibration measures the threads and the device on one job and
+// says whether large jobs go to the threads, the device, or both at once.
+enum class Plan { Threads, Device, Both };
+struct Speeds {
+    double cpu = 2.5e-9;        // seconds a check on one thread
+    double large_seconds = 0;   // seconds the large jobs of this process have spent on the threads
+    double device_checks = 0, device_seconds = 0;  // the device's runs so far, all costs included
+    bool calibrated = false;
+    double gpu = 0, fixed = 0;  // calibrated: seconds a check, and a job's fixed seconds, on the device
+    Plan plan = Plan::Threads;
+    unsigned beside = 1;        // calibrated: the threads to run beside the device
+    json report;                // the last calibration
+};
+std::mutex speed_lock;
+Speeds speeds;
+
+// How a job is shared: the fraction of its checks given to the device (0: threads only, 1: device only), and the
+// threads for the rest.
+struct Choice {
+    double share = 0;
+    unsigned threads = 1;
+};
+
+// The share at which the device and `threads` threads finish together: fixed + f C g = (1 - f) C c / threads.
+double even_share(double checks, double cpu, unsigned threads, double gpu, double fixed) {
+    const double per_thread = cpu / threads, whole = checks * (gpu + per_thread);
+    return whole > 0 ? (checks * per_thread - fixed) / whole : 0;
+}
+
+// How to run a job of `checks` that would use `threads` threads on its own. KERFKITE_GPU=on gives every job to
+// the device and KERFKITE_GPU=off none.
+Choice choose(double checks, unsigned threads) {
+    const Device &device = *in_use.load();
+    if (&device == &kStandIn && stand_in_share >= 0) return {stand_in_share, threads};
+    const std::string mode = gpu::mode();
+    if (mode == "off") return {0, threads};
+    if (mode == "on") return {device.usable() ? 1.0 : 0.0, threads};
+    Speeds known;
+    {
+        std::lock_guard<std::mutex> guard(speed_lock);
+        known = speeds;
+    }
+    if (!known.calibrated) {
+        // Only large jobs, and only a discrete GPU: the threads run the large jobs until they have taken as long
+        // as setting the GPU up does, or until one job is expected to; from then on each job goes to whichever
+        // has been measured faster.
+        if (checks < kGpuChecks) return {0, threads};
+        if (!device.started() && known.large_seconds + checks * known.cpu / threads < kSetupSeconds) return {0, threads};
+        if (!device.usable() || device.shared()) return {0, threads};
+        if (known.device_checks <= 0) return {1, threads};
+        return {known.device_seconds / known.device_checks < known.cpu / threads ? 1.0 : 0.0, threads};
+    }
+    if (known.plan == Plan::Threads || !device.usable()) return {0, threads};
+    // Each way is chosen only when it is expected to save a twentieth of the time.
+    Choice best{0, threads};
+    double fastest = checks * known.cpu / threads;
+    const double alone = known.fixed + checks * known.gpu;
+    if (alone < 0.95 * fastest) {
+        best = {1, threads};
+        fastest = alone;
+    }
+    if (known.plan == Plan::Both) {
+        const unsigned beside = std::max(1u, std::min(known.beside, threads));
+        const double share = even_share(checks, known.cpu, beside, known.gpu, known.fixed);
+        const double both = known.fixed + share * checks * known.gpu;
+        if (share > 0.02 && share < 0.98 && both < 0.95 * fastest) best = {share, beside};
+    }
+    return best;
+}
+
+// What a job ran on, for the speeds and the report.
+struct Outcome {
+    std::string path;
+    unsigned threads = 0;
+    double thread_checks = 0, thread_seconds = 0;
+    bool device_ok = false;
+    double device_checks = 0, device_seconds = 0;
+};
+
+// Whether the device's contacts agree with the processor's at a spread sample (the corners of its part and
+// kGuardSamples others). On any difference the device is turned off for the rest of the process.
+bool guarded(const Prepared &prepared, const std::vector<double> &contacts, const Device &device) {
+    const std::size_t items = contacts.size(), nx = std::size_t(prepared.job.nx);
+    std::vector<std::size_t> sample = {0, items - 1};
+    if (items >= nx) {
+        sample.push_back(nx - 1);
+        sample.push_back(items - nx);
+    }
     for (std::size_t k = 1; sample.size() < std::min(kGuardSamples, items); k++)
         sample.push_back(std::size_t(k * 2654435761ull % items));
     for (std::size_t item : sample) {
         const double cpu = segment_contact(prepared, static_cast<int>(item / nx), static_cast<int>(item % nx));
         if (std::memcmp(&cpu, &contacts[item], sizeof cpu) != 0) {
-            gpu::disable("its relief contact differed from the CPU's at raster " + std::to_string(item / nx) +
-                         ", segment " + std::to_string(item % nx));
+            device.turn_off("its relief contact differed from the CPU's at raster " + std::to_string(item / nx) +
+                            ", segment " + std::to_string(item % nx));
             return false;
         }
     }
-    gpu::record(checks, seconds);
-    for (int raster = 0; raster <= ny; raster++)
-        vertex_row(&contacts[std::size_t(raster) * nx], nx, &output[std::size_t(raster) * (nx + 1)]);
-    last_path = "GPU, " + gpu::describe();
     return true;
 }
+
+std::string threads_text(unsigned threads) {
+    return std::to_string(threads) + (threads == 1 ? " thread" : " threads");
+}
+
+// Runs a job as chosen: the device takes the first rasters, up to the chosen share of the checks, while the
+// threads take the rest, each raster computed whole by one side. A device that fails or disagrees leaves its
+// rasters to the threads afterwards, so the answer is always the processor's bits.
+Outcome share_out(const Prepared &prepared, const std::vector<double> &before, Choice choice, std::vector<double> &output) {
+    const std::size_t rasters = before.size() - 1, nx = std::size_t(prepared.job.nx);
+    const double total = before.back();
+    std::size_t split = 0;  // rasters [0, split) go to the device
+    if (choice.share >= 1) split = rasters;
+    else if (choice.share > 0) split = std::lower_bound(before.begin(), before.end(), choice.share * total) - before.begin();
+    split = std::min(split, rasters);
+    const Device &device = *in_use.load();
+    Outcome outcome;
+    std::vector<double> contacts;
+    std::string why;
+    auto device_part = [&] {
+        try {
+            contacts.assign(split * nx, 0.0);
+            outcome.device_ok = device.contacts(prepared, contacts.size(), contacts.data(), outcome.device_seconds, why);
+        } catch (...) {
+            outcome.device_ok = false;
+        }
+    };
+    std::thread driver;
+    bool alongside = false;
+    if (split > 0 && split < rasters) {
+        try {
+            driver = std::thread(device_part);
+            alongside = true;
+        } catch (...) {
+            // No thread to be had: the device's part runs first, on this thread.
+        }
+    }
+    if (split > 0 && !alongside) device_part();
+    if (split < rasters) {
+        try {
+            const auto began = std::chrono::steady_clock::now();
+            parallel::for_ranges(rasters - split, choice.threads, [&](std::size_t first, std::size_t last) {
+                contact_rows(prepared, split + first, split + last, output.data());
+            });
+            outcome.thread_seconds = since(began);
+        } catch (...) {
+            if (alongside) driver.join();
+            throw;
+        }
+        outcome.threads = choice.threads;
+        outcome.thread_checks = total - before[split];
+    }
+    if (alongside) driver.join();
+    if (split > 0 && outcome.device_ok) outcome.device_ok = guarded(prepared, contacts, device);
+    if (split > 0 && outcome.device_ok) {
+        for (std::size_t raster = 0; raster < split; raster++)
+            vertex_row(&contacts[raster * nx], int(nx), &output[raster * (nx + 1)]);
+        outcome.device_checks = before[split];
+    } else if (split > 0) {
+        const unsigned again = parallel::threads_for(before[split], kChecksPerThread, split);
+        parallel::for_ranges(split, again, [&](std::size_t first, std::size_t last) {
+            contact_rows(prepared, first, last, output.data());
+        });
+        outcome.threads = std::max(outcome.threads, again);
+        outcome.device_seconds = 0;
+    }
+    if (outcome.device_ok && split == rasters) {
+        outcome.path = "GPU, " + device.name();
+    } else if (outcome.device_ok) {
+        const int percent = static_cast<int>(std::lround(100 * before[split] / total));
+        outcome.path = "GPU+CPU, " + std::to_string(percent) + "% of the work on " + device.name() + ", the rest on " +
+                       threads_text(outcome.threads);
+    } else {
+        outcome.path = "CPU, " + threads_text(outcome.threads);
+    }
+    return outcome;
+}
+
+// Folds what a job measured into the speeds.
+void learn(const Outcome &outcome) {
+    std::lock_guard<std::mutex> guard(speed_lock);
+    if (outcome.thread_checks >= 10000000 && outcome.thread_seconds > 0)
+        speeds.cpu = 0.8 * speeds.cpu + 0.2 * (outcome.thread_seconds * outcome.threads / outcome.thread_checks);
+    if (outcome.thread_checks >= kGpuChecks) speeds.large_seconds += outcome.thread_seconds;
+    if (!outcome.device_ok) return;
+    speeds.device_checks += outcome.device_checks;
+    speeds.device_seconds += outcome.device_seconds;
+    if (in_use.load() == &kGpu) gpu::record(outcome.device_checks, outcome.device_seconds);
+    if (speeds.calibrated && outcome.device_checks >= 10000000) {
+        const double per_check = (outcome.device_seconds - speeds.fixed) / outcome.device_checks;
+        if (per_check > 0) speeds.gpu = 0.8 * speeds.gpu + 0.2 * per_check;
+    }
+}
+
+// The calibration's job: a varied field of 512 x 512 cells over 128 mm, a 4 mm ball, and as many rasters as give
+// about `checks` checks.
+ReliefContact calibration_job(double checks) {
+    ReliefContact job;
+    job.rows = job.cols = 512;
+    job.width = job.height = 128;
+    job.depth = 5;
+    job.diameter = 4;
+    job.allowance = 0.1;
+    job.ball = true;
+    job.nx = 512;
+    job.maxima.resize(std::size_t(job.rows) * job.cols);
+    std::uint64_t state = 2026;
+    for (int j = 0; j < job.rows; j++)
+        for (int i = 0; i < job.cols; i++) {
+            state = state * 6364136223846793005ull + 1442695040888963407ull;
+            const double noise = double(state >> 11) / 9007199254740992.0;
+            const double wave = 0.5 + 0.25 * std::sin(i * 0.031) * std::cos(j * 0.023);
+            job.maxima[std::size_t(j) * job.cols + i] = -job.depth * std::min(1.0, wave + 0.25 * noise);
+        }
+    job.ny = 2;
+    const std::vector<double> sample = raster_checks(job);
+    const double per_raster = std::max(1.0, sample.back() / 3);
+    job.ny = static_cast<int>(std::max(4.0, std::min(20000.0, checks / per_raster)));
+    return job;
+}
+
+// One timed run of the calibration job, and whether its depths equal the threads' own.
+struct Trial {
+    double seconds = 0;
+    Outcome outcome;
+    bool same = true;
+};
+Trial trial(const Prepared &prepared, const std::vector<double> &before, Choice choice,
+            const std::vector<double> *reference, std::vector<double> *keep = nullptr) {
+    std::vector<double> output(std::size_t(prepared.job.nx + 1) * (prepared.job.ny + 1));
+    Trial result;
+    const auto began = std::chrono::steady_clock::now();
+    result.outcome = share_out(prepared, before, choice, output);
+    result.seconds = since(began);
+    if (reference)
+        result.same = output.size() == reference->size() &&
+                      std::memcmp(output.data(), reference->data(), output.size() * sizeof(double)) == 0;
+    if (keep) *keep = std::move(output);
+    return result;
+}
+
+std::mutex calibration_lock;
 
 // studio.relief._number(data, key, default, minimum=, positive=, maximum=).
 double setting_of(const json &data, const char *key, const json *fallback, double minimum, bool positive,
@@ -249,31 +509,174 @@ double setting_of(const json &data, const char *key, const json *fallback, doubl
 
 std::vector<double> relief_depths(const ReliefContact &job, std::string &ran) {
     const Prepared prepared(job);
-    const double checks = count_checks(job);
+    const std::vector<double> before = raster_checks(job);
+    const double checks = before.back();
     if (checks > kMaxChecks) throw ValueError("Native contact work exceeds 2000000000 checks");
     std::vector<double> output(std::size_t(job.nx + 1) * (job.ny + 1));
     const std::size_t rasters = std::size_t(job.ny) + 1;
     const unsigned threads = parallel::threads_for(checks, kChecksPerThread, rasters);
-    bool done = false;
+    Choice choice{0, threads};
     try {
-        if (try_gpu(checks, threads)) done = gpu_rows(prepared, checks, output);
+        choice = choose(checks, threads);
     } catch (...) {
-        done = false;
+        choice = {0, threads};
     }
-    if (!done) {
-        const auto began = std::chrono::steady_clock::now();
-        parallel::for_ranges(rasters, threads, [&](std::size_t first, std::size_t last) {
-            contact_rows(prepared, first, last, output.data());
-        });
-        const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - began).count();
-        last_path = "CPU, " + std::to_string(threads) + (threads == 1 ? " thread" : " threads");
-        std::lock_guard<std::mutex> guard(speed_lock);
-        if (checks >= 10000000) cpu_seconds_per_check = 0.8 * cpu_seconds_per_check + 0.2 * (took * threads / checks);
-        if (checks >= kGpuChecks) cpu_large_seconds += took;
-    }
-    ran = last_path;
+    const Outcome outcome = share_out(prepared, before, choice, output);
+    learn(outcome);
+    ran = last_path = outcome.path;
     return output;
 }
+
+Json relief_calibrate() {
+    std::lock_guard<std::mutex> one_at_a_time(calibration_lock);
+    const auto began = std::chrono::steady_clock::now();
+    const unsigned threads = parallel::limit();
+    const Device &device = *in_use.load();
+    // A small first run sizes the job to take about 40 ms on all the threads.
+    double cpu = 0;
+    {
+        const ReliefContact probe = calibration_job(8e6);
+        const Prepared prepared(probe);
+        const std::vector<double> before = raster_checks(probe);
+        cpu = trial(prepared, before, {0, threads}, nullptr).seconds * threads / before.back();
+    }
+    const ReliefContact job = calibration_job(std::max(2e7, std::min(6e8, 0.04 * threads / std::max(cpu, 1e-12))));
+    const Prepared prepared(job);
+    const std::vector<double> before = raster_checks(job);
+    const double checks = before.back();
+    std::vector<double> reference;
+    double on_threads = trial(prepared, before, {0, threads}, nullptr, &reference).seconds;
+    if (on_threads < 0.1) on_threads = std::min(on_threads, trial(prepared, before, {0, threads}, &reference).seconds);
+    cpu = on_threads * threads / checks;
+    json report = json{{"threads", threads}, {"checks", checks}, {"threads_ms", on_threads * 1000}};
+
+    Plan plan = Plan::Threads;
+    double gpu_per_check = 0, fixed = 0, share = 0, best = on_threads;
+    unsigned beside = threads;
+    // A run that used the device counts only if it gave the threads' bits throughout; a difference the guard's
+    // sample missed still turns the device off.
+    auto counts = [&](const Trial &run) {
+        if (run.outcome.device_ok && !run.same) device.turn_off("its relief contact differed from the CPU's in the calibration");
+        return run.outcome.device_ok && run.same;
+    };
+    if (gpu::mode() != "off" && device.usable()) {
+        report["device"] = device.name();
+        // The device alone, twice: the first run builds its program.
+        Trial run = trial(prepared, before, {1, threads}, &reference);
+        bool fine = counts(run);
+        double device_wall = run.seconds, device_seconds = run.outcome.device_seconds;
+        if (fine) {
+            run = trial(prepared, before, {1, threads}, &reference);
+            fine = counts(run);
+            device_wall = std::min(device_wall, run.seconds);
+            device_seconds = std::min(device_seconds, run.outcome.device_seconds);
+        }
+        // A job of a few rasters gives the fixed cost of a run: buffers, transfers and launches.
+        if (fine) {
+            const ReliefContact small = calibration_job(0);
+            const Prepared small_prepared(small);
+            const std::vector<double> small_before = raster_checks(small);
+            std::vector<double> small_reference;
+            trial(small_prepared, small_before, {0, threads}, nullptr, &small_reference);
+            double small_seconds = 1e9;
+            for (int k = 0; k < 2 && fine; k++) {
+                run = trial(small_prepared, small_before, {1, threads}, &small_reference);
+                fine = counts(run);
+                small_seconds = std::min(small_seconds, run.outcome.device_seconds);
+            }
+            if (fine) {
+                gpu_per_check = std::max(1e-15, (device_seconds - small_seconds) / (checks - small_before.back()));
+                fixed = std::max(0.0, small_seconds - small_before.back() * gpu_per_check);
+            }
+        }
+        if (fine) {
+            report["device_ms"] = device_wall * 1000;
+            report["device_fixed_ms"] = fixed * 1000;
+            if (device_wall < 0.95 * best) {
+                plan = Plan::Device;
+                best = device_wall;
+                share = 1;
+            }
+            // Both at once: the device beside all the threads, and beside one fewer, since on a computer with few
+            // cores the thread that drives the device may want a core to itself.
+            json tried = json::array();
+            for (unsigned k : {threads, threads - 1}) {
+                if (k == 0 || !fine || (k == threads - 1 && threads < 2)) continue;
+                double f = even_share(checks, cpu, k, gpu_per_check, fixed), fastest = 0, kept = f;
+                for (int round = 0; round < 2 && f > 0.02 && f < 0.98; round++) {
+                    run = trial(prepared, before, {f, k}, &reference);
+                    if (!counts(run)) {
+                        fine = false;
+                        break;
+                    }
+                    if (fastest == 0 || run.seconds < fastest) {
+                        fastest = run.seconds;
+                        kept = f;
+                    }
+                    // The next share from what each side took in this run.
+                    const double given = run.outcome.device_checks, rest = checks - given;
+                    if (given <= 0 || rest <= 0 || run.outcome.thread_seconds <= 0) break;
+                    const double device_rate = std::max(1e-15, (run.outcome.device_seconds - fixed) / given);
+                    f = even_share(checks, run.outcome.thread_seconds * k / rest, k, device_rate, fixed);
+                }
+                if (fastest > 0) {
+                    tried.push_back(json{{"threads", k}, {"share", kept}, {"ms", fastest * 1000}});
+                    if (fastest < 0.95 * best) {
+                        plan = Plan::Both;
+                        best = fastest;
+                        share = kept;
+                        beside = k;
+                    }
+                }
+            }
+            report["shared"] = std::move(tried);
+        }
+        if (!fine || !device.usable()) {
+            plan = Plan::Threads;
+            share = 0;
+            report["device_status"] = device.name();
+        }
+    } else {
+        report["device"] = nullptr;
+        report["device_status"] = gpu::mode() == "off" ? std::string("turned off by KERFKITE_GPU=off") : device.name();
+    }
+    report["plan"] = plan == Plan::Both ? "gpu+cpu" : plan == Plan::Device ? "gpu" : "threads";
+    report["share"] = share;
+    report["beside"] = plan == Plan::Both ? beside : plan == Plan::Device ? 0u : threads;
+    report["seconds"] = since(began);
+    std::lock_guard<std::mutex> guard(speed_lock);
+    speeds.calibrated = true;
+    speeds.cpu = cpu;
+    speeds.gpu = gpu_per_check;
+    speeds.fixed = fixed;
+    speeds.plan = plan;
+    speeds.beside = beside;
+    speeds.report = report;
+    return report;
+}
+
+Json relief_calibration() {
+    std::lock_guard<std::mutex> guard(speed_lock);
+    return speeds.calibrated ? speeds.report : Json(nullptr);
+}
+
+namespace detail {
+
+void relief_test_device(bool on, double slowdown, long long wrong, double share) {
+    {
+        std::lock_guard<std::mutex> guard(stand_in_lock);
+        stand_in_status = "test device";
+    }
+    stand_in_on = true;
+    stand_in_slowdown = slowdown;
+    stand_in_wrong = wrong;
+    stand_in_share = share;
+    in_use = on ? &kStandIn : &kGpu;
+    std::lock_guard<std::mutex> guard(speed_lock);
+    speeds = Speeds{};
+}
+
+}  // namespace detail
 
 Json prepare_relief(const Json &data) {
     if (!data.is_object()) throw ValueError("Relief input must be an object");
@@ -436,7 +839,7 @@ Json prepare_relief(const Json &data) {
          "Allowance is capped at the stock top (Z=0). Ball-cutter raster spacing can leave scallops between passes."});
     return json{{"paths", json(std::move(paths))},
                 {"path_depths", json(std::move(depth_rows))},
-                {"device", ran.compare(0, 3, "GPU") == 0 ? "gpu" : "cpu"},
+                {"device", ran.compare(0, 8, "GPU+CPU,") == 0 ? "gpu+cpu" : ran.compare(0, 4, "GPU,") == 0 ? "gpu" : "cpu"},
                 {"surface", std::move(surface)},
                 {"warnings", std::move(warnings)}};
 }

@@ -565,6 +565,25 @@ PyObject *gpu_status(PyObject *, PyObject *) {
 
 PyObject *last_contact(PyObject *, PyObject *) { return PyUnicode_FromString(kerfkite::last_relief_contact().c_str()); }
 
+// calibrate(): measures the relief contact on the threads and any GPU and decides how to share large jobs,
+// without the GIL; the report as JSON text (kerfkite::relief_calibrate).
+PyObject *calibrate(PyObject *, PyObject *) {
+    std::string text;
+    Py_BEGIN_ALLOW_THREADS
+    try {
+        text = kerfkite::relief_calibrate().dump();
+    } catch (const std::exception &error) {
+        text.clear();
+        text = std::string("!") + error.what();
+    }
+    Py_END_ALLOW_THREADS
+    if (!text.empty() && text[0] == '!') {
+        PyErr_SetString(PyExc_RuntimeError, text.c_str() + 1);
+        return nullptr;
+    }
+    return PyUnicode_FromStringAndSize(text.data(), static_cast<Py_ssize_t>(text.size()));
+}
+
 // A solid kept between calls. Python holds it as a capsule and hands it back in the `kept` list of a later
 // request; the capsule owns a copy of the Solid, which shares the mesh and never changes it, so any
 // number of threads may use one solid at once.
