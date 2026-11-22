@@ -5,6 +5,8 @@
 // filled triangles are the region, already triangulated for the caps of an extrusion.
 #include <algorithm>
 #include <cmath>
+#include <functional>
+#include <map>
 
 #include "mesh.hpp"
 #include "planar.hpp"
@@ -35,7 +37,7 @@ bool filled(int winding, FillRule rule) {
     }
 }
 
-void resolve_region(const std::vector<Segment2> &segments, FillRule rule, Region &out) {
+void resolve_region(const std::vector<Segment2> &segments, const std::function<bool(int)> &keep, Region &out) {
     Plane carrier;
     carrier.n[2] = I128(1);
     Planar planar(out.pool, carrier, 0, 1, 1);
@@ -102,13 +104,17 @@ void resolve_region(const std::vector<Segment2> &segments, FillRule rule, Region
         }
     }
     for (size_t t = 0; t < count; ++t) {
-        if (!filled(winding[t], rule)) continue;
+        if (!keep(winding[t])) continue;
         out.triangles.push_back(planar.triangles[t]);
         for (size_t k = 0; k < 3; ++k) {
             const int next = planar.neighbours[t][k];
-            if (next < 0 || !filled(winding[static_cast<size_t>(next)], rule)) out.boundary.emplace_back(planar.triangles[t][k], planar.triangles[t][(k + 1) % 3]);
+            if (next < 0 || !keep(winding[static_cast<size_t>(next)])) out.boundary.emplace_back(planar.triangles[t][k], planar.triangles[t][(k + 1) % 3]);
         }
     }
+}
+
+void resolve_region(const std::vector<Segment2> &segments, FillRule rule, Region &out) {
+    resolve_region(segments, [rule](int winding) { return filled(winding, rule); }, out);
 }
 
 std::vector<Segment2> ring_segments(const std::vector<Ring> &rings, const char *context) {
@@ -210,6 +216,65 @@ std::vector<Ring> resolve_rings(const std::vector<Ring> &rings, FillRule fill) {
     detail::Region region;
     detail::resolve_region(detail::ring_segments(rings, "rings"), fill, region);
     return detail::region_rings(region);
+}
+
+RegionTriangles region_triangles(const std::vector<Ring> &rings, const std::vector<std::array<Vec2, 2>> &lines, int depth) {
+    std::vector<detail::Segment2> segments = detail::ring_segments(rings, "rings");
+    for (const std::array<Vec2, 2> &line : lines) {
+        // Both ways, so that the line divides triangles without changing any winding number.
+        const int64_t ax = detail::to_grid(line[0].x), ay = detail::to_grid(line[0].y), bx = detail::to_grid(line[1].x), by = detail::to_grid(line[1].y);
+        segments.push_back(detail::Segment2{ax, ay, bx, by});
+        segments.push_back(detail::Segment2{bx, by, ax, ay});
+    }
+    detail::Region region;
+    detail::resolve_region(segments, [depth](int winding) { return winding >= depth; }, region);
+    RegionTriangles out;
+    std::map<int, int> index;  // pool point -> output point
+    const auto point = [&](int p) {
+        const auto found = index.find(p);
+        if (found != index.end()) return found->second;
+        const int id = static_cast<int>(out.points.size());
+        index.emplace(p, id);
+        out.points.push_back(detail::point_mm(region.pool, p));
+        return id;
+    };
+    // Pieces: triangles joined across an edge. Each directed edge of a triangle names it.
+    const size_t count = region.triangles.size();
+    std::map<std::pair<int, int>, size_t> owner;
+    for (size_t t = 0; t < count; ++t)
+        for (size_t k = 0; k < 3; ++k) owner.emplace(std::make_pair(region.triangles[t][k], region.triangles[t][(k + 1) % 3]), t);
+    std::vector<size_t> parent(count);
+    for (size_t t = 0; t < count; ++t) parent[t] = t;
+    const std::function<size_t(size_t)> root = [&](size_t t) { return parent[t] == t ? t : parent[t] = root(parent[t]); };
+    for (size_t t = 0; t < count; ++t)
+        for (size_t k = 0; k < 3; ++k) {
+            const auto other = owner.find(std::make_pair(region.triangles[t][(k + 1) % 3], region.triangles[t][k]));
+            if (other != owner.end()) parent[root(t)] = root(other->second);
+        }
+    std::map<size_t, size_t> piece;  // root -> piece
+    std::vector<size_t> piece_of(count);
+    for (size_t t = 0; t < count; ++t) {
+        const size_t r = root(t);
+        if (!piece.count(r)) {
+            piece.emplace(r, out.pieces.size());
+            out.pieces.emplace_back();
+        }
+        piece_of[t] = piece[r];
+        out.pieces[piece_of[t]].push_back(static_cast<int>(t));
+        out.triangles.push_back({point(region.triangles[t][0]), point(region.triangles[t][1]), point(region.triangles[t][2])});
+    }
+    std::vector<std::vector<std::pair<int, int>>> edges(out.pieces.size());
+    for (const std::pair<int, int> &edge : region.boundary) edges[piece_of[owner.at(edge)]].push_back(edge);
+    for (const std::vector<std::pair<int, int>> &own : edges) {
+        std::vector<Ring> loops;
+        for (const std::vector<int> &loop : detail::loops_of(own)) {
+            Ring ring;
+            for (const int p : loop) ring.push_back(detail::point_mm(region.pool, p));
+            if (ring.size() >= 3) loops.push_back(ring);
+        }
+        out.outlines.push_back(loops);
+    }
+    return out;
 }
 
 Solid extrude(const std::vector<Ring> &rings, double height, const ExtrudeOptions &options) {

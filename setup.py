@@ -66,6 +66,8 @@ setup(
                 # LightBurn bundles: the ZIP archive and its text members.
                 'native/core/src/bundle_import.cpp',
                 'native/core/src/python_text.cpp',
+                # Editable Bézier and B-spline surfaces.
+                'native/core/src/surface.cpp',
                 # Circuit board import: Gerber layers and Excellon drill files.
                 'native/core/src/excellon.cpp',
                 'native/core/src/gerber.cpp',

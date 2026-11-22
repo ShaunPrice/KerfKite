@@ -106,7 +106,7 @@ Consequences to know:
 
 `projection(solid)` is the outline seen along Z. It takes the edges where the upward-facing part of the surface ends and fills them by the positive winding rule; a through hole shows, a blind pocket does not.
 
-Behind `extrude`, `revolve` and `projection` is a small exact 2D arrangement (`planar.cpp`, `profile.cpp`): segments on the grid are split where they cross, triangulated, and filled by the even-odd, non-zero or positive rule. `resolve_rings` exposes it. Rings may cross themselves or each other; crossings are resolved before rounding.
+Behind `extrude`, `revolve` and `projection` is a small exact 2D arrangement (`planar.cpp`, `profile.cpp`): segments on the grid are split where they cross, triangulated, and filled by the even-odd, non-zero or positive rule. `resolve_rings` exposes it, and `region_triangles` gives the triangles of the region where the rings wind at least a given number of times, with lines that split triangles without bounding anything, grouped into pieces joined edge to edge with their boundary loops; the surface mesher cuts drawn outlines with it. Rings may cross themselves or each other; crossings are resolved before rounding.
 
 ## Queries for machining
 

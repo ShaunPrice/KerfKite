@@ -1,4 +1,11 @@
-"""Editable rational Bézier and B-spline patches with Open CASCADE STEP exchange."""
+"""Editable rational Bézier and B-spline patches with Open CASCADE STEP exchange.
+
+The native core tessellates surfaces (native/core/src/surface.cpp) where the compiled extension is installed:
+it is Studio's implementation of surface_mesh, and this module's is the reference and the fallback. Untrimmed
+patches and joined sheets agree with the reference to rounding; a drawn outline is cut and triangulated by the
+core's exact planar arrangement, compared with the reference and the true surface by
+validation/surface_mesh_check.py. STEP exchange stays with Open CASCADE here.
+"""
 
 import base64
 import binascii
@@ -10,6 +17,11 @@ import numpy as np
 from flask import Response, jsonify, request
 
 from .solid_cad import Dimensions
+
+try:  # The native core's port of surface_mesh, in the compiled extension.
+    from ._relief_native import core_cam as _core_cam
+except ImportError:
+    _core_cam = None
 
 MAX_STEP_BYTES = 1_500_000
 MAX_TRIANGLES = 60000
@@ -290,7 +302,40 @@ def _trimmed_mesh(spec, window, domain):
     )
 
 
-def surface_mesh(surface):
+def _core_request(surface):
+    """The core's request for a surface: parameters are resolved in their dictionary's order, which JSON objects
+    in the core do not keep, so the order travels with them."""
+    request = {'surface': surface}
+
+    def order(item):
+        parameters = item.get('parameters', {}) if isinstance(item, dict) else None
+        return list(parameters) if isinstance(parameters, dict) else None
+
+    request['order'] = order(surface)
+    if isinstance(surface, dict) and isinstance(surface.get('patches'), list):
+        request['orders'] = [order(patch) for patch in surface['patches']]
+    return request
+
+
+def surface_mesh(surface, *, backend='auto'):
+    """The tessellated surface for the editor and STL. backend='auto' meshes in the native core where it can and
+    here otherwise; 'python' meshes here; 'native' raises NotImplementedError where the core cannot answer."""
+    if backend not in ('auto', 'python', 'native'):
+        raise ValueError('Surface backend must be auto, python or native')
+    if backend != 'python':
+        if _core_cam is not None:
+            try:
+                answer = _core_cam('solid-cad-surface', _core_request(surface))
+            except NotImplementedError:
+                if backend == 'native':
+                    raise
+                answer = None
+            if answer is not None:
+                return answer
+            if backend == 'native':
+                raise NotImplementedError('The surface cannot be passed to the native core unchanged')
+        elif backend == 'native':
+            raise NotImplementedError('The native surface mesher is not installed')
     patches, resolved = _regions(surface)
     pieces = [_trimmed_mesh(*patch) for patch in patches]
     if not resolved:

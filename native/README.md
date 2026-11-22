@@ -144,6 +144,13 @@ reads one page of a PDF (`{"content": base64 text of the file, "page"}`) as Stud
 `core/src/inflate.cpp`): the page's vector paths as a draft in millimetres, with its warnings, page count and
 size, or the reference's message.
 
+    kerfkite-cam solid-cad-surface request.json
+
+tessellates an editable surface (`{"surface", "order", "orders"}`) as Studio's surface editor does
+(`core/src/surface.cpp`, the port of `studio/cad_exchange.py`'s `surface_mesh`): a rational Bézier or clamped
+B-spline patch, or a sheet of joined patches, within its trim bounds and drawn outline, as vertices, triangles,
+area and bounds, with a sheet's resolved patches, or the reference's message.
+
     kerfkite-cam bundle-import request.json
 
 lists the LightBurn members of a user bundle (`{"content": base64 text of the ZIP archive}`), or reads the text

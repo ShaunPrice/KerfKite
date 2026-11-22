@@ -18,7 +18,10 @@ namespace kerfkite {
 // "profiles", "bounds", "area"} for a drawing, {"dimension": 3, "vertices", "triangles", "bounds", "volume"} for a
 // solid. "sketch-solve": {"feature", "parameters", "order"} -> studio.sketch_constraints.solve_profile: {"points",
 // "dof", "redundant", "iterations"}. "assembly-solve": {"assembly", "mesh", "orders"} -> studio.assembly.solve:
-// {"parts", "contacts", "interferences"} (core/src/assembly.cpp).
+// {"parts", "contacts", "interferences"} (core/src/assembly.cpp). "solid-cad-surface": {"surface", "order",
+// "orders"} -> studio.cad_exchange.surface_mesh(surface): {"vertices", "triangles", "area", "bounds", "faces",
+// "solids"}, with "resolvedPatches" for a joined sheet (core/src/surface.cpp); order is that of the surface's
+// parameters, orders that of each patch's.
 bool solid_cad_command(const std::string &command);
 Json solid_cad_call(const std::string &command, const Json &request);
 

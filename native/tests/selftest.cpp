@@ -1378,6 +1378,22 @@ static void bundle_imports() {
     expect(refusal() == "Cannot read the bundle or selected text member", "a member whose CRC-32 does not match");
 }
 
+// A bilinear patch on the reference's 25 by 25 grid, and an outline with a hole cut from it.
+static void surfaces() {
+    const json patch = json::parse(R"({"poles": [[[0, 0, 0], [0, 12, 3]], [[20, 0, 4], [20, 12, 0]]]})");
+    json request = json::object();
+    request["surface"] = patch;
+    const json mesh = kerfkite::solid_cad_call("solid-cad-surface", request);
+    expect(mesh.at("triangles").size() == 1152 && mesh.at("vertices").at(12 * 25 + 12) == json::array({10.0, 6.0, 1.75}),
+           "a bilinear patch's grid and its midpoint");
+    json cut = patch;
+    cut["boundary"] = json::parse("[[[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]], [[0.4, 0.4], [0.4, 0.6], [0.6, 0.6], [0.6, 0.4]]]");
+    request["surface"] = cut;
+    const json trimmed = kerfkite::solid_cad_call("solid-cad-surface", request);
+    const double whole = mesh.at("area").get<double>(), kept = trimmed.at("area").get<double>();
+    expect(kept > 0.55 * whole && kept < 0.62 * whole, "an outline with a hole keeps 0.64 - 0.04 of the parameters");
+}
+
 int main() {
     // Ties round to even on the exact binary value, as Python's formatting does.
     expect(fixed(0.125, 2) == "0.12", "0.125 to two places");
@@ -1576,6 +1592,7 @@ int main() {
     cad_scripts();
     program_imports();
     bundle_imports();
+    surfaces();
     artwork_reliefs();
 
     std::printf(failures ? "%d checks failed\n" : "PASS native core self-test%.0d\n", failures);

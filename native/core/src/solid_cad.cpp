@@ -37,6 +37,7 @@
 #include "solid_cad_build.hpp"
 #include "simple_line.hpp"
 #include "solid_requests.hpp"
+#include "surface.hpp"
 
 namespace kerfkite {
 
@@ -1460,17 +1461,42 @@ json script_preview(const json &payload) {
 
 }  // namespace
 
+namespace surface {
+namespace {
+
+// A patch's parameters for surface.cpp: Dimensions(definitions).vector(value, 3).
+class DimensionPoints : public Parameters {
+public:
+    DimensionPoints(const json *definitions, const json *order) : dimensions_(definitions, parameter_order(definitions, order)) {}
+    std::array<double, 3> point(const json *value) override {
+        const std::vector<double> v = dimensions_.vector(value, 3);
+        return {v[0], v[1], v[2]};
+    }
+
+private:
+    Dimensions dimensions_;
+};
+
+}  // namespace
+
+std::unique_ptr<Parameters> parameters(const Json *definitions, const Json *order) {
+    return std::make_unique<DimensionPoints>(definitions, order);
+}
+
+}  // namespace surface
+
 solid_requests::Shape solid_cad_build(const Json *model, const Json *order) { return build(model, order).solid; }
 
 bool solid_cad_command(const std::string &command) {
     return command == "solid-cad" || command == "solid-cad-section" || command == "cad-script" || command == "sketch-solve" ||
-           command == "assembly-solve";
+           command == "assembly-solve" || command == "solid-cad-surface";
 }
 
 Json solid_cad_call(const std::string &command, const Json &request) {
     if (command == "cad-script") return script_preview(request);
     if (command == "sketch-solve") return sketch_solve(request);
     if (command == "assembly-solve") return assembly_solve(request);
+    if (command == "solid-cad-surface") return surface::mesh(request);
     if (!request.is_object()) throw ValueError("Supply a CAD model in the model field");
     if (command == "solid-cad-section") return section(request);
     return rebuild(field(request, "model"), field(request, "order"));
