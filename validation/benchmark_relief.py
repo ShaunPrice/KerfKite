@@ -105,7 +105,9 @@ def main():
         agree = agree and len(digests) == 1
         best = ' '.join(f'{min(row["times"]) * 1000:9.1f}ms' for row in rows)
         first = f' {ways["GPU"]["jobs"][index]["times"][0] * 1000:9.1f}ms' if 'GPU' in ways else ''
-        print(f'{name:24} {checks(side, width, height, diameter, step):>14,} {best}{first}  {"/".join(sorted(digests))}')
+        print(
+            f'{name:24} {checks(side, width, height, diameter, step):>14,} {best}{first}  {"/".join(sorted(digests))}'
+        )
     for name_, result in ways.items():
         print(f'{name_}: last job on {result["jobs"][-1]["path"]}')
     if not agree:
