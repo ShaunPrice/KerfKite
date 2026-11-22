@@ -35,6 +35,7 @@ void set_threads(const char *value) {
 
 void parallel_checks() {
     using namespace kerfkite::parallel;
+    set_threads(nullptr);  // whatever the test was started with
     const unsigned most = limit();
     check(most >= 1, "at least one thread");
     // Every index is visited exactly once, by the range the fixed split gives it.

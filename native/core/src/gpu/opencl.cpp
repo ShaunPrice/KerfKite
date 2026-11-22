@@ -3,6 +3,7 @@
 // OpenCL header or loader is compiled in, shipped or required. See kerfkite/gpu.hpp for the rules.
 
 #include "kerfkite/gpu.hpp"
+#include "kerfkite/environment.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -135,13 +136,12 @@ std::string text_info(const Functions &cl, cl_device_id device, cl_uint what) {
 // Looks for the library and a device, once. The caller holds the lock.
 void look(State &s) {
     s.looked = true;
-    const char *mode_text = std::getenv("KERFKITE_GPU");
-    const std::string mode = mode_text ? mode_text : "auto";
-    if (mode == "off") {
+    const std::string setting = mode();
+    if (setting == "off") {
         s.status = "turned off by KERFKITE_GPU=off";
         return;
     }
-    const bool permissive = mode == "on";
+    const bool permissive = setting == "on";
     void *library = open_library();
     if (!library) {
         s.status = "no OpenCL library on this computer";
@@ -264,6 +264,11 @@ cl_kernel kernel_for(State &s, const char *name, const char *source, std::string
 }
 
 } // namespace
+
+std::string mode() {
+    const std::string setting = environment("KERFKITE_GPU");
+    return setting == "on" || setting == "off" ? setting : "auto";
+}
 
 bool started() {
     std::lock_guard<std::mutex> guard(lock());

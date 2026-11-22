@@ -32,10 +32,11 @@ from studio import _relief_native as r
 jobs, repeat = json.loads(sys.argv[2]), int(sys.argv[3])
 out = []
 for name, side, width, height, depth, diameter, step in jobs:
+    # Ridges and noise from exact operations and a fixed generator, so the map, and the digest, are the same on
+    # every computer.
     rng = np.random.default_rng(side)
-    x = np.linspace(-1, 1, side)
-    grid = (np.sin(9 * x)[None, :] * np.cos(7 * x)[:, None] + 0.2 * rng.random((side, side)) - 1.2) / 1.2 * depth
-    grid = np.clip(grid, -depth, 0)
+    u = np.arange(side) / (side - 1)
+    grid = -depth * (0.6 * ((3 * u[None, :] + 2 * u[:, None]) % 1.0) + 0.4 * rng.random((side, side)))
     maxima = np.maximum(np.maximum(grid[:-1, :-1], grid[:-1, 1:]), np.maximum(grid[1:, :-1], grid[1:, 1:]))
     packed = np.ascontiguousarray(maxima).tobytes()
     dx = width / (side - 1)
@@ -95,15 +96,16 @@ def main():
     if not args.no_gpu:
         ways['GPU'] = way(None, 'on', args.repeat)
     print('GPU:', ways.get('GPU', ways['threads'])['status'])
-    print(f"{'job':24} {'checks':>14} " + ' '.join(f'{name:>10}' for name in ways) + f" {'GPU first':>10}  digest")
+    first_header = f" {'GPU first':>10}" if 'GPU' in ways else ''
+    print(f"{'job':24} {'checks':>14} " + ' '.join(f'{name:>10}' for name in ways) + f'{first_header}  digest')
     agree = True
     for index, (name, side, width, height, _, diameter, step) in enumerate(JOBS):
         rows = [ways[name_]['jobs'][index] for name_ in ways]
         digests = {row['digest'] for row in rows}
         agree = agree and len(digests) == 1
         best = ' '.join(f'{min(row["times"]) * 1000:9.1f}ms' for row in rows)
-        first = f'{ways["GPU"]["jobs"][index]["times"][0] * 1000:9.1f}ms' if 'GPU' in ways else ''
-        print(f'{name:24} {checks(side, width, height, diameter, step):>14,} {best} {first:>10}  {"/".join(sorted(digests))}')
+        first = f' {ways["GPU"]["jobs"][index]["times"][0] * 1000:9.1f}ms' if 'GPU' in ways else ''
+        print(f'{name:24} {checks(side, width, height, diameter, step):>14,} {best}{first}  {"/".join(sorted(digests))}')
     for name_, result in ways.items():
         print(f'{name_}: last job on {result["jobs"][-1]["path"]}')
     if not agree:

@@ -14,6 +14,8 @@
 #include <thread>
 #include <vector>
 
+#include "kerfkite/environment.hpp"
+
 namespace kerfkite {
 namespace parallel {
 
@@ -21,11 +23,12 @@ namespace parallel {
 inline unsigned limit() {
     unsigned most = std::thread::hardware_concurrency();
     if (most == 0) most = 1;
-    if (const char *text = std::getenv("KERFKITE_THREADS")) {
+    const std::string setting = environment("KERFKITE_THREADS");
+    if (!setting.empty()) {
         // Digits only: no sign, no spaces, no locale.
         unsigned long value = 0;
-        bool digits = *text != '\0';
-        for (const char *c = text; *c && digits; ++c) {
+        bool digits = true;
+        for (const char *c = setting.c_str(); *c && digits; ++c) {
             if (*c < '0' || *c > '9' || value > 100000) digits = false;
             else value = value * 10 + static_cast<unsigned long>(*c - '0');
         }

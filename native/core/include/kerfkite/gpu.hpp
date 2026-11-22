@@ -39,6 +39,9 @@ struct Argument {
     static Argument out(void *data, std::size_t bytes) { Argument a; a.kind = Output; a.output = data; a.bytes = bytes; return a; }
 };
 
+// The setting of KERFKITE_GPU: "on", "off", or "auto" when it is unset or has any other value.
+std::string mode();
+
 // Whether the library and a device have been looked for in this process. It does not look.
 bool started();
 

@@ -47,7 +47,8 @@ const char *kReliefKernel = R"CL(
 #pragma OPENCL FP_CONTRACT OFF
 double most(double a, double b) { return a < b ? b : a; }
 double least(double a, double b) { return b < a ? b : a; }
-__kernel void relief_contact(__global const double *maxima, const int rows, const int cols, const double width,
+__kernel void relief_contact(__global const double *maxima, __global const double *xs, __global const double *ys,
+                             const int rows, const int cols, const double width,
                              const double height, const double depth, const double diameter,
                              const double allowance, const int nx, const int ny, const int ball,
                              __global double *contacts, const long first, const long items) {
@@ -63,9 +64,9 @@ __kernel void relief_contact(__global const double *maxima, const int rows, cons
     const int hi_i = (int)least((double)(cols - 1), floor((end + radius) / dx));
     double best = -depth;
     for (int j = lo_j; j <= hi_j; j++) {
-        const double yd = most(0.0, most(j * dy - py, py - (j + 1) * dy));
+        const double yd = most(0.0, most(ys[j] - py, py - ys[j + 1]));
         for (int i = lo_i; i <= hi_i; i++) {
-            const double xd = most(0.0, most(i * dx - end, start - (i + 1) * dx));
+            const double xd = most(0.0, most(xs[i] - end, start - xs[i + 1]));
             const double ds = xd * xd + yd * yd;
             if (ds > radius * radius) continue;
             const double sag = ball ? radius - sqrt(most(0.0, radius * radius - ds)) : 0.0;
@@ -90,9 +91,9 @@ double cpu_large_seconds = 0;
 // taken as long as setting the GPU up does, or until one job is expected to. From then on each job goes to
 // whichever has been measured faster.
 bool try_gpu(double checks, unsigned threads) {
-    const char *mode = std::getenv("KERFKITE_GPU");
-    if (mode && std::strcmp(mode, "off") == 0) return false;
-    if (mode && std::strcmp(mode, "on") == 0) return kerfkite::gpu::available();
+    const std::string mode = kerfkite::gpu::mode();
+    if (mode == "off") return false;
+    if (mode == "on") return kerfkite::gpu::available();
     if (checks < kGpuChecks) return false;
     if (!kerfkite::gpu::started()) {
         std::lock_guard<std::mutex> guard(speed_lock);
@@ -129,7 +130,19 @@ struct Job {
     int rows = 0, cols = 0, nx = 0, ny = 0;
     double width = 0, height = 0, depth = 0, diameter = 0, allowance = 0;
     bool ball = false;
+    // The cell edges i * dx (i = 0..cols) and j * dy (j = 0..rows), each the product the reference computes for
+    // it, worked out once instead of at every check.
+    std::vector<double> xs, ys;
 };
+
+// Fills the cell edges of a job whose settings are read.
+void edges(Job &job) {
+    const double dx=job.width/job.cols,dy=job.height/job.rows;
+    job.xs.resize(std::size_t(job.cols)+1);
+    job.ys.resize(std::size_t(job.rows)+1);
+    for(int i=0;i<=job.cols;i++) job.xs[i]=i*dx;
+    for(int j=0;j<=job.rows;j++) job.ys[j]=j*dy;
+}
 
 // The settings both entry points share, read and checked in the reference's order.
 bool read_settings(PyObject *w, PyObject *h, PyObject *d, PyObject *diam, PyObject *allow, PyObject *xn,
@@ -193,7 +206,7 @@ double segment_contact(const Job &job, int raster, int segment) {
     const int rows=job.rows,cols=job.cols,nx=job.nx,ny=job.ny;
     const double width=job.width,height=job.height;
     const double dx=width/cols,dy=height/rows,radius=job.diameter/2;
-    const double *maxima=job.maxima.data();
+    const double *maxima=job.maxima.data(),*xs=job.xs.data(),*ys=job.ys.data();
     const double py=height*raster/ny;
     const int lo_j=static_cast<int>(std::max(0.0,std::floor((py-radius)/dy)));
     const int hi_j=static_cast<int>(std::min(double(rows-1),std::floor((py+radius)/dy)));
@@ -202,9 +215,9 @@ double segment_contact(const Job &job, int raster, int segment) {
     const int hi_i=static_cast<int>(std::min(double(cols-1),std::floor((end+radius)/dx)));
     double best=-job.depth;
     for(int j=lo_j;j<=hi_j;j++) {
-        const double yd=std::max(0.0,std::max(j*dy-py,py-(j+1)*dy));
+        const double yd=std::max(0.0,std::max(ys[j]-py,py-ys[j+1]));
         for(int i=lo_i;i<=hi_i;i++) {
-            const double xd=std::max(0.0,std::max(i*dx-end,start-(i+1)*dx));
+            const double xd=std::max(0.0,std::max(xs[i]-end,start-xs[i+1]));
             const double ds=xd*xd+yd*yd;
             if(ds>radius*radius)continue;
             const double sag=job.ball?radius-std::sqrt(std::max(0.0,radius*radius-ds)):0;
@@ -238,6 +251,8 @@ bool gpu_rows(const Job &job, double checks, std::vector<double> &output) {
     std::vector<double> contacts(items);
     const std::vector<kerfkite::gpu::Argument> arguments={
         kerfkite::gpu::Argument::in(job.maxima.data(),job.maxima.size()*sizeof(double)),
+        kerfkite::gpu::Argument::in(job.xs.data(),job.xs.size()*sizeof(double)),
+        kerfkite::gpu::Argument::in(job.ys.data(),job.ys.size()*sizeof(double)),
         kerfkite::gpu::Argument::whole(job.rows),kerfkite::gpu::Argument::whole(job.cols),
         kerfkite::gpu::Argument::number(job.width),kerfkite::gpu::Argument::number(job.height),
         kerfkite::gpu::Argument::number(job.depth),kerfkite::gpu::Argument::number(job.diameter),
@@ -265,7 +280,8 @@ bool gpu_rows(const Job &job, double checks, std::vector<double> &output) {
 }
 
 // Runs a job whose values are read, and returns its depths as (ny + 1) lists of nx + 1 floats.
-PyObject *run(const Job &job) {
+PyObject *run(Job &job) {
+    edges(job);
     const double checks=count_checks(job);
     if(checks>kMaxChecks) { too_much_work(); return nullptr; }
     std::vector<double> output(std::size_t(job.nx+1)*(job.ny+1));
@@ -362,10 +378,10 @@ static PyObject *contact_packed(PyObject *, PyObject *args) {
 static PyObject *gpu_status(PyObject *, PyObject *) {
     std::string text;
     Py_BEGIN_ALLOW_THREADS
-    const char *mode=std::getenv("KERFKITE_GPU");
-    if(!(mode&&std::strcmp(mode,"off")==0)) kerfkite::gpu::available();
+    const bool off=kerfkite::gpu::mode()=="off";
+    if(!off) kerfkite::gpu::available();
     text=kerfkite::gpu::describe();
-    if(mode&&std::strcmp(mode,"off")==0&&!kerfkite::gpu::started()) text="turned off by KERFKITE_GPU=off";
+    if(off&&!kerfkite::gpu::started()) text="turned off by KERFKITE_GPU=off";
     Py_END_ALLOW_THREADS
     return PyUnicode_FromString(text.c_str());
 }
