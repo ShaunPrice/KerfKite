@@ -177,6 +177,7 @@ def main():
                 from laser_pattern_workflow import run as laser_patterns
                 from corner_workflow import run as corner
                 from relief_link_workflow import run as linked_relief
+                from image_relief_workflow import run as image_relief
                 from sketch_join_workflow import run as sketch_join
                 from machining_lessons_workflow import run as machining_lessons
                 from loft_workflow import run as loft
@@ -208,6 +209,7 @@ def main():
                     linked_cad,
                     loft,
                     linked_relief,
+                    image_relief,
                     sketch_join,
                     production_labels,
                     laser_patterns,

@@ -41,6 +41,13 @@ target_sources(kerfkite_core PRIVATE core/src/polygon/arrangement.cpp core/src/p
   core/src/polygon/command.cpp core/src/polygon/distance.cpp core/src/polygon/measure.cpp core/src/polygon/offset.cpp
   core/src/polygon/voronoi.cpp core/src/operations.cpp core/src/pocket_entry.cpp core/src/vcarve.cpp)
 
+# Work shared out over threads the same way on every machine (core/include/kerfkite/parallel.hpp), and the
+# optional use of a GPU through the system's OpenCL library, loaded when first needed (core/include/kerfkite/gpu.hpp).
+# Nothing of OpenCL is compiled in or fetched; without the library everything runs on the CPU.
+find_package(Threads REQUIRED)
+target_sources(kerfkite_core PRIVATE core/src/gpu/opencl.cpp)
+target_link_libraries(kerfkite_core PUBLIC Threads::Threads ${CMAKE_DL_LIBS})
+
 add_executable(kerfkite-cam tools/kerfkite_cam.cpp)
 target_link_libraries(kerfkite-cam PRIVATE kerfkite_core)
 
@@ -72,6 +79,11 @@ add_test(NAME solid COMMAND kerfkite_solid_selftest)
 # compiler the checks run on has to produce the same solids to the last vertex.
 add_test(NAME solid_same_everywhere COMMAND kerfkite_solid_selftest --digest 150 2026)
 set_tests_properties(solid_same_everywhere PROPERTIES PASS_REGULAR_EXPRESSION "0 failed.*digest e150789607e7145b")
+add_executable(kerfkite_parallel_selftest tests/parallel_selftest.cpp)
+target_link_libraries(kerfkite_parallel_selftest PRIVATE kerfkite_core)
+add_test(NAME parallel COMMAND kerfkite_parallel_selftest)
+add_test(NAME gpu_off COMMAND kerfkite_parallel_selftest --gpu-off)
+set_tests_properties(gpu_off PROPERTIES ENVIRONMENT KERFKITE_GPU=off)
 add_executable(kerfkite_polygon_selftest tests/polygon_selftest.cpp)
 target_link_libraries(kerfkite_polygon_selftest PRIVATE kerfkite_core)
 add_test(NAME polygon COMMAND kerfkite_polygon_selftest)

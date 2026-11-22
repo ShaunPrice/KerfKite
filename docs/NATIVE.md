@@ -2,7 +2,7 @@
 
 `studio/_relief_native.cpp` is an in-process CPython extension. It accelerates conservative flat/ball cutter contact; Python retains input validation, work caps, path construction, metadata and the reference implementation. There are no runtime compiler or subprocess calls. The kernel releases the GIL during its bounded numerical loop.
 
-Install with a compiler and Python headers, then `python -m pip install .`. Developers can use `python -m pip install -e .`, which builds the extension in place with the setuptools release the project requires, or `python setup.py build_ext --inplace` where setuptools 77 or later is already installed (the release bundled with a new Python 3.10 environment is older and rejects the licence field). Windows uses MSVC `/O2`; other builds use `-O3 -std=c++11`, without fast-math. The extension is optional, so inspect the backend rather than assuming compilation succeeded.
+Install with a compiler and Python headers, then `python -m pip install .`. Developers can use `python -m pip install -e .`, which builds the extension in place with the setuptools release the project requires, or `python setup.py build_ext --inplace` where setuptools 77 or later is already installed (the release bundled with a new Python 3.10 environment is older and rejects the licence field). Windows uses MSVC `/O2 /fp:precise /std:c++17`; other builds use `-O3 -std=c++17 -ffp-contract=off -pthread`, without fast-math, and link `libdl` on Linux for the optional GPU library. The extension is optional, so inspect the backend rather than assuming compilation succeeded.
 
 ```python
 from studio.relief import prepare_relief
@@ -19,6 +19,37 @@ Native and Python parity tests cover planes, ramps, domes, peaks, random fields,
 Installed Pi medians: 1.142 s Python relief versus 0.086 s C++; 2.864 s total versus 1.818 s. About 37% less total calculation time for that fixture. C++ was chosen because its implementation was directly measured; no Rust performance comparison was performed. Stock preview is the largest remaining stage.
 
 Evidence: `validation/native-installed-pi5-2026-09-11.json` and `validation/native-installed-mac-2026-09-11.json`. The Mac evidence exercises the local compiled module; the Pi evidence imports from the temporary environment's installed site-packages. No persistent Pi service was deployed.
+
+## Threads, and a GPU for large reliefs
+
+The relief contact and the stock preview share their work out over the processor's threads. The split is fixed: rasters (relief) or rows of the height map (stock preview) go to the threads in equal runs, each value is written by one thread with the arithmetic of a single thread, and errors are found by a first pass in the order one thread would meet them. The number of threads therefore changes no bit of any result and no error message. A job starts a thread only for enough work (two million contact checks a thread, for the relief), and both release the GIL while they compute. `KERFKITE_THREADS=n` caps the threads; `1` runs everything on the calling thread.
+
+With the compiled extension the relief takes larger maps: image height maps of up to 1024 points a side (256 without it) and jobs of up to 2 × 10⁹ contact checks (10⁷). The editor sends a map larger than 256 as the canvas's RGB bytes (`heightmap_rgb`, base64, with `heightmap_size` as columns and rows, top row first), from which the server computes the luminance the editor would have. `GET /api/session` reports the limit as `relief_map`. STL and artwork reliefs stay at 128, as their rasterisers are Python. A path still holds at most 100,000 points, so a 1024-point map needs a stepover of about a hundredth of the map's height or more.
+
+### The GPU
+
+A large relief may run on a GPU. KerfKite uses the OpenCL library that GPU drivers install, loaded when it is first needed: `OpenCL.dll` from the Windows system folder (and from nowhere else), `libOpenCL.so.1` on Linux, the OpenCL framework on macOS. Nothing of OpenCL is compiled in or shipped. The few functions used are declared from the public specification in `native/core/src/gpu/opencl.cpp`, behind the interface of `kerfkite/gpu.hpp`. Without the library or a suitable device, everything runs on the threads.
+
+* **Which device.** With `KERFKITE_GPU=auto` (or unset), a discrete GPU with double precision. Integrated GPUs share the processor's memory and were measured slower than its threads, so they are left out. `KERFKITE_GPU=on` takes any device with double precision, a discrete GPU first, for tests and measurements; `off` uses none. The choice is made once per process.
+* **The same bits.** The kernel is the contact arithmetic of `segment_contact` in `studio/_relief_native.cpp`, written out statement for statement in OpenCL C: double precision, no fused multiply-add, and maximum and minimum written to choose as `std::max` and `std::min` do. OpenCL requires double-precision division and square root to be correctly rounded, as they are on the processor. Each result is still checked: 128 of its contacts, the four corners among them, are computed again on the processor and compared bit for bit. On any difference the result is discarded, the job runs on the threads, and the GPU is turned off for the rest of the process.
+* **When.** A job of fewer than 2 × 10⁸ checks stays on the threads, because its fixed costs on a GPU (buffers, transfers, launches) would take the gain. Setting a GPU up the first time in a process took 0.1 to 0.3 s, so large jobs run on the threads until they have spent that long there between them, or until one job alone is expected to; then the GPU is set up, and each later large job goes to whichever of the two has been measured faster. A single job on a processor with many cores thus stays on its threads, while a session of large reliefs moves to the GPU.
+* **No driver resets.** Work goes to the device in slices that start at 64 contacts and grow to about 50 ms each, so no launch comes near the two seconds after which Windows resets a display driver, however slow the device is.
+* **What it reports.** The editor says **C++ accelerated relief on the GPU** when a GPU computed the contact. The result's `device` is `gpu`, `cpu` or `python`; it is kept out of `surface`, which is saved with the design and is the same on every computer. `studio.relief.gpu_status()` names the device in use, or says why there is none.
+
+Measured with `validation/benchmark_relief.py` on a laptop with an Intel Core Ultra 9 275HX (24 threads) and an NVIDIA GeForce RTX 5090 Laptop GPU (OpenCL 3.0, driver 617.71): the contact of a ball cutter over a 100 × 100 mm map, best of five. The depths had the same digest in every way, under MSVC on Windows and on the GPU as under GCC on Linux. The 8 and 4 thread columns are the same processor with `KERFKITE_THREADS` capping it, standing for smaller processors.
+
+| Job | Contact checks | 1 thread | 4 threads | 8 threads | 24 threads | GPU |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 256-point map, 6 mm ball | 13.7 million | 19.8 ms | 6.6 ms | 4.4 ms | 4.4 ms | 3.0 ms |
+| 1024-point map, 6 mm ball | 357 million | 479 ms | 121 ms | 68.8 ms | 40.8 ms | 35.6 ms |
+| 1024-point map, 12 mm ball | 1.36 billion | 1.77 s | 454 ms | 248 ms | 116 ms | 104 ms |
+| 1024-point map, 14 mm ball | 1.68 billion | 3.04 s | 566 ms | 311 ms | 154 ms | 147 ms |
+
+Setting the GPU up in a new process took 210 to 280 ms, on top of the first job. Consumer GPUs run double precision at a small fraction of their single-precision rate, so on the large jobs the GPU was only 5 to 15 per cent faster than all 24 threads of this processor, but 2.1 to 2.4 times faster than 8 threads and 3.5 to 4.1 times faster than 4. The laptop's integrated GPU, measured with the prototype of the same kernel, took 1.52 s for a job of 1.37 billion checks that the 24 threads did in 0.17 s. The inner loop reads each cell edge from a table worked out once per job rather than multiplying it out at every check, which made one thread 19 to 25 per cent faster on these jobs with the same digests.
+
+`tests/test_native_gpu.py` runs reliefs of several shapes with the GPU turned off, forced on and left to choose, each in a process of its own, and requires the GPU's depths to be the threads' bit for bit; without a usable GPU it says so and skips that comparison. `kerfkite_parallel_selftest` checks the split over threads and the runtime itself: a kernel's results equal the processor's bit for bit, a slice of work items that is not a multiple of 64 is handled, and a program that does not build turns the GPU off with the reason. The installed-wheel check runs a relief from a 400-point RGB map against a recorded digest, on the threads, on one thread and, where there is a GPU, forced onto it.
+
+The stock preview stays on the threads: it uses `hypot` and `tan`, whose last bits differ between mathematics libraries and between GPUs, so a GPU could not give the same preview. The solid and polygon kernels make their decisions in exact integer arithmetic and do not use a GPU either.
 
 ## G-code and rotary loops
 
