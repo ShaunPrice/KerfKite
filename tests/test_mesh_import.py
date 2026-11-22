@@ -153,7 +153,7 @@ class NativeMeshImportTests(unittest.TestCase):
             with self.subTest(data=data):
                 self.assertEqual(answer(data, 'native'), answer(data, 'python'))
 
-    def test_the_work_limit_is_the_reference_s(self):
+    def test_the_work_limit_matches_the_reference(self):
         wide = [[(0, 0, 0), (100, 0, 1), (100, 100, 2)]] * 130
         data = {'content_base64': base64.b64encode(binary_mesh(wide)).decode(), 'resolution': 128}
         self.assertEqual(answer(data, 'native'), answer(data, 'python'))
