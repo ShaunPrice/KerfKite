@@ -18,6 +18,8 @@
 //                                            as a drawing or a solid (/api/cad-script, studio.scad_geometry)
 //   kerfkite-cam sketch-solve REQUEST.json   {"feature", "parameters", "order"}: a sketch's vertices with its
 //                                            constraints solved, and the solver's diagnostics (studio.sketch_constraints)
+//   kerfkite-cam assembly-solve REQUEST.json {"assembly", "mesh", "orders"}: parts placed by their mates, with contacts
+//                                            and interferences (studio.assembly)
 //   kerfkite-cam artwork-relief REQUEST.json closed artwork contours as a raised or recessed relief (/api/artwork-relief)
 //   kerfkite-cam artwork-raster REQUEST.json the artwork relief's height field alone
 //   kerfkite-cam calibrate                   measure the relief contact on the threads and any GPU, and how to share
@@ -231,6 +233,8 @@ int batch(const std::string &path) {
                 job = kerfkite::solid_cad_call("cad-script", request.at("cad_script"));
             else if (request.contains("sketch_solve"))
                 job = kerfkite::solid_cad_call("sketch-solve", request.at("sketch_solve"));
+            else if (request.contains("assembly_solve"))
+                job = kerfkite::solid_cad_call("assembly-solve", request.at("assembly_solve"));
             else if (request.contains("relief"))
                 job = kerfkite::prepare_relief(request.at("relief"));
             else if (request.contains("stock"))
@@ -358,7 +362,7 @@ int main(int argc, char **argv) {
     if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "polygon" || command == "operation" ||
          command == "solid" || command == "rotary" || command == "rotary-wrap" || command == "relief" || command == "stock" ||
          command == "tool-changes" || command == "fixture-collision" || command == "stl-heightmap" ||
-         command == "solid-cad" || command == "solid-cad-section" || command == "cad-script" || command == "sketch-solve" ||
+         command == "solid-cad" || command == "solid-cad-section" || command == "cad-script" || command == "sketch-solve" || command == "assembly-solve" ||
          command == "artwork-relief" || command == "artwork-raster") &&
         argc == 3)
         return request(command, argv[2]);

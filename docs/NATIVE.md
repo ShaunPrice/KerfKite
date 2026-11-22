@@ -83,6 +83,20 @@ Sketches with geometric constraints (fixed points, distances, parallel, perpendi
 
 `validation/sketch_constraint_check.py` compares the core's solver with the NumPy one on generated sketches of 3 to 12 vertices with up to 16 relations, some contradictory, redundant or degenerate. On 6,000 sketches (seeds 1 to 3), 3,505 were solved by both and 2,327 refused by both. The largest difference in a vertex was 7.3·10⁻⁷ mm, and 4 sketches had a vertex on another point of the kernels' 1 nm grid. Where a system is ill-conditioned the iterations can take different paths, as NumPy's own answer does from one BLAS library to another. Then 8 of the solved sketches had other diagnostics (an iteration more or fewer, or a singular value either side of the rank tolerance). 7 were solved by one solver within its 40 iterations and given up by the other, and 161 of the refusals named another relation as the one that could not be satisfied. The NumPy solver stays as the reference, `solve_profile(..., backend='python')`, and as the solver without the extension.
 
+### Assemblies
+
+Assemblies are solved by the core too (`native/core/src/assembly.cpp`, the port of `studio/assembly.py` and `assembly_constraints.py`), and this is the implementation Studio uses. `/api/assembly/solve` asks the core through `studio.assembly.solve`, and `kerfkite-cam assembly-solve` solves an assembly without Python. The port follows the reference statement for statement:
+
+* the document's checks and messages;
+* the part placements and the mate tree, with its cycle test;
+* additional mates fitted by Gauss-Newton on the driving joints' free axes, with finite differences, the step limit for rotations and the halving of the step;
+* the parts, rebuilt by the history port above and placed by the kernel;
+* the shortlist of pairs by their bounds, their interferences and their contacts, all from the kernel.
+
+The matrix products, the inverse (LU decomposition with partial pivoting) and the fitting's least squares (`least_squares.hpp`) are the core's own, where the reference has NumPy's BLAS and LAPACK. The placements therefore agree to rounding rather than to the bit. Studio sends each part's parameter order with the assembly, as it does for a model.
+
+`validation/assembly_check.py` compares the core with the NumPy reference on generated assemblies of 2 to 6 parts. They are joined by mate trees of every kind, sometimes by an additional mate, with faulty documents among them. On 1,200 (seeds 1 and 2), 751 were solved by both, 318 of them to the bit, and 449 were refused by both with the same message. Without additional mates the placements agreed to 10⁻¹² mm. With one, the fit stops once the mates hold to 10⁻⁶ mm, and the placements differed by at most 3.9·10⁻⁶ mm. A last bit of difference in a placement can move a vertex to the neighbouring point of the kernel's 1 nm grid, so an interference's volume may differ by about the overlap's area times 10⁻⁶ mm, and a pair touching within the 10⁻⁶ mm contact distance may be a contact in one and not the other. No pair touched differently in these runs. The NumPy implementation stays as the reference, `solve(..., backend='python')`, and as the fallback without the extension.
+
 ## CAD scripts
 
 Studio's CAD script language runs in the native core as well (`native/core/src/scad.cpp`, the port of `studio/scad_language.py` and `studio/scad_geometry.py`). `/api/cad-script` sends the core's answer, the scripted features of a parametric solid are rebuilt by it, and `kerfkite-cam cad-script` previews a script without Python. The request is the route's payload, `{"source", "parameters", "overrides"}`, with the parameters' order beside it as for a model. The port reproduces the following, to the bit:

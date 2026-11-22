@@ -1,4 +1,12 @@
-"""Rigid assemblies of parametric solid parts, in millimetres and degrees."""
+"""Rigid assemblies of parametric solid parts, in millimetres and degrees.
+
+With the compiled extension, solve() is answered by the native core's port of this module and of
+assembly_constraints.py (native/core/src/assembly.cpp, the "assembly-solve" command): the same checks, mate
+tree, fitted mates, parts and contacts, with the core's own matrix arithmetic where this module has NumPy's
+BLAS and LAPACK. The placements agree to rounding rather than to the bit, so the core is the one implementation
+Studio uses, and this module stays as the reference it is compared with (validation/assembly_check.py) and as
+the fallback without the extension.
+"""
 
 import itertools
 import math
@@ -8,6 +16,12 @@ from flask import jsonify, request
 
 from .solid_cad import _build
 from .assembly_constraints import fit
+from .solid_kernel import solid_backend
+
+try:  # The native core's port of this module, in the compiled extension.
+    from ._relief_native import core_cam as _core_cam
+except ImportError:
+    _core_cam = None
 
 CONTACT_MM = 1e-6
 MAX_PARTS = 24
@@ -62,7 +76,41 @@ def _joint(mate):
     return _pose(mate.get('parentFrame', {})) @ motion @ np.linalg.inv(_pose(mate.get('childFrame', {})))
 
 
-def solve(document, include_mesh=False):
+def _request(document, include_mesh):
+    """The core's request: the assembly, the mesh flag, and each part's parameter order, which JSON objects in
+    the core do not keep."""
+    orders = None
+    if isinstance(document, dict) and isinstance(document.get('parts'), list):
+        orders = []
+        for part in document['parts']:
+            model = part.get('model') if isinstance(part, dict) else None
+            parameters = model.get('parameters') if isinstance(model, dict) else None
+            orders.append(list(parameters) if isinstance(parameters, dict) else None)
+    return {'assembly': document, 'mesh': include_mesh, 'orders': orders}
+
+
+def solve(document, include_mesh=False, *, backend='auto'):
+    """The parts placed by their mates, with contacts and interferences.
+
+    backend='auto' solves in the native core when the extension is installed and here otherwise; 'python'
+    solves here; 'native' raises NotImplementedError where the core cannot answer.
+    """
+    if backend not in ('auto', 'python', 'native'):
+        raise ValueError('Assembly backend must be auto, python or native')
+    if backend != 'python':
+        if _core_cam is not None and solid_backend() == 'kernel':
+            try:
+                answer = _core_cam('assembly-solve', _request(document, include_mesh))
+            except NotImplementedError:
+                if backend == 'native':
+                    raise
+                answer = None
+            if answer is not None:
+                return answer
+            if backend == 'native':
+                raise NotImplementedError('The assembly cannot be passed to the native core unchanged')
+        elif backend == 'native':
+            raise NotImplementedError('The native assembly solver is not installed')
     if not isinstance(document, dict) or type(document.get('version')) is not int or document['version'] != 1:
         raise ValueError('Expected a version 1 assembly')
     parts = document.get('parts')

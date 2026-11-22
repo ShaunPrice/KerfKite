@@ -117,6 +117,12 @@ solid kernel, with the mesh, measures and silhouette. `solid-cad-section` (`{"mo
 material at a height, and `sketch-solve` (`{"feature", "parameters"}`) a sketch's vertices with its
 constraints solved. STEP features are still Python's.
 
+    kerfkite-cam assembly-solve request.json
+
+solves an assembly (`{"assembly", "mesh"}`) as Studio's **Assemblies** does (`core/src/assembly.cpp`, the
+port of `studio/assembly.py`): the parts placed by their mates, with the contacts and interferences between
+them.
+
     kerfkite-cam cad-script request.json
 
 previews a CAD script (`{"source", "parameters", "overrides"}`) as Studio's script editor does

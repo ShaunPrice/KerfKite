@@ -1161,6 +1161,20 @@ static void solid_histories() {
         conflict = error.what();
     }
     expect(conflict.rfind("Cannot satisfy sketch constraint", 0) == 0, "contradictory constraints are refused");
+    // A shaft in the bore of a plate, seated against its shoulder by an additional mate: its centre stays on
+    // the bore's axis and its foot at Z = 6.
+    json seated = json::parse(R"({"mesh": false, "assembly": {"version": 1, "parts": [
+        {"id": "Plate", "model": {"version": 1, "features": [{"id": "plate", "kind": "box", "size": [40, 30, 8]},
+            {"id": "bore", "kind": "cylinder", "op": "cut", "height": 10, "radius": 5, "origin": [20, 15, -1]}]}},
+        {"id": "Shaft", "model": {"version": 1, "features": [{"id": "shaft", "kind": "cylinder", "radius": 4, "height": 24}]}}],
+        "mates": [{"child": "Shaft", "parent": "Plate", "kind": "concentric", "parentFrame": {"origin": [20, 15, 0]}, "offset": [0, 0, -4]}],
+        "constraints": [{"kind": "planar", "parent": "Plate", "child": "Shaft", "parentFrame": {"origin": [0, 0, 8]},
+            "childFrame": {"origin": [0, 0, 2]}}]}})");
+    const json placed = kerfkite::solid_cad_call("assembly-solve", seated);
+    const json &shaft = placed.at("parts").at("Shaft").at("matrix");
+    expect(std::fabs(shaft[0][3].get<double>() - 20) < 1e-5 && std::fabs(shaft[1][3].get<double>() - 15) < 1e-5 &&
+               std::fabs(shaft[2][3].get<double>() - 6) < 1e-5 && placed.at("interferences").empty(),
+           "an assembly's additional mate seats a shaft in its bore");
     json section = request;
     section["z"] = 2;
     const json cut = kerfkite::solid_cad_call("solid-cad-section", section);
