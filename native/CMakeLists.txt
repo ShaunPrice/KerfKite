@@ -53,6 +53,10 @@ if(KERFKITE_SOLID_PROFILE)
 endif()
 add_executable(kerfkite_solid_bench tools/solid_bench.cpp)
 target_link_libraries(kerfkite_solid_bench PRIVATE kerfkite_core)
+# Two builds of the solid kernel compared as solids: one records the operations of generated models, the
+# other does them again, and either says whether the results are the same sets of points.
+add_executable(kerfkite_solid_shapes tools/solid_shapes.cpp)
+target_link_libraries(kerfkite_solid_shapes PRIVATE kerfkite_core)
 
 enable_testing()
 add_executable(kerfkite_selftest tests/selftest.cpp)

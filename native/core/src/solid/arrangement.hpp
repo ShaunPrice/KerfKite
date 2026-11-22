@@ -71,6 +71,9 @@ public:
     void probe_only() { probe_only_ = !plain_; }
     // After resolve() with Rule::Positive on one operand: every face separates winding 0 from winding 1.
     bool unit_winding() const { return unit_winding_; }
+    // After resolve() on two operands that are valid solids: whether every region of space is inside both
+    // or outside both, which is to say that the two are one set of points.
+    bool windings_agree() const;
     void record_simple();
     // Lets load() recognise an operand whose shape was examined against itself before, in this thread, and
     // found inert (see arrangement.cpp), and lets record_simple() remember the shapes found so this time.

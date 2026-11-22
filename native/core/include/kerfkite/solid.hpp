@@ -154,6 +154,9 @@ std::size_t count_self_intersections(const Solid &solid);
 // The complete check, by building the arrangement of the mesh with itself: true when every region of
 // space is wound exactly once (inside) or not at all (outside) and no triangle crosses another.
 bool verify_exact(const Solid &solid);
+// Exact: whether two solids are the same set of points, however each is divided into triangles. Decided
+// from the arrangement of the two meshes as they stand, with nothing rounded or left out.
+bool same_shape(const Solid &a, const Solid &b);
 
 // ---- Sections and projection ----------------------------------------------------------------------
 

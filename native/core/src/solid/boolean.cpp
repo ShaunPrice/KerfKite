@@ -438,5 +438,23 @@ bool verify_exact(const Solid &solid) {
     return arrangement.unit_winding();
 }
 
+bool same_shape(const Solid &a, const Solid &b) {
+    const Mesh &ma = Access::mesh(a), &mb = Access::mesh(b);
+    if (ma.t.empty() || mb.t.empty()) return ma.t.empty() && mb.t.empty();
+    for (int k = 0; k < 3; ++k)
+        if (ma.lo[k] != mb.lo[k] || ma.hi[k] != mb.hi[k]) return false;
+    // The arrangement of the two as they stand: no ribbons, and nothing absorbed or rounded. Each cell is
+    // wound by each solid exactly; the solids are one set of points when no cell is inside one alone.
+    detail::Arrangement arrangement;
+    std::vector<detail::Operand> operands;
+    operands.push_back(detail::Operand{&ma.v, &ma.t, 0, false, nullptr});
+    operands.push_back(detail::Operand{&mb.v, &mb.t, 1, false, nullptr});
+    arrangement.load(operands);
+    arrangement.intersect();
+    detail::ExactMesh exact;
+    arrangement.resolve(detail::Rule::Union, exact);
+    return arrangement.windings_agree();
+}
+
 }  // namespace solid
 }  // namespace kerfkite

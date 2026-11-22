@@ -125,7 +125,7 @@ uint64_t shape_hash(const std::vector<GridPoint> &v, const std::vector<Triangle>
     return h;
 }
 
-bool same_shape(const InertShape &shape, const std::vector<GridPoint> &v, const std::vector<Triangle> &t) {
+bool shape_matches(const InertShape &shape, const std::vector<GridPoint> &v, const std::vector<Triangle> &t) {
     if (shape.vertices.size() != 3 * v.size() || shape.triangles.size() != 3 * t.size()) return false;
     for (size_t i = 0; i < v.size(); ++i)
         for (size_t k = 0; k < 3; ++k)
@@ -143,7 +143,7 @@ long long inert_pairs_of(const std::vector<GridPoint> &v, const std::vector<Tria
     if (shapes.empty()) return -1;
     const uint64_t hash = shape_hash(v, t);
     for (size_t k = 0; k < shapes.size(); ++k) {
-        if (shapes[k].hash != hash || !same_shape(shapes[k], v, t)) continue;
+        if (shapes[k].hash != hash || !shape_matches(shapes[k], v, t)) continue;
         std::rotate(shapes.begin(), shapes.begin() + static_cast<std::ptrdiff_t>(k), shapes.begin() + static_cast<std::ptrdiff_t>(k) + 1);
         return static_cast<long long>(shapes[0].pairs);
     }
@@ -1576,6 +1576,12 @@ void Arrangement::extract(Rule rule, ExactMesh &out) {
         out.tri[static_cast<size_t>(chosen[f])] = turned[f] ? Triangle{{corner[0], corner[2], corner[1]}} : Triangle{{corner[0], corner[1], corner[2]}};
         out.plane[static_cast<size_t>(chosen[f])] = faces_[f].parent;
     }
+}
+
+bool Arrangement::windings_agree() const {
+    for (const std::array<int, 2> &w : winding_)
+        if ((w[0] > 0) != (w[1] > 0)) return false;
+    return true;
 }
 
 void Arrangement::resolve(Rule rule, ExactMesh &out) {
