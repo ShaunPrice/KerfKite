@@ -132,10 +132,10 @@ and column.
 
     kerfkite-cam program-import request.json
 
-reads posted G-code, an HP-GL plot or a LinuxCNC INI file (`{"name", "text", "unit"}`) as Studio's
-**Import** does (`core/src/program_import.cpp`, the port of `studio/program_import.py`): the artwork, layers,
-presets, devices and warnings, or the reference's message. DXF drawings and text that is not ASCII are
-declined to the Python.
+reads posted G-code, an HP-GL plot, a LinuxCNC INI file or an ASCII DXF drawing (`{"name", "text", "unit"}`)
+as Studio's **Import** does (`core/src/program_import.cpp`, the port of `studio/program_import.py`, and the
+core's own DXF reader, `core/src/dxf.cpp`): the artwork, layers, presets, devices and warnings, or the
+reference's message. Program text that is not ASCII, and DXF splines given only by fit points, are declined.
 
     kerfkite-cam artwork-relief request.json
 

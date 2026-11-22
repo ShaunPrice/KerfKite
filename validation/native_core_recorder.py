@@ -132,6 +132,11 @@ def preview_reference(kind, data):
         elif kind == 'program_import':
             from studio.program_import import import_program
 
+            name = data.get('name') if isinstance(data, dict) else None
+            if isinstance(name, str) and name.lower().endswith('.dxf'):
+                # DXF is read by the core's own reader, compared to the tolerance by validation/dxf_import_check.py.
+                return None
+
             result = _SOLID.get('import', import_program)(data, backend='python')
         elif kind == 'solid_cad_section':
             from studio.solid_cad import horizontal_section

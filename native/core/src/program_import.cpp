@@ -6,8 +6,9 @@
 // flattened with the platform's maths library as Python calls it, the Drawing's limits and its grouping of
 // long runs of contours, every message, and the warnings and presets with Python's '{:g}' format.
 //
-// Declined (NotPorted), for the Python to answer: DXF drawings, which the reference reads with ezdxf, and
-// text that is not ASCII, which the reference upper-cases and splits by Unicode's rules.
+// DXF drawings go to the core's own reader (dxf.cpp), whose outlines agree with the reference's to the
+// tolerance. Declined (NotPorted), for the Python to answer: program text that is not ASCII, which the
+// reference upper-cases and splits by Unicode's rules.
 #include "kerfkite/program_import.hpp"
 
 #include <algorithm>
@@ -24,6 +25,8 @@
 #include "kerfkite/decimal.hpp"
 #include "kerfkite/number_text.hpp"
 #include "kerfkite/py_math.hpp"
+#include "dxf_reader.hpp"
+#include "imported_drawing.hpp"
 #include "project.hpp"
 #include "py_trig.hpp"
 #include "python_text.hpp"
@@ -32,12 +35,10 @@ namespace kerfkite {
 
 using json = Json;
 using namespace detail;
+using namespace imported;
 
 namespace {
 
-const double kTolerance = 0.025;  // millimetres
-const size_t kMaxPoints = 100000;
-const size_t kMaxPaths = 3000;
 const double kTau = 2 * pytrig::PI;  // math.tau
 
 // ---- Python's text -----------------------------------------------------------------------------------
@@ -116,183 +117,6 @@ double read_float(const std::string &text) {
     float_from_text(text, value);
     return value;
 }
-
-// format(value, 'g'): six significant digits, rounded half to even on the exact binary value, in fixed
-// notation for decimal exponents -4 to 5 and exponent notation otherwise, trailing zeros removed.
-std::string general(double value) {
-    if (std::isnan(value)) return "nan";
-    std::string out = std::signbit(value) ? "-" : "";
-    value = std::fabs(value);
-    if (std::isinf(value)) return out + "inf";
-    if (value == 0) return out + "0";
-    int exponent2 = 0;
-    const double fraction = std::frexp(value, &exponent2);
-    const uint64_t mantissa = static_cast<uint64_t>(std::ldexp(fraction, 53));
-    const int shift = exponent2 - 53;  // value = mantissa * 2^shift
-    // The decimal exponent of the leading digit: an estimate, then checked exactly.
-    int e10 = static_cast<int>(std::floor(std::log10(value)));
-    const auto ratio = [&](int scale, text::Big &numerator, text::Big &denominator) {
-        // value * 10^scale as numerator / denominator.
-        numerator = text::Big(mantissa);
-        denominator = text::Big(1);
-        if (shift > 0) numerator.shift_left(shift);
-        else denominator.shift_left(-shift);
-        if (scale > 0) numerator.multiply_pow10(scale);
-        else denominator.multiply_pow10(-scale);
-    };
-    const auto below = [&](int power) {  // value < 10^power
-        text::Big numerator, denominator;
-        ratio(-power, numerator, denominator);
-        return numerator.compare(denominator) < 0;
-    };
-    while (below(e10)) --e10;
-    while (!below(e10 + 1)) ++e10;
-    // round(value * 10^(5 - e10)), half to even.
-    text::Big numerator, denominator;
-    ratio(5 - e10, numerator, denominator);
-    uint64_t low = 0, high = 10000000;  // the quotient lies in [10^5, 10^6)
-    while (high - low > 1) {
-        const uint64_t middle = (low + high) / 2;
-        text::Big product = denominator;
-        product.multiply_add(static_cast<uint32_t>(middle), 0);
-        if (product.compare(numerator) <= 0) low = middle;
-        else high = middle;
-    }
-    text::Big remainder = numerator, taken = denominator;
-    taken.multiply_add(static_cast<uint32_t>(low), 0);
-    remainder.subtract(taken);
-    text::Big twice = remainder;
-    twice.add(remainder);
-    const int against_half = twice.compare(denominator);
-    uint64_t digits = low;
-    if (against_half > 0 || (against_half == 0 && (digits & 1))) ++digits;
-    if (digits == 1000000) {
-        digits = 100000;
-        ++e10;
-    }
-    std::string text = std::to_string(digits);  // six digits
-    if (-4 <= e10 && e10 < 6) {
-        std::string fixed;
-        if (e10 < 0) fixed = "0." + std::string(static_cast<size_t>(-e10 - 1), '0') + text;
-        else fixed = text.substr(0, static_cast<size_t>(e10) + 1) + "." + text.substr(static_cast<size_t>(e10) + 1);
-        while (!fixed.empty() && fixed.back() == '0') fixed.pop_back();
-        if (!fixed.empty() && fixed.back() == '.') fixed.pop_back();
-        return out + fixed;
-    }
-    std::string mantissa_text = text.substr(0, 1) + "." + text.substr(1);
-    while (mantissa_text.back() == '0') mantissa_text.pop_back();
-    if (mantissa_text.back() == '.') mantissa_text.pop_back();
-    const int size = e10 < 0 ? -e10 : e10;
-    std::string exponent = std::to_string(size);
-    if (exponent.size() < 2) exponent = "0" + exponent;
-    return out + mantissa_text + "e" + (e10 < 0 ? "-" : "+") + exponent;
-}
-
-// ---- the drawing -------------------------------------------------------------------------------------
-
-using Point = std::array<double, 2>;
-
-struct Object {
-    std::string name, layer;
-    std::vector<std::vector<Point>> paths;
-    std::vector<std::vector<double>> depths, source_z;
-    bool has_depths = false, has_source_z = false;
-};
-
-json points_json(const std::vector<Point> &points) {
-    json list = json::array();
-    for (const Point &p : points) list.push_back(json::array({p[0], p[1]}));
-    return list;
-}
-
-// program_import.Drawing.
-class Drawing {
-public:
-    std::vector<Object> objects;
-    std::vector<std::string> layers;
-    json presets = json::array();
-    std::vector<std::string> warnings;
-    std::string mode;  // empty for None
-    size_t points = 0;
-
-    void path(const std::string &name, const std::string &layer, const std::vector<Point> &path, const std::vector<double> *depths = nullptr) {
-        if (path.size() < 2) return;
-        points += path.size();
-        if (points > kMaxPoints || objects.size() >= kMaxPaths) throw ValueError("Simplify the drawing to 100000 vertices and 3000 paths");
-        for (const Point &p : path)
-            for (const double v : p)
-                if (!std::isfinite(v) || std::fabs(v) > 2000)
-                    throw ValueError("Move or scale the drawing into the portable project ±2000 mm XY range");
-        Object object;
-        object.name = name.substr(0, 100);
-        object.layer = layer;
-        object.paths.push_back(path);
-        if (depths) {
-            bool cutting = true;
-            for (const double z : *depths) cutting = cutting && -50 <= z && z <= 0;
-            if (cutting && *std::min_element(depths->begin(), depths->end()) < 0) {
-                object.has_depths = true;
-                object.depths.push_back(*depths);
-            } else {
-                object.has_source_z = true;
-                object.source_z.push_back(*depths);
-            }
-        }
-        if (std::find(layers.begin(), layers.end(), layer) == layers.end()) layers.push_back(layer);
-        objects.push_back(std::move(object));
-    }
-
-    json finish() {
-        if (objects.empty()) {
-            std::string message = "File contains no supported drawing paths";
-            if (!warnings.empty()) {
-                message += ". ";
-                for (size_t i = 0; i < warnings.size(); ++i) message += (i ? " " : "") + warnings[i];
-            }
-            throw ValueError(message);
-        }
-        // The sender accepts at most 100 ordered operations: long consecutive runs with the same layer and
-        // depth semantics are batched.
-        if (objects.size() > 100) {
-            std::vector<Object> groups;
-            for (Object &object : objects) {
-                if (!groups.empty() && groups.back().layer == object.layer && groups.back().has_depths == object.has_depths &&
-                    groups.back().has_source_z == object.has_source_z) {
-                    Object &group = groups.back();
-                    group.name = group.layer.substr(0, 80) + " contours";
-                    group.paths.insert(group.paths.end(), object.paths.begin(), object.paths.end());
-                    group.depths.insert(group.depths.end(), object.depths.begin(), object.depths.end());
-                    group.source_z.insert(group.source_z.end(), object.source_z.begin(), object.source_z.end());
-                } else {
-                    groups.push_back(std::move(object));
-                }
-            }
-            objects = std::move(groups);
-        }
-        json list = json::array();
-        for (const Object &object : objects) {
-            json entry = json::object();
-            entry["name"] = object.name;
-            json paths = json::array();
-            for (const auto &path : object.paths) paths.push_back(points_json(path));
-            entry["paths"] = std::move(paths);
-            entry["sourceLayer"] = object.layer;
-            if (object.has_depths) entry["depths"] = json(object.depths);
-            if (object.has_source_z) entry["sourceZ"] = json(object.source_z);
-            list.push_back(std::move(entry));
-        }
-        json layer_list = json::array();
-        for (const std::string &layer : layers) layer_list.push_back(json{{"key", layer}, {"name", layer}});
-        json result = json::object();
-        result["objects"] = std::move(list);
-        result["layers"] = std::move(layer_list);
-        result["presets"] = presets;
-        result["devices"] = json::array();
-        result["warnings"] = json(warnings);
-        result["mode"] = mode.empty() ? json() : json(mode);
-        return result;
-    }
-};
 
 // _arc(start, centre, sweep, radius): the arc flattened to the tolerance, its start left out.
 std::vector<Point> arc(const Point &start, const Point &centre, double sweep, double radius) {
@@ -877,7 +701,7 @@ json import_program(const json &payload) {
     const bool ascii = std::all_of(text.begin(), text.end(), [](char c) { return static_cast<unsigned char>(c) < 0x80; });
     const bool plotter = suffix == ".plt" || suffix == ".hpgl" || suffix == ".hpg";
     const bool program = suffix == ".gcode" || suffix == ".nc" || suffix == ".ngc" || suffix == ".cnc" || suffix == ".tap";
-    if (suffix == ".dxf") throw NotPorted("DXF drawings");
+    if (suffix == ".dxf") return dxf_drawing(text, units.at(unit));
     if ((suffix == ".ini" || plotter || program) && !ascii) throw NotPorted("drawing text that is not ASCII");
     if (suffix == ".ini") return linuxcnc_ini(text);
     if (plotter) return hpgl(text);

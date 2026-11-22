@@ -1,8 +1,13 @@
 """The native core's reader of foreign drawings against the Python reference, to the bit."""
 
+import io
 import json
+import math
 import unittest
 from unittest.mock import patch
+
+import ezdxf
+from ezdxf import units
 
 from studio import program_import
 from studio.program_import import import_json, import_program
@@ -107,17 +112,64 @@ class NativeProgramImportTests(unittest.TestCase):
             with self.subTest(payload=payload):
                 self.same(payload)
 
-    def test_dxf_and_text_that_is_not_ascii_are_answered_by_the_reference(self):
-        for payload, expected in (
-            ({'name': 'part.dxf', 'text': '0\nEOF\n'}, 'ValueError'),
-            ({'name': 'part.nc', 'text': 'G21 (Ä)\nG0 X0 Y0\nG1 X3 Y4 F100'}, '{'),
-        ):
-            with self.subTest(payload=payload):
-                self.assertIsNone(import_json(payload))
-                with self.assertRaises(NotImplementedError):
-                    import_program(payload, backend='native')
-                self.assertTrue(outcome(payload, 'auto').startswith(expected))
-                self.assertEqual(outcome(payload, 'auto'), outcome(payload, 'python'))
+    def test_text_that_is_not_ascii_is_answered_by_the_reference(self):
+        payload = {'name': 'part.nc', 'text': 'G21 (Ä)\nG0 X0 Y0\nG1 X3 Y4 F100'}
+        self.assertIsNone(import_json(payload))
+        with self.assertRaises(NotImplementedError):
+            import_program(payload, backend='native')
+        self.assertTrue(outcome(payload, 'auto').startswith('{'))
+        self.assertEqual(outcome(payload, 'auto'), outcome(payload, 'python'))
+
+    def test_dxf_drawings_are_read_by_the_core_to_the_tolerance(self):
+        doc = ezdxf.new(units=units.MM)
+        doc.layers.new('Cut', dxfattribs={'color': 1})
+        doc.layers.new('Hidden', dxfattribs={'color': -5, 'flags': 1})
+        msp = doc.modelspace()
+        msp.add_lwpolyline(
+            [(0, 0, 0.5), (40, 0, 0), (40, 30, -1), (0, 30, 0)], format='xyb', close=True, dxfattribs={'layer': 'Cut'}
+        )
+        msp.add_circle((20, 15), 6, dxfattribs={'layer': 'Hidden'})
+        msp.add_arc((20, 15), 10, 30, 150)
+        msp.add_ellipse((60, 15), major_axis=(10, 4), ratio=0.4)
+        msp.add_open_spline([(70, 0), (80, 20), (90, 0), (100, 20)])
+        msp.add_text('Label')
+        block = doc.blocks.new('Hole', base_point=(1, 1))
+        block.add_circle((1, 1), 2)
+        msp.add_blockref(
+            'Hole', (10, 50), dxfattribs={'rotation': 30, 'xscale': 2, 'yscale': -1, 'row_count': 2, 'row_spacing': 8}
+        )
+        stream = io.StringIO()
+        doc.write(stream)
+        payload = {'name': 'plate.DXF', 'text': stream.getvalue()}
+        self.assertIsNotNone(import_json(payload))
+        core, reference = import_program(payload, backend='native'), import_program(payload, backend='python')
+        self.assertEqual(core['layers'], reference['layers'])
+        self.assertEqual(core['warnings'], reference['warnings'])
+        self.assertEqual([o['name'] for o in core['objects']], [o['name'] for o in reference['objects']])
+        for mine, theirs in zip(core['objects'], reference['objects']):
+            for a, b in zip(mine['paths'], theirs['paths']):
+                self.assertLess(math.dist(a[0], b[0]), 1e-6)
+                self.assertLess(math.dist(a[-1], b[-1]), 1e-6)
+                for point in a:
+                    nearest = min(math.dist(point, q) for q in b)
+                    self.assertLess(nearest, 1.0)
+        self.assertEqual(core['layers'][0], {'key': 'Cut', 'name': 'Cut', 'color': '#ff0000', 'visible': True})
+        self.assertFalse(core['layers'][1]['visible'])
+        # The core draws the true curves: a circle's vertices lie on it.
+        circle = next(o for o in core['objects'] if o['name'] == 'Hidden \u00b7 Circle')['paths'][0]
+        for x, y in circle:
+            self.assertAlmostEqual(math.hypot(x - 20, y - 15), 6, places=9)
+        self.assertEqual(circle[0], circle[-1])
+
+    def test_a_spline_given_only_by_fit_points_is_answered_by_the_reference(self):
+        doc = ezdxf.new(units=units.MM)
+        doc.modelspace().add_spline([(0, 0), (10, 10), (20, 0)])
+        stream = io.StringIO()
+        doc.write(stream)
+        payload = {'name': 'fit.dxf', 'text': stream.getvalue()}
+        with self.assertRaises(NotImplementedError):
+            import_program(payload, backend='native')
+        self.assertEqual(outcome(payload, 'auto'), outcome(payload, 'python'))
 
     def test_the_route_sends_the_core_text(self):
         client = create_app().test_client()

@@ -35,8 +35,9 @@ Eight comparisons, all against values computed by Python in this run:
 9. Solids and CAD scripts: parametric solid histories and their sections (solid_cad_cases), and CAD scripts for
    the script preview (cad_script_cases), both through the compiled extension's kernel.
 10. Foreign drawings: studio.program_import's import_program for posted G-code, HP-GL plotter files and LinuxCNC
-   INI files, sound, damaged and refused, with every filename suffix and unit (program_import_cases). DXF
-   drawings and text that is not ASCII are declined.
+   INI files, sound, damaged and refused, with every filename suffix and unit (program_import_cases). Program
+   text that is not ASCII is declined. DXF drawings, which the core reads with its own reader, are left out
+   here and compared to the tolerance by validation/dxf_import_check.py.
 
 For each job the native core must either reproduce the reference exactly (program lines, preview segments,
 length, time, bounds and warnings, and for a rotary job its rotary setup; or the same error message) or

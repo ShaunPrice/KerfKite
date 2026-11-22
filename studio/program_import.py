@@ -1,9 +1,12 @@
 """Read foreign drawing and toolpath files as editable artwork for layer-gated review.
 
-With the compiled extension, import_program is answered by the native core's port of this module for G-code,
-HP-GL and LinuxCNC INI files (native/core/src/program_import.cpp), which reads them the same way and gives the
-same artwork, presets, warnings and messages to the bit. This module stays as the reference, and answers what
-the core declines: DXF drawings, which it reads with ezdxf, and text that is not ASCII.
+With the compiled extension, import_program is answered by the native core. For G-code, HP-GL and LinuxCNC INI
+files the core has a port of this module (native/core/src/program_import.cpp), which reads them the same way and
+gives the same artwork, presets, warnings and messages to the bit. DXF drawings are read by the core's own
+reader (native/core/src/dxf.cpp), which flattens the true curves where _dxf flattens ezdxf's Bézier paths: the
+outlines agree to the tolerance, and validation/dxf_import_check.py compares the two. This module stays as the
+reference, and answers what the core declines: text that is not ASCII in a program, and a DXF spline given only
+by fit points.
 """
 
 import io

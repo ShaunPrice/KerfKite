@@ -45,9 +45,9 @@ The first pen makes a 10 × 10 mm square starting at X 10, Y 10. The second make
 
 ## Size and performance
 
-Imported artwork fits Studio's portable project limits of 3000 paths, 100000 vertices and coordinates within ±2000 mm. Circular toolpaths target 0.025 mm chord error. DXF uses ezdxf's path approximation and flattening with a 0.025 mm target. Convert very large drawings to the relevant work region and relocate distant survey or building coordinates before import.
+Imported artwork fits Studio's portable project limits of 3000 paths, 100000 vertices and coordinates within ±2000 mm. Circular toolpaths target 0.025 mm chord error. DXF curves are flattened to the same 0.025 mm target. Convert very large drawings to the relevant work region and relocate distant survey or building coordinates before import.
 
-G-code, HP-GL and LinuxCNC INI files are read by Studio's native core where the compiled extension is installed, and give the same artwork, presets, warnings and messages as the Python reader to the last digit. DXF drawings, and files whose text is not plain ASCII, are read by the Python reader. See [Foreign drawings](NATIVE.md#foreign-drawings).
+G-code, HP-GL and LinuxCNC INI files are read by Studio's native core where the compiled extension is installed, and give the same artwork, presets, warnings and messages as the Python reader to the last digit. DXF drawings are read by the core's own DXF reader, which divides curves into equal chords within 0.025 mm of the true curve and draws rational, low-degree and closed splines exactly. Programs whose text is not plain ASCII, and DXF splines given only by fit points, are read by the Python reader. See [Foreign drawings](NATIVE.md#foreign-drawings).
 
 ## LinuxCNC workspace reference
 

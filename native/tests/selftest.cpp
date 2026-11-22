@@ -1249,7 +1249,30 @@ static void program_imports() {
     expect(refusal("part.plt", "IN;LB text;") == "Invalid plotter values at instruction 2", "label text is not a value");
     expect(refusal("part.plt", "IN;EA4,4;") == "Unsupported HP-GL instruction 2: EA. Export plain, unscaled pen paths.", "filled shapes are refused");
     expect(refusal("part.svg", "G1") == "Choose an ASCII DXF, G-code or HP-GL drawing", "an unknown suffix");
-    expect(refusal("part.dxf", "0\nEOF\n") == "declined" && refusal("part.nc", "G21 (\xc3\xa9)") == "declined", "DXF and non-ASCII text are Python's");
+    expect(refusal("part.nc", "G21 (\xc3\xa9)") == "declined", "program text that is not ASCII is Python's");
+    // A DXF drawing, by the core's own reader.
+    std::string dxf;
+    for (const char *pair : {"0", "SECTION", "2", "HEADER", "9", "$INSUNITS", "70", "4", "0", "ENDSEC", "0", "SECTION", "2", "TABLES", "0",
+                             "TABLE", "2", "LAYER", "0", "LAYER", "2", "Cut", "62", "1", "70", "0", "0", "ENDTAB", "0", "ENDSEC", "0", "SECTION",
+                             "2", "BLOCKS", "0", "BLOCK", "2", "Hole", "10", "0", "20", "0", "0", "CIRCLE", "8", "0", "10", "0", "20", "0", "40",
+                             "2", "0", "ENDBLK", "0", "ENDSEC", "0", "SECTION", "2", "ENTITIES", "0", "LINE", "8", "Cut", "10", "0", "20", "0",
+                             "11", "10", "21", "0", "0", "LWPOLYLINE", "8", "Cut", "90", "2", "70", "0", "10", "0", "20", "0", "42", "1", "10",
+                             "10", "20", "0", "0", "INSERT", "8", "Cut", "2", "Hole", "10", "50", "20", "50", "0", "TEXT", "8", "0", "1", "Hi",
+                             "0", "ENDSEC", "0", "EOF"})
+        dxf += std::string(pair) + "\n";
+    const json plate = read("plate.dxf", dxf);
+    const json &objects = plate.at("objects");
+    expect(objects.size() == 3 && objects.at(0).at("name") == json("Cut \xc2\xb7 Line") && objects.at(2).at("name") == json("Cut \xc2\xb7 Circle"),
+           "a DXF's lines, polylines and block circles are read, the circle on the reference's layer");
+    double lowest = 0;
+    for (const json &p : objects.at(1).at("paths").at(0)) lowest = std::min(lowest, p.at(1).get<double>());
+    expect(std::fabs(lowest + 5) < 0.03, "a bulge of 1 is a half circle, counter-clockwise");
+    const json &circle = objects.at(2).at("paths").at(0);
+    expect(circle.at(0) == json::array({52.0, 50.0}) && circle.at(0) == circle.at(circle.size() - 1) && circle.at(1).at(1).get<double>() < 50,
+           "a circle starts at angle 0, turns clockwise and closes");
+    expect(plate.at("layers").at(0).at("color") == json("#ff0000") && plate.at("warnings").at(0) == json("Skipped DXF entities: TEXT (1)"),
+           "a DXF layer's colour and the entities skipped");
+    expect(refusal("plate.dxf", "hello") == "Cannot read this ASCII DXF drawing", "text that is not a DXF");
 }
 
 int main() {
