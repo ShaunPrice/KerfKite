@@ -51,6 +51,9 @@ setup(
                 'native/core/src/simple_line.cpp',
                 'native/core/src/stock.cpp',
                 'native/core/src/tabs.cpp',
+                # Plans of stages for manual tool changes, and the fixture clearance check.
+                'native/core/src/tool_changes.cpp',
+                'native/core/src/fixture_collision.cpp',
                 # Circuit board import: Gerber layers and Excellon drill files.
                 'native/core/src/excellon.cpp',
                 'native/core/src/gerber.cpp',

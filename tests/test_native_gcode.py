@@ -116,7 +116,7 @@ class ExactNumberTextTests(unittest.TestCase):
         for value in self.values():
             if not math.isfinite(value):
                 continue
-            for decimals in (0, 1, 3):
+            for decimals in (0, 1, 3, 5, 9):
                 result = native.rounded_value(value, decimals)
                 if result is not None:
                     expected = float(round(value, decimals))

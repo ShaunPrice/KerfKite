@@ -125,9 +125,13 @@ def register_design_routes(app):
 
     @app.post('/api/tool-changes')
     def tool_change_plan():
-        from .tool_changes import plan_tool_changes
+        from .tool_changes import plan_tool_changes, tool_changes_json
 
         data = body('Provide a project')
+        # Every stage is a whole job: the core's own JSON text of the plan is the response.
+        text = tool_changes_json(data.get('project'))
+        if text is not None:
+            return app.response_class(text, mimetype='application/json')
         return jsonify(plan_tool_changes(data.get('project')))
 
     @app.post('/api/rotary')

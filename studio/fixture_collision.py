@@ -3,6 +3,9 @@
 The cutter and holder are upright cylinders. A translated cylinder touches
 an axis-aligned box when its Z interval overlaps the box and its centre is
 within one radius of the XY rectangle, at the same instant along the move.
+
+The native core checks it (native/core/src/fixture_collision.cpp) when the compiled extension is installed; this
+module is the reference it is compared with, and the fallback.
 """
 
 import math
@@ -127,7 +130,31 @@ def _moves(lines, start):
         position = destination
 
 
-def check_fixtures(payload):
+def check_fixtures(payload, *, backend='auto'):
+    """The contacts of a posted program's moves with fixture boxes, or a refusal naming the first line it cannot
+    check.
+
+    backend='auto' runs the native core when the extension is installed and Python otherwise, or when the core
+    declines; 'python' runs this module, the reference; 'native' requires the core."""
+    from .cam import cam_backend, core_answer
+
+    core = cam_backend(backend, 'Fixture check')
+    if core is not None:
+        answer = core_answer(core, 'fixture-collision', payload, backend)
+        if answer is not None:
+            return answer
+    return _check(payload)
+
+
+def fixtures_json(payload):
+    """check_fixtures(payload) as JSON text written by the core, or None: then check_fixtures(payload) answers."""
+    from .cam import core_json
+
+    return core_json('fixture-collision', payload)
+
+
+def _check(payload):
+    """check_fixtures in Python: the reference the native core is compared with."""
     if not isinstance(payload, dict):
         raise ValueError('Supply a posted program and fixture setup')
     start = _vector(payload.get('start'), 'Initial tool-tip XYZ')
@@ -198,4 +225,8 @@ def check_fixtures(payload):
 def register(app):
     @app.post('/api/fixture-collision')
     def fixture_collision_check():
-        return jsonify(check_fixtures(request.get_json()))
+        payload = request.get_json()
+        text = fixtures_json(payload)
+        if text is not None:
+            return app.response_class(text, mimetype='application/json')
+        return jsonify(check_fixtures(payload))

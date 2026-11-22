@@ -4,8 +4,9 @@ Loaded by validation/native_core_parity.py with ``-p native_core_recorder``. Eac
 project exactly as it was passed and what the Python reference did with it. Calls whose project cannot be
 written as JSON without changing its meaning (tuples, non-finite numbers, non-text keys) are left out, as
 are the rotary generator's internal calls. Top-level calls of studio.rotary's generate_rotary and wrap_job
-are recorded the same way, with their rotary setup, and so are those of studio.relief.prepare_relief and
-studio.simulation.simulate, whose expected answers come from their Python, as the native core is compared with.
+are recorded the same way, with their rotary setup, and so are those of studio.relief.prepare_relief,
+studio.simulation.simulate, studio.tool_changes.plan_tool_changes and studio.fixture_collision.check_fixtures,
+whose expected answers come from their Python, as the native core is compared with.
 """
 
 import functools
@@ -101,10 +102,13 @@ def where_computed_left_out(result):
 
 
 def preview_reference(kind, data):
-    """One case line for a relief ("relief") or a stock preview ("stock") from the Python reference, with the
-    native core's limits for a relief; or None when the request cannot be carried as JSON."""
+    """One case line for a relief ("relief"), a stock preview ("stock"), a tool-change plan ("tool_changes") or a
+    fixture check ("fixtures") from the Python reference, with the native core's limits for a relief; or None when
+    the request cannot be carried as JSON."""
     from studio.relief import prepare_relief
     from studio.simulation import simulate
+    from studio.fixture_collision import check_fixtures
+    from studio.tool_changes import plan_tool_changes
 
     if not plain(data):
         return None
@@ -112,6 +116,10 @@ def preview_reference(kind, data):
     try:
         if kind == 'relief':
             result = where_computed_left_out(prepare_relief(data, backend='python', _native_limits=True))
+        elif kind == 'tool_changes':
+            result = plan_tool_changes(data, backend='python')
+        elif kind == 'fixtures':
+            result = check_fixtures(data, backend='python')
         else:
             result = simulate(data, backend='python')
     except ValueError as error:
@@ -218,6 +226,14 @@ def pytest_configure(config):
 
     _record_preview(relief, 'prepare_relief', 'relief')
     _record_preview(simulation, 'simulate', 'stock')
+
+    import studio.tool_changes as tool_changes
+
+    _record_preview(tool_changes, 'plan_tool_changes', 'tool_changes')
+
+    import studio.fixture_collision as fixture_collision
+
+    _record_preview(fixture_collision, 'check_fixtures', 'fixtures')
 
 
 def pytest_sessionfinish(session):
