@@ -132,6 +132,9 @@ def linux(work, out, wheel, arch, version):
     helper = dest / "kerfkite-native"
     shutil.copyfile(HERE / "linux/kerfkite-native", helper)
     helper.chmod(0o755)
+    # The launcher points the menu entry and desktop shortcut of a portable copy at this icon.
+    with Image.open(ICON) as im:
+        im.resize((256, 256), Image.Resampling.LANCZOS).save(dest / "kerfkite-studio.png")
     desktop = pkg / "usr/share/applications/org.kerfkite.Studio.desktop"
     desktop.parent.mkdir(parents=True)
     desktop.write_text(

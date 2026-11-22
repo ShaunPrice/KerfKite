@@ -14,6 +14,11 @@ Icon "app.ico"
 !define MUI_FINISHPAGE_RUN_TEXT "Open KerfKite Studio"
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "payload\LICENSE"
+; Start always gets KerfKite Studio; the desktop icon is the user's choice, ticked to begin with.
+!define MUI_COMPONENTSPAGE_SMALLDESC
+!define MUI_PAGE_HEADER_TEXT "Choose where KerfKite Studio appears"
+!define MUI_PAGE_HEADER_SUBTEXT "It is always added to the Start menu. Untick the desktop shortcut if you do not want one."
+!insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -47,20 +52,31 @@ Function .onInit
   continue:
 FunctionEnd
 
-Section "KerfKite Studio"
+Section "KerfKite Studio and its Start menu shortcut" SecStudio
+  SectionIn RO
   SetOutPath "$INSTDIR"
   Delete "$INSTDIR\kerfkite_studio-*.whl"
   File /r "payload\*"
   File "app.ico"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateShortcut "$SMPROGRAMS\KerfKite Studio.lnk" "$INSTDIR\KerfKite.exe" "" "$INSTDIR\app.ico"
+  ; A reinstall without the desktop shortcut removes the one an earlier install made.
+  Delete "$DESKTOP\KerfKite Studio.lnk"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\KerfKiteStudio" "DisplayName" "KerfKite Studio"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\KerfKiteStudio" "DisplayVersion" "${STUDIO_VERSION}"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\KerfKiteStudio" "DisplayIcon" "$INSTDIR\app.ico"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\KerfKiteStudio" "UninstallString" '"$INSTDIR\Uninstall.exe"'
 SectionEnd
+Section "Desktop shortcut" SecDesktop
+  CreateShortcut "$DESKTOP\KerfKite Studio.lnk" "$INSTDIR\KerfKite.exe" "" "$INSTDIR\app.ico"
+SectionEnd
+!insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecStudio} "The workshop for your account, with KerfKite Studio in the Start menu."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "A KerfKite Studio icon on your desktop. Double-click it to start the workshop."
+!insertmacro MUI_FUNCTION_DESCRIPTION_END
 Section "Uninstall"
   Delete "$SMPROGRAMS\KerfKite Studio.lnk"
+  Delete "$DESKTOP\KerfKite Studio.lnk"
   Delete "$INSTDIR\KerfKite.exe"
   Delete "$INSTDIR\KerfKiteNative.exe"
   Delete "$INSTDIR\Microsoft.Web.WebView2.Core.dll"

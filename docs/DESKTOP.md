@@ -4,7 +4,7 @@ KerfKite Studio opens a native window on macOS, Windows and Linux. The native ob
 
 ## Make a test plate in simulation
 
-1. Open KerfKite Studio from your applications menu. In the setup tab, choose **Native desktop** and **Start workshop**. The default workshop is a simulator.
+1. Open KerfKite Studio from Start, Launchpad or your applications menu, or double-click its desktop shortcut. In the setup tab, choose **Native desktop** and **Start workshop**. The default workshop is a simulator.
 2. In the native geometry controls, enter X **10**, Y **10**, width **40** and height **20**. Add a rectangle. Select it from the native object list or on the canvas.
 3. Set the selected object's X to **20** and Y to **15**, then apply the move. Use **Undo** and **Redo** to compare the placement on the canvas.
 4. Choose the **3D CAD** workspace to edit solids, or **CAM** to set up the tool and operation. Generate a **Preview**. Use the File menu to export the resulting G-code. Editing geometry or machining settings requires a fresh preview.
