@@ -27,6 +27,12 @@ def rectangle():
     }
 
 
+try:
+    from studio import _relief_native as native
+except ImportError:
+    native = None
+
+
 class SketchConstraintTests(unittest.TestCase):
     def test_dimension_driven_fully_constrained_rectangle(self):
         f = rectangle()
@@ -74,6 +80,30 @@ class SketchConstraintTests(unittest.TestCase):
             f['constraints'] = [faulty]
             with self.assertRaises(ValueError):
                 solve_profile(f, d)
+
+    @unittest.skipUnless(native is not None and hasattr(native, 'core_cam'), 'the compiled extension is not installed')
+    def test_the_core_solver_agrees_with_the_numpy_reference_to_rounding(self):
+        f = rectangle()
+        cases = [({'w': 20, 'h': 10}, f['constraints'])]
+        angled = copy.deepcopy(f['constraints'])
+        angled[3] = {'kind': 'angle', 'edges': [0, 1], 'value': 'angle'}
+        cases += [({'w': 20, 'h': 10, 'angle': angle}, angled) for angle in (60, 135, -30)]
+        loose = [{'kind': 'fixed', 'point': 0, 'value': [0, 0]}, {'kind': 'equal', 'edges': [0, 1]}]
+        cases.append(({'w': 20, 'h': 10}, loose))
+        for parameters, constraints in cases:
+            with self.subTest(parameters=parameters, constraints=constraints):
+                feature = dict(f, constraints=constraints)
+                core = solve_profile(feature, Dimensions(parameters), backend='native')
+                reference = solve_profile(feature, Dimensions(parameters), backend='python')
+                self.assertEqual(core[1], reference[1])
+                for a, b in zip(core[0], reference[0], strict=True):
+                    self.assertLess(math.dist(a, b), 1e-9)
+        refused = dict(f, constraints=[*f['constraints'], {'kind': 'distance', 'points': [1, 2], 'value': 8}])
+        for backend in ('native', 'python'):
+            with self.assertRaisesRegex(ValueError, 'Cannot satisfy sketch constraint'):
+                solve_profile(refused, Dimensions({'w': 20, 'h': 10}), backend=backend)
+        with self.assertRaises(NotImplementedError):
+            solve_profile(dict(f, constraints=[]), Dimensions({'w': 1, 'h': 1}), backend='native')
 
     @unittest.skipUnless(importlib.util.find_spec('OCP'), 'requires optional STEP runtime')
     def test_exact_step_follows_solved_constraints_and_fillets(self):

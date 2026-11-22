@@ -156,24 +156,35 @@ class NativeSolidCadTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertIsNone(outcome(rebuild, model, backend='native'))
                 self.assertIsNotNone(outcome(rebuild, model))
-        constrained = {
-            'version': 1,
-            'features': [
-                {
-                    'id': 's',
-                    'kind': 'extrude',
-                    'height': 2,
-                    'points': [[0, 0], [5, 0], [0, 5]],
-                    'constraints': [{'kind': 'horizontal', 'edge': 0}],
-                }
-            ],
-        }
         step = {'version': 1, 'features': [{'id': 's', 'kind': 'step', 'content_base64': ''}]}
-        for model in (constrained, step):
+        for model in (step,):
             with self.subTest(model=model):
                 with self.assertRaises(NotImplementedError):
                     rebuild(model, backend='native')
                 self.assertIsNone(model_json(model))
+
+    def test_constrained_sketches_are_solved_by_the_core(self):
+        points = [[0, 0], [10, 0.5], [10.2, 8], [0.3, 7]]
+        constraints = [
+            {'kind': 'fixed', 'point': 0, 'value': [0, 0]},
+            {'kind': 'perpendicular', 'edges': [0, 1]},
+            {'kind': 'parallel', 'edges': [0, 2]},
+            {'kind': 'distance', 'points': [0, 1], 'value': 'w'},
+            {'kind': 'equal', 'edges': [1, 3]},
+        ]
+        feature = {'id': 's', 'kind': 'extrude', 'height': 2, 'points': points, 'constraints': constraints}
+        answer = json.loads(self.same({'version': 1, 'parameters': {'w': 12}, 'features': [feature]}))
+        self.assertGreater(answer['volume'], 0)
+        for change in (
+            {'kind': 'angle', 'edges': [0, 1], 'value': 30},
+            {'kind': 'distance', 'points': [0, 0], 'value': 1},
+            {'kind': 'spiral'},
+            {'kind': 'fixed', 'point': 9, 'value': [0, 0]},
+        ):
+            with self.subTest(change=change):
+                failing = json.loads(json.dumps(feature))
+                failing['constraints'].append(change)
+                self.same({'version': 1, 'parameters': {'w': 12}, 'features': [failing]})
 
     def test_scripted_features_share_one_budget_and_take_the_parameters(self):
         script = 'module peg(h=4) cylinder(h=h, r=r, $fn=12); for (i = [0:n-1]) translate([i*5, 0, 0]) peg();'

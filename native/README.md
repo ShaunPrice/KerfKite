@@ -114,7 +114,8 @@ rebuilds a parametric solid history (`{"model": ...}`) as Studio's 3D CAD does (
 the port of `studio/solid_cad.py`): parameters and their expressions, boxes, cylinders, spheres, sketched
 extrusions and revolutions, lofts and scripted features, patterns and runs of Boolean operations on the
 solid kernel, with the mesh, measures and silhouette. `solid-cad-section` (`{"model", "z"}`) gives the
-material at a height. STEP features and sketches with constraints are still Python's.
+material at a height, and `sketch-solve` (`{"feature", "parameters"}`) a sketch's vertices with its
+constraints solved. STEP features are still Python's.
 
     kerfkite-cam cad-script request.json
 

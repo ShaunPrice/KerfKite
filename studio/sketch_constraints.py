@@ -1,6 +1,19 @@
-"""Solve point and straight-edge sketch relations before building a closed profile."""
+"""Solve point and straight-edge sketch relations before building a closed profile.
+
+With the compiled extension, solve_profile is answered by the native core's solver (the "sketch-solve"
+command, native/core/src/solid_cad.cpp), which is this module's Gauss-Newton iteration statement for
+statement with the core's own least squares in place of NumPy's. The solved vertices agree with this
+module's to rounding (about 10^-12 mm), not to the bit, so the core is the one solver Studio uses and the
+NumPy solver below stays as the reference it is compared with (validation/sketch_constraint_check.py) and
+as the fallback without the extension.
+"""
 
 import math
+
+try:  # The native core's solver, in the compiled extension.
+    from ._relief_native import core_cam as _core_cam
+except ImportError:
+    _core_cam = None
 
 
 def _index(value, n):
@@ -28,7 +41,32 @@ def _driven(expr):
     return False
 
 
-def solve_profile(feature, dimensions):
+def solve_profile(feature, dimensions, *, backend='auto'):
+    """The vertices with every relation satisfied, and the solver's diagnostics (dof, redundant, iterations).
+
+    backend='auto' solves in the native core when the extension is installed and here otherwise; 'python'
+    solves here; 'native' raises NotImplementedError where the core cannot answer.
+    """
+    if backend not in ('auto', 'python', 'native'):
+        raise ValueError('Sketch solver backend must be auto, python or native')
+    constraints = feature.get('constraints')
+    if backend != 'python' and isinstance(constraints, list) and constraints:
+        if _core_cam is not None:
+            request = {'feature': feature, 'parameters': dimensions.definitions, 'order': list(dimensions.definitions)}
+            try:
+                answer = _core_cam('sketch-solve', request)
+            except NotImplementedError:
+                if backend == 'native':
+                    raise
+                answer = None
+            if answer is not None:
+                return answer['points'], {key: answer[key] for key in ('dof', 'redundant', 'iterations')}
+            if backend == 'native':
+                raise NotImplementedError('The sketch cannot be passed to the native core unchanged')
+        elif backend == 'native':
+            raise NotImplementedError('The native sketch solver is not installed')
+    elif backend == 'native':
+        raise NotImplementedError('The native solver is asked only for a sketch with constraints')
     raw = feature.get('points')
     if not isinstance(raw, list) or len(raw) > 256:
         raise ValueError('A sketch supports up to 256 vertices')

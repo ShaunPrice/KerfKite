@@ -56,7 +56,7 @@ The Android and MCP clients retain their legacy 680 × 240 mm example canvas for
 
 The paired phone listener is managed by `studio/phone_monitor_service.py`. Its authenticated API is in `studio/monitor.py`. The native client and activity are in the Android Pocket package. `tests/test_phone_pendant.py` exercises action bounds and revocation. `validation/android_pendant_workflow.py` drives an emulator against the simulator.
 
-For sketch constraints, start with `studio/sketch_constraints.py` and `studio/sketch_profile.py`. Supplementary assembly mates are solved in `studio/assembly_constraints.py`. The browser tracks linked CAD geometry in `studio/static/solid-links.js`. The browser harness exercises crossing lines, linked contours and reliefs, and parameter-driven sketches.
+For sketch constraints, start with `studio/sketch_constraints.py` and `studio/sketch_profile.py`. With the compiled extension the constraints are solved by the native core's port of the solver (`solve_sketch` in `native/core/src/solid_cad.cpp`), so a change to the solver is made in both and compared with `validation/sketch_constraint_check.py`. Supplementary assembly mates are solved in `studio/assembly_constraints.py`. The browser tracks linked CAD geometry in `studio/static/solid-links.js`. The browser harness exercises crossing lines, linked contours and reliefs, and parameter-driven sketches.
 
 ## Workshop extensions
 

@@ -8,15 +8,16 @@
 // revolutions, lofts and CAD scripts (scad.cpp), placed by rotation and origin, repeated by linear and polar
 // patterns, and combined in runs of additions, cuts and intersections; named parameters and their
 // expressions; the mesh, measures and silhouette of rebuild(); horizontal sections; and the /api/cad-script
-// preview. Models with STEP features or sketch constraints are declined (NotPorted), as are dimension
-// expressions outside numbers, names, + - * /, unary signs, parentheses and the sketch crossing functions,
-// which the reference reads with Python's own parser.
+// preview; and sketch constraints, by the core's own solver (below). Models with STEP features are declined
+// (NotPorted), as are dimension expressions outside numbers, names, + - * /, unary signs, parentheses and the
+// sketch crossing functions, which the reference reads with Python's own parser.
 #include "kerfkite/solid_cad.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -26,6 +27,7 @@
 #include "kerfkite/cam.hpp"
 #include "kerfkite/polygon_command.hpp"
 #include "kerfkite/py_math.hpp"
+#include "least_squares.hpp"
 #include "kerfkite/solid_command.hpp"
 #include "project.hpp"
 #include "py_trig.hpp"
@@ -486,8 +488,7 @@ const Shape &checked(const Shape &shape) {
     return shape;
 }
 
-// ---- sketched profiles: studio/sketch_profile.py, sketch_curves.py and the unconstrained case of
-// sketch_constraints.py --------------------------------------------------------------------------------
+// ---- sketched profiles: studio/sketch_profile.py, sketch_curves.py and sketch_constraints.py ------------
 
 using P2 = std::array<double, 2>;
 
@@ -672,21 +673,252 @@ double ring_area(const std::vector<P2> &ring) {
     return sum / 2.0;
 }
 
-// sketch_profile.profile_geometry, for a sketch without constraints: the sampled outline.
+// ---- sketch constraints: studio/sketch_constraints.py -----------------------------------------------
+//
+// The Gauss-Newton solver with its relations, residuals, Jacobian, backtracking, convergence test and
+// messages, statement for statement. Its linear algebra is the core's own (least_squares.hpp), where the
+// reference has NumPy's LAPACK and BLAS, so the solved vertices agree with NumPy's to rounding rather than to
+// the bit. This solver is the one Studio uses: studio/sketch_constraints.solve_profile asks the core, and keeps
+// its NumPy solver as the reference it is compared with (validation/sketch_constraint_check.py).
+
+struct SolvedSketch {
+    std::vector<P2> points;
+    long long dof = 0, redundant = 0, iterations = 0;
+};
+
+// _index: a vertex or edge number, an int (not a bool or a float) within the sketch.
+size_t sketch_index(const json *value, size_t n) {
+    const char *const missing = "Sketch constraint refers to a missing vertex or edge";
+    if (!value || !value->is_number_integer()) throw ValueError(missing);
+    if (value->is_number_unsigned()) {
+        const std::uint64_t index = value->get<std::uint64_t>();
+        if (index >= n) throw ValueError(missing);
+        return static_cast<size_t>(index);
+    }
+    const std::int64_t index = value->get<std::int64_t>();
+    if (index < 0 || static_cast<std::uint64_t>(index) >= n) throw ValueError(missing);
+    return static_cast<size_t>(index);
+}
+
+std::array<size_t, 2> sketch_pair(const json *value, size_t n) {
+    if (!value || !value->is_array() || value->size() != 2) throw ValueError("A sketch relation requires two references");
+    const size_t a = sketch_index(&(*value)[0], n), b = sketch_index(&(*value)[1], n);
+    if (a == b) throw ValueError("Choose two different vertices or edges for this relation");
+    return {a, b};
+}
+
+// _driven: text that float() does not read, that is, an expression.
+bool driven(const json &value) {
+    if (!value.is_string()) return false;
+    double ignored = 0;
+    return !float_from_text(value.get_ref<const std::string &>(), ignored);
+}
+
+struct Relation {
+    size_t number;
+    std::string kind;
+    std::vector<size_t> indices;
+    double target;
+};
+
+// The residuals and Jacobian of the relations at these vertices, or the reference's message for a collapsed
+// edge.
+void sketch_residuals(const std::vector<Relation> &relations, const std::vector<P2> &points, const std::map<std::pair<size_t, int>, size_t> &columns,
+                      size_t free_count, std::vector<double> &residual, Matrix &jacobian) {
+    residual.assign(relations.size(), 0.0);
+    jacobian.assign(relations.size(), std::vector<double>(free_count, 0.0));
+    for (size_t row = 0; row < relations.size(); ++row) {
+        const Relation &relation = relations[row];
+        const size_t i = relation.indices[0], j = relation.indices[1];
+        const P2 a = {points[j][0] - points[i][0], points[j][1] - points[i][1]};
+        const double la = pymath::hypot(a[0], a[1]);
+        if (la < 1e-9) throw ValueError("Constraint " + std::to_string(relation.number) + " uses a collapsed edge or coincident reference points");
+        P2 da = {a[0] / la, a[1] / la};
+        std::vector<P2> grads;
+        if (relation.kind == "distance") {
+            residual[row] = la - relation.target;
+            grads = {{-da[0], -da[1]}, da};
+        } else {
+            const size_t k = relation.indices[2], l = relation.indices[3];
+            const P2 b = {points[l][0] - points[k][0], points[l][1] - points[k][1]};
+            const double lb = pymath::hypot(b[0], b[1]);
+            if (lb < 1e-9) throw ValueError("Constraint " + std::to_string(relation.number) + " uses a collapsed reference edge");
+            P2 db;
+            if (relation.kind == "equal") {
+                db = {-b[0] / lb, -b[1] / lb};
+                residual[row] = la - lb;
+            } else {
+                // Relative angle has a nonzero derivative even at right angles.
+                const double angle = pytrig::atan2(a[0] * b[1] - a[1] * b[0], a[0] * b[0] + a[1] * b[1]);
+                const double period = relation.kind == "angle" ? 2 * pytrig::PI : pytrig::PI;
+                residual[row] = pytrig::modulo(angle - relation.target + period / 2, period) - period / 2;
+                const double la2 = std::pow(la, 2.0), lb2 = std::pow(lb, 2.0);
+                da = {a[1] / la2, -a[0] / la2};
+                db = {-b[1] / lb2, b[0] / lb2};
+            }
+            grads = {{-da[0], -da[1]}, da, {-db[0], -db[1]}, db};
+        }
+        for (size_t g = 0; g < grads.size(); ++g)
+            for (int axis = 0; axis < 2; ++axis) {
+                const auto column = columns.find({relation.indices[g], axis});
+                if (column != columns.end()) jacobian[row][column->second] += grads[g][axis];
+            }
+    }
+}
+
+// np.max(np.abs(values), initial=0.0), a NaN winning, and np.argmax(np.abs(values)): the first largest.
+double largest_magnitude(const std::vector<double> &values, size_t *at = nullptr) {
+    double largest = 0.0;
+    size_t where = 0;
+    for (size_t i = 0; i < values.size(); ++i) {
+        const double magnitude = std::fabs(values[i]);
+        if (std::isnan(magnitude)) {
+            if (at) *at = i;
+            return magnitude;
+        }
+        if (i == 0 || magnitude > std::fabs(values[where])) where = i;
+        largest = std::max(largest, magnitude);
+    }
+    if (at) *at = where;
+    return largest;
+}
+
+double dot(const std::vector<double> &a, const std::vector<double> &b) {
+    double total = 0;
+    for (size_t i = 0; i < a.size(); ++i) total += a[i] * b[i];
+    return total;
+}
+
+// sketch_constraints.solve_profile(feature, dimensions): the vertices with every relation satisfied.
+SolvedSketch solve_sketch(const json &feature, Dimensions &dimensions) {
+    const json *raw = get(feature, "points");
+    if (!raw || !raw->is_array() || raw->size() > 256) throw ValueError("A sketch supports up to 256 vertices");
+    std::vector<P2> xy;
+    for (const json &point : *raw) {
+        const std::vector<double> values = dimensions.vector(&point, 2);
+        xy.push_back({values[0], values[1]});
+    }
+    const size_t n = xy.size();
+    std::set<std::pair<size_t, int>> locked;
+    for (size_t i = 0; i < n; ++i)
+        for (int k = 0; k < 2; ++k)
+            if (driven((*raw)[i][static_cast<size_t>(k)])) locked.insert({i, k});
+    static const json none = json::array();
+    const json *constraints = feature.contains("constraints") ? get(feature, "constraints") : &none;
+    if (!constraints->is_array() || constraints->size() > 128) throw ValueError("A sketch supports up to 128 geometric constraints");
+    SolvedSketch solved;
+    if (constraints->empty()) {
+        solved.points = xy;
+        solved.dof = static_cast<long long>(2 * n - locked.size());
+        return solved;
+    }
+    std::set<size_t> used;
+    std::vector<Relation> relations;
+    long long redundant_fixed = 0;
+    size_t number = 0;
+    for (const json &rel : *constraints) {
+        ++number;
+        const std::string label = std::to_string(number);
+        if (!rel.is_object()) throw ValueError("Invalid sketch constraint " + label);
+        const json *kind = get(rel, "kind");
+        Relation relation{number, kind && kind->is_string() ? kind->get<std::string>() : std::string(), {}, 0.0};
+        if (is_text(kind, "fixed")) {
+            const size_t i = sketch_index(get(rel, "point"), n);
+            const std::vector<double> target = dimensions.vector(get(rel, "value"), 2);
+            for (int axis = 0; axis < 2; ++axis) {
+                if (locked.count({i, axis})) {
+                    if (std::fabs(xy[i][static_cast<size_t>(axis)] - target[static_cast<size_t>(axis)]) > 1e-8)
+                        throw ValueError("Fixed constraint " + label + " contradicts another dimension at point " + std::to_string(i + 1));
+                    ++redundant_fixed;
+                }
+                locked.insert({i, axis});
+                xy[i][static_cast<size_t>(axis)] = target[static_cast<size_t>(axis)];
+            }
+            continue;
+        }
+        if (is_text(kind, "distance")) {
+            const std::array<size_t, 2> pair = sketch_pair(get(rel, "points"), n);
+            relation.indices = {pair[0], pair[1]};
+            relation.target = dimensions.positive(get(rel, "value"));
+        } else if (is_text(kind, "parallel") || is_text(kind, "perpendicular") || is_text(kind, "angle") || is_text(kind, "equal")) {
+            const std::array<size_t, 2> pair = sketch_pair(get(rel, "edges"), n);
+            relation.indices = {pair[0], (pair[0] + 1) % n, pair[1], (pair[1] + 1) % n};
+            if (relation.kind == "angle")
+                relation.target = pytrig::modulo(dimensions.evaluate(get(rel, "value")) * (pytrig::PI / 180.0), 2 * pytrig::PI);
+            else if (relation.kind == "perpendicular")
+                relation.target = pytrig::PI / 2;
+        } else {
+            throw ValueError("Unknown sketch constraint " + label);
+        }
+        used.insert(relation.indices.begin(), relation.indices.end());
+        relations.push_back(std::move(relation));
+    }
+    std::vector<std::pair<size_t, int>> free;
+    for (const size_t i : used)
+        for (int k = 0; k < 2; ++k)
+            if (!locked.count({i, k})) free.push_back({i, k});
+    std::map<std::pair<size_t, int>, size_t> columns;
+    for (size_t c = 0; c < free.size(); ++c) columns[free[c]] = c;
+    const long long free_count = static_cast<long long>(2 * n - locked.size());
+    std::vector<double> residual;
+    Matrix jacobian;
+    for (int iteration = 0; iteration < 41; ++iteration) {
+        sketch_residuals(relations, xy, columns, free.size(), residual, jacobian);
+        const double error = largest_magnitude(residual);
+        if (error <= 1e-8) {
+            const long long rank =
+                relations.empty() || free.empty() ? 0 : static_cast<long long>(matrix_rank(jacobian, relations.size(), free.size(), 1e-10));
+            std::vector<double> coordinates;
+            for (const P2 &point : xy) coordinates.insert(coordinates.end(), point.begin(), point.end());
+            const double reach = largest_magnitude(coordinates);
+            if (!std::all_of(coordinates.begin(), coordinates.end(), [](double v) { return std::isfinite(v); }) || reach > 100000)
+                throw ValueError("Solved sketch exceeds the Studio coordinate range");
+            solved.points = xy;
+            solved.dof = free_count - rank;
+            solved.redundant = redundant_fixed + static_cast<long long>(relations.size()) - rank;
+            solved.iterations = iteration;
+            return solved;
+        }
+        if (free.empty() || iteration == 40) break;
+        std::vector<double> negated;
+        for (const double r : residual) negated.push_back(-r);
+        const std::vector<double> step = least_squares(jacobian, relations.size(), free.size(), negated, 1e-12);
+        std::vector<P2> delta(n, P2{0.0, 0.0});
+        for (size_t c = 0; c < free.size(); ++c) delta[free[c].first][static_cast<size_t>(free[c].second)] = step[c];
+        const double objective = dot(residual, residual);
+        bool improved = false;
+        for (int backtrack = 0; backtrack < 11; ++backtrack) {
+            const double divisor = std::ldexp(1.0, backtrack);
+            std::vector<P2> candidate = xy;
+            for (size_t i = 0; i < n; ++i)
+                for (size_t k = 0; k < 2; ++k) candidate[i][k] = xy[i][k] + delta[i][k] / divisor;
+            std::vector<double> next;
+            Matrix unused;
+            try {
+                sketch_residuals(relations, candidate, columns, free.size(), next, unused);
+            } catch (const ValueError &) {
+                continue;
+            }
+            if (dot(next, next) < objective) {
+                xy = std::move(candidate);
+                improved = true;
+                break;
+            }
+        }
+        if (!improved) break;
+    }
+    size_t worst = 0;
+    largest_magnitude(residual, &worst);
+    const Relation &relation = relations[worst];
+    throw ValueError("Cannot satisfy sketch constraint " + std::to_string(relation.number) + " (" + relation.kind +
+                     "). Check conflicting dimensions or choose another starting geometry");
+}
+
+// sketch_profile.profile_geometry: the sampled outline of the solved sketch.
 std::vector<P2> profile_outline(const json &feature, Dimensions &dimensions) {
     const json *raw = get(feature, "points");
     if (!raw || !raw->is_array() || raw->size() < 3 || raw->size() > 256) throw ValueError("A sketch needs 3–256 vertices");
-    // solve_profile: the vertices, then the constraints, which are the Python's for now.
-    std::vector<P2> points;
-    for (const json &point : *raw) {
-        const std::vector<double> xy = dimensions.vector(&point, 2);
-        points.push_back({xy[0], xy[1]});
-    }
-    const json *constraints = get(feature, "constraints");
-    if (constraints) {
-        if (!constraints->is_array() || constraints->size() > 128) throw ValueError("A sketch supports up to 128 geometric constraints");
-        if (constraints->size()) throw NotPorted("sketch constraints");
-    }
+    std::vector<P2> points = solve_sketch(feature, dimensions).points;
     const size_t given = points.size();
     std::vector<double> radii;
     const json *fillets = get(feature, "fillets");
@@ -1178,6 +1410,26 @@ json section(const json &request) {
     return result;
 }
 
+// sketch_constraints.solve_profile for a feature and the model's parameters: the solved vertices and the
+// solver's diagnostics.
+json sketch_solve(const json &request) {
+    if (!request.is_object()) throw ValueError("Supply a sketch feature");
+    static const json none = json::object();
+    const json *parameters = request.contains("parameters") ? field(request, "parameters") : &none;
+    Dimensions dimensions(parameters, parameter_order(parameters, field(request, "order")));
+    const json *feature = field(request, "feature");
+    if (!feature || !feature->is_object()) throw ValueError("Supply a sketch feature");
+    const SolvedSketch solved = solve_sketch(*feature, dimensions);
+    json points = json::array();
+    for (const P2 &point : solved.points) points.push_back(json::array({point[0], point[1]}));
+    json result = json::object();
+    result["points"] = std::move(points);
+    result["dof"] = solved.dof;
+    result["redundant"] = solved.redundant;
+    result["iterations"] = solved.iterations;
+    return result;
+}
+
 // The /api/cad-script route: a CAD script previewed as a drawing or a solid.
 json script_preview(const json &payload) {
     if (!payload.is_object()) throw ValueError("Supply a CAD script");
@@ -1207,11 +1459,12 @@ json script_preview(const json &payload) {
 }  // namespace
 
 bool solid_cad_command(const std::string &command) {
-    return command == "solid-cad" || command == "solid-cad-section" || command == "cad-script";
+    return command == "solid-cad" || command == "solid-cad-section" || command == "cad-script" || command == "sketch-solve";
 }
 
 Json solid_cad_call(const std::string &command, const Json &request) {
     if (command == "cad-script") return script_preview(request);
+    if (command == "sketch-solve") return sketch_solve(request);
     if (!request.is_object()) throw ValueError("Supply a CAD model in the model field");
     if (command == "solid-cad-section") return section(request);
     return rebuild(field(request, "model"), field(request, "order"));

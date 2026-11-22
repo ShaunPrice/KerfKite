@@ -1142,6 +1142,25 @@ static void solid_histories() {
     sketched["model"]["features"][0]["points"] = json::parse("[[0, 0], [10, 10], [10, 0], [0, 10]]");
     sketched["model"]["features"][0].erase("fillets");
     expect(refusal(sketched) == "wedge: Sketch must enclose an area without crossing itself", "a sketch that crosses itself is refused");
+    // A quadrilateral constrained to a 12 × 7 rectangle from its first corner.
+    json solving = json::object();
+    solving["parameters"] = json::parse(R"({"w": 12, "h": 7})");
+    solving["feature"] = json::parse(R"({"points": [[0, 0], [11, 1], [12, 8], [-1, 6]], "constraints": [
+        {"kind": "fixed", "point": 0, "value": [0, 0]}, {"kind": "fixed", "point": 1, "value": ["w", 0]},
+        {"kind": "distance", "points": [1, 2], "value": "h"}, {"kind": "perpendicular", "edges": [0, 1]},
+        {"kind": "parallel", "edges": [0, 2]}, {"kind": "equal", "edges": [0, 2]}]})");
+    const json solved = kerfkite::solid_cad_call("sketch-solve", solving);
+    const json &corner = solved.at("points")[2];
+    expect(solved.at("dof") == json(0) && std::fabs(corner[0].get<double>() - 12) < 1e-7 && std::fabs(corner[1].get<double>() - 7) < 1e-7,
+           "a constrained sketch solved to a rectangle with no freedom left");
+    solving["feature"]["constraints"].push_back(json::parse(R"({"kind": "distance", "points": [1, 2], "value": 5})"));
+    std::string conflict;
+    try {
+        kerfkite::solid_cad_call("sketch-solve", solving);
+    } catch (const kerfkite::ValueError &error) {
+        conflict = error.what();
+    }
+    expect(conflict.rfind("Cannot satisfy sketch constraint", 0) == 0, "contradictory constraints are refused");
     json section = request;
     section["z"] = 2;
     const json cut = kerfkite::solid_cad_call("solid-cad-section", section);
