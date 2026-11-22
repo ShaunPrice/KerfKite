@@ -15,6 +15,10 @@ The indexed artwork catalog retained all 1,768 original entries and all 1,358,04
 
 Pocket's signed Android app was exercised on an ARM64 Android API 37 emulator configured with 2,048 MiB of RAM. The editor passed file import, reference-preserving export, resizing, SVG conversion, recovery, and library persistence after a cold restart. The paired pendant passed jog, home, zero, start, pause, resume and stop against the Studio simulator over virtual LAN and ADB reverse. The APK minimum is API 26. On a physical Galaxy S23 Ultra running Android 17, the published Pocket 0.4.1 APK started cold in 273 ms and 499 ms, used 41 to 97 MiB proportional memory while editing, and rendered 648 frames with a 5 ms median and a 13 ms 90th percentile. Pi 4/5 performance for this revision and material-cutting tests require their respective devices.
 
+## Relief contact on threads and the GPU
+
+The relief contact shares its rasters out over the processor's threads and, for large jobs on a computer with a discrete GPU, may run on the GPU, with the same depths to the last bit either way. On a 24-thread laptop a relief from a 1024-point map with a 12 mm ball takes 116 ms on the threads, 104 ms on its RTX 5090 Laptop GPU and 1.77 s on one thread. The measurements, the rules for choosing and the checks are in [Threads and the GPU](NATIVE.md#threads-and-a-gpu-for-large-reliefs); `validation/benchmark_relief.py` repeats them.
+
 ## G-code and rotary generation after 0.6.1
 
 The relief and stock-preview kernels are native, which left G-code and rotary generation in Python as the largest stages. Their per-move loops were tightened without changing the output: plain in-range numbers skip the general validator, per-block sets are built once per job, and packed rows are written through a bound function. `validation/benchmark_gcode.py` gives best-of-nine times and a hash of each generated program on the 256 × 256 relief fixture.

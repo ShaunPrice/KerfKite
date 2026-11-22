@@ -54,13 +54,16 @@ setup(
                 'native/core/src/solid/simplify.cpp',
                 'native/core/src/solid/stl.cpp',
                 'native/core/src/solid_command.cpp',
+                'native/core/src/gpu/opencl.cpp',
             ],
             language='c++',
             include_dirs=['native/core/include'],
             optional=os.environ.get('KERFKITE_REQUIRE_NATIVE') != '1',
             extra_compile_args=['/O2', '/fp:precise', '/std:c++17', '/utf-8']
             if sys.platform == 'win32'
-            else ['-O3', '-g0', '-ffp-contract=off', '-std=c++17'],
+            else ['-O3', '-g0', '-ffp-contract=off', '-std=c++17', '-pthread'],
+            extra_link_args=[] if sys.platform == 'win32' else ['-pthread'],
+            libraries=['dl'] if sys.platform.startswith('linux') else [],
         )
     ],
 )

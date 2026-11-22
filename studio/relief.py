@@ -8,6 +8,8 @@ would miss collisions between them. Holder, clamps and material outside the
 height-field rectangle are not modeled.
 """
 
+import base64
+import binascii
 import math
 
 try:
@@ -16,7 +18,63 @@ except ImportError:
     _relief_native = None
 
 MAX_VERTICES = 100_000
+# Without the compiled extension the contact runs in Python, so its maps and work stay small.
 MAX_CONTACT_CHECKS = 10_000_000
+MAX_MAP = 256
+# The compiled contact shares the work between threads, and between them and a capable GPU. Its largest job
+# is about 4.5 s on one thread of a 2026 laptop core and a quarter of a second on 24 threads.
+NATIVE_MAX_CONTACT_CHECKS = 2_000_000_000
+NATIVE_MAX_MAP = 1024
+
+
+def _native(backend):
+    """Whether the compiled contact, with its larger limits, will run this job."""
+    return backend != 'python' and _relief_native is not None and hasattr(_relief_native, 'contact_packed')
+
+
+def map_limit():
+    """The most points a side of an image heightmap may have in this installation."""
+    return NATIVE_MAX_MAP if _native('auto') else MAX_MAP
+
+
+def gpu_status():
+    """The GPU the compiled contact uses for large jobs, or why there is none. Looks for it if not yet done."""
+    if _relief_native is None or not hasattr(_relief_native, 'gpu_status'):
+        return 'no compiled extension'
+    return _relief_native.gpu_status()
+
+
+def _rgb_heights(data, depth, limit):
+    """Heights from an image's RGB bytes, as the editor computes them, and the map's size.
+
+    heightmap_rgb is base64 of columns x rows x 3 bytes, the image's top row first, as a canvas gives them;
+    heightmap_size is [columns, rows]. Luminance is (0.2126 R + 0.7152 G + 0.0722 B) / 255, evaluated in the
+    same order as the editor's JavaScript, so a value here is the value the editor would have sent as a number.
+    Rows are turned over so that row 0 is the bottom of the image, as in heightmap.
+    """
+    import numpy as np
+
+    size = data.get('heightmap_size')
+    if (
+        not isinstance(size, list)
+        or len(size) != 2
+        or not all(isinstance(v, int) and not isinstance(v, bool) for v in size)
+        or not all(2 <= v <= limit for v in size)
+    ):
+        raise ValueError(f'heightmap_size must be [columns, rows], each 2..{limit}')
+    columns, rows = size
+    text = data.get('heightmap_rgb')
+    if not isinstance(text, str) or len(text) > 4 * ((columns * rows * 3 + 2) // 3):
+        raise ValueError('heightmap_rgb must be base64 of columns x rows x 3 bytes')
+    try:
+        raw = base64.b64decode(text, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise ValueError('heightmap_rgb must be base64 of columns x rows x 3 bytes') from exc
+    if len(raw) != columns * rows * 3:
+        raise ValueError('heightmap_rgb must be base64 of columns x rows x 3 bytes')
+    pixels = np.frombuffer(raw, dtype=np.uint8).reshape(rows, columns, 3)[::-1].astype(np.float64)
+    luminance = (0.2126 * pixels[..., 0] + 0.7152 * pixels[..., 1] + 0.0722 * pixels[..., 2]) / 255
+    return (luminance - 1) * depth, rows, columns
 
 
 def _number(data, key, default=None, *, minimum=0, positive=False, maximum=10000):
@@ -59,28 +117,49 @@ def prepare_relief(data, *, backend="auto"):
     shape = data.get('tool_shape', 'ball')
     if shape not in ('flat', 'ball'):
         raise ValueError('tool_shape must be flat or ball')
-    matrix = data.get('heightmap')
-    if not isinstance(matrix, list) or not 2 <= len(matrix) <= 256:
-        raise ValueError('heightmap must contain 2..256 rows')
-    columns = len(matrix[0]) if isinstance(matrix[0], list) else 0
-    if not 2 <= columns <= 256:
-        raise ValueError('heightmap must contain 2..256 columns')
-    values = []
-    for row in matrix:
-        if not isinstance(row, list) or len(row) != columns:
-            raise ValueError('heightmap must be rectangular')
-        converted = []
-        for value in row:
-            if (
-                isinstance(value, bool)
-                or not isinstance(value, (int, float))
-                or not math.isfinite(value)
-                or not 0 <= value <= 1
-            ):
-                raise ValueError('heightmap values must be finite numbers in 0..1')
-            converted.append((float(value) - 1) * depth)
-        values.append(converted)
-    rows = len(values)
+    native = _native(backend)
+    limit = NATIVE_MAX_MAP if native else MAX_MAP
+    # A map the compiled extension could take, but which must run in Python here.
+    hint = '' if native else '; larger maps need the compiled extension'
+    grid = None
+    if 'heightmap_rgb' in data:
+        if data.get('heightmap') is not None:
+            raise ValueError('Give heightmap or heightmap_rgb, not both')
+        size = data.get('heightmap_size')
+        if (
+            not native
+            and isinstance(size, list)
+            and len(size) == 2
+            and any(isinstance(v, int) and MAX_MAP < v <= NATIVE_MAX_MAP for v in size)
+        ):
+            raise ValueError(f'heightmap_size must be [columns, rows], each 2..{MAX_MAP}{hint}')
+        grid, rows, columns = _rgb_heights(data, depth, limit)
+        values = grid if native else grid.tolist()
+    else:
+        matrix = data.get('heightmap')
+        if not isinstance(matrix, list) or not 2 <= len(matrix) <= limit:
+            extra = hint if isinstance(matrix, list) and limit < len(matrix) <= NATIVE_MAX_MAP else ''
+            raise ValueError(f'heightmap must contain 2..{limit} rows{extra}')
+        columns = len(matrix[0]) if isinstance(matrix[0], list) else 0
+        if not 2 <= columns <= limit:
+            extra = hint if limit < columns <= NATIVE_MAX_MAP else ''
+            raise ValueError(f'heightmap must contain 2..{limit} columns{extra}')
+        values = []
+        for row in matrix:
+            if not isinstance(row, list) or len(row) != columns:
+                raise ValueError('heightmap must be rectangular')
+            converted = []
+            for value in row:
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not math.isfinite(value)
+                    or not 0 <= value <= 1
+                ):
+                    raise ValueError('heightmap values must be finite numbers in 0..1')
+                converted.append((float(value) - 1) * depth)
+            values.append(converted)
+        rows = len(values)
     dx, dy = width / (columns - 1), height / (rows - 1)
     # Sampling no coarser than the input X grid or requested stepover.
     nx = math.ceil(width / min(dx, step))
@@ -91,15 +170,37 @@ def prepare_relief(data, *, backend="auto"):
     # Bound work before allocating paths. Actual checks are capped as well.
     cells_x = min(columns - 1, math.ceil((width / nx + diameter) / dx) + 2)
     cells_y = min(rows - 1, math.ceil(diameter / dy) + 2)
-    if nx * (ny + 1) * cells_x * cells_y > MAX_CONTACT_CHECKS:
+    if nx * (ny + 1) * cells_x * cells_y > (NATIVE_MAX_CONTACT_CHECKS if native else MAX_CONTACT_CHECKS):
         raise ValueError('Relief contact calculation too large; reduce map resolution or tool diameter')
-    maxima = [
-        [max(values[j][i], values[j][i + 1], values[j + 1][i], values[j + 1][i + 1]) for i in range(columns - 1)]
-        for j in range(rows - 1)
-    ]
     native_depths = None
-    if backend != 'python' and _relief_native is not None:
-        native_depths = _relief_native.contact(maxima, width, height, depth, diameter, allowance, nx, ny, shape)
+    if grid is not None and native:
+        import numpy as np
+
+        # Each cell's highest corner, as the list form below computes it.
+        maxima = np.maximum(np.maximum(grid[:-1, :-1], grid[:-1, 1:]), np.maximum(grid[1:, :-1], grid[1:, 1:]))
+        native_depths = _relief_native.contact_packed(
+            np.ascontiguousarray(maxima).tobytes(),
+            rows - 1,
+            columns - 1,
+            width,
+            height,
+            depth,
+            diameter,
+            allowance,
+            nx,
+            ny,
+            shape,
+        )
+    else:
+        maxima = [
+            [max(values[j][i], values[j][i + 1], values[j + 1][i], values[j + 1][i + 1]) for i in range(columns - 1)]
+            for j in range(rows - 1)
+        ]
+        if native or (backend != 'python' and _relief_native is not None):
+            native_depths = _relief_native.contact(maxima, width, height, depth, diameter, allowance, nx, ny, shape)
+    device = None
+    if native_depths is not None:
+        device = 'gpu' if getattr(_relief_native, 'last_contact', str)().startswith('GPU') else 'cpu'
     paths, depths = [], []
     checks = 0
     for raster in range(ny + 1):
@@ -138,6 +239,9 @@ def prepare_relief(data, *, backend="auto"):
     return {
         'paths': paths,
         'path_depths': depths,
+        # Where the contact was computed: 'gpu', 'cpu' (C++ threads) or 'python'. Not part of the surface, which is
+        # saved with the design: the same design gives the same surface on any computer.
+        'device': device or 'python',
         'surface': {
             'kind': 'bilinear-heightmap',
             'width': width,

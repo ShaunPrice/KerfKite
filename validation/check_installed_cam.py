@@ -361,3 +361,67 @@ assert (part['volume'], part['bounds'], gasket.area()) == (
     [0.0, 1.75, -0.85, 42.6, 28.25, 14.65],
     808.9521749015435,
 ), (part['volume'], part['bounds'], gasket.area())
+
+# A relief from a 400-point map sent as RGB bytes, through the compiled contact: every point and depth against a
+# recorded digest. The threads change no bit, so it holds on every platform and with any KERFKITE_THREADS. Where
+# the computer has a usable GPU, the same job forced onto it, in a process of its own, must give it too.
+import base64
+import os
+import subprocess
+import sys
+
+from studio.relief import gpu_status, prepare_relief
+
+rng = random.Random(1024)
+SIDE = 400
+RELIEF_EXPECTED = (61, 24400, '55a418fdfe4d9ccb')
+RELIEF = {
+    'x': 5,
+    'y': 5,
+    'width': 120,
+    'height': 90,
+    'depth': 4,
+    'tool_diameter': 6,
+    'tool_shape': 'ball',
+    'stepover': 1.5,
+    'allowance': 0.1,
+    'heightmap_size': [SIDE, SIDE],
+    'heightmap_rgb': base64.b64encode(bytes(rng.randrange(256) for _ in range(SIDE * SIDE * 3))).decode(),
+}
+
+
+def relief_summary(result):
+    text = json.dumps([result['paths'], result['path_depths']], separators=(',', ':'))
+    return len(result['paths']), sum(map(len, result['paths'])), sha256(text.encode()).hexdigest()[:16]
+
+
+relief = prepare_relief(RELIEF)
+assert relief['surface']['backend'] == 'cpp' and relief['device'] in ('cpu', 'gpu'), relief['device']
+summary = relief_summary(relief)
+assert summary == RELIEF_EXPECTED, summary
+os.environ['KERFKITE_THREADS'] = '1'
+try:
+    assert relief_summary(prepare_relief(RELIEF)) == summary, 'one thread'
+finally:
+    del os.environ['KERFKITE_THREADS']
+FORCED = (
+    'import json, sys\n'
+    'sys.path.insert(0, sys.argv[1])\n'
+    'from studio.relief import prepare_relief\n'
+    'result = prepare_relief(json.load(sys.stdin))\n'
+    'print(json.dumps([result["device"], result["paths"], result["path_depths"]], separators=(",", ":")))\n'
+)
+# The package this check imported, so that the second process runs the same one.
+installed = os.path.dirname(os.path.dirname(os.path.abspath(_relief_native.__file__)))
+forced = subprocess.run(  # noqa: S603 - this interpreter, with a fixed script
+    [sys.executable, '-I', '-c', FORCED, installed],
+    input=json.dumps(RELIEF),
+    capture_output=True,
+    text=True,
+    env={**os.environ, 'KERFKITE_GPU': 'on'},
+    check=False,
+)
+assert forced.returncode == 0, forced.stderr
+device, paths, depths = json.loads(forced.stdout)
+assert relief_summary({'paths': paths, 'path_depths': depths}) == summary, device
+print('relief contact:', summary, 'GPU:', gpu_status() if device == 'gpu' else 'not used (' + gpu_status() + ')')
