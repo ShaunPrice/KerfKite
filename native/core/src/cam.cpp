@@ -241,6 +241,7 @@ Job single(const json &project) {
                 Segment segment{x, y, nx, ny, 0, true, path[v].power, 0};
                 segment.planar = true;
                 segment.whole_power = path[v].whole_zero;
+                segment.packed = true;
                 job.segments.push_back(segment);
                 // The reference adds the square of a zero height difference, which changes nothing.
                 length += std::sqrt(text::square(nx - x) + text::square(ny - y));
@@ -274,7 +275,9 @@ Job single(const json &project) {
                     text::fixed(text, next_z, 3);
                 }
                 lines.push_back(text);
-                job.segments.push_back({x, y, nx, ny, next_z, false, 0, start_z});
+                Segment segment{x, y, nx, ny, next_z, false, 0, start_z};
+                segment.packed = true;
+                job.segments.push_back(segment);
                 length += std::sqrt(text::square(nx - x) + text::square(ny - y) + text::square(next_z - start_z));
                 current_z = next_z;
                 start_z = next_z;

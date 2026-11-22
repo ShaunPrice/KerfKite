@@ -4,6 +4,8 @@
 //   kerfkite-cam probe-plan REQUEST.json     a probing program for the cutting bounds of a job
 //   kerfkite-cam height-map REQUEST.json     the surface heights from the probe results
 //   kerfkite-cam level REQUEST.json          a program corrected to follow that surface
+//   kerfkite-cam rotary REQUEST.json         {"project", "options"}: the job wrapped onto a cylinder (studio.rotary)
+//   kerfkite-cam rotary-wrap REQUEST.json    {"job", "options"}: given canonical G-code lines wrapped the same way
 //   kerfkite-cam gerber FILE [--arc-tolerance MM]            a Gerber layer as drawn objects in millimetres
 //   kerfkite-cam gerber-outline FILE [--tolerance MM] [--offset [X,Y]]   a profile layer as closed paths
 //   kerfkite-cam gerber-isolation FILE --tool-width MM [--passes N] [--overlap F] [--mirror-x X]   isolation paths
@@ -22,10 +24,12 @@
 //
 // generate writes the program (or, with --json, the whole job) and exits 0. Exit 2 means the project was
 // rejected, with the reference's message on standard error; exit 3 means it needs a feature that is not
-// ported yet; exit 1 is a usage or file error.
+// ported yet; exit 1 is a usage or file error. The commands that take a REQUEST.json exit the same way.
 //
 // batch and numbers serve validation/native_core_parity.py. batch reads one {"project": ...} object per
-// line and answers each with {"ok": job}, {"error": message} or {"declined": feature}. numbers reads
+// line (with "rotary": options, the project as a rotary job; {"job": ..., "rotary": options}, given G-code
+// lines wrapped onto the cylinder) and answers each with {"ok": job}, {"error": message} or
+// {"declined": feature}. numbers reads
 // "HEXFLOAT DECIMALS" lines and writes the fixed-point text, round() and repr() of each value. arithmetic
 // answers "dist" and "sum" requests with the core's versions of Python's math.dist and sum(). simple reads a
 // line of "METHOD X1 Y1 X2 Y2 ..." for each path (METHOD usual, tree or pairs; coordinates as hexadecimal
@@ -40,6 +44,7 @@
 #include <vector>
 
 #include "kerfkite/cam.hpp"
+#include "kerfkite/rotary.hpp"
 #include "kerfkite/leveling.hpp"
 #include "kerfkite/line_check.hpp"
 #include "kerfkite/number_text.hpp"
@@ -136,6 +141,9 @@ int request(const std::string &command, const std::string &path) {
     } catch (const kerfkite::ValueError &error) {
         std::cerr << error.what() << "\n";
         return 2;
+    } catch (const kerfkite::NotPorted &error) {
+        std::cerr << "Not available in the native core yet: " << error.what() << "\n";
+        return 3;
     } catch (const json::exception &error) {
         std::cerr << "kerfkite-cam: the request is not valid JSON: " << error.what() << "\n";
         return 1;
@@ -184,7 +192,15 @@ int batch(const std::string &path) {
         if (line.empty()) continue;
         json answer;
         try {
-            answer = json{{"ok", kerfkite::to_json(kerfkite::generate(json::parse(line).at("project")))}};
+            const json request = json::parse(line);
+            json job;
+            if (request.contains("job"))
+                job = kerfkite::wrap_job(request.at("job"), request.at("rotary"));
+            else if (request.contains("rotary"))
+                job = kerfkite::generate_rotary(request.at("project"), request.at("rotary"));
+            else
+                job = kerfkite::to_json(kerfkite::generate(request.at("project")));
+            answer = json{{"ok", std::move(job)}};
         } catch (const kerfkite::ValueError &error) {
             answer = json{{"error", error.what()}};
         } catch (const kerfkite::NotPorted &error) {
@@ -299,7 +315,7 @@ int main(int argc, char **argv) {
     if (command == "generate") return generate(argc, argv);
     if (command == "batch" && argc == 3) return batch(argv[2]);
     if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "polygon" || command == "operation" ||
-         command == "solid") &&
+         command == "solid" || command == "rotary" || command == "rotary-wrap") &&
         argc == 3)
         return request(command, argv[2]);
     if ((command == "polygon-batch" || command == "solid-batch") && argc == 3)

@@ -1840,6 +1840,7 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <li>Squares use the same <code>pow</code> call that Python's <code>**</code> operator makes.</li>
 <li>The rotary cut length is computed by the Python function itself, called from C++, because Python's <code>hypot</code> and <code>asinh</code> are its own implementations. Laser path preparation stays in Python for the same reason (<code>math.dist</code>).</li>
 </ul>
+<p>The native core has the whole rotary post as well (<code>native/core/src/rotary.cpp</code>, <code>kerfkite-cam rotary</code> and <code>rotary-wrap</code>), for use without Python. It computes the cut length itself: CPython's <code>hypot</code> of three values is reproduced step for step (<code>pymath::vector_norm</code> in <code>kerfkite/py_math.hpp</code>), <code>asinh</code> is the C library's, which is what CPython 3.11 and later call, and squares use <code>pow</code> as Python's <code>**</code> does. <code>validation/native_core_parity.py</code> compares it with <code>studio.rotary</code> on every rotary call the test suite makes and on generated jobs and given programs (<code>--rotary</code>: 3,000 generated jobs and 1,500 programs by default, about a quarter of them accepted).</p>
 <pre><code class="language-python">from studio.cam import generate
 from studio.rotary import generate_rotary
 job = generate(project)                      # auto: C++ loops if importable, otherwise Python

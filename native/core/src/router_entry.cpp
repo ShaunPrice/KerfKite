@@ -141,6 +141,7 @@ Job entry_job(const json &project, const std::vector<Contour> &source, const std
         Segment segment{at_x, at_y, x, y, z, false, 0, at_z};
         segment.whole_end = whole;
         segment.whole_start = at_whole;
+        segment.packed = true;  // the reference packs entry rows for the rotary post too, but not drilling rows
         job.segments.push_back(segment);
         const double d = dist3(at_x, at_y, at_z, x, y, z);
         length += d;

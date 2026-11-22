@@ -32,6 +32,7 @@ struct Segment {
     bool whole_power = false;  // the power is the integer 0 of a beam-off gap
     bool whole_end = false;    // the end height is the integer 0 that starts a ramp entry
     bool whole_start = false;  // the start height is that integer 0
+    bool packed = false;       // a row the reference packs as seven floats for the rotary post (moves and entries)
 };
 
 struct Job {
