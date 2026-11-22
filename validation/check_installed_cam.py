@@ -75,7 +75,7 @@ for head in ('router', 'laser'):
     packed = generate_rotary(project, options)['lines']
     assert sha256('\n'.join(legacy).encode()).digest() == sha256('\n'.join(packed).encode()).digest(), head
 
-# The C++ move loops must reproduce the Python reference byte for byte on the installed build.
+# The native core's CAM must reproduce the Python reference byte for byte on the installed build.
 for backend_project in (project, dict(project, path_depths=None, path_powers=None, mode='router', step=0.5)):
     backend_project = {key: value for key, value in backend_project.items() if value is not None}
     backend_project.pop('path_powers' if backend_project['mode'] == 'router' else 'path_depths', None)

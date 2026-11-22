@@ -46,3 +46,23 @@ The same jobs with the per-move loops ported to C++ (`studio/_gcode_native.cpp`;
 
 Against the 0.6.1 figures above, the relief job is 6.3 times faster and the rotary job 6.4 times. The laser job gains least because preparing laser paths remains in Python, as does the rotary cut-length calculation; both depend on Python's own `hypot` and `dist`, and porting them would change the last digits of some values.
 
+### The native core's CAM
+
+Studio now generates the whole job in the native core (see [Native](NATIVE.md#g-code-and-rotary-output)), and the C++ loops above are retired. The core's rotary post reads its tokens in place, and its post-processor takes the program's lines over instead of copying them. Best of nine, Linux x86-64 on a two-core machine, Python 3.13; the same jobs, with the program hashes unchanged:
+
+| Stage | Python | C++ loops | Native core | Program hash |
+| --- | ---: | ---: | ---: | --- |
+| Relief job, packed segments | 150 ms | 35 ms | 43 ms | `08c0811b116f` |
+| Relief job, list rows | 136 ms | 54 ms | 52 ms | `08c0811b116f` |
+| Flat six-level job | 103 ms | 23 ms | 26 ms | `31c8a9794b61` |
+| Laser job | 143 ms | 93 ms | 26 ms | `6636b83bda44` |
+| Rotary job | 535 ms | 129 ms | 114 ms | `cfe252049e5c` |
+
+The laser job is 3.6 times faster than with the C++ loops, because its path preparation is now in C++ as well; the rotary job is 12 per cent faster. Packed segments, which only the tests ask for, are a few milliseconds slower: the job's paths and lines are made as Python objects, where the loops reused the caller's. A preview also returns as the core's own JSON text, which for these jobs is most of the request:
+
+| Preview response | C++ loops, then `jsonify` | Core's job and text |
+| --- | ---: | ---: |
+| Relief job | 329 ms | 129 ms |
+| Laser job | 228 ms | 65 ms |
+| Rotary job | 412 ms | 193 ms |
+

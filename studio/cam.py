@@ -10,23 +10,45 @@ from .router_entry import generate_entry
 from .protocols import postprocess, get_protocol
 from .operations import prepare as prepare_operation, router_tool_shape
 
-try:  # The C++ loops are optional: see docs/NATIVE.md.
-    from ._relief_native import gcode_moves as _native_moves
-    from ._relief_native import plain_depths as _native_depths
-    from ._relief_native import plain_points as _native_points
+try:  # The native core's CAM, in the compiled extension: see docs/NATIVE.md.
+    from ._relief_native import core_cam as _core_cam, core_cam_text as _core_cam_text
 except ImportError:
-    _native_moves = _native_depths = _native_points = None
+    _core_cam = _core_cam_text = None
 
 
-def _moves_backend(backend):
-    """The C++ move loop to try, or None for the Python reference loop."""
+def _python_chosen():
+    """Whether the environment asks for the Python CAM: KERFKITE_GCODE_BACKEND=python, or
+    KERFKITE_POLYGON_BACKEND=shapely, since only the Python CAM can take offsets, pockets and fills from Shapely."""
+    return (
+        os.environ.get('KERFKITE_GCODE_BACKEND') == 'python' or os.environ.get('KERFKITE_POLYGON_BACKEND') == 'shapely'
+    )
+
+
+def cam_backend(backend, name='G-code'):
+    """The native core's CAM to use, or None for this module's Python, which is the reference."""
     if backend not in ('auto', 'python', 'native'):
-        raise ValueError('G-code backend must be auto, python or native')
-    if backend == 'native' and _native_moves is None:
-        raise ValueError('Native G-code backend is not installed')
-    if backend == 'python' or (backend == 'auto' and os.environ.get('KERFKITE_GCODE_BACKEND') == 'python'):
+        raise ValueError(f'{name} backend must be auto, python or native')
+    if backend == 'native' and _core_cam is None:
+        raise ValueError(f'Native {name} backend is not installed')
+    if backend == 'python' or (backend == 'auto' and _python_chosen()):
         return None
-    return _native_moves
+    return _core_cam
+
+
+def core_answer(core, command, request, backend, packed=False):
+    """The core's job, or None when the reference must answer: the request cannot cross to the core unchanged
+    (a tuple, a non-finite number, a key that is not text), or the core does not reproduce what it asks. With
+    backend='native' either of those raises NotImplementedError instead. A rejection is the reference's
+    ValueError, with its message."""
+    try:
+        job = core(command, request, packed)
+    except NotImplementedError:
+        if backend == 'native':
+            raise
+        return None
+    if job is None and backend == 'native':
+        raise NotImplementedError('The request cannot be passed to the native core unchanged')
+    return job
 
 
 def _bounds(paths):
@@ -165,7 +187,43 @@ def _holding_tabs(project, paths, depth):
     return result, depths, warnings
 
 
+def core_json(command, request):
+    """The core's answer as UTF-8 JSON text, for a web response to send as it is, or None when the reference
+    must answer it (no extension, the Python CAM chosen by the environment, a request that cannot cross
+    unchanged, or a case the core does not reproduce). Writing a job of 200,000 moves this way takes about a quarter of the
+    time that Python's json module takes. A rejection is the reference's ValueError."""
+    if _core_cam_text is None or _python_chosen():
+        return None
+    try:
+        return _core_cam_text(command, request)
+    except NotImplementedError:
+        return None
+
+
+def job_json(project):
+    """generate(project) as JSON text written by the core, or None: then generate(project, backend='python')."""
+    return core_json('generate', project)
+
+
 def generate(project, *, packed_segments=False, _rotary_blocks=False, backend='auto'):
+    """The job for a project: its program lines, preview segments (packed when packed_segments), cut length
+    and time, bounds and warnings, with the paths and depths it cut, or for an ordered job the number of
+    operations, and for drilling the holes and the drill.
+
+    backend='auto' runs the native core's generator when the extension is installed and Python otherwise, or
+    when the core declines; 'python' runs this module, the reference; 'native' requires the core."""
+    core = cam_backend(backend)
+    if core is not None and not _rotary_blocks:
+        job = core_answer(core, 'generate', project, backend, packed_segments)
+        if job is not None:
+            if packed_segments:
+                job['segments'] = PackedSegments.from_native(job['segments'])
+            return job
+    return _reference(project, packed_segments, _rotary_blocks, 'python' if backend == 'native' else backend)
+
+
+def _reference(project, packed_segments, _rotary_blocks, backend):
+    """generate() in Python: the reference the native core is compared with."""
     if not isinstance(project, dict):
         raise ValueError('Project must be an object')
     if 'operations' in project:
@@ -232,7 +290,7 @@ def generate(project, *, packed_segments=False, _rotary_blocks=False, backend='a
             'operations': len(jobs),
             **drill_data,
         }
-    return _generate_single(project, packed_segments, _rotary_blocks, backend)
+    return _generate_single(project, packed_segments, _rotary_blocks)
 
 
 def _python_moves(lines, clean, laser_paths, depths, levels, laser, rotary_blocks, packed, safe, plunge, cut_feed):
@@ -287,8 +345,7 @@ def _python_moves(lines, clean, laser_paths, depths, levels, laser, rotary_block
     return segments, length
 
 
-def _generate_single(project, packed_segments, rotary_blocks, backend='auto'):
-    native_moves = _moves_backend(backend)
+def _generate_single(project, packed_segments, rotary_blocks):
     mode = project.get('mode')
     if mode not in ('router', 'laser', 'knife'):
         raise ValueError('Choose router, laser or knife')
@@ -314,28 +371,25 @@ def _generate_single(project, packed_segments, rotary_blocks, backend='auto'):
     paths = project.get('paths')
     if not isinstance(paths, list) or not 1 <= len(paths) <= 3000:
         raise ValueError('Add between 1 and 3000 paths')
-    # The C++ check copies a wholly plain design and returns None for anything else, which the loop below reports.
-    clean = _native_points(paths, width, height, 100000) if native_moves is not None else None
-    if clean is None:
-        clean = []
-        count = 0
-        for path in paths:
-            if not isinstance(path, list) or len(path) < 2:
-                raise ValueError('Each path needs at least two points')
-            points = []
-            for point in path:
-                if not isinstance(point, list) or len(point) != 2:
-                    raise ValueError('Invalid XY point')
-                px, py = point
-                # Plain in-range numbers need no further checks; anything else takes the full validation.
-                if type(px) in _PLAIN and type(py) in _PLAIN and 0 <= px <= width and 0 <= py <= height:
-                    points.append([float(px), float(py)])
-                else:
-                    points.append([number(px, 'X', 0, width), number(py, 'Y', 0, height)])
-            count += len(points)
-            if count > 100000:
-                raise ValueError('Too many vertices; simplify the design')
-            clean.append(points)
+    clean = []
+    count = 0
+    for path in paths:
+        if not isinstance(path, list) or len(path) < 2:
+            raise ValueError('Each path needs at least two points')
+        points = []
+        for point in path:
+            if not isinstance(point, list) or len(point) != 2:
+                raise ValueError('Invalid XY point')
+            px, py = point
+            # Plain in-range numbers need no further checks; anything else takes the full validation.
+            if type(px) in _PLAIN and type(py) in _PLAIN and 0 <= px <= width and 0 <= py <= height:
+                points.append([float(px), float(py)])
+            else:
+                points.append([number(px, 'X', 0, width), number(py, 'Y', 0, height)])
+        count += len(points)
+        if count > 100000:
+            raise ValueError('Too many vertices; simplify the design')
+        clean.append(points)
     entry = project.get('router_entry', 'plunge')
     if mode == 'router' and entry != 'plunge' and project.get('operation') == 'drill':
         raise ValueError('Use the drill peck setting for drilling; select plunge as the router entry')
@@ -359,19 +413,15 @@ def _generate_single(project, packed_segments, rotary_blocks, backend='auto'):
     count = sum(map(len, clean))
     depths = prepared_depths if prepared_depths is not None else project.get('path_depths')
     if depths is not None:
-        plain = _native_depths(depths, clean) if native_moves is not None and mode != 'laser' else None
-        if plain is not None:
-            depths = plain
-        else:
-            if mode == 'laser' or not isinstance(depths, list) or len(depths) != len(clean):
-                raise ValueError('Depth paths must match router XY paths')
-            for path, values in zip(clean, depths):
-                if not isinstance(values, list) or len(values) != len(path):
-                    raise ValueError('Each vertex must have a matching depth')
-                for value in values:
-                    if not (type(value) in _PLAIN and -50 <= value <= 0):
-                        number(value, 'Vertex Z', -50, 0)
-            depths = [[float(v) for v in path] for path in depths]
+        if mode == 'laser' or not isinstance(depths, list) or len(depths) != len(clean):
+            raise ValueError('Depth paths must match router XY paths')
+        for path, values in zip(clean, depths):
+            if not isinstance(values, list) or len(values) != len(path):
+                raise ValueError('Each vertex must have a matching depth')
+            for value in values:
+                if not (type(value) in _PLAIN and -50 <= value <= 0):
+                    number(value, 'Vertex Z', -50, 0)
+        depths = [[float(v) for v in path] for path in depths]
         depth = max(-min(path) for path in depths)
         if depth <= 0:
             raise ValueError('No contour cuts below the stock surface')
@@ -440,23 +490,9 @@ def _generate_single(project, packed_segments, rotary_blocks, backend='auto'):
     packed = packed_segments or rotary_blocks
     laser = mode == 'laser'
     cut_feed = min(feed, plunge) if depths is not None else feed
-    emitted = None
-    if native_moves is not None:
-        # None means the C++ loop declined this job; the Python loop below then produces it.
-        emitted = native_moves(
-            laser_paths if laser else clean, depths, levels, laser, rotary_blocks, packed, safe, plunge, cut_feed
-        )
-    if emitted is not None:
-        text, rows, length, runs = emitted
-        segments = PackedSegments.from_native(rows) if packed else rows
-        moves = text.split('\n')
-        for index, start, stop in runs:
-            moves[index] = CutRun(segments, start, stop, cut_feed, depths is not None, laser)
-        lines += moves
-    else:
-        segments, length = _python_moves(
-            lines, clean, laser_paths, depths, levels, laser, rotary_blocks, packed, safe, plunge, cut_feed
-        )
+    segments, length = _python_moves(
+        lines, clean, laser_paths, depths, levels, laser, rotary_blocks, packed, safe, plunge, cut_feed
+    )
     lines.append('M5')
     envelope = laser_paths if mode == 'laser' else clean
     warnings = (

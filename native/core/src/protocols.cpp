@@ -47,15 +47,22 @@ const Protocol &get_protocol(const json *protocol) {
 
 std::vector<std::string> postprocess(const std::vector<std::string> &lines, const json *protocol,
                                      const std::string &mode, const json *dwell_units) {
+    return postprocess(std::vector<std::string>(lines), protocol, mode, dwell_units);
+}
+
+std::vector<std::string> postprocess(std::vector<std::string> &&lines, const json *protocol, const std::string &mode,
+                                     const json *dwell_units) {
     const Protocol &profile = get_protocol(protocol);
     if (std::find(profile.modes.begin(), profile.modes.end(), mode) == profile.modes.end())
         throw ValueError(profile.name + " dynamic laser export is not implemented; choose a validated laser profile");
-    if (profile.family == "grbl") return lines;
+    if (profile.family == "grbl") return std::move(lines);
     std::vector<std::string> result;
+    result.reserve(lines.size() + 5);
     if (profile.family == "marlin") {
-        for (const std::string &line : lines) {
+        for (std::string &line : lines) {
             if (line == "G17" || line == "G94" || line == "G54") continue;
-            result.push_back(line == "G4 P2" ? "G4 P2000" : line);
+            if (line == "G4 P2") line = "G4 P2000";
+            result.push_back(std::move(line));
         }
         return result;
     }
@@ -63,9 +70,11 @@ std::vector<std::string> postprocess(const std::vector<std::string> &lines, cons
     const bool seconds = is_text(dwell_units, "seconds"), milliseconds = is_text(dwell_units, "milliseconds");
     if (configured_dwell && !seconds && !milliseconds)
         throw ValueError("Select configured dwell units: seconds or milliseconds");
-    for (const std::string &line : lines) {
-        result.push_back(line == "G4 P2" && configured_dwell && milliseconds ? "G4 P2000" : line);
-        if (line == "G90") result.insert(result.end(), {"G40", "G49", "G80", "G61"});
+    for (std::string &line : lines) {
+        const bool absolute = line == "G90";
+        if (line == "G4 P2" && configured_dwell && milliseconds) line = "G4 P2000";
+        result.push_back(std::move(line));
+        if (absolute) result.insert(result.end(), {"G40", "G49", "G80", "G61"});
     }
     result.push_back("M30");
     return result;

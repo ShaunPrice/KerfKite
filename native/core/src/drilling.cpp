@@ -98,7 +98,7 @@ Job drill_job(const json &project, const std::vector<Path> &paths) {
     const double power = number(get(project, "power"), "Spindle RPM", 1, 100000, "1", "100000");
     const double peck = setting(project, "drill_peck", 0, "Peck depth", 0, 50, "0", "50");
     if (peck != 0 && peck < 0.01) throw ValueError("Use zero for one plunge or a peck depth of at least 0.01 mm");
-    setting(project, "drill_point_angle", 118, "Drill point angle", 60, 170, "60", "170");
+    const double angle = setting(project, "drill_point_angle", 118, "Drill point angle", 60, 170, "60", "170");
     const json *shape = get(project, "tool_shape");
     if (shape && !is_text(shape, "drill") && !is_text(shape, "flat"))
         throw ValueError("Drilling requires a drill bit or centre-cutting flat end mill");
@@ -142,7 +142,7 @@ Job drill_job(const json &project, const std::vector<Path> &paths) {
     }
     lines.push_back("M5");
     const json *protocol = get(project, "protocol");
-    job.lines = postprocess(lines, protocol, "router", get(project, "dwell_units"));
+    job.lines = postprocess(std::move(lines), protocol, "router", get(project, "dwell_units"));
     job.cut_length = rounded(length, 2);
     job.cut_minutes = rounded(length / plunge, 2);
     job.bounds = {centers[0][0], centers[0][1], centers[0][0], centers[0][1]};
@@ -152,6 +152,12 @@ Job drill_job(const json &project, const std::vector<Path> &paths) {
     job.warnings = {get_protocol(protocol).notes,
                     "Depth is measured to the tool tip. Drilling time includes feed plunges from clearance; rapid "
                     "retracts and spindle startup are excluded."};
+    job.drilled = true;
+    for (const Point &center : centers) job.drill_holes.push_back({center[0], center[1], diameter});
+    job.has_simulation_tool = true;
+    job.simulation_tool = {diameter, shape ? shape->get<std::string>() : "drill", angle};
+    job.prepared = true;
+    job.prepared_paths = paths;  // the holes as drawn; a drilling job has no depths
     return job;
 }
 

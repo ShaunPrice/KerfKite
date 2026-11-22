@@ -1,8 +1,26 @@
 """Optional native relief and stock kernels; a compiler is not required to install Studio."""
 
 import os
+from pathlib import Path
 import sys
 from setuptools import Extension, setup, find_packages
+
+GENERATED = Path('build', 'generated')
+
+
+def protocols_header():
+    """The controller table compiled into the core's CAM, made as native/CMakeLists.txt makes it."""
+    template = Path('native/core/src/protocols_data.hpp.in').read_text(encoding='utf-8')
+    table = Path('studio/static/protocols.json').read_text(encoding='utf-8')
+    header = template.replace('@KERFKITE_PROTOCOLS_JSON@', table)
+    target = GENERATED / 'protocols_data.hpp'
+    if not target.is_file() or target.read_text(encoding='utf-8') != header:
+        GENERATED.mkdir(parents=True, exist_ok=True)
+        target.write_text(header, encoding='utf-8', newline='\n')
+
+
+if os.environ.get('KERFKITE_PORTABLE_WHEEL') != '1':
+    protocols_header()
 
 setup(
     packages=find_packages(include=['studio', 'studio.*']),
@@ -19,6 +37,18 @@ setup(
                 'studio/_core_native.cpp',
                 'native/core/src/json.cpp',
                 'native/core/src/leveling.cpp',
+                # G-code and rotary output: the planar generator, drilling, the drag knife, laser paths, ramp
+                # and helix entries, holding tabs, the self-crossing test they ask of contours, the
+                # controller table and the rotary post.
+                'native/core/src/cam.cpp',
+                'native/core/src/drilling.cpp',
+                'native/core/src/knife.cpp',
+                'native/core/src/laser.cpp',
+                'native/core/src/protocols.cpp',
+                'native/core/src/rotary.cpp',
+                'native/core/src/router_entry.cpp',
+                'native/core/src/simple_line.cpp',
+                'native/core/src/tabs.cpp',
                 # Circuit board import: Gerber layers and Excellon drill files.
                 'native/core/src/excellon.cpp',
                 'native/core/src/gerber.cpp',
@@ -57,7 +87,7 @@ setup(
                 'native/core/src/gpu/opencl.cpp',
             ],
             language='c++',
-            include_dirs=['native/core/include'],
+            include_dirs=['native/core/include', str(GENERATED)],
             optional=os.environ.get('KERFKITE_REQUIRE_NATIVE') != '1',
             extra_compile_args=['/O2', '/fp:precise', '/std:c++17', '/utf-8']
             if sys.platform == 'win32'

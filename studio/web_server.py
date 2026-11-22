@@ -14,7 +14,7 @@ from .web_store import WebStore
 from .web_transfer import validate_upload, validate_destination, send_to_receiver
 from . import pcb_import
 from . import relief
-from .cam import generate
+from .cam import generate, job_json
 from .design_api import register_design_routes
 from .profiles import PROFILES
 
@@ -169,7 +169,11 @@ def create_app(store, public_url, destinations=None, allow_file_upload=False):
 
     @app.post('/api/generate')
     def cam():
-        return jsonify(generate(request.get_json()))
+        project = request.get_json()
+        text = job_json(project)
+        if text is not None:
+            return app.response_class(text, mimetype='application/json')
+        return jsonify(generate(project, backend='python'))
 
     @app.get('/api/files')
     def files():
