@@ -156,18 +156,20 @@ std::vector<std::vector<int>> artwork_raster(const Json &data) {
 
     std::vector<std::vector<int>> matrix(std::size_t(n), std::vector<int>(std::size_t(n), 0));
     std::vector<const Edge *> band, row_edges;
+    std::size_t next = 0;
     for (int row = 0; row < n; ++row) {
         // The reference's arithmetic for the cell, then each value on the grid.
         const double py = y + row * height / (n - 1), half_y = height / (n - 1);
         const Coord low_y = polygon::to_grid(py - half_y), high_y = polygon::to_grid(py + half_y);
         const Coord centre_y = polygon::to_grid(py);
-        band.clear();
+        // The edges that reach this row's band: those that start at or below its top, less those that end below
+        // its bottom. Rows rise by at least 787 nm, so an edge that ends below one row's band misses every later
+        // band, and each edge is added and dropped once.
+        while (next < edges.size() && edges[next].low_y <= high_y) band.push_back(&edges[next++]);
+        band.erase(std::remove_if(band.begin(), band.end(), [&](const Edge *edge) { return edge->high_y < low_y; }), band.end());
         row_edges.clear();
-        for (const Edge &edge : edges) {
-            if (edge.low_y > high_y) break;
-            if (edge.high_y >= low_y) band.push_back(&edge);
-            if (edge.low_y <= centre_y && centre_y < edge.high_y) row_edges.push_back(&edge);
-        }
+        for (const Edge *edge : band)
+            if (edge->low_y <= centre_y && centre_y < edge->high_y) row_edges.push_back(edge);
         for (int col = 0; col < n; ++col) {
             const double px = x + col * width / (n - 1), half_x = width / (n - 1);
             Cell cell{polygon::to_grid(px - half_x), polygon::to_grid(px + half_x), low_y, high_y, {polygon::to_grid(px), centre_y}};
