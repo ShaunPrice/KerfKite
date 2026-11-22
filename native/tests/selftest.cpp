@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <initializer_list>
 #include <array>
 #include <string>
@@ -1019,6 +1020,70 @@ static void artwork_reliefs() {
            "the artwork relief adds the route's warning");
 }
 
+// The contact shared between the threads and a device gives the threads' bits, whatever the share, and a device
+// that disagrees is caught and turned off. A stand-in takes the GPU's place, so this runs on any computer.
+static void shared_contacts() {
+    using kerfkite::detail::relief_test_device;
+    kerfkite::ReliefContact job;
+    job.rows = 60;
+    job.cols = 47;
+    job.width = 40;
+    job.height = 31;
+    job.depth = 3;
+    job.diameter = 3.175;
+    job.allowance = 0.05;
+    job.nx = 200;
+    job.ny = 151;
+    job.maxima.resize(std::size_t(job.rows) * job.cols);
+    std::uint64_t state = 7;
+    for (double &value : job.maxima) {
+        state = state * 6364136223846793005ull + 1442695040888963407ull;
+        value = -job.depth * double(state >> 11) / 9007199254740992.0;
+    }
+    auto same = [](const std::vector<double> &a, const std::vector<double> &b) {
+        return a.size() == b.size() && std::memcmp(a.data(), b.data(), a.size() * sizeof(double)) == 0;
+    };
+    std::string ran;
+    for (bool ball : {true, false}) {
+        job.ball = ball;
+        const std::string shape = ball ? "ball" : "flat";
+        relief_test_device(true, 1, -1, 0);
+        const std::vector<double> threads = kerfkite::relief_depths(job, ran);
+        expect(ran.rfind("CPU, ", 0) == 0, shape + ": a share of nothing stays on the threads");
+        for (double share : {0.001, 0.37, 0.5, 0.95, 1.0}) {
+            relief_test_device(true, 1, -1, share);
+            const std::vector<double> shared = kerfkite::relief_depths(job, ran);
+            expect(same(shared, threads), shape + ": share " + std::to_string(share) + " gives the threads' bits");
+            expect(ran.rfind(share == 1.0 ? "GPU, test device" : "GPU+CPU, ", 0) == 0,
+                   shape + ": share " + std::to_string(share) + " ran on " + ran);
+        }
+        // Wrong at item 0, which the guard always checks: the threads redo the device's part.
+        relief_test_device(true, 1, 0, 0.5);
+        expect(same(kerfkite::relief_depths(job, ran), threads), shape + ": a wrong device leaves the threads' bits");
+        expect(ran.rfind("CPU, ", 0) == 0, shape + ": a wrong device's part is redone on the threads");
+        expect(same(kerfkite::relief_depths(job, ran), threads) && ran.rfind("CPU, ", 0) == 0,
+               shape + ": a device that was wrong once is not used again");
+    }
+    // A calibration with the stand-in: every measured run equals the threads' answer.
+    relief_test_device(true);
+    const json report = kerfkite::relief_calibrate();
+    expect(report.at("device") == json("test device") && !report.contains("device_status"),
+           "a calibration with a sound device keeps it: " + report.dump());
+    expect(kerfkite::relief_calibration() == report, "the last calibration is kept");
+    const std::string plan = report.at("plan").get<std::string>();
+    expect(plan == "threads" || plan == "gpu" || plan == "gpu+cpu", "a calibration chooses a plan");
+    expect(report.at("threads_ms").get<double>() > 0 && report.at("checks").get<double>() >= 2e7,
+           "a calibration measures the threads on a large enough job");
+    // Wrong at an item the guard's sample may miss: the calibration's whole comparison turns the device off.
+    relief_test_device(true, 1, 12345);
+    const json caught = kerfkite::relief_calibrate();
+    expect(caught.at("plan") == json("threads") && caught.contains("device_status") &&
+               caught.at("device_status").get<std::string>().find("differed") != std::string::npos,
+           "a calibration catches a device that differs: " + caught.dump());
+    relief_test_device(false);
+    expect(kerfkite::relief_calibration().is_null(), "restoring the GPU forgets the calibration");
+}
+
 int main() {
     // Ties round to even on the exact binary value, as Python's formatting does.
     expect(fixed(0.125, 2) == "0.12", "0.125 to two places");
@@ -1209,6 +1274,7 @@ int main() {
     circuit_boards();
     rotary();
     reliefs_and_stock();
+    shared_contacts();
     tool_change_plans();
     fixture_checks();
     stl_height_fields();

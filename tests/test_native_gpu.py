@@ -90,5 +90,56 @@ class GpuContactTests(unittest.TestCase):
         self.assertTrue(automatic['status'])
 
 
+CALIBRATE = r'''
+import json, sys
+from studio import relief
+thread = relief.calibrate_in_background(delay=0)
+thread.join(120)
+again = relief.calibrate_in_background(delay=0)
+print(json.dumps({'report': relief.calibration(), 'again': again is None}))
+'''
+
+
+@unittest.skipUnless(native is not None and hasattr(native, 'calibrate'), 'the compiled extension is not installed')
+class CalibrationTests(unittest.TestCase):
+    def calibrate(self, mode):
+        env = {**os.environ, 'PYTHONPATH': str(ROOT)}
+        env.pop('KERFKITE_GPU', None)
+        if mode is not None:
+            env['KERFKITE_GPU'] = mode
+        done = subprocess.run(  # noqa: S603 - the test's own interpreter and script
+            [sys.executable, '-c', CALIBRATE],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=ROOT,
+            timeout=600,
+            check=False,
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return json.loads(done.stdout)
+
+    def test_a_calibration_measures_the_threads_and_reports_its_plan(self):
+        answer = self.calibrate(None)
+        report = answer['report']
+        self.assertTrue(answer['again'], 'a second calibration was started in the same process')
+        self.assertGreaterEqual(report['threads'], 1)
+        self.assertGreaterEqual(report['checks'], 2e7)
+        self.assertGreater(report['threads_ms'], 0)
+        self.assertIn(report['plan'], ('threads', 'gpu', 'gpu+cpu'))
+        if report['device'] is None:
+            self.assertEqual(report['plan'], 'threads')
+            self.assertTrue(report['device_status'])
+        if report['plan'] == 'gpu+cpu':
+            self.assertTrue(0 < report['share'] < 1)
+            self.assertLessEqual(report['beside'], report['threads'])
+
+    def test_off_leaves_the_gpu_out_of_the_calibration(self):
+        report = self.calibrate('off')['report']
+        self.assertIsNone(report['device'])
+        self.assertEqual(report['device_status'], 'turned off by KERFKITE_GPU=off')
+        self.assertEqual(report['plan'], 'threads')
+
+
 if __name__ == '__main__':
     unittest.main()

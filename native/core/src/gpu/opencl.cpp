@@ -81,6 +81,7 @@ struct State {
     std::string status = "not looked for yet";
     Functions cl;
     cl_device_id device = nullptr;
+    bool shared = true;  // the device shares the processor's memory (unknown counts as shared)
     cl_context context = nullptr;
     cl_command_queue queue = nullptr;
     std::map<std::string, cl_kernel> kernels;
@@ -194,8 +195,8 @@ void look(State &s) {
                 skipped += (skipped.empty() ? "" : "; ") + name + " lacks double precision";
                 continue;
             }
-            if (!permissive && !discrete) {
-                skipped += (skipped.empty() ? "" : "; ") + name + (gpu ? " is integrated" : " is not a GPU");
+            if (!permissive && !gpu) {
+                skipped += (skipped.empty() ? "" : "; ") + name + " is not a GPU";
                 continue;
             }
             const int rank = discrete ? 2 : gpu ? 1 : 0;
@@ -203,6 +204,7 @@ void look(State &s) {
                 best_rank = rank;
                 best_units = units;
                 s.device = device;
+                s.shared = unified != 0;
             }
         }
     }
@@ -283,6 +285,12 @@ bool available() {
 std::string describe() {
     std::lock_guard<std::mutex> guard(lock());
     return state().status;
+}
+
+bool shared_memory() {
+    std::lock_guard<std::mutex> guard(lock());
+    const State &s = state();
+    return !s.usable || s.shared;
 }
 
 void disable(const std::string &why) {
