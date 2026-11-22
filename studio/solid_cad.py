@@ -6,8 +6,8 @@ manifold3d otherwise; studio/solid_kernel.py chooses and gives both the one inte
 With the kernel, rebuild() and horizontal_section() are answered by the native core's port of this module
 (native/core/src/solid_cad.cpp), which asks the kernel for the same operations and so gives the same mesh,
 measures and outlines to the bit. This module stays as the reference, and answers what the core declines:
-sketched, lofted, scripted and STEP features, and dimension expressions outside numbers, names, + - * /,
-signs, parentheses and the sketch crossing functions.
+STEP features, sketch constraints, and dimension expressions outside numbers, names, + - * /, signs,
+parentheses and the sketch crossing functions.
 """
 
 import ast

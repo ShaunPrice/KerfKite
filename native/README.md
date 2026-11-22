@@ -111,10 +111,17 @@ of 2 to 128 points a side, as Studio's STL relief does (`core/src/stl_heightmap.
     kerfkite-cam solid-cad request.json
 
 rebuilds a parametric solid history (`{"model": ...}`) as Studio's 3D CAD does (`core/src/solid_cad.cpp`,
-the port of `studio/solid_cad.py`): parameters and their expressions, boxes, cylinders and spheres,
-patterns and runs of Boolean operations on the solid kernel, with the mesh, measures and silhouette.
-`solid-cad-section` (`{"model", "z"}`) gives the material at a height. Sketched, lofted, scripted and STEP
-features are still Python's.
+the port of `studio/solid_cad.py`): parameters and their expressions, boxes, cylinders, spheres, sketched
+extrusions and revolutions, lofts and scripted features, patterns and runs of Boolean operations on the
+solid kernel, with the mesh, measures and silhouette. `solid-cad-section` (`{"model", "z"}`) gives the
+material at a height. STEP features and sketches with constraints are still Python's.
+
+    kerfkite-cam cad-script request.json
+
+previews a CAD script (`{"source", "parameters", "overrides"}`) as Studio's script editor does
+(`core/src/scad.cpp`, the port of `studio/scad_language.py` and `studio/scad_geometry.py`): the drawing's
+outlines, bounds and area, or the solid's mesh, bounds and volume, or the reference's message with the line
+and column.
 
     kerfkite-cam artwork-relief request.json
 

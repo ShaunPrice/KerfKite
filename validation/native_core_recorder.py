@@ -7,7 +7,7 @@ are the rotary generator's internal calls. Top-level calls of studio.rotary's ge
 are recorded the same way, with their rotary setup, and so are those of studio.relief.prepare_relief,
 studio.simulation.simulate, studio.tool_changes.plan_tool_changes, studio.fixture_collision.check_fixtures and
 studio.mesh_import.stl_heightmap, whose expected answers come from their Python, as the native core is compared
-with.
+with; so are Studio's solid routes and its CAD script preview (studio.scad_geometry.preview).
 """
 
 import functools
@@ -22,7 +22,10 @@ _DEPTH = [0]
 def plain(value):
     """Whether JSON text carries this value to another program unchanged."""
     kind = type(value)
-    if value is None or kind in (bool, str, int):
+    if kind is str:
+        # A lone surrogate is Python text but not UTF-8, which the core's JSON is.
+        return value.isascii() or not any('\ud800' <= c <= '\udfff' for c in value)
+    if value is None or kind in (bool, int):
         return True
     if kind is float:
         return math.isfinite(value)
@@ -120,6 +123,11 @@ def preview_reference(kind, data):
             from studio.solid_cad import rebuild
 
             result = _SOLID.get('rebuild', rebuild)(data['model'], backend='python')
+        elif kind == 'cad_script':
+            from studio.scad_geometry import preview
+
+            payload = {key: value for key, value in data.items() if key != 'order'}
+            result = _SOLID.get('preview', preview)(payload, backend='python')
         elif kind == 'solid_cad_section':
             from studio.solid_cad import horizontal_section
 
@@ -197,6 +205,25 @@ def _record_solid_cad():
         return original_section(model, z, **kwargs)
 
     solid_cad.model_json, solid_cad.horizontal_section = model_json, horizontal_section
+
+    import studio.scad_geometry as scad_geometry
+
+    original_preview_json, original_preview = scad_geometry.preview_json, scad_geometry.preview
+    _SOLID.update(preview=original_preview)
+
+    @functools.wraps(original_preview_json)
+    def preview_json(payload):
+        if isinstance(payload, dict):
+            record('cad_script', scad_geometry._request(payload))
+        return original_preview_json(payload)
+
+    @functools.wraps(original_preview)
+    def preview(payload, **kwargs):
+        if not kwargs and isinstance(payload, dict):
+            record('cad_script', scad_geometry._request(payload))
+        return original_preview(payload, **kwargs)
+
+    scad_geometry.preview_json, scad_geometry.preview = preview_json, preview
 
 
 def _studio_as_left_alone():

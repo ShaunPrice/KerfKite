@@ -14,6 +14,8 @@
 //   kerfkite-cam solid-cad REQUEST.json      {"model", "order"}: a parametric solid history rebuilt (studio.solid_cad);
 //                                            "order", optional, lists the parameters in the order to resolve them
 //   kerfkite-cam solid-cad-section REQUEST.json   {"model", "z", "order"}: its material at a height
+//   kerfkite-cam cad-script REQUEST.json     {"source", "parameters", "overrides", "order"}: a CAD script previewed
+//                                            as a drawing or a solid (/api/cad-script, studio.scad_geometry)
 //   kerfkite-cam artwork-relief REQUEST.json closed artwork contours as a raised or recessed relief (/api/artwork-relief)
 //   kerfkite-cam artwork-raster REQUEST.json the artwork relief's height field alone
 //   kerfkite-cam calibrate                   measure the relief contact on the threads and any GPU, and how to share
@@ -223,6 +225,8 @@ int batch(const std::string &path) {
                 job = kerfkite::solid_cad_call("solid-cad", request.at("solid_cad"));
             else if (request.contains("solid_cad_section"))
                 job = kerfkite::solid_cad_call("solid-cad-section", request.at("solid_cad_section"));
+            else if (request.contains("cad_script"))
+                job = kerfkite::solid_cad_call("cad-script", request.at("cad_script"));
             else if (request.contains("relief"))
                 job = kerfkite::prepare_relief(request.at("relief"));
             else if (request.contains("stock"))
@@ -350,7 +354,7 @@ int main(int argc, char **argv) {
     if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "polygon" || command == "operation" ||
          command == "solid" || command == "rotary" || command == "rotary-wrap" || command == "relief" || command == "stock" ||
          command == "tool-changes" || command == "fixture-collision" || command == "stl-heightmap" ||
-         command == "solid-cad" || command == "solid-cad-section" ||
+         command == "solid-cad" || command == "solid-cad-section" || command == "cad-script" ||
          command == "artwork-relief" || command == "artwork-raster") &&
         argc == 3)
         return request(command, argv[2]);

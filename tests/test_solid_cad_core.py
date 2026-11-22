@@ -168,12 +168,41 @@ class NativeSolidCadTests(unittest.TestCase):
                 }
             ],
         }
-        script = {'version': 1, 'features': [{'id': 's', 'kind': 'script', 'source': 'cube(2);'}]}
-        for model in (constrained, script):
+        step = {'version': 1, 'features': [{'id': 's', 'kind': 'step', 'content_base64': ''}]}
+        for model in (constrained, step):
             with self.subTest(model=model):
                 with self.assertRaises(NotImplementedError):
                     rebuild(model, backend='native')
                 self.assertIsNone(model_json(model))
+
+    def test_scripted_features_share_one_budget_and_take_the_parameters(self):
+        script = 'module peg(h=4) cylinder(h=h, r=r, $fn=12); for (i = [0:n-1]) translate([i*5, 0, 0]) peg();'
+        features = [
+            {'id': 'base', 'kind': 'box', 'size': ['w', 8, 2], 'origin': [-2, -4, -2]},
+            {'id': 'pegs', 'kind': 'script', 'source': script, 'scriptParameters': {'n': 3}},
+            {'id': 'slot', 'kind': 'script', 'op': 'cut', 'source': 'translate([0, -1, -3]) cube([w - 4, 2, 2]);'},
+            {
+                'id': 'row',
+                'kind': 'script',
+                'source': 'sphere(1, $fn=8);',
+                'pattern': {'kind': 'linear', 'count': 2, 'step': [0, 5, 0]},
+            },
+        ]
+        model = {'version': 1, 'parameters': {'w': 20, 'r': 'w / 10', 'n': 2}, 'features': features}
+        self.assertGreater(json.loads(self.same(model))['volume'], 0)
+        for change in (
+            {'source': 'square(2);'},
+            {'source': 'cube(1'},
+            {'source': None},
+            {'scriptParameters': None},
+            {'scriptParameters': {'bad name': 1}},
+            {'scriptParameters': {'n': 'x'}},
+            {'source': 'for (i = [0:1000]) translate([i, 0, 0]) sphere(1, $fn=64);'},
+        ):
+            with self.subTest(change=change):
+                failing = json.loads(json.dumps(model))
+                failing['features'][1].update(change)
+                self.same(failing)
 
     def test_sketched_extrusions_and_revolutions(self):
         star = [[10 + (8 if k % 2 == 0 else 4) * c, 10 + (8 if k % 2 == 0 else 4) * s] for k, (c, s) in enumerate(

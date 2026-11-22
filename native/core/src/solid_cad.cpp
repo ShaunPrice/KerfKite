@@ -4,12 +4,13 @@
 // The Python builds a model by asking the solid kernel for one operation at a time through the "solid"
 // command (studio/solid_kernel.py), keeping each solid for the next request. This file asks the same
 // command for the same operations, with the same requests, so the solids, measures and meshes are the
-// same to the bit. What is reproduced: models of boxes, cylinders and spheres, placed by rotation and
-// origin, repeated by linear and polar patterns, and combined in runs of additions, cuts and
-// intersections; named parameters and their expressions; the mesh, measures and silhouette of rebuild();
-// horizontal sections. Models with sketched, lofted, scripted or STEP features are declined (NotPorted),
-// as are dimension expressions outside numbers, names, + - * /, unary signs, parentheses and the sketch
-// crossing functions, which the reference reads with Python's own parser.
+// same to the bit. What is reproduced: models of boxes, cylinders, spheres, sketched extrusions and
+// revolutions, lofts and CAD scripts (scad.cpp), placed by rotation and origin, repeated by linear and polar
+// patterns, and combined in runs of additions, cuts and intersections; named parameters and their
+// expressions; the mesh, measures and silhouette of rebuild(); horizontal sections; and the /api/cad-script
+// preview. Models with STEP features or sketch constraints are declined (NotPorted), as are dimension
+// expressions outside numbers, names, + - * /, unary signs, parentheses and the sketch crossing functions,
+// which the reference reads with Python's own parser.
 #include "kerfkite/solid_cad.hpp"
 
 #include <algorithm>
@@ -29,12 +30,15 @@
 #include "project.hpp"
 #include "py_trig.hpp"
 #include "python_text.hpp"
+#include "scad.hpp"
 #include "simple_line.hpp"
+#include "solid_requests.hpp"
 
 namespace kerfkite {
 
 using json = Json;
 using namespace detail;
+using namespace solid_requests;
 
 namespace {
 
@@ -43,7 +47,6 @@ const double kMaxFaces = 75000;
 const int kSegments = 96;
 const char *const kRange = "Dimensions must be finite and within ±100000";
 const char *const kSyntaxSubset = "Use numbers, named parameters, parentheses and + − * / in dimensions";
-const char *const kTooFine = "too fine for the 1 nm grid";
 
 // _number(value): a number within range, as a float.
 double number_of(const json *value) {
@@ -401,6 +404,26 @@ public:
         return result;
     }
 
+    // script_parameters(overrides): the resolved parameters, then the macro's own values over them.
+    std::vector<std::pair<std::string, double>> script_parameters(const json *overrides) const {
+        if (!overrides || !overrides->is_object() || overrides->size() > 64) throw ValueError("Define at most 64 macro parameters");
+        for (const auto &item : overrides->items())
+            if (!parameter_name(std::string(item.key()))) throw ValueError("Invalid macro parameter name");
+        std::vector<std::pair<std::string, double>> result = values_;
+        for (const auto &item : overrides->items()) {
+            const double value = number_of(&item.value());
+            const std::string name(item.key());
+            bool found = false;
+            for (auto &known : result)
+                if (known.first == name) {
+                    known.second = value;
+                    found = true;
+                }
+            if (!found) result.emplace_back(name, value);
+        }
+        return result;
+    }
+
     json values() const {
         json result = json::object();
         for (const auto &known : values_) result[known.first] = known.second;
@@ -450,72 +473,7 @@ private:
     }
 };
 
-// ---- the solid kernel, asked as studio/solid_kernel.py asks it -------------------------------------
-
-struct Shape {
-    solid::Solid solid;
-    json info;
-};
-
-// As JSON text reads it: a whole number of no sign is unsigned, which the solid command requires here.
-json kept_node(int index) { return json{{"kept", static_cast<std::uint64_t>(index)}}; }
-
-// One request to the kernel: its answer and its solid. A result too fine for the grid is reported with the
-// reference's advice.
-Shape ask(const json &node, const std::vector<const Shape *> &kept) {
-    json request = json::object();
-    request["shape"] = node;
-    std::vector<solid::Solid> solids;
-    for (const Shape *shape : kept) solids.push_back(shape->solid);
-    Shape result;
-    try {
-        result.info = solid_call(request, solids, &result.solid);
-    } catch (const ValueError &error) {
-        const std::string text = error.what();
-        if (text.find(kTooFine) != std::string::npos)
-            throw ValueError("The solid kernel cannot represent this result: " + text +
-                             ". Two faces almost coincide here, usually after a rotation. Move, turn or resize one of the shapes by a small amount");
-        throw;
-    }
-    return result;
-}
-
-// A question about a kept solid: projection or sections.
-json question(const Shape &shape, const char *key, const json &value) {
-    json request = json::object();
-    request["shape"] = kept_node(0);
-    request[key] = value;
-    try {
-        return solid_call(request, {shape.solid}, nullptr);
-    } catch (const ValueError &error) {
-        const std::string text = error.what();
-        if (text.find(kTooFine) != std::string::npos)
-            throw ValueError("The solid kernel cannot represent this result: " + text +
-                             ". Two faces almost coincide here, usually after a rotation. Move, turn or resize one of the shapes by a small amount");
-        throw;
-    }
-}
-
-json numbers(const std::vector<double> &values) {
-    json result = json::array();
-    for (double value : values) result.push_back(value);
-    return result;
-}
-
-Shape mapped(const Shape &shape, const char *how, const std::vector<double> &values) {
-    json node = json::object();
-    node[how] = numbers(values);
-    node["of"] = kept_node(0);
-    return ask(node, {&shape});
-}
-
-Shape combined(const char *op, const std::vector<const Shape *> &shapes) {
-    json list = json::array();
-    for (size_t i = 0; i < shapes.size(); ++i) list.push_back(kept_node(static_cast<int>(i)));
-    json node = json::object();
-    node[op] = std::move(list);
-    return ask(node, shapes);
-}
+// ---- the solid kernel, asked as studio/solid_kernel.py asks it (solid_requests.hpp) -----------------
 
 const char *op_name(const std::string &op) { return op == "add" ? "union" : op == "cut" ? "difference" : "intersection"; }
 
@@ -527,9 +485,6 @@ const Shape &checked(const Shape &shape) {
     if (triangles_of(shape) > kMaxFaces) throw ValueError("Solid exceeds 75000 triangles");
     return shape;
 }
-
-// The polygon kernel's normal form of rings (below).
-std::vector<json> normalised(const std::vector<json> &rings, const char *fill);
 
 // ---- sketched profiles: studio/sketch_profile.py, sketch_curves.py and the unconstrained case of
 // sketch_constraints.py --------------------------------------------------------------------------------
@@ -941,10 +896,16 @@ Shape loft(const json &feature, Dimensions &dimensions) {
 
 const json *field(const json &object, const char *key) { return get(object, key); }
 
-Shape primitive(const json &feature, Dimensions &dimensions) {
+Shape primitive(const json &feature, Dimensions &dimensions, scad::Budget &budget) {
     const json *kind = field(feature, "kind");
     Shape shape;
-    if (is_text(kind, "box")) {
+    if (is_text(kind, "script")) {
+        static const json no_overrides = json::object();
+        const json *overrides = feature.contains("scriptParameters") ? field(feature, "scriptParameters") : &no_overrides;
+        scad::Built built = scad::build_script(field(feature, "source"), dimensions.script_parameters(overrides), budget);
+        if (built.dimension != 3) throw ValueError("A solid feature needs a 3D script. Use linear_extrude() to give a drawing thickness.");
+        shape = std::move(built.solid);
+    } else if (is_text(kind, "box")) {
         const std::vector<double> size = dimensions.vector(field(feature, "size"), 3);
         if (*std::min_element(size.begin(), size.end()) <= 0) throw ValueError("Box dimensions must be positive");
         json node = json::object();
@@ -1111,14 +1072,10 @@ Built build(const json *model, const json *order) {
     const json *version = field(*model, "version");
     if (!version || !version->is_number_integer() || version->get<long long>() != 1) throw ValueError("Expected a version 1 solid model");
     const json *features = field(*model, "features");
-    // Sketched, lofted, scripted and STEP features are the Python's for now.
+    // STEP features are the Python's for now.
     if (features && features->is_array())
         for (const json &feature : *features)
-            if (feature.is_object()) {
-                const json *kind = field(feature, "kind");
-                for (const char *other : {"step", "script"})
-                    if (is_text(kind, other)) throw NotPorted(std::string("solid features of kind ") + other);
-            }
+            if (feature.is_object() && is_text(field(feature, "kind"), "step")) throw NotPorted("solid features of kind step");
     static const json no_parameters = json::object();
     const json *parameters = model->contains("parameters") ? field(*model, "parameters") : &no_parameters;
     Built built;
@@ -1127,6 +1084,7 @@ Built build(const json *model, const json *order) {
     if (!features || !features->is_array() || features->size() < 1 || features->size() > 64)
         throw ValueError("A solid model needs 1–64 features");
     bool have_solid = false;
+    scad::Budget budget;  // ScriptGeometryBudget, shared by the model's scripts
     std::vector<Pending> run;
     std::set<std::string> identifiers;
     size_t index = 0;
@@ -1158,7 +1116,7 @@ Built build(const json *model, const json *order) {
                 op = given_op ? (given_op->is_string() ? given_op->get<std::string>() : std::string("\x01")) : "add";
                 if (op != "add" && op != "cut" && op != "intersect") throw ValueError("Choose add, cut or intersect");
                 if (!have_solid && run.empty() && op != "add") throw ValueError("First enabled feature must add material");
-                tool = instances(primitive(feature, dimensions), field(feature, "pattern"), dimensions);
+                tool = instances(primitive(feature, dimensions, budget), field(feature, "pattern"), dimensions);
                 if (!have_solid && run.empty()) {
                     checked(tool);
                     built.solid = std::move(tool);
@@ -1185,72 +1143,11 @@ Built build(const json *model, const json *order) {
     return built;
 }
 
-// CrossSection(rings, fill): the polygon kernel's normal form of the rings, as its shells and holes in turn.
-std::vector<json> normalised(const std::vector<json> &rings, const char *fill) {
-    if (rings.empty()) return {};
-    json request = json::object();
-    request["op"] = "normalise";
-    request["rings"] = json(rings);
-    request["fill"] = fill;
-    const json answer = polygon_call("polygon", request);
-    std::vector<json> result;
-    for (const json &polygon : answer.at("polygons")) {
-        result.push_back(polygon.at("shell"));
-        for (const json &hole : polygon.at("holes")) result.push_back(hole);
-    }
-    return result;
-}
-
-// _rings(section): each ring closed by its first point again.
-json closed(const std::vector<json> &rings) {
-    json paths = json::array();
-    for (const json &ring : rings) {
-        json path = ring;
-        if (ring.size()) path.push_back(ring[0]);
-        paths.push_back(std::move(path));
-    }
-    return paths;
-}
-
-// solid_kernel._between and _straightened: section rings without the points that only divide a straight side.
-bool between(const json &a, const json &b, const json &c) {
-    const double ax = a[0].get<double>(), ay = a[1].get<double>();
-    const double ux = c[0].get<double>() - ax, uy = c[1].get<double>() - ay;
-    const double vx = b[0].get<double>() - ax, vy = b[1].get<double>() - ay;
-    const double square = ux * ux + uy * uy, across = ux * vy - uy * vx, along = ux * vx + uy * vy;
-    const double straight = 2e-6;
-    return square > 0 && across * across <= straight * straight * square && 0 <= along && along <= square;
-}
-
-std::vector<json> straightened(const json &rings) {
-    std::vector<json> result;
-    for (const json &ring : rings) {
-        std::vector<json> kept;
-        for (const json &point : ring) {
-            while (kept.size() >= 2 && between(kept[kept.size() - 2], kept.back(), point)) kept.pop_back();
-            kept.push_back(point);
-        }
-        while (kept.size() > 3 && between(kept[kept.size() - 2], kept.back(), kept[0])) kept.pop_back();
-        while (kept.size() > 3 && between(kept.back(), kept[0], kept[1])) kept.erase(kept.begin());
-        result.push_back(json(kept));
-    }
-    return result;
-}
-
-std::vector<json> rings_in(const json &value) {
-    std::vector<json> rings;
-    for (const json &ring : value) rings.push_back(ring);
-    return rings;
-}
-
 json rebuild(const json *model, const json *order) {
     Built built = build(model, order);
     const Shape &solid = built.solid;
-    json vertices = json::array();
-    for (const solid::Vec3 &vertex : solid.solid.vertices()) vertices.push_back(json::array({vertex.x, vertex.y, vertex.z}));
-    json triangles = json::array();
-    for (const solid::Triangle &triangle : solid.solid.triangles())
-        triangles.push_back(json::array({std::int64_t(triangle[0]), std::int64_t(triangle[1]), std::int64_t(triangle[2])}));
+    json vertices, triangles;
+    mesh_of(solid, vertices, triangles);
     // The silhouette: CrossSection(solid.project().to_polygons(), Positive), normalised twice as the
     // reference's two cross sections are.
     const json projection = question(solid, "projection", true);
@@ -1281,11 +1178,40 @@ json section(const json &request) {
     return result;
 }
 
+// The /api/cad-script route: a CAD script previewed as a drawing or a solid.
+json script_preview(const json &payload) {
+    if (!payload.is_object()) throw ValueError("Supply a CAD script");
+    static const json none = json::object();
+    const json *parameters = payload.contains("parameters") ? field(payload, "parameters") : &none;
+    const json *overrides = payload.contains("overrides") ? field(payload, "overrides") : &none;
+    Dimensions dimensions(parameters, parameter_order(parameters, field(payload, "order")));
+    scad::Budget budget;
+    const scad::Built built = scad::build_script(field(payload, "source"), dimensions.script_parameters(overrides), budget);
+    json result = json::object();
+    result["dimension"] = built.dimension;
+    if (built.dimension == 2) {
+        result["profiles"] = closed(built.region.rings);
+        result["bounds"] = numbers(scad::region_bounds(built.region));
+        result["area"] = built.region.area;
+        return result;
+    }
+    json vertices, triangles;
+    mesh_of(built.solid, vertices, triangles);
+    result["vertices"] = std::move(vertices);
+    result["triangles"] = std::move(triangles);
+    result["bounds"] = built.solid.info.at("bounds");
+    result["volume"] = built.solid.info.at("volume");
+    return result;
+}
+
 }  // namespace
 
-bool solid_cad_command(const std::string &command) { return command == "solid-cad" || command == "solid-cad-section"; }
+bool solid_cad_command(const std::string &command) {
+    return command == "solid-cad" || command == "solid-cad-section" || command == "cad-script";
+}
 
 Json solid_cad_call(const std::string &command, const Json &request) {
+    if (command == "cad-script") return script_preview(request);
     if (!request.is_object()) throw ValueError("Supply a CAD model in the model field");
     if (command == "solid-cad-section") return section(request);
     return rebuild(field(request, "model"), field(request, "order"));

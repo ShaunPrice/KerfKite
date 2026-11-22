@@ -3,6 +3,12 @@
 The geometry is computed by KerfKite's own solid and polygon kernels when the compiled extension is
 installed, and by manifold3d otherwise: studio/solid_kernel.py chooses, and presents both through the one
 interface this module calls as `kernel`.
+
+With the kernel, preview() (the /api/cad-script route) and the scripted features of a solid history are
+answered by the native core's port of this module and of scad_language.py (native/core/src/scad.cpp), which
+reads and evaluates the script the same way and asks the kernels for the same operations, so the drawings,
+solids, measures and messages are the same to the bit. This module stays as the reference, and answers what
+the core declines: a polygon path or polyhedron face whose crossing test depends on rounding inside GEOS.
 """
 
 import math
@@ -11,6 +17,11 @@ import numpy as np
 from shapely.geometry import LinearRing
 
 from .solid_kernel import modelling, solid_backend
+
+try:  # The native core's port of this module, in the compiled extension.
+    from ._relief_native import core_cam as _core_cam, core_cam_text as _core_cam_text
+except ImportError:
+    _core_cam = _core_cam_text = None
 
 
 class _Kernel:
@@ -451,3 +462,63 @@ def build_script(source, parameters=None, *, budget=None):
     if result.is_empty() or (_dimension(result) == 3 and result.volume() <= 0):
         raise ValueError('The script produced an empty result')
     return _dimension(result), result
+
+
+def _request(payload):
+    """The core's request for a preview: the payload, with the order of its parameters, which JSON objects in
+    the core do not keep (the order they are resolved in decides which of two faults is reported)."""
+    request = {key: value for key, value in payload.items() if key != 'order'}
+    if isinstance(payload.get('parameters'), dict):
+        request['order'] = list(payload['parameters'])
+    return request
+
+
+def preview_json(payload):
+    """preview(payload) as JSON text written by the core, for a web response, or None: then preview(payload)."""
+    if _core_cam_text is None or not isinstance(payload, dict) or solid_backend() != 'kernel':
+        return None
+    try:
+        return _core_cam_text('cad-script', _request(payload))
+    except NotImplementedError:
+        return None
+
+
+def preview(payload, *, backend='auto'):
+    """The /api/cad-script answer for {source, parameters, overrides}: a drawing (dimension 2: profiles, bounds,
+    area) or a solid (dimension 3: vertices, triangles, bounds, volume).
+
+    backend='auto' asks the native core first and answers here what it declines; 'python' answers here;
+    'native' raises NotImplementedError where the core cannot answer.
+    """
+    if backend not in ('auto', 'python', 'native'):
+        raise ValueError('CAD script backend must be auto, python or native')
+    if not isinstance(payload, dict):
+        raise ValueError('Supply a CAD script')
+    if backend != 'python':
+        if _core_cam is not None and solid_backend() == 'kernel':
+            try:
+                answer = _core_cam('cad-script', _request(payload))
+            except NotImplementedError:
+                if backend == 'native':
+                    raise
+                answer = None
+            if answer is not None:
+                return answer
+            if backend == 'native':
+                raise NotImplementedError('The script cannot be passed to the native core unchanged')
+        elif backend == 'native':
+            raise NotImplementedError('The native CAD script engine is not installed')
+    from .solid_cad import Dimensions, _rings
+
+    parameters = Dimensions(payload.get('parameters', {})).script_parameters(payload.get('overrides', {}))
+    dimension, shape = build_script(payload.get('source'), parameters)
+    if dimension == 2:
+        return {'dimension': 2, 'profiles': _rings(shape), 'bounds': list(shape.bounds()), 'area': shape.area()}
+    mesh = shape.to_mesh64()
+    return {
+        'dimension': 3,
+        'vertices': mesh.vert_properties[:, :3].tolist(),
+        'triangles': mesh.tri_verts.tolist(),
+        'bounds': list(shape.bounding_box()),
+        'volume': shape.volume(),
+    }

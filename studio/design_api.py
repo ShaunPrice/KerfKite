@@ -39,22 +39,14 @@ def register_design_routes(app):
 
     @app.post('/api/cad-script')
     def preview_script():
-        from .scad_geometry import build_script
-        from .solid_cad import Dimensions, _rings
+        from .scad_geometry import preview, preview_json
 
         payload = body('Supply a CAD script')
-        parameters = Dimensions(payload.get('parameters', {})).script_parameters(payload.get('overrides', {}))
-        dimension, shape = build_script(payload.get('source'), parameters)
-        if dimension == 2:
-            return jsonify(dimension=2, profiles=_rings(shape), bounds=shape.bounds(), area=shape.area())
-        mesh = shape.to_mesh64()
-        return jsonify(
-            dimension=3,
-            vertices=mesh.vert_properties[:, :3].tolist(),
-            triangles=mesh.tri_verts.tolist(),
-            bounds=shape.bounding_box(),
-            volume=shape.volume(),
-        )
+        # The core's own JSON text is the response; the Python answers what the core declines.
+        text = preview_json(payload)
+        if text is not None:
+            return app.response_class(text, mimetype='application/json')
+        return jsonify(preview(payload, backend='python'))
 
     @app.post('/api/solid-cad/sketch-points')
     def resolve_sketch_points():
