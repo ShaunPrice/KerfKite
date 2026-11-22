@@ -4,7 +4,7 @@ Each way runs in a process of its own, because the GPU is chosen once per proces
 prints the contact checks, the best of several runs in each way, the first GPU run (which includes setting the
 GPU up) and a digest of the depths, which must be the same in every way. Synthetic maps only.
 
-    python validation/benchmark_relief.py [--repeat 5] [--no-gpu]
+    python validation/benchmark_relief.py [--repeat 5] [--no-gpu] [--threads N]
 """
 
 import argparse
@@ -91,8 +91,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--repeat', type=int, default=5)
     parser.add_argument('--no-gpu', action='store_true', help='time the threads only')
+    parser.add_argument('--threads', type=int, help='cap the threads at this many, as a smaller processor would have')
     args = parser.parse_args()
-    ways = {'1 thread': way(1, 'off', max(1, args.repeat // 2)), 'threads': way(None, 'off', args.repeat)}
+    ways = {'1 thread': way(1, 'off', max(1, args.repeat // 2)), 'threads': way(args.threads, 'off', args.repeat)}
     if not args.no_gpu:
         ways['GPU'] = way(None, 'on', args.repeat)
     print('GPU:', ways.get('GPU', ways['threads'])['status'])
