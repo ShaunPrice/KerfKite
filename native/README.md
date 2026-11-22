@@ -95,6 +95,13 @@ of numbers (`heightmap`) or as RGB bytes in base64 (`heightmap_rgb`, with `heigh
 rows), and answers with the raster paths, their depths and the surface record. `stock` takes the stock
 settings and a job's preview segments and answers with the height map the cutter leaves in the stock.
 
+    kerfkite-cam tool-changes project.json
+
+plans a router project for manual tool changes, as Studio's **Manual tool changes** does
+(`core/src/tool_changes.cpp`, the port of `studio/tool_changes.py`): each run of operations with the same
+tool (number, diameter, shape, V angle and drill point angle) becomes a stage, a whole job of its own with
+the tool, the operations' numbers, a file name and what to do before running it.
+
 ## What is ported
 
 | Area | State |
@@ -124,6 +131,7 @@ settings and a job's preview segments and answers with the height map the cutter
 | Studio's CAM on the core | Done. Studio's `generate`, `generate_rotary` and `wrap_job` call the core through the extension (`core_cam` in `studio/_core_native.cpp`) and keep their Python as the reference and the fallback for what the core declines; the job carries everything the Python job has, the paths and depths cut, the holes and drill of a drilling job and the operation count of an ordered one included. See `docs/NATIVE.md`. |
 | Relief finishing (`core/src/relief.cpp`): the settings, height fields as numbers or as RGB image bytes, the flat and ball cutter contact on threads or a GPU, the raster paths and their depths | Done, to the bit. Studio's `prepare_relief` calls it through the extension and keeps its Python as the reference and the fallback. STL and artwork height fields are still rasterised in Python. |
 | Stock preview (`core/src/stock.cpp`): the height map a job's segments leave in the stock, for flat, ball, V and drill cutters | Done, to the bit: distances are CPython's `hypot` and minima Python's `min`. Studio's stock preview calls it through the extension; a segment row with text that is not a number is declined. |
+| Manual tool-change plans (`core/src/tool_changes.cpp`): stages for runs of operations with one tool, each a whole job | Done, to the byte, with every refusal. Studio's `plan_tool_changes` and `/api/tool-changes` call it through the extension and keep the Python as the reference and the fallback. A stage of fewer than two program lines, where the reference fails with an IndexError, is declined. |
 | Importers, sender, pendant, editors | Not yet. |
 
 Every operation of a job (lines, drilling, knife paths, offsets, pockets, fills, V-carving, entries and

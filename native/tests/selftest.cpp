@@ -18,6 +18,7 @@
 #include "kerfkite/relief.hpp"
 #include "kerfkite/rotary.hpp"
 #include "kerfkite/stock.hpp"
+#include "kerfkite/tool_changes.hpp"
 
 using json = kerfkite::Json;
 using namespace kerfkite;
@@ -842,6 +843,52 @@ static void reliefs_and_stock() {
     }
 }
 
+// Plans for manual tool changes (studio/tool_changes.py): stages for runs of one tool, as the reference gives them.
+static void tool_change_plans() {
+    const char *project = R"({"mode":"router","protocol":"grbl","width":100,"height":100,"feed":600,"power":1000,
+        "safe":5,"depth":1,"step":0.5,"plunge":100,"operation":"line","operations":[
+        {"tool_id":1,"tool_name":" First ","paths":[[[10,10],[20,10]]],"tool_diameter":3,"tool_shape":"flat"},
+        {"tool_id":1,"paths":[[[10,10],[20,10]]],"tool_diameter":3,"tool_shape":"flat"},
+        {"tool_id":2,"paths":[[[10,10],[20,10]]],"tool_diameter":1.5,"tool_shape":"flat"}]})";
+    const json plan = plan_tool_changes(json::parse(project));
+    const json &stages = plan.at("stages");
+    expect(stages.size() == 2 && plan.at("tool_changes").dump() == "1" &&
+               stages.at(0).at("filename").dump() == "\"stage-001-tool-001.nc\"" &&
+               stages.at(1).at("filename").dump() == "\"stage-002-tool-002.nc\"" &&
+               stages.at(0).at("operation_indices").dump() == "[1,2]" && stages.at(1).at("operation_indices").dump() == "[3]",
+           "two runs of tools are two stages, each with its operations");
+    expect(stages.at(0).at("tool").dump() ==
+                   R"({"diameter":3.0,"shape":"flat","tool_id":1,"tool_name":"First","v_angle":null})" &&
+               stages.at(1).at("tool").dump() ==
+                   R"({"diameter":1.5,"shape":"flat","tool_id":2,"tool_name":"Tool 2","v_angle":null})",
+           "the tool of each stage, its name stripped as str.strip() strips it");
+    const json &lines = stages.at(0).at("lines");
+    expect(lines.size() == 40 && lines.at(38).dump() == "\"G0 Z5.000\"" && lines.at(39).dump() == "\"M5\"" &&
+               stages.at(0).at("cut_length").dump() == "40.0",
+           "each stage is a whole job that ends retracted with the spindle off");
+    const auto refusal = [&](const std::string &changed) -> std::string {
+        json given = json::parse(project);
+        const json change = json::parse(changed);
+        for (const auto &item : change.items()) given[item.key()] = item.value();
+        try {
+            plan_tool_changes(given);
+        } catch (const ValueError &error) {
+            return error.what();
+        }
+        return "(nothing thrown)";
+    };
+    expect(refusal(R"({"mode":"laser"})") == "Manual tool-change plans require router mode; head changes are not supported",
+           "a laser project is refused");
+    expect(refusal(R"({"operations":[{"tool_id":0,"paths":[[[10,10],[20,10]]]}]})") ==
+               "Assign a tool number to every operation is out of range",
+           "tool number 0 is refused");
+    expect(refusal(R"({"operations":[{"tool_id":1,"tool_name":"a\tb","paths":[[[10,10],[20,10]]]}]})") ==
+               "Tool name must contain 1..80 printable characters",
+           "a tool name with a control character is refused");
+    expect(refusal(R"({"rotary":{"diameter":10}})") == "Rotary tool-change plans require separate export and setup review",
+           "a rotary project is refused");
+}
+
 int main() {
     // Ties round to even on the exact binary value, as Python's formatting does.
     expect(fixed(0.125, 2) == "0.12", "0.125 to two places");
@@ -1029,6 +1076,7 @@ int main() {
     circuit_boards();
     rotary();
     reliefs_and_stock();
+    tool_change_plans();
 
     std::printf(failures ? "%d checks failed\n" : "PASS native core self-test%.0d\n", failures);
     return failures ? 1 : 0;

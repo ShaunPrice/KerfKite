@@ -1,5 +1,10 @@
+import json
+import os
 import unittest
-from studio.tool_changes import plan_tool_changes
+from unittest.mock import patch
+
+from studio import cam
+from studio.tool_changes import plan_tool_changes, tool_changes_json
 
 
 def operation(tool_id=1, **changes):
@@ -121,6 +126,78 @@ class ManualToolChangeTests(unittest.TestCase):
         result = plan_tool_changes(p)
         self.assertIn('G4 P2000', result['stages'][0]['lines'])
         self.assertEqual(result['stages'][0]['lines'][-1], 'M5')
+
+
+def exact(value):
+    """A form that tells 0 from 0.0 and -0.0 from 0.0."""
+    return json.loads(json.dumps(value), parse_float=lambda text: ('f', text), parse_int=lambda text: ('i', text))
+
+
+def answer(project, backend):
+    try:
+        return 'ok', exact(plan_tool_changes(project, backend=backend))
+    except ValueError as error:
+        return 'error', str(error)
+
+
+@unittest.skipIf(cam._core_cam is None, 'Build the extension to compare the native core with the reference')
+class NativeToolChangeTests(unittest.TestCase):
+    """The native core's plans against this module's Python, the reference: every member, with its type."""
+
+    def setUp(self):
+        # The environment switches that choose the Python CAM or Shapely are for other tests.
+        environment = patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        for key in ('KERFKITE_GCODE_BACKEND', 'KERFKITE_POLYGON_BACKEND'):
+            os.environ.pop(key, None)
+
+    def test_plans_and_refusals_are_the_reference(self):
+        carve = operation(
+            4,
+            operation='vcarve',
+            tool_shape='v',
+            v_resolution=1,
+            paths=[[[10, 10], [20, 10], [20, 20], [10, 20], [10, 10]]],
+        )
+        drill = operation(5, operation='drill', tool_shape='drill', paths=[[[30, 30], [30, 30]]])
+        cases = [
+            project(),
+            project([operation(), operation(), operation(2), operation(), operation(tool_diameter=4.0)]),
+            project([operation(4, tool_shape='v'), carve, drill, operation(5, tool_shape='drill', operation='drill',
+                                                                          paths=[[[40, 40], [40, 40]]], drill_point_angle=135)]),
+            project([operation(tool_name='  Spaced\u00a0name\u3000 '), operation(tool_name='caf\u00e9'), operation(tool_name=None)]),
+            project([operation(tool_name='x' * 80), operation(tool_name='x' * 81)]),
+            project([operation(width=100.0), operation(height=True)]),
+            project([operation(dwell_units=None)]),
+            {**project(), 'rotary': {}},
+            {**project(), 'rotary': {'diameter': 10}},
+            {**project(), 'operations': None},
+            {key: value for key, value in project().items() if key != 'operations'} | operation(),
+        ]  # fmt: skip
+        for case in cases:
+            with self.subTest(case=json.dumps(case)[:120]):
+                self.assertEqual(answer(case, 'native'), answer(case, 'python'))
+
+    def test_the_line_limit_counts_every_stage(self):
+        long = [[[10 + (i % 2) * 0.5, 10 + i * 0.0015] for i in range(50_001)]]
+        case = project([operation(1, paths=long), operation(2, paths=long)])
+        found = answer(case, 'native')
+        self.assertEqual(found, ('error', 'Tool-change plan exceeds 200000 total lines'))
+        self.assertEqual(found, answer(case, 'python'))
+
+    def test_route_sends_the_core_text(self):
+        from studio.server import create_app
+
+        client = create_app().test_client()
+        headers = {'X-Studio-Token': client.get('/api/session').get_json()['token']}
+        response = client.post('/api/tool-changes', json={'project': project()}, headers=headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, tool_changes_json(project()))
+        self.assertEqual(exact(response.get_json()), exact(plan_tool_changes(project(), backend='python')))
+        refused = client.post('/api/tool-changes', json={'project': {**project(), 'mode': 'laser'}}, headers=headers)
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn('router mode', refused.get_json()['error'])
 
 
 if __name__ == '__main__':

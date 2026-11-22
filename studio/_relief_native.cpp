@@ -20,7 +20,7 @@ static PyMethodDef methods[] = {
     {"segment_rows", segment_rows, METH_VARARGS, "Unpack a packed segment buffer into list rows."},
     {"core_call", core_call, METH_VARARGS, "Run a command of the native core: (command, JSON request) -> JSON answer."},
     {"core_cam", core_cam, METH_VARARGS,
-     "G-code, rotary, relief or stock-preview output from the native core: (command, request, packed=False, "
+     "G-code, rotary, relief, stock-preview or tool-change output from the native core: (command, request, packed=False, "
      "rows=None) -> answer, or None when the request cannot cross unchanged."},
     {"core_cam_text", core_cam_text, METH_VARARGS,
      "The answer of core_cam as UTF-8 JSON text written by the core: (command, request) -> bytes, or None."},

@@ -3,7 +3,7 @@
     cmake -S native -B build/native && cmake --build build/native --config Release
     python validation/native_core_parity.py --cli build/native/kerfkite-cam
 
-Five comparisons, all against values computed by Python in this run:
+Six comparisons, all against values computed by Python in this run:
 
 1. Number text and arithmetic: fixed-point formatting, round() and repr() for several hundred thousand
    values, including decimal ties and values next to them; and math.dist and sum(), which Python computes
@@ -25,6 +25,9 @@ Five comparisons, all against values computed by Python in this run:
 5. Reliefs and stock previews: studio.relief.prepare_relief for height fields given as numbers and as image
    bytes (relief_cases), compared with the Python reference given the core's limits, and studio.simulation's
    simulate for the segments of generated jobs (stock_cases). Where the contact ran (CPU or GPU) is left out.
+6. Plans for manual tool changes: studio.tool_changes.plan_tool_changes for router projects of operations with
+   the same and with different tools, valid and not (tool_change_cases). Each stage is a whole job, compared
+   with the job the Python CAM generates for it.
 
 For each job the native core must either reproduce the reference exactly (program lines, preview segments,
 length, time, bounds and warnings, and for a rotary job its rotary setup; or the same error message) or
@@ -1712,6 +1715,77 @@ def stock_cases(count, seed, generate):
         yield data
 
 
+def tool_change_cases(count, seed):
+    """Router projects for manual tool-change plans: runs of operations with the same tool and changes between
+    them, for lines, pockets, drilling and V-carving, with tool numbers, names, diameters, shapes and angles from
+    valid to invalid, operations that disagree with the project, and projects the plan refuses."""
+    rng = random.Random(seed)
+    names = [
+        'Tool 1', ' spaced ', '\u00a0no-break\u3000', 'x' * 80, 'x' * 81, '', '   ', 'tab\there', 'caf\u00e9',
+        '\u2028', '\u0085end', 'end\u180e', None, 5, '3 mm flat', 'del\x7f',
+    ]  # fmt: skip
+    weird = [None, True, False, 0, 1, 1.0, 1.5, -3, 999, 1000, '3', [], {}, 3, 3.0, 2**40, 0.005, 100.0, 170, 9.99]
+
+    def square(x, y, size):
+        return [[x, y], [x + size, y], [x + size, y + size], [x, y + size], [x, y]]
+
+    def operation():
+        x, y = round(rng.uniform(10, 60), rng.randrange(0, 3)), round(rng.uniform(10, 60), rng.randrange(0, 3))
+        kind = rng.choice(['line', 'line', 'pocket', 'inside', 'drill', 'vcarve', None])
+        op = {}
+        if kind == 'line' or kind is None:
+            op['paths'] = [[[x, y], [x + rng.uniform(1, 20), y + rng.uniform(-5, 5)]]]
+        elif kind == 'drill':
+            op['paths'] = [[[x, y], [x, y]] for _ in range(rng.choice([1, 2]))]
+            op['tool_shape'] = rng.choice(['drill', 'drill', 'flat'])
+        else:
+            op['paths'] = [square(x, y, rng.choice([8, 12, 20]))]
+        if kind is not None:
+            op['operation'] = kind
+        if rng.random() < 0.93:
+            op['tool_id'] = rng.choice([1, 1, 2, 2, 3, 1.0, 2.0, 12])
+        if rng.random() < 0.06:
+            op['tool_id'] = rng.choice(weird)
+        if rng.random() < 0.6:
+            op['tool_name'] = rng.choice(names) if rng.random() < 0.3 else f"Tool {op.get('tool_id')}"
+        if rng.random() < 0.85:
+            op['tool_diameter'] = rng.choice([3, 3.0, 1, 2.5, 6, 3.175])
+        if rng.random() < 0.06:
+            op['tool_diameter'] = rng.choice(weird)
+        if rng.random() < 0.2:
+            op['tool_shape'] = rng.choice(['flat', 'ball', 'v', 'drill', 'bull', None, 3])
+        if rng.random() < 0.15:
+            op['v_angle'] = rng.choice([60, 90, 45.5, 5, None, '60'])
+        if rng.random() < 0.15:
+            op['drill_point_angle'] = rng.choice([118, 135, 59, None])
+        if rng.random() < 0.05:
+            key = rng.choice(['mode', 'protocol', 'width', 'height', 'dwell_units'])
+            op[key] = rng.choice(['router', 'laser', 'grbl', 100, 100.0, 120, True, None, 'ms'])
+        if rng.random() < 0.02:
+            op['operations'] = []
+        return op
+
+    for _ in range(count):
+        project = dict(
+            mode='router', protocol=rng.choice(['grbl', 'grbl', 'marlin', 'linuxcnc']), width=100, height=100,
+            feed=600, power=1000, safe=5, depth=1, step=0.5, plunge=100, operation='line',
+            operations=[operation() for _ in range(rng.choice([1, 1, 2, 3, 4, 6]))],
+        )  # fmt: skip
+        roll = rng.random()
+        if roll < 0.04:
+            project['mode'] = rng.choice(['laser', None, 'knife'])
+        elif roll < 0.07:
+            project['rotary'] = rng.choice([True, {}, [], 0, 0.0, 'x', '', {'a': 1}, None])
+        elif roll < 0.11:
+            project['operations'] = rng.choice([None, [], 'x', [1], [None]])
+        elif roll < 0.15:
+            del project['operations']
+            project.update(operation())
+        elif roll < 0.18:
+            project['dwell_units'] = rng.choice(['ms', 's', None])
+        yield project
+
+
 def strict_equal(a, b):
     """Equality that tells 0 from 0.0 and True from 1, and compares floats by value and sign."""
     if type(a) is not type(b):
@@ -1738,6 +1812,7 @@ def main():
         '--rotary', type=int, default=3000, help='generated rotary jobs, and half as many given programs'
     )
     parser.add_argument('--relief', type=int, default=1500, help='generated reliefs, and as many stock previews')
+    parser.add_argument('--tool-changes', type=int, default=1500, help='generated plans for manual tool changes')
     parser.add_argument('--skip-suite', action='store_true', help='do not replay the calls made by the test suite')
     parser.add_argument(
         '--without-polygon-operations',
@@ -1850,6 +1925,10 @@ def main():
             line = preview_reference('stock', data)
             if line is not None:
                 lines.setdefault(line, 'stock')
+        for project in tool_change_cases(args.tool_changes, 100):
+            line = preview_reference('tool_changes', project)
+            if line is not None:
+                lines.setdefault(line, 'tool-changes')
         tally = collections.Counter()
         declined = collections.Counter()
         failures = []
@@ -1863,7 +1942,8 @@ def main():
             assert len(answers) == len(lines), 'The native core did not answer every case.'
             for (line, origin), answer in zip(lines.items(), answers, strict=True):
                 case, got = json.loads(line), json.loads(answer)
-                expect, subject = case['expect'], case.get('project', case.get('job'))
+                expect = case['expect']
+                subject = case.get('project', case.get('job', case.get('tool_changes')))
                 if 'relief' in case and 'ok' in got:
                     got = {'ok': where_computed_left_out(got['ok'])}
                 if not shared and 'project' in case and uses_polygon_operation(subject):
@@ -1904,13 +1984,14 @@ def main():
                 if lines:
                     compare(lines)
 
-    for origin in ('suite', 'generated', 'entry/tabs', 'helix', 'v-carve', 'rotary', 'rotary-wrap', 'relief', 'stock'):
+    origins = ('suite', 'generated', 'entry/tabs', 'helix', 'v-carve', 'rotary', 'rotary-wrap', 'relief', 'stock')
+    for origin in (*origins, 'tool-changes'):
         total = sum(n for (o, _), n in tally.items() if o == origin)
         if not total:
             continue
         same = tally[origin, 'program'] + tally[origin, 'rejection']
         print(
-            f'{origin:10s} {total:5d} cases: {tally[origin, "program"]} programs and {tally[origin, "rejection"]} rejections'
+            f'{origin:12s} {total:5d} cases: {tally[origin, "program"]} programs and {tally[origin, "rejection"]} rejections'
             f' reproduced ({same * 100 / total:.1f}%), {tally[origin, "declined"]} declined as not ported'
             + (f', {tally[origin, "left out"]} with polygon operations NOT COMPARED' if not shared else '')
         )
@@ -1927,6 +2008,8 @@ def main():
         raise SystemExit('No rotary program was reproduced: the comparison did not exercise the rotary post.')
     if args.relief and not (tally['relief', 'program'] and tally['stock', 'program']):
         raise SystemExit('No relief or stock preview was reproduced: the comparison did not exercise them.')
+    if args.tool_changes and not tally['tool-changes', 'program']:
+        raise SystemExit('No tool-change plan was reproduced: the comparison did not exercise the planner.')
     if not shared:
         print(
             'PASS for the cases compared; offsets, pockets, fills and V-carves were NOT COMPARED (no compiled extension).'

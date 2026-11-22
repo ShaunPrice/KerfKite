@@ -51,6 +51,8 @@ setup(
                 'native/core/src/simple_line.cpp',
                 'native/core/src/stock.cpp',
                 'native/core/src/tabs.cpp',
+                # Plans of stages for manual tool changes.
+                'native/core/src/tool_changes.cpp',
                 # Circuit board import: Gerber layers and Excellon drill files.
                 'native/core/src/excellon.cpp',
                 'native/core/src/gerber.cpp',
