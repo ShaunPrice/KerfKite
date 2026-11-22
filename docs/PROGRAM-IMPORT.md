@@ -47,6 +47,8 @@ The first pen makes a 10 × 10 mm square starting at X 10, Y 10. The second make
 
 Imported artwork fits Studio's portable project limits of 3000 paths, 100000 vertices and coordinates within ±2000 mm. Circular toolpaths target 0.025 mm chord error. DXF uses ezdxf's path approximation and flattening with a 0.025 mm target. Convert very large drawings to the relevant work region and relocate distant survey or building coordinates before import.
 
+G-code, HP-GL and LinuxCNC INI files are read by Studio's native core where the compiled extension is installed, and give the same artwork, presets, warnings and messages as the Python reader to the last digit. DXF drawings, and files whose text is not plain ASCII, are read by the Python reader. See [Foreign drawings](NATIVE.md#foreign-drawings).
+
 ## LinuxCNC workspace reference
 
 Choose a self-contained LinuxCNC **.ini** file and select **Review import**. The reader uses explicit `[TRAJ]LINEAR_UNITS` and `[AXIS_X]` / `[AXIS_Y]` minimum and maximum soft limits. A workspace width equals maximum X minus minimum X, including machines with negative travel coordinates. Z range, axis velocity and acceleration appear as measured-unit reference values when present. Applying the imported workspace changes the Studio drawing dimensions. INI files using external include statements require a resolved copy with the axis limits in the same file. [LinuxCNC INI reference](https://linuxcnc.org/docs/stable/html/config/ini-config.html)

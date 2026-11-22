@@ -130,6 +130,13 @@ previews a CAD script (`{"source", "parameters", "overrides"}`) as Studio's scri
 outlines, bounds and area, or the solid's mesh, bounds and volume, or the reference's message with the line
 and column.
 
+    kerfkite-cam program-import request.json
+
+reads posted G-code, an HP-GL plot or a LinuxCNC INI file (`{"name", "text", "unit"}`) as Studio's
+**Import** does (`core/src/program_import.cpp`, the port of `studio/program_import.py`): the artwork, layers,
+presets, devices and warnings, or the reference's message. DXF drawings and text that is not ASCII are
+declined to the Python.
+
     kerfkite-cam artwork-relief request.json
 
 turns closed artwork contours (`paths`) into a raised or recessed relief, as Studio's **Artwork relief**

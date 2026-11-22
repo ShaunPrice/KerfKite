@@ -16,6 +16,7 @@
 #include "kerfkite/number_text.hpp"
 #include "kerfkite/operation_command.hpp"
 #include "kerfkite/pcb.hpp"
+#include "kerfkite/program_import.hpp"
 #include "kerfkite/relief.hpp"
 #include "kerfkite/rotary.hpp"
 #include "kerfkite/stock.hpp"
@@ -1212,6 +1213,45 @@ static void cad_scripts() {
     expect(refusal("cube(\xd9\xa3);").empty(), "an Arabic-Indic digit is a number");
 }
 
+static void program_imports() {
+    const auto read = [](const char *name, const std::string &text, const char *unit = "mm") {
+        json request = json::object();
+        request["name"] = name;
+        request["text"] = text;
+        request["unit"] = unit;
+        return kerfkite::program_import_call("program-import", request);
+    };
+    const auto refusal = [&](const char *name, const std::string &text) -> std::string {
+        try {
+            read(name, text);
+        } catch (const kerfkite::ValueError &error) {
+            return error.what();
+        } catch (const kerfkite::NotPorted &) {
+            return "declined";
+        }
+        return "";
+    };
+    const json square = read("part.nc", "G21 G90\nG0 X0 Y0 Z5\nG1 Z-1 F300\nG1 X10\nG1 Y10\nG2 X0 Y10 R5\nM30\n");
+    const json &cut = square.at("objects").at(0);
+    expect(square.at("mode") == json("router") && cut.at("name") == json("Toolpath"), "posted G-code is a router drawing");
+    expect(cut.at("paths").at(0).at(0) == json::array({0.0, 0.0}) && cut.at("depths").at(0).at(0) == json(-1.0), "a contour starts where the plunge ended");
+    expect(square.at("presets").at(0).at("name") == json("Posted feed \xc2\xb7 300 mm/min"), "a posted feed is a preset, written as Python's {:g}");
+    const json inch = read("part.nc", "G0 X0 Y0\nG1 X1 Y0 F12.3456789", "in");
+    expect(inch.at("objects").at(0).at("paths").at(0).at(1) == json::array({25.4, 0.0}), "motion before a units command takes the chosen unit");
+    expect(inch.at("presets").at(0).at("settings").at("feed") == json(313.58024), "a feed is rounded to five places");
+    const json pens = read("cutter.plt", "IN;SP1;VS2.5;PU0,0;PD400,0,400,400;SP2;PU800,800;CI40;");
+    expect(pens.at("mode") == json("knife") && pens.at("layers").size() == 2, "each HP-GL pen is a layer");
+    expect(pens.at("warnings").at(0) == json("Pen 1 velocity (cm/s): 2.5"), "pen speeds are reported");
+    const json machine = read("machine.ini", "[TRAJ]\nLINEAR_UNITS = inch\n[AXIS_X]\nMIN_LIMIT = 0\nMAX_LIMIT = 10\n[AXIS_Y]\nMIN_LIMIT = -1\nMAX_LIMIT = 1E1\n");
+    expect(machine.at("devices").at(0).at("width") == json(254.0) && machine.at("devices").at(0).at("height") == json(279.4), "an INI's travel is the workspace");
+    expect(refusal("part.nc", "G21\nG0 X0 Y0\nG2 X10 Y0 I3 J0") == "G-code line 3: inconsistent arc endpoints and centre", "an arc off its circle");
+    expect(refusal("part.nc", "M30\nG1 X1") == "G-code line 2: instructions after program end", "nothing after the end");
+    expect(refusal("part.plt", "IN;LB text;") == "Invalid plotter values at instruction 2", "label text is not a value");
+    expect(refusal("part.plt", "IN;EA4,4;") == "Unsupported HP-GL instruction 2: EA. Export plain, unscaled pen paths.", "filled shapes are refused");
+    expect(refusal("part.svg", "G1") == "Choose an ASCII DXF, G-code or HP-GL drawing", "an unknown suffix");
+    expect(refusal("part.dxf", "0\nEOF\n") == "declined" && refusal("part.nc", "G21 (\xc3\xa9)") == "declined", "DXF and non-ASCII text are Python's");
+}
+
 int main() {
     // Ties round to even on the exact binary value, as Python's formatting does.
     expect(fixed(0.125, 2) == "0.12", "0.125 to two places");
@@ -1408,6 +1448,7 @@ int main() {
     stl_height_fields();
     solid_histories();
     cad_scripts();
+    program_imports();
     artwork_reliefs();
 
     std::printf(failures ? "%d checks failed\n" : "PASS native core self-test%.0d\n", failures);

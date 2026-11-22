@@ -109,6 +109,18 @@ Two decisions rest on arithmetic that the Python leaves to NumPy's linear algebr
 
 `validation/native_core_parity.py` compares 1,000 generated scripts by default (`--cad-script`). They cover every primitive and operation with sound and unsound arguments, the language's constructs and limits, the reader's faults, parameters and overrides, and scripts damaged at random. Generated solid histories now include scripted features. In the measurement for this change, 464 of the 967 distinct cases were reproduced as drawings or solids and 503 as rejections, with none declined. 6,000 further scripts from other seeds and 167 hand-picked edge cases also matched. The test suite's calls are replayed too. `tests/test_scad_core.py` compares drawings, solids, the language, parameters and the route.
 
+## Foreign drawings
+
+Posted G-code, HP-GL plotter files and LinuxCNC INI files are read by the native core (`native/core/src/program_import.cpp`, the port of `studio/program_import.py`). `/api/program-import` sends the core's answer, and `kerfkite-cam program-import` reads a file without Python. The request is the route's payload, `{"name", "text", "unit"}`. The port reproduces the following, to the bit:
+
+* **The request.** The payload's checks and their order, the choice of reader by the filename's suffix as `pathlib` takes it, the byte-order marks removed from the start, and every message.
+* **Reading.** Python's `splitlines()` and `strip()`, the regular expressions of the words, values and comments, `float()` and `round(feed, 5)`, the modal groups and codes, absolute and incremental coordinates and arc centres, arcs given by I/J and by R, and the heights interpolated along a feed move. Arcs are flattened to the same 0.025 mm chord with CPython's maths functions on the platform's library.
+* **The drawing.** The limits of 3,000 paths, 100,000 vertices and ±2,000 mm, depths and source heights, layers in their order of appearance, the batching of long runs of contours beyond 100 objects, and the presets and warnings written with Python's `{:g}`.
+
+DXF drawings, which the Python reads with ezdxf, and text that is not ASCII, which the Python upper-cases and splits by Unicode's rules, are declined to the Python. On Windows, a filename beginning with a UNC or device anchor is declined as well, because `PureWindowsPath` takes its anchor apart in ways the core does not reproduce.
+
+`validation/native_core_parity.py` compares 3,000 generated files by default (`--program-import`). They cover sound programs and plots, every refusal, every suffix and unit, long runs that are batched, and payloads the request refuses. In the measurement for this change, 8,659 of 18,493 distinct cases from 20,000 generated files were reproduced as drawings or workspaces and 9,458 as rejections; 376 were declined, all of them DXF drawings or text that is not ASCII. The test suite's calls are replayed too. `tests/test_program_import_core.py` compares drawings, refusals, the fallback and the route.
+
 ## Threads, and a GPU for large reliefs
 
 The relief contact and the stock preview share their work out over the processor's threads. The split is fixed: rasters (relief) or rows of the height map (stock preview) go to the threads in equal runs, each value is written by one thread with the arithmetic of a single thread, and errors are found by a first pass in the order one thread would meet them. The number of threads therefore changes no bit of any result and no error message. A job starts a thread only for enough work (two million contact checks a thread, for the relief), and both release the GIL while they compute. `KERFKITE_THREADS=n` caps the threads; `1` runs everything on the calling thread.

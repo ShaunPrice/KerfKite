@@ -32,6 +32,11 @@ Eight comparisons, all against values computed by Python in this run:
    swept against generated boxes (fixture_cases). Lines that are not ASCII are declined.
 8. STL height fields: studio.mesh_import.stl_heightmap for binary and ASCII meshes, at every resolution, damaged
    in the ways the reader must refuse (stl_cases).
+9. Solids and CAD scripts: parametric solid histories and their sections (solid_cad_cases), and CAD scripts for
+   the script preview (cad_script_cases), both through the compiled extension's kernel.
+10. Foreign drawings: studio.program_import's import_program for posted G-code, HP-GL plotter files and LinuxCNC
+   INI files, sound, damaged and refused, with every filename suffix and unit (program_import_cases). DXF
+   drawings and text that is not ASCII are declined.
 
 For each job the native core must either reproduce the reference exactly (program lines, preview segments,
 length, time, bounds and warnings, and for a rotary job its rotary setup; or the same error message) or
@@ -63,6 +68,7 @@ import math
 import os
 from pathlib import Path
 import random
+import re
 import struct
 import subprocess
 import sys
@@ -2438,6 +2444,244 @@ def strict_equal(a, b):
     return a == b
 
 
+def program_import_cases(count, seed):
+    """Foreign drawings for /api/program-import: posted G-code with linear moves, arcs given by I/J and by R,
+    absolute and incremental coordinates and centres, units, comments, tool changes, dwells and program ends;
+    HP-GL with pens up and down, absolute and relative moves, arcs, circles, pen speeds and forces; LinuxCNC
+    INI files with units, coordinates and axis limits; long runs of contours that are batched; every limit;
+    each with words, values and statements made unsound at random, under every suffix and unit, and payloads
+    the request itself refuses. DXF drawings and text that is not ASCII are the core's to decline."""
+    rng = random.Random(seed)
+    pick = rng.choice
+    risk = [0.0]
+
+    def opt(good, bad=()):
+        return pick(bad) if bad and rng.random() < risk[0] else pick(good)
+
+    def value(low, high, digits=3):
+        roll = rng.random()
+        if roll < 0.15:
+            return str(rng.randint(int(low), int(high)))
+        if roll < 0.2:
+            return pick(['0', '-0', '.5', '5.', '+2', '-.25', '0.0', '1.000'])
+        text = f'{rng.uniform(low, high):.{digits}f}'
+        return text.rstrip('0').rstrip('.') if rng.random() < 0.3 else text
+
+    def gcode():
+        lines = []
+        if rng.random() < 0.8:
+            lines.append(
+                opt(['G21', 'G20', 'G21 G90', 'G90 G21 G17', 'G20 G91.1', 'G21 G90.1', '%'], ['G21 G20', 'G18', 'G70'])
+            )
+        if rng.random() < 0.3:
+            lines.append(opt(['T1 M6', 'T2 M06', 'T3 M6 (change)'], ['M6', 'T-1 M6', 'T1.5 M6']))
+        x = y = None
+        if rng.random() < 0.85:
+            lines.append(pick(['G0 X0 Y0', 'G0 X0 Y0 Z5', 'G00 X1.5 Y-2 Z3']))
+            x, y = (1.5, -2.0) if 'X1.5' in lines[-1] else (0.0, 0.0)
+        centre_absolute = bool(lines) and 'G90.1' in lines[0]
+        arcs = False  # whether G2 or G3 is the modal motion
+        for _ in range(rng.randint(1, 40)):
+            roll = rng.random()
+            parts = []
+            if roll < 0.12:
+                x, y = rng.uniform(-40, 40), rng.uniform(-40, 40)
+                parts = [opt(['G0', 'G00', 'G0'], ['G0 G1']), f'X{x:.3f}', f'Y{y:.3f}']
+                arcs = False
+                if rng.random() < 0.5:
+                    parts.append(f'Z{value(-3, 10)}')
+            elif roll < 0.22:
+                parts = [opt(['G1', 'G01'], ['G1 G2']), f'Z{value(-6, 5)}', f'F{value(50, 900, 2)}']
+                arcs = False
+            elif roll < 0.55:
+                parts = [opt(['G01', 'G1'] if arcs else ['G1', '', 'G01'], ['G80', 'G5'])]
+                arcs = False
+                for axis in sorted(rng.sample('XYZ', rng.randint(1, 3))):
+                    if axis == 'Z':
+                        parts.append(f'Z{value(-6, 5)}')
+                    else:
+                        number = rng.uniform(-40, 40)
+                        x, y = (number, y) if axis == 'X' else (x, number)
+                        parts.append(f'{axis}{number:.4f}')
+                if rng.random() < 0.4:
+                    parts.append(f'F{value(10, 12000, rng.choice([0, 1, 3, 6]))}')
+            elif roll < 0.78 and x is not None and y is not None:
+                motion = pick(['G2', 'G3', 'G02', 'G03'])
+                form = rng.random()
+                if form < 0.5:
+                    i, j = rng.uniform(-15, 15), rng.uniform(-15, 15)
+                    radius, turn = math.hypot(i, j), rng.uniform(-math.pi, math.pi)
+                    ex, ey = x + i + radius * math.cos(turn), y + j + radius * math.sin(turn)
+                    if abs(ex) > 50 or abs(ey) > 50:
+                        continue
+                    centre = [f'I{x + i:.4f}', f'J{y + j:.4f}'] if centre_absolute else [f'I{i:.4f}', f'J{j:.4f}']
+                    parts = [motion, f'X{ex:.4f}', f'Y{ey:.4f}', *rng.sample(centre, opt([2], [1]))]
+                    if rng.random() < 0.2:
+                        parts = parts[:1] + parts[3:]  # a full circle back to the start
+                        ex, ey = x, y
+                elif form < 0.8:
+                    ex, ey = rng.uniform(-30, 30), rng.uniform(-30, 30)
+                    half = math.dist((x, y), (ex, ey)) / 2
+                    radius = half * opt([1.0000001, 1.5, 3, 1.01], [1, 0.9]) * pick([1, -1])
+                    parts = [motion, f'X{ex:.4f}', f'Y{ey:.4f}', f'R{radius:.5f}']
+                else:
+                    ex, ey = rng.uniform(-30, 30), rng.uniform(-30, 30)
+                    parts = [
+                        motion,
+                        f'X{ex:.4f}',
+                        f'Y{ey:.4f}',
+                        opt([f'R{45 + rng.random():.3f}'], ['R1 I1', 'K2', '', 'I1']),
+                    ]
+                if rng.random() < 0.3:
+                    parts.append(f'Z{value(-4, 1)}')
+                x, y = ex, ey
+                arcs = True
+            elif roll < 0.85:
+                parts = [opt(['M3 S12000', 'M5', 'M8', 'M9', 'S800', 'G4 P0.5', 'M4 S300', 'G94', 'G54 G40 G49'],
+                             ['G4 X1', 'M7 P1', 'G33', 'M98'])]  # fmt: skip
+            elif roll < 0.9:
+                parts = [opt(['G90', 'G90', 'G91 G1 X5 Y-2\nG90', 'G90.1', 'G91.1'], ['G90 G91', 'G90.1 G91.1', 'G91'])]
+                if 'X5' in parts[0]:
+                    x, y = (x + 5, y - 2) if x is not None and y is not None else (None, None)
+                    arcs = False
+                centre_absolute = 'G90.1' in parts[0] or (centre_absolute and 'G91.1' not in parts[0])
+            elif roll < 0.95:
+                parts = [opt(['(comment)', '; note', 'G1 X1 (inline) Y2', 'N10 G1 X2 Y3', 'g1 x4 y5', 'G1X6Y7F100', '((nested) text)'],
+                             ['#1=2', 'G1 X[1+2]', 'G1 X1 X2', 'O100', 'G1 X1e3', '(unclosed', 'G1 X 1 Y'])]  # fmt: skip
+                found = re.findall(r'([XY])(\d+)', re.sub(r'\([^()]*\)', '', parts[0].upper()))
+                for axis, number in found:
+                    x, y = (float(number), y) if axis == 'X' else (x, float(number))
+                if found and parts[0].upper().startswith(('G1', 'N10 G1')):
+                    arcs = False
+            else:
+                parts = [opt(['M30', 'M2', 'M02'], ['M30\nG1 X1 Y1'])]
+            if rng.random() < risk[0] * 0.3:
+                parts.append(pick(['A1', 'X1e12', 'Y' + '9' * 400, 'F-5', 'Q1', '@', 'X99999999', 'F' + '1' * 30]))
+            lines.append(' '.join(part for part in parts if part))
+            if lines[-1].startswith(('M30', 'M2', 'M02')) and rng.random() < 0.8:
+                break
+        newline = pick(['\n', '\r\n', '\n', '\r', '\x0b', '\x1e'])
+        return newline.join(lines) + pick(['', '\n', newline])
+
+    def hpgl():
+        out = [opt(['IN', 'IN;SP1', 'DF', 'IN;DF;SP2'], ['IN 1', 'SP 300', 'SP 1.5', 'XX'])]
+        for _ in range(rng.randint(1, 30)):
+            roll = rng.random()
+            if roll < 0.4:
+                count = rng.randint(1, 6) * 2
+                command = pick(['PD', 'PA', 'PR', 'PU', 'PD'])
+                reach = 1000 if command == 'PR' else 40000
+                numbers = [
+                    str(rng.randint(-reach, reach)) if rng.random() < 0.7 else value(-4000, 4000) for _ in range(count)
+                ]
+                separator = pick([',', ' ', ', ', ' ,', ',  '])
+                out.append(command + separator.join(numbers) if numbers else command)
+            elif roll < 0.5:
+                out.append(pick(['PD', 'PU', 'PA', 'PR']))
+            elif roll < 0.62:
+                out.append(pick(['AA', 'AR']) + ','.join([str(rng.randint(-4000, 4000)), str(rng.randint(-4000, 4000)),
+                                                         opt([value(-360, 360, 1)], ['0', '400'])] + ([value(1, 5)] if rng.random() < 0.3 else [])))  # fmt: skip
+            elif roll < 0.7:
+                out.append('CI' + value(1, 4000, 1) + (pick([',5', '']) if rng.random() < 0.5 else ''))
+            elif roll < 0.82:
+                out.append(pick(['VS', 'FS']) + value(0, 60, 1) + pick(['', ',1', ',2', ',' + str(rng.randint(0, 3))]))
+            elif roll < 0.9:
+                out.append(opt(['SP' + str(rng.randint(0, 8)), 'SP'], ['SP-1', 'SP256']))
+            else:
+                out.append(
+                    opt(['', ' ', 'pd1,2,3,4', 'IN'], ['LB text', 'PD 1,2,3', 'PA 1e5,1', 'VS -1', 'CI 0', 'AA 1,2'])
+                )
+        separator = pick([';', ';\n', ';', '; '])
+        return separator.join(out) + pick(['', ';', ';\n'])
+
+    def ini():
+        unit = opt(['mm', 'inch', 'metric', 'Imperial', 'MM'], ['cm', '', 'furlong'])
+        lines = ['[EMC]', 'VERSION = 1.1', '[TRAJ]']
+        if rng.random() > risk[0] * 0.5:
+            lines.append(f'LINEAR_UNITS = {unit}')
+        if rng.random() < 0.5:
+            lines.append('COORDINATES = ' + opt(['X Y Z', 'XYZ', 'X Y Z A'], ['X Z', 'A B']))
+        for axis in rng.sample('XYZ', 3):
+            if axis == 'Z' and rng.random() < 0.3:
+                continue
+            lines.append(pick([f'[AXIS_{axis}]', f'[axis_{axis.lower()}]', f'[[AXIS_{axis}]]']))
+            inch = unit.lower() in ('inch', 'imperial')
+            low = rng.uniform(-15, 0) if inch else rng.uniform(-400, 0)
+            span = opt([rng.uniform(0.05, 75) if inch else rng.uniform(1, 1900)], [0, -5, 3000, 0.5])
+            for key, text in (('MIN_LIMIT', f'{low:.3f}'), ('MAX_LIMIT', f'{low + span:.3f}'),
+                              ('MAX_VELOCITY', value(1, 200)), ('MAX_ACCELERATION', value(10, 3000))):  # fmt: skip
+                if rng.random() < 0.9:
+                    text = opt([text, text + 'e0', f'{float(text):.2E}'], ['', 'fast', '1e999', '-3', '0x10'])
+                    lines.append(f'{key} = {text}' + pick(['', ' ; note', ' # note']))
+            if rng.random() < risk[0] * 0.2:
+                lines.append('MIN_LIMIT = 1')
+        if rng.random() < risk[0] * 0.2:
+            lines.insert(1, pick(['#INCLUDE other.inc', '  # include x', '#INCLUDED = 1']))
+        return '\n'.join(lines) + '\n'
+
+    def long_run():
+        # More than 100 contours: batched by layer and depth semantics; some near the limits.
+        size = pick([101, 150, 400, 2999, 3001])
+        lines = ['G21 G90']
+        for index in range(size):
+            x = (index % 50) * 3.0
+            y = (index // 50) * 3.0
+            depth = pick(['-1', '-1', '2']) if rng.random() < 0.05 else '-1'
+            lines += [f'G0 X{x:g} Y{y:g}', f'G1 Z{depth} F300', f'G1 X{x + 1:g}', 'G0 Z5']
+            if rng.random() < 0.01:
+                lines.append(f'T{rng.randint(1, 3)} M6')
+        return '\n'.join(lines)
+
+    suffixes = {
+        'gcode': ['.nc', '.gcode', '.NGC', '.cnc', '.tap', '.Nc'],
+        'hpgl': ['.plt', '.hpgl', '.HPG'],
+        'ini': ['.ini', '.INI'],
+    }
+    for index in range(count):
+        risk[0] = pick([0.0, 0.0, 0.0, 0.01, 0.03, 0.2])
+        roll = rng.random()
+        if roll < 0.45:
+            kind, text = 'gcode', gcode()
+        elif roll < 0.75:
+            kind, text = 'hpgl', hpgl()
+        elif roll < 0.88:
+            kind, text = 'ini', ini()
+        elif roll < 0.92:
+            kind, text = 'gcode', long_run()
+        else:
+            kind, text = 'gcode', ''
+        name = pick(['part', 'job', 'dir/sub/part', 'C:\\\\cut\\\\part', 'a.b', '.hidden', 'x..y']) + pick(
+            suffixes[kind]
+        )
+        payload = {'name': name, 'text': text, 'unit': pick(['mm', 'mm', 'in', 'inch', 'cm', 'm', 'ft'])}
+        if roll >= 0.92:
+            payload = pick([
+                {'name': 'part.nc', 'text': 'G21\nG1 X1 Y1\n', 'unit': 'yard'},
+                {'name': 'part.nc', 'text': '', 'unit': 'mm'},
+                {'name': 'part.nc', 'text': 'G1 X1\0', 'unit': 'mm'},
+                {'name': 'part.svg', 'text': 'G1 X1', 'unit': 'mm'},
+                {'name': 'part.', 'text': 'G1 X1', 'unit': 'mm'},
+                {'name': 'part.nc', 'text': '\ufeff\ufeffG21\nG0 X0 Y0\nG1 X3 Y4 F100'},
+                {'name': 'part.nc', 'text': 'G21 (Ä)\nG0 X0 Y0\nG1 X3 Y4 F100', 'unit': 'mm'},
+                {'name': 'part.dxf', 'text': '0\nEOF\n', 'unit': 'mm'},
+                {'name': 'x' * 1025 + '.nc', 'text': 'G1 X1', 'unit': 'mm'},
+                {'name': 7, 'text': 'G1 X1', 'unit': 'mm'},
+                {'name': 'part.nc', 'text': 5},
+                {'name': 'part.nc', 'text': 'G1 X1', 'unit': None},
+                {'text': 'G1 X1'},
+                [],
+                'G1 X1',
+                {'name': 'part.plt', 'text': 'IN;SP1;PU0,0;PD400,0,400,400;CI40000000;', 'unit': 'mm'},
+                {'name': 'part.plt', 'text': ';'.join(['IN', 'SP1'] + [f'VS{v}' for v in range(17)]) + ';PD1,1,9,9', 'unit': 'mm'},
+                {'name': 'part.nc', 'text': 'G21\nG0 X0 Y0\nG2 X0 Y0 I1999 J0 F100', 'unit': 'mm'},
+                {'name': 'part.nc', 'text': 'G21\nG0 X0 Y0 Z1\nG1 X10 Z-2 F100\nG1 Y10\nG1 Z-60\nG1 X0', 'unit': 'mm'},
+                {'name': 'part.nc', 'text': 'G20\nG0 X0 Y0\nG3 X1 Y1 R-1 F12.3456789', 'unit': 'mm'},
+            ])  # fmt: skip
+        if rng.random() < 0.03 and isinstance(payload, dict) and isinstance(payload.get('text'), str):
+            payload['text'] = pick(['\ufeff', '\ufeff\ufeff', '']) + payload['text'] + pick(['', ' é', '\u2028G1 X1'])
+        yield payload
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--cli', required=True, type=Path, help='the kerfkite-cam executable')
@@ -2456,6 +2700,7 @@ def main():
     parser.add_argument('--stl', type=int, default=1000, help='generated STL meshes for relief height fields')
     parser.add_argument('--solid-cad', type=int, default=300, help='generated parametric solid histories and sections')
     parser.add_argument('--cad-script', type=int, default=1000, help='generated CAD scripts for the script preview')
+    parser.add_argument('--program-import', type=int, default=3000, help='generated G-code, HP-GL and INI drawings')
     parser.add_argument('--skip-suite', action='store_true', help='do not replay the calls made by the test suite')
     parser.add_argument(
         '--without-polygon-operations',
@@ -2591,6 +2836,10 @@ def main():
                 line = preview_reference('cad_script', script_request(payload))
                 if line is not None:
                     lines.setdefault(line, 'cad-script')
+        for payload in program_import_cases(args.program_import, 105):
+            line = preview_reference('program_import', payload)
+            if line is not None:
+                lines.setdefault(line, 'program-import')
         tally = collections.Counter()
         declined = collections.Counter()
         failures = []
@@ -2610,6 +2859,8 @@ def main():
                 )
                 if subject is None:
                     subject = case.get('solid_cad', case.get('solid_cad_section', case.get('cad_script')))
+                if subject is None:
+                    subject = case.get('program_import')
                 if 'relief' in case and 'ok' in got:
                     got = {'ok': where_computed_left_out(got['ok'])}
                 if not shared and 'project' in case and uses_polygon_operation(subject):
@@ -2651,7 +2902,7 @@ def main():
                     compare(lines)
 
     origins = ('suite', 'generated', 'entry/tabs', 'helix', 'v-carve', 'rotary', 'rotary-wrap', 'relief', 'stock')
-    for origin in (*origins, 'tool-changes', 'fixtures', 'stl', 'solid-cad', 'cad-script'):
+    for origin in (*origins, 'tool-changes', 'fixtures', 'stl', 'solid-cad', 'cad-script', 'program-import'):
         total = sum(n for (o, _), n in tally.items() if o == origin)
         if not total:
             continue
@@ -2684,6 +2935,8 @@ def main():
         raise SystemExit('No solid was rebuilt: the comparison did not exercise the parametric history.')
     if shared and args.cad_script and not tally['cad-script', 'program']:
         raise SystemExit('No CAD script was previewed: the comparison did not exercise the script engine.')
+    if args.program_import and not tally['program-import', 'program']:
+        raise SystemExit('No drawing was imported: the comparison did not exercise the program reader.')
     if not shared:
         print(
             'PASS for the cases compared; offsets, pockets, fills and V-carves were NOT COMPARED (no compiled extension).'

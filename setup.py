@@ -57,6 +57,8 @@ setup(
                 # STL height fields for reliefs.
                 'native/core/src/stl_heightmap.cpp',
                 'native/core/src/artwork_relief.cpp',
+                # Foreign drawings and toolpaths: G-code, HP-GL and LinuxCNC INI import.
+                'native/core/src/program_import.cpp',
                 # Circuit board import: Gerber layers and Excellon drill files.
                 'native/core/src/excellon.cpp',
                 'native/core/src/gerber.cpp',

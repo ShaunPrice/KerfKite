@@ -7,7 +7,8 @@ are the rotary generator's internal calls. Top-level calls of studio.rotary's ge
 are recorded the same way, with their rotary setup, and so are those of studio.relief.prepare_relief,
 studio.simulation.simulate, studio.tool_changes.plan_tool_changes, studio.fixture_collision.check_fixtures and
 studio.mesh_import.stl_heightmap, whose expected answers come from their Python, as the native core is compared
-with; so are Studio's solid routes and its CAD script preview (studio.scad_geometry.preview).
+with; so are Studio's solid routes, its CAD script preview (studio.scad_geometry.preview) and its reader of
+foreign drawings (studio.program_import.import_program).
 """
 
 import functools
@@ -128,6 +129,10 @@ def preview_reference(kind, data):
 
             payload = {key: value for key, value in data.items() if key != 'order'}
             result = _SOLID.get('preview', preview)(payload, backend='python')
+        elif kind == 'program_import':
+            from studio.program_import import import_program
+
+            result = _SOLID.get('import', import_program)(data, backend='python')
         elif kind == 'solid_cad_section':
             from studio.solid_cad import horizontal_section
 
@@ -224,6 +229,24 @@ def _record_solid_cad():
         return original_preview(payload, **kwargs)
 
     scad_geometry.preview_json, scad_geometry.preview = preview_json, preview
+
+    import studio.program_import as program_import
+
+    original_import_json, original_import = program_import.import_json, program_import.import_program
+    _SOLID.update({'import': original_import})
+
+    @functools.wraps(original_import_json)
+    def import_json(payload):
+        record('program_import', payload)
+        return original_import_json(payload)
+
+    @functools.wraps(original_import)
+    def import_program(payload, **kwargs):
+        if not kwargs:
+            record('program_import', payload)
+        return original_import(payload, **kwargs)
+
+    program_import.import_json, program_import.import_program = import_json, import_program
 
 
 def _studio_as_left_alone():
