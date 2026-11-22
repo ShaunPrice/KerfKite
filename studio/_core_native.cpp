@@ -23,6 +23,7 @@
 #include "kerfkite/pcb.hpp"
 #include "kerfkite/polygon_command.hpp"
 #include "kerfkite/relief.hpp"
+#include "kerfkite/solid_cad.hpp"
 #include "kerfkite/artwork_relief.hpp"
 #include "kerfkite/rotary.hpp"
 #include "kerfkite/solid_command.hpp"
@@ -374,6 +375,8 @@ PyObject *job_object(const kerfkite::Job &job, Rows form) {
 //   "tool-changes": studio.tool_changes.plan_tool_changes, request a project.
 //   "fixture-collision": studio.fixture_collision.check_fixtures.
 //   "stl-heightmap": studio.mesh_import.stl_heightmap.
+//   "solid-cad": studio.solid_cad.rebuild, request {"model", "order"}; "solid-cad-section":
+//               studio.solid_cad.horizontal_section, request {"model", "z", "order"}.
 //   "artwork-relief": the /api/artwork-relief route (studio.artwork_relief.artwork_relief); "artwork-raster":
 //               its height field alone.
 // None when the request cannot cross to the core unchanged (see to_core), so that the reference answers it.
@@ -388,7 +391,8 @@ PyObject *core_cam(PyObject *, PyObject *args) {
     const bool generating = command == "generate";
     if (!generating && !kerfkite::rotary_command(command) && !kerfkite::relief_command(command) &&
         !kerfkite::stock_command(command) && !kerfkite::tool_changes_command(command) &&
-        !kerfkite::fixture_command(command) && !kerfkite::stl_command(command) && !kerfkite::artwork_command(command)) {
+        !kerfkite::fixture_command(command) && !kerfkite::stl_command(command) && !kerfkite::solid_cad_command(command) &&
+        !kerfkite::artwork_command(command)) {
         PyErr_SetString(PyExc_ValueError, "Unknown CAM command");
         return nullptr;
     }
@@ -429,6 +433,8 @@ PyObject *core_cam(PyObject *, PyObject *args) {
             answer = kerfkite::check_fixtures(given);
         } else if (kerfkite::stl_command(command)) {
             answer = kerfkite::stl_heightmap(given);
+        } else if (kerfkite::solid_cad_command(command)) {
+            answer = kerfkite::solid_cad_call(command, given);
         } else if (kerfkite::artwork_command(command)) {
             answer = kerfkite::artwork_call(command, given);
         } else if (command == "rotary") {
@@ -505,7 +511,8 @@ PyObject *core_cam_text(PyObject *, PyObject *args) {
     const std::string command = command_text;
     if (command != "generate" && !kerfkite::rotary_command(command) && !kerfkite::relief_command(command) &&
         !kerfkite::stock_command(command) && !kerfkite::tool_changes_command(command) &&
-        !kerfkite::fixture_command(command) && !kerfkite::stl_command(command) && !kerfkite::artwork_command(command)) {
+        !kerfkite::fixture_command(command) && !kerfkite::stl_command(command) && !kerfkite::solid_cad_command(command) &&
+        !kerfkite::artwork_command(command)) {
         PyErr_SetString(PyExc_ValueError, "Unknown CAM command");
         return nullptr;
     }
@@ -525,6 +532,7 @@ PyObject *core_cam_text(PyObject *, PyObject *args) {
                 : kerfkite::tool_changes_command(command) ? kerfkite::plan_tool_changes(given)
                 : kerfkite::fixture_command(command) ? kerfkite::check_fixtures(given)
                 : kerfkite::stl_command(command) ? kerfkite::stl_heightmap(given)
+                : kerfkite::solid_cad_command(command) ? kerfkite::solid_cad_call(command, given)
                 : kerfkite::artwork_command(command) ? kerfkite::artwork_call(command, given)
                                                      : kerfkite::rotary_call(command, given))
                    .dump();

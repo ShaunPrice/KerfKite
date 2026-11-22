@@ -2,6 +2,12 @@
 
 The solids are built by KerfKite's own solid kernel when the compiled extension is installed and by
 manifold3d otherwise; studio/solid_kernel.py chooses and gives both the one interface used here.
+
+With the kernel, rebuild() and horizontal_section() are answered by the native core's port of this module
+(native/core/src/solid_cad.cpp), which asks the kernel for the same operations and so gives the same mesh,
+measures and outlines to the bit. This module stays as the reference, and answers what the core declines:
+sketched, lofted, scripted and STEP features, and dimension expressions outside numbers, names, + - * /,
+signs, parentheses and the sketch crossing functions.
 """
 
 import ast
@@ -10,7 +16,12 @@ import re
 import struct
 
 from .sketch_profile import crossing_axis, profile_geometry
-from .solid_kernel import modelling
+from .solid_kernel import modelling, solid_backend
+
+try:  # The native core's port of this module, in the compiled extension.
+    from ._relief_native import core_cam as _core_cam, core_cam_text as _core_cam_text
+except ImportError:
+    _core_cam = _core_cam_text = None
 
 _MAX_VALUE = 100_000
 _MAX_FACES = 75_000
@@ -310,8 +321,52 @@ def _rings(section):
     return paths
 
 
-def horizontal_section(model, z):
+def _request(model, **more):
+    """The core's request for a model. The parameters are resolved in the order of the dictionary, which
+    JSON objects in the core do not keep, so the order travels with them."""
+    request = dict(more, model=model)
+    if isinstance(model, dict) and isinstance(model.get('parameters'), dict):
+        request['order'] = list(model['parameters'])
+    return request
+
+
+def _core(command, request, backend):
+    """The core's answer, or None when this module must answer. backend='native' raises NotImplementedError
+    instead of returning None."""
+    if backend not in ('auto', 'python', 'native'):
+        raise ValueError('Solid CAD backend must be auto, python or native')
+    if backend == 'python':
+        return None
+    if _core_cam is None or solid_backend() != 'kernel':
+        if backend == 'native':
+            raise NotImplementedError('The native solid CAD is not installed')
+        return None
+    try:
+        answer = _core_cam(command, request)
+    except NotImplementedError:
+        if backend == 'native':
+            raise
+        return None
+    if answer is None and backend == 'native':
+        raise NotImplementedError('The model cannot be passed to the native core unchanged')
+    return answer
+
+
+def model_json(model):
+    """rebuild(model) as JSON text written by the core, for a web response, or None: then rebuild(model)."""
+    if _core_cam_text is None or solid_backend() != 'kernel':
+        return None
+    try:
+        return _core_cam_text('solid-cad', _request(model))
+    except NotImplementedError:
+        return None
+
+
+def horizontal_section(model, z, *, backend='auto'):
     """Solid material at an XY plane. Lower faces are inclusive, upper faces exclusive."""
+    answer = _core('solid-cad-section', _request(model, z=z), backend)
+    if answer is not None:
+        return answer
     solid, dimensions, _ = _build(model)
     height = dimensions.evaluate(z)
     bounds = solid.bounding_box()
@@ -320,7 +375,10 @@ def horizontal_section(model, z):
     return {'z': height, 'profiles': _rings(solid.slice(height))}
 
 
-def rebuild(model):
+def rebuild(model, *, backend='auto'):
+    answer = _core('solid-cad', _request(model), backend)
+    if answer is not None:
+        return answer
     solid, dimensions, kernel = _build(model)
     mesh = solid.to_mesh64()
     silhouette = kernel.CrossSection(solid.project().to_polygons(), kernel.FillRule.Positive)

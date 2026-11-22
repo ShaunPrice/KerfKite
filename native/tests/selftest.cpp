@@ -22,6 +22,7 @@
 #include "kerfkite/tool_changes.hpp"
 #include "kerfkite/fixture_collision.hpp"
 #include "kerfkite/stl_heightmap.hpp"
+#include "kerfkite/solid_cad.hpp"
 #include "kerfkite/artwork_relief.hpp"
 
 using json = kerfkite::Json;
@@ -1084,6 +1085,48 @@ static void shared_contacts() {
     expect(kerfkite::relief_calibration().is_null(), "restoring the GPU forgets the calibration");
 }
 
+// The parametric solid history: a plate less a bore, its parameters resolved in the order given, and the
+// reference's messages.
+static void solid_histories() {
+    json model = json::parse(R"({"version": 1, "parameters": {"w": 20, "h": "w / 2"}, "features": [
+        {"id": "plate", "kind": "box", "size": ["w", "h", 4]},
+        {"id": "bore", "kind": "cylinder", "op": "cut", "radius": 2, "height": 6, "origin": ["w / 2", "h / 2", -1]}]})");
+    json request = json::object();
+    request["model"] = model;
+    const json answer = kerfkite::solid_cad_call("solid-cad", request);
+    expect(answer.at("bounds") == json::array({0.0, 0.0, 0.0, 20.0, 10.0, 4.0}), "a plate's bounds");
+    const double volume = answer.at("volume").get<double>();
+    expect(volume < 800 && volume > 800 - 3.15 * 4 * 4, "a plate less a bore of radius 2");
+    expect(answer.at("parameters") == json::parse(R"({"h": 10.0, "w": 20.0})"), "the parameters' values");
+    const auto refusal = [](const json &given) -> std::string {
+        try {
+            kerfkite::solid_cad_call("solid-cad", given);
+        } catch (const kerfkite::ValueError &error) {
+            return error.what();
+        } catch (const kerfkite::NotPorted &) {
+            return "declined";
+        }
+        return "";
+    };
+    json circular = request;
+    circular["model"]["parameters"] = json::parse(R"({"a": "b", "b": "a"})");
+    circular["order"] = json::array({"b", "a"});
+    expect(refusal(circular) == "Circular parameter reference: b", "a circular reference names the parameter it began from");
+    json divided = request;
+    divided["model"]["features"][0]["size"][2] = "4 / (w - 20)";
+    expect(refusal(divided) == "plate: Division by zero in dimension", "a division by zero names its feature");
+    json power = request;
+    power["model"]["features"][0]["size"][2] = "w ** 2";
+    expect(refusal(power) == "declined", "an expression beyond the core's grammar is declined");
+    json sketched = request;
+    sketched["model"]["features"][1]["kind"] = "extrude";
+    expect(refusal(sketched) == "declined", "a sketched feature is declined");
+    json section = request;
+    section["z"] = 2;
+    const json cut = kerfkite::solid_cad_call("solid-cad-section", section);
+    expect(cut.at("z") == json(2.0) && cut.at("profiles").size() == 2, "a section through the plate has its outline and the bore");
+}
+
 int main() {
     // Ties round to even on the exact binary value, as Python's formatting does.
     expect(fixed(0.125, 2) == "0.12", "0.125 to two places");
@@ -1278,6 +1321,7 @@ int main() {
     tool_change_plans();
     fixture_checks();
     stl_height_fields();
+    solid_histories();
     artwork_reliefs();
 
     std::printf(failures ? "%d checks failed\n" : "PASS native core self-test%.0d\n", failures);
