@@ -6,6 +6,7 @@
 #include "kerfkite/polygon_command.hpp"
 #include "kerfkite/relief.hpp"
 #include "kerfkite/solid_cad.hpp"
+#include "kerfkite/artwork_relief.hpp"
 #include "kerfkite/rotary.hpp"
 #include "kerfkite/stock.hpp"
 #include "kerfkite/tool_changes.hpp"
@@ -23,6 +24,7 @@ Json call(const std::string &command, const Json &request) {
     if (fixture_command(command)) return fixture_call(command, request);
     if (stl_command(command)) return stl_call(command, request);
     if (solid_cad_command(command)) return solid_cad_call(command, request);
+    if (artwork_command(command)) return artwork_call(command, request);
     if (pcb_command(command)) return pcb_call(command, request);
     if (command == "solid") return solid_call(request);
     if (polygon_command(command)) return polygon_call(command, request);

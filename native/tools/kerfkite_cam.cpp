@@ -13,6 +13,8 @@
 //   kerfkite-cam stl-heightmap REQUEST.json  an STL mesh as a relief height field (studio.mesh_import)
 //   kerfkite-cam solid-cad REQUEST.json      {"model"}: a parametric solid history rebuilt (studio.solid_cad)
 //   kerfkite-cam solid-cad-section REQUEST.json   {"model", "z"}: its material at a height
+//   kerfkite-cam artwork-relief REQUEST.json closed artwork contours as a raised or recessed relief (/api/artwork-relief)
+//   kerfkite-cam artwork-raster REQUEST.json the artwork relief's height field alone
 //   kerfkite-cam calibrate                   measure the relief contact on the threads and any GPU, and how to share
 //   kerfkite-cam gerber FILE [--arc-tolerance MM]            a Gerber layer as drawn objects in millimetres
 //   kerfkite-cam gerber-outline FILE [--tolerance MM] [--offset [X,Y]]   a profile layer as closed paths
@@ -347,7 +349,8 @@ int main(int argc, char **argv) {
     if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "polygon" || command == "operation" ||
          command == "solid" || command == "rotary" || command == "rotary-wrap" || command == "relief" || command == "stock" ||
          command == "tool-changes" || command == "fixture-collision" || command == "stl-heightmap" ||
-         command == "solid-cad" || command == "solid-cad-section") &&
+         command == "solid-cad" || command == "solid-cad-section" ||
+         command == "artwork-relief" || command == "artwork-raster") &&
         argc == 3)
         return request(command, argv[2]);
     if ((command == "polygon-batch" || command == "solid-batch") && argc == 3)

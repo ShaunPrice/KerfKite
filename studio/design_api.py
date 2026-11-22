@@ -3,6 +3,7 @@
 from flask import Response, request, jsonify
 from shapely.ops import unary_union
 from .operations import region, outlines, value
+from .artwork_relief import artwork_relief, artwork_relief_json
 from .relief import prepare_relief, relief_json
 
 
@@ -207,34 +208,13 @@ def register_design_routes(app):
         return jsonify(extrude(body('Supply closed artwork paths')))
 
     @app.post('/api/artwork-relief')
-    def artwork_relief():
-        from shapely.geometry import box
-
+    def artwork_relief_route():
         data = body('Supply closed artwork paths')
-        g = region(data.get('paths', []))
-        width = value(data, 'width', 100, 0.1, 2000)
-        height = value(data, 'height', 100, 0.1, 2000)
-        x = value(data, 'x', 0, 0, 2000)
-        y = value(data, 'y', 0, 0, 2000)
-        n = int(value(data, 'resolution', 64, 16, 128))
-        kind = data.get('kind', 'raised')
-        if kind not in ('raised', 'recessed'):
-            raise ValueError('Choose raised or recessed relief')
-        # Protect raised material wherever its contour intersects a cell neighborhood.
-        matrix = []
-        for row in range(n):
-            values = []
-            for col in range(n):
-                px = x + col * width / (n - 1)
-                py = y + row * height / (n - 1)
-                cell = box(px - width / (n - 1), py - height / (n - 1), px + width / (n - 1), py + height / (n - 1))
-                values.append(1 if (g.intersects(cell) if kind == 'raised' else not g.covers(cell)) else 0)
-            matrix.append(values)
-        result = prepare_relief({**data, 'heightmap': matrix})
-        result['warnings'].append(
-            'Artwork relief is conservatively rasterized; increase map resolution for small glyph details.'
-        )
-        return jsonify(result)
+        # The core's own JSON text is the response; the Shapely reference answers without the extension.
+        text = artwork_relief_json(data)
+        if text is not None:
+            return app.response_class(text, mimetype='application/json')
+        return jsonify(artwork_relief(data, backend='python'))
 
     @app.post('/api/relief')
     def relief():
