@@ -36,6 +36,17 @@ A large relief may run on a GPU. KerfKite uses the OpenCL library that GPU drive
 * **No driver resets.** Work goes to the device in slices that start at 64 contacts and grow to about 50 ms each, so no launch comes near the two seconds after which Windows resets a display driver, however slow the device is.
 * **What it reports.** The editor says **C++ accelerated relief on the GPU** when a GPU computed the contact. The result's `device` is `gpu`, `cpu` or `python`; it is kept out of `surface`, which is saved with the design and is the same on every computer. `studio.relief.gpu_status()` names the device in use, or says why there is none.
 
+Measured with `validation/benchmark_relief.py` on a laptop with an Intel Core Ultra 9 275HX (24 threads) and an NVIDIA GeForce RTX 5090 Laptop GPU (OpenCL 3.0, driver 617.71): the contact of a ball cutter over a 100 × 100 mm map, best of five. The depths had the same digest in every way, under MSVC on Windows and on the GPU as under GCC on Linux. The 8 and 4 thread columns are the same processor with `KERFKITE_THREADS` capping it, standing for smaller processors.
+
+| Job | Contact checks | 1 thread | 4 threads | 8 threads | 24 threads | GPU |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 256-point map, 6 mm ball | 13.7 million | 19.8 ms | 6.6 ms | 4.4 ms | 4.4 ms | 3.0 ms |
+| 1024-point map, 6 mm ball | 357 million | 479 ms | 121 ms | 68.8 ms | 40.8 ms | 35.6 ms |
+| 1024-point map, 12 mm ball | 1.36 billion | 1.77 s | 454 ms | 248 ms | 116 ms | 104 ms |
+| 1024-point map, 14 mm ball | 1.68 billion | 3.04 s | 566 ms | 311 ms | 154 ms | 147 ms |
+
+Setting the GPU up in a new process took 210 to 280 ms, on top of the first job. Consumer GPUs run double precision at a small fraction of their single-precision rate, so on the large jobs the GPU was only 5 to 15 per cent faster than all 24 threads of this processor, but 2.1 to 2.4 times faster than 8 threads and 3.5 to 4.1 times faster than 4. The laptop's integrated GPU, measured with the prototype of the same kernel, took 1.52 s for a job of 1.37 billion checks that the 24 threads did in 0.17 s. The inner loop reads each cell edge from a table worked out once per job rather than multiplying it out at every check, which made one thread 19 to 25 per cent faster on these jobs with the same digests.
+
 `tests/test_native_gpu.py` runs reliefs of several shapes with the GPU turned off, forced on and left to choose, each in a process of its own, and requires the GPU's depths to be the threads' bit for bit; without a usable GPU it says so and skips that comparison. `kerfkite_parallel_selftest` checks the split over threads and the runtime itself: a kernel's results equal the processor's bit for bit, a slice of work items that is not a multiple of 64 is handled, and a program that does not build turns the GPU off with the reason. The installed-wheel check runs a relief from a 400-point RGB map against a recorded digest, on the threads, on one thread and, where there is a GPU, forced onto it.
 
 The stock preview stays on the threads: it uses `hypot` and `tan`, whose last bits differ between mathematics libraries and between GPUs, so a GPU could not give the same preview. The solid and polygon kernels make their decisions in exact integer arithmetic and do not use a GPU either.

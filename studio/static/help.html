@@ -1750,6 +1750,59 @@ accelerated = prepare_relief(data, backend='native')  # explicit error if absent
 <li><strong>No driver resets.</strong> Work goes to the device in slices that start at 64 contacts and grow to about 50 ms each, so no launch comes near the two seconds after which Windows resets a display driver, however slow the device is.</li>
 <li><strong>What it reports.</strong> The editor says <strong>C++ accelerated relief on the GPU</strong> when a GPU computed the contact. The result's <code>device</code> is <code>gpu</code>, <code>cpu</code> or <code>python</code>; it is kept out of <code>surface</code>, which is saved with the design and is the same on every computer. <code>studio.relief.gpu_status()</code> names the device in use, or says why there is none.</li>
 </ul>
+<p>Measured with <code>validation/benchmark_relief.py</code> on a laptop with an Intel Core Ultra 9 275HX (24 threads) and an NVIDIA GeForce RTX 5090 Laptop GPU (OpenCL 3.0, driver 617.71): the contact of a ball cutter over a 100 × 100 mm map, best of five. The depths had the same digest in every way, under MSVC on Windows and on the GPU as under GCC on Linux. The 8 and 4 thread columns are the same processor with <code>KERFKITE_THREADS</code> capping it, standing for smaller processors.</p>
+<table>
+<thead>
+<tr>
+<th>Job</th>
+<th style="text-align:right">Contact checks</th>
+<th style="text-align:right">1 thread</th>
+<th style="text-align:right">4 threads</th>
+<th style="text-align:right">8 threads</th>
+<th style="text-align:right">24 threads</th>
+<th style="text-align:right">GPU</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>256-point map, 6 mm ball</td>
+<td style="text-align:right">13.7 million</td>
+<td style="text-align:right">19.8 ms</td>
+<td style="text-align:right">6.6 ms</td>
+<td style="text-align:right">4.4 ms</td>
+<td style="text-align:right">4.4 ms</td>
+<td style="text-align:right">3.0 ms</td>
+</tr>
+<tr>
+<td>1024-point map, 6 mm ball</td>
+<td style="text-align:right">357 million</td>
+<td style="text-align:right">479 ms</td>
+<td style="text-align:right">121 ms</td>
+<td style="text-align:right">68.8 ms</td>
+<td style="text-align:right">40.8 ms</td>
+<td style="text-align:right">35.6 ms</td>
+</tr>
+<tr>
+<td>1024-point map, 12 mm ball</td>
+<td style="text-align:right">1.36 billion</td>
+<td style="text-align:right">1.77 s</td>
+<td style="text-align:right">454 ms</td>
+<td style="text-align:right">248 ms</td>
+<td style="text-align:right">116 ms</td>
+<td style="text-align:right">104 ms</td>
+</tr>
+<tr>
+<td>1024-point map, 14 mm ball</td>
+<td style="text-align:right">1.68 billion</td>
+<td style="text-align:right">3.04 s</td>
+<td style="text-align:right">566 ms</td>
+<td style="text-align:right">311 ms</td>
+<td style="text-align:right">154 ms</td>
+<td style="text-align:right">147 ms</td>
+</tr>
+</tbody>
+</table>
+<p>Setting the GPU up in a new process took 210 to 280 ms, on top of the first job. Consumer GPUs run double precision at a small fraction of their single-precision rate, so on the large jobs the GPU was only 5 to 15 per cent faster than all 24 threads of this processor, but 2.1 to 2.4 times faster than 8 threads and 3.5 to 4.1 times faster than 4. The laptop's integrated GPU, measured with the prototype of the same kernel, took 1.52 s for a job of 1.37 billion checks that the 24 threads did in 0.17 s. The inner loop reads each cell edge from a table worked out once per job rather than multiplying it out at every check, which made one thread 19 to 25 per cent faster on these jobs with the same digests.</p>
 <p><code>tests/test_native_gpu.py</code> runs reliefs of several shapes with the GPU turned off, forced on and left to choose, each in a process of its own, and requires the GPU's depths to be the threads' bit for bit; without a usable GPU it says so and skips that comparison. <code>kerfkite_parallel_selftest</code> checks the split over threads and the runtime itself: a kernel's results equal the processor's bit for bit, a slice of work items that is not a multiple of 64 is handled, and a program that does not build turns the GPU off with the reason. The installed-wheel check runs a relief from a 400-point RGB map against a recorded digest, on the threads, on one thread and, where there is a GPU, forced onto it.</p>
 <p>The stock preview stays on the threads: it uses <code>hypot</code> and <code>tan</code>, whose last bits differ between mathematics libraries and between GPUs, so a GPU could not give the same preview. The solid and polygon kernels make their decisions in exact integer arithmetic and do not use a GPU either.</p>
 <h2>G-code and rotary loops</h2>
@@ -2680,6 +2733,8 @@ layer = pcb_import.gerber(pcb_import.read('board-F_Cu.gbr'))      # any layer as
 <p>Run <code>python -m validation.benchmark_native result.json</code> from the checkout with the extension installed. The benchmark requires matching G-code hashes and a maximum stock-cell difference below 1 × 10⁻¹⁰ mm. For the viewport, <code>python validation/benchmark_viewport.py --browser PATH</code> compares the same camera orbit through WebGL2 and Canvas. On Apple M4 using Metal, median frame intervals for an 18,432-triangle mesh were 16.7 ms and 50.0 ms respectively.</p>
 <p>The indexed artwork catalog retained all 1,768 original entries and all 1,358,040 coordinate pairs in a value-for-value comparison. An isolated Mac process searching metadata and loading one template peaked at 32.6 MiB with the index. The earlier eager loader peaked at 432.8 MiB. The compressed catalog payload decreased from 18.89 MiB to 15.11 MiB.</p>
 <p>Pocket's signed Android app was exercised on an ARM64 Android API 37 emulator configured with 2,048 MiB of RAM. The editor passed file import, reference-preserving export, resizing, SVG conversion, recovery, and library persistence after a cold restart. The paired pendant passed jog, home, zero, start, pause, resume and stop against the Studio simulator over virtual LAN and ADB reverse. The APK minimum is API 26. On a physical Galaxy S23 Ultra running Android 17, the published Pocket 0.4.1 APK started cold in 273 ms and 499 ms, used 41 to 97 MiB proportional memory while editing, and rendered 648 frames with a 5 ms median and a 13 ms 90th percentile. Pi 4/5 performance for this revision and material-cutting tests require their respective devices.</p>
+<h2>Relief contact on threads and the GPU</h2>
+<p>The relief contact shares its rasters out over the processor's threads and, for large jobs on a computer with a discrete GPU, may run on the GPU, with the same depths to the last bit either way. On a 24-thread laptop a relief from a 1024-point map with a 12 mm ball takes 116 ms on the threads, 104 ms on its RTX 5090 Laptop GPU and 1.77 s on one thread. The measurements, the rules for choosing and the checks are in <a href="#native">Threads and the GPU</a>; <code>validation/benchmark_relief.py</code> repeats them.</p>
 <h2>G-code and rotary generation after 0.6.1</h2>
 <p>The relief and stock-preview kernels are native, which left G-code and rotary generation in Python as the largest stages. Their per-move loops were tightened without changing the output: plain in-range numbers skip the general validator, per-block sets are built once per job, and packed rows are written through a bound function. <code>validation/benchmark_gcode.py</code> gives best-of-nine times and a hash of each generated program on the 256 × 256 relief fixture.</p>
 <table>
