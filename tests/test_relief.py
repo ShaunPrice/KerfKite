@@ -115,10 +115,6 @@ class ReliefTests(unittest.TestCase):
             prepare_relief(None)
 
 
-if __name__ == '__main__':
-    unittest.main()
-
-
 def rgb(pixels):
     """heightmap_rgb and heightmap_size for rows of (r, g, b), the top row first, as a canvas gives them."""
     data = bytes(v for row in pixels for pixel in row for v in pixel)
@@ -213,3 +209,7 @@ class ReliefMapLimitTests(unittest.TestCase):
                 data.pop('heightmap')
             with self.subTest(change=change), self.assertRaises(ValueError):
                 prepare_relief(data)
+
+
+if __name__ == '__main__':
+    unittest.main()
