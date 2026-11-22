@@ -23,6 +23,7 @@
 #include "kerfkite/pcb.hpp"
 #include "kerfkite/polygon_command.hpp"
 #include "kerfkite/relief.hpp"
+#include "kerfkite/artwork_relief.hpp"
 #include "kerfkite/rotary.hpp"
 #include "kerfkite/solid_command.hpp"
 #include "kerfkite/stock.hpp"
@@ -373,6 +374,8 @@ PyObject *job_object(const kerfkite::Job &job, Rows form) {
 //   "tool-changes": studio.tool_changes.plan_tool_changes, request a project.
 //   "fixture-collision": studio.fixture_collision.check_fixtures.
 //   "stl-heightmap": studio.mesh_import.stl_heightmap.
+//   "artwork-relief": the /api/artwork-relief route (studio.artwork_relief.artwork_relief); "artwork-raster":
+//               its height field alone.
 // None when the request cannot cross to the core unchanged (see to_core), so that the reference answers it.
 // A rejected request raises ValueError with the reference's message; one the core does not reproduce raises
 // NotImplementedError naming what it lacks. The work runs without the GIL.
@@ -385,7 +388,7 @@ PyObject *core_cam(PyObject *, PyObject *args) {
     const bool generating = command == "generate";
     if (!generating && !kerfkite::rotary_command(command) && !kerfkite::relief_command(command) &&
         !kerfkite::stock_command(command) && !kerfkite::tool_changes_command(command) &&
-        !kerfkite::fixture_command(command) && !kerfkite::stl_command(command)) {
+        !kerfkite::fixture_command(command) && !kerfkite::stl_command(command) && !kerfkite::artwork_command(command)) {
         PyErr_SetString(PyExc_ValueError, "Unknown CAM command");
         return nullptr;
     }
@@ -426,6 +429,8 @@ PyObject *core_cam(PyObject *, PyObject *args) {
             answer = kerfkite::check_fixtures(given);
         } else if (kerfkite::stl_command(command)) {
             answer = kerfkite::stl_heightmap(given);
+        } else if (kerfkite::artwork_command(command)) {
+            answer = kerfkite::artwork_call(command, given);
         } else if (command == "rotary") {
             // rotary_call's reading of the request, kept apart so that the job need not be written as JSON.
             if (!given.is_object()) throw kerfkite::ValueError("Supply a project and rotary setup");
@@ -500,7 +505,7 @@ PyObject *core_cam_text(PyObject *, PyObject *args) {
     const std::string command = command_text;
     if (command != "generate" && !kerfkite::rotary_command(command) && !kerfkite::relief_command(command) &&
         !kerfkite::stock_command(command) && !kerfkite::tool_changes_command(command) &&
-        !kerfkite::fixture_command(command) && !kerfkite::stl_command(command)) {
+        !kerfkite::fixture_command(command) && !kerfkite::stl_command(command) && !kerfkite::artwork_command(command)) {
         PyErr_SetString(PyExc_ValueError, "Unknown CAM command");
         return nullptr;
     }
@@ -520,6 +525,7 @@ PyObject *core_cam_text(PyObject *, PyObject *args) {
                 : kerfkite::tool_changes_command(command) ? kerfkite::plan_tool_changes(given)
                 : kerfkite::fixture_command(command) ? kerfkite::check_fixtures(given)
                 : kerfkite::stl_command(command) ? kerfkite::stl_heightmap(given)
+                : kerfkite::artwork_command(command) ? kerfkite::artwork_call(command, given)
                                                      : kerfkite::rotary_call(command, given))
                    .dump();
     } catch (const kerfkite::ValueError &error) {

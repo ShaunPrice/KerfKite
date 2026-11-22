@@ -21,6 +21,7 @@
 #include "kerfkite/tool_changes.hpp"
 #include "kerfkite/fixture_collision.hpp"
 #include "kerfkite/stl_heightmap.hpp"
+#include "kerfkite/artwork_relief.hpp"
 
 using json = kerfkite::Json;
 using namespace kerfkite;
@@ -950,6 +951,74 @@ static void stl_height_fields() {
     expect(refusal(empty) == "ASCII STL requires solid and endsolid lines", "an ASCII file of two lines is refused");
 }
 
+// Artwork reliefs: squares on a grid of 5 mm steps, whose cells reach 5 mm to each side, so that every count is
+// exact; and the reference's messages.
+static void artwork_reliefs() {
+    auto square = [](double low, double high) {
+        return json::array({json::array({low, low}), json::array({high, low}), json::array({high, high}),
+                            json::array({low, high}), json::array({low, low})});
+    };
+    json request = json::object();
+    request["paths"] = json::array({square(30, 70)});
+    request["width"] = 100;
+    request["height"] = 100;
+    auto ones = [](const std::vector<std::vector<int>> &matrix) {
+        int count = 0;
+        for (const auto &row : matrix)
+            for (int value : row) count += value;
+        return count;
+    };
+    const auto refusal_of = [](auto call) -> std::string {
+        try {
+            call();
+        } catch (const kerfkite::ValueError &error) {
+            return error.what();
+        }
+        return "";
+    };
+    request["resolution"] = 16;
+    expect(kerfkite::artwork_raster(request).size() == 16, "an artwork raster has resolution rows");
+    json low = request;
+    low["resolution"] = 11;
+    expect(refusal_of([&] { kerfkite::artwork_raster(low); }) == "resolution must be between 16 and 128",
+           "a resolution below 16 is refused with the reference's message");
+    // 21 points over 100 mm: 5 mm steps, cells reaching 5 mm each way. The square [30, 70] meets the closed cell
+    // of every sample from 25 to 75 (11 a side) and covers those from 35 to 65 (7 a side).
+    request["resolution"] = 21;
+    expect(ones(kerfkite::artwork_raster(request)) == 121, "a raised square keeps the cells it meets, edges included");
+    request["kind"] = "recessed";
+    expect(ones(kerfkite::artwork_raster(request)) == 441 - 49, "a recessed square cuts only the cells it covers");
+    // A hole: the square with a 20 mm square inside it cancels there under the even-odd rule.
+    request["paths"] = json::array({square(30, 70), square(40, 60)});
+    request["kind"] = "raised";
+    // Only the cell of the sample at the hole's centre, [45, 55] square, lies wholly inside the hole.
+    expect(ones(kerfkite::artwork_raster(request)) == 120, "a raised outline leaves the cell wholly inside its hole");
+    request["kind"] = "recessed";
+    // Covered: samples 35..65 whose cells avoid the hole's interior: none of 40..60 (5 a side) with cells
+    // reaching into (40, 60); a cell [s - 5, s + 5] stays out of the open hole when s + 5 <= 40 or s - 5 >= 60.
+    expect(ones(kerfkite::artwork_raster(request)) == 441 - (49 - 25), "a hole in a recessed outline is kept");
+    json open = request;
+    open["paths"] = json::array({json::array({json::array({0, 0}), json::array({1, 0}), json::array({1, 1})})});
+    expect(refusal_of([&] { kerfkite::artwork_raster(open); }) == "This operation needs closed contours",
+           "an open contour is refused");
+    json both = request;
+    both["paths"] = json::array({square(30, 70), square(30, 70)});
+    expect(refusal_of([&] { kerfkite::artwork_raster(both); }) == "Contours cancel under even-odd fill",
+           "contours that cancel are refused");
+    json kind = request;
+    kind["kind"] = "embossed";
+    expect(refusal_of([&] { kerfkite::artwork_raster(kind); }) == "Choose raised or recessed relief", "an unknown kind is refused");
+    json relief = request;
+    relief["kind"] = "raised";
+    relief["depth"] = 2;
+    relief["tool_diameter"] = 3;
+    relief["stepover"] = 1;
+    const json answer = kerfkite::artwork_relief(relief);
+    const json &warnings = answer.at("warnings");
+    expect(warnings[warnings.size() - 1] == json("Artwork relief is conservatively rasterized; increase map resolution for small glyph details."),
+           "the artwork relief adds the route's warning");
+}
+
 int main() {
     // Ties round to even on the exact binary value, as Python's formatting does.
     expect(fixed(0.125, 2) == "0.12", "0.125 to two places");
@@ -1143,6 +1212,7 @@ int main() {
     tool_change_plans();
     fixture_checks();
     stl_height_fields();
+    artwork_reliefs();
 
     std::printf(failures ? "%d checks failed\n" : "PASS native core self-test%.0d\n", failures);
     return failures ? 1 : 0;
