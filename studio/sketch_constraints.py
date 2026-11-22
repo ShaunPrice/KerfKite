@@ -3,9 +3,11 @@
 With the compiled extension, solve_profile is answered by the native core's solver (the "sketch-solve"
 command, native/core/src/solid_cad.cpp), which is this module's Gauss-Newton iteration statement for
 statement with the core's own least squares in place of NumPy's. The solved vertices agree with this
-module's to rounding (about 10^-12 mm), not to the bit, so the core is the one solver Studio uses and the
-NumPy solver below stays as the reference it is compared with (validation/sketch_constraint_check.py) and
-as the fallback without the extension.
+module's to rounding, not to the bit: usually within about 1e-12 mm, and up to about 1e-6 mm on
+ill-conditioned systems, where the two can also differ in which relation they report or whether they solve
+at all (validation/sketch_constraint_check.py counts those cases). So the core is the one solver Studio uses,
+and the NumPy solver below stays as the reference it is compared with and as the fallback without the
+extension.
 """
 
 import math
