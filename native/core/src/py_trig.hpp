@@ -25,6 +25,7 @@ const double PI = 3.141592653589793;  // math.pi
 KERFKITE_TRIG_NOINLINE inline double sine(double x) { return std::sin(x); }
 KERFKITE_TRIG_NOINLINE inline double cosine(double x) { return std::cos(x); }
 KERFKITE_TRIG_NOINLINE inline double library_atan2(double y, double x) { return std::atan2(y, x); }
+KERFKITE_TRIG_NOINLINE inline double tangent(double x) { return std::tan(x); }
 
 // math.atan2 for finite arguments: CPython answers a zero y itself and calls the library for the rest.
 inline double atan2(double y, double x) {

@@ -13,6 +13,7 @@
 #include "kerfkite/solid_cad.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -26,7 +27,9 @@
 #include "kerfkite/py_math.hpp"
 #include "kerfkite/solid_command.hpp"
 #include "project.hpp"
+#include "py_trig.hpp"
 #include "python_text.hpp"
+#include "simple_line.hpp"
 
 namespace kerfkite {
 
@@ -525,6 +528,415 @@ const Shape &checked(const Shape &shape) {
     return shape;
 }
 
+// The polygon kernel's normal form of rings (below).
+std::vector<json> normalised(const std::vector<json> &rings, const char *fill);
+
+// ---- sketched profiles: studio/sketch_profile.py, sketch_curves.py and the unconstrained case of
+// sketch_constraints.py --------------------------------------------------------------------------------
+
+using P2 = std::array<double, 2>;
+
+double distance(const P2 &a, const P2 &b) { return pymath::dist(a[0], a[1], b[0], b[1]); }
+
+// sketch_profile.Corner: a vertex, or a fillet arc from start to end.
+struct Corner {
+    P2 start{}, end{}, center{};
+    double radius = 0, start_angle = 0, sweep = 0, setback = 0;
+    P2 at(double fraction) const {
+        const double angle = start_angle + sweep * fraction;
+        const double x = center[0] + radius * pytrig::cosine(angle);
+        return {x, center[1] + radius * pytrig::sine(angle)};
+    }
+};
+
+// sketch_profile._corner.
+Corner corner_of(const P2 &a, const P2 &b, const P2 &c, double radius) {
+    Corner corner;
+    if (radius == 0) {
+        corner.start = corner.end = b;
+        return corner;
+    }
+    P2 u = {a[0] - b[0], a[1] - b[1]}, v = {c[0] - b[0], c[1] - b[1]};
+    u = {u[0] / pymath::hypot(u[0], u[1]), u[1] / pymath::hypot(u[0], u[1])};
+    v = {v[0] / pymath::hypot(v[0], v[1]), v[1] / pymath::hypot(v[0], v[1])};
+    const double cross = u[0] * v[1] - u[1] * v[0];
+    if (std::fabs(cross) < 1e-10) throw ValueError("A fillet needs two edges meeting at a corner");
+    const double angle = pytrig::atan2(std::fabs(cross), u[0] * v[0] + u[1] * v[1]);
+    const double setback = radius / pytrig::tangent(angle / 2);
+    corner.start = {b[0] + setback * u[0], b[1] + setback * u[1]};
+    corner.end = {b[0] + setback * v[0], b[1] + setback * v[1]};
+    // The centre is one radius normal to the incoming line at its point of tangency.
+    const double side = std::copysign(radius, cross);
+    corner.center = {corner.start[0] - side * u[1], corner.start[1] + side * u[0]};
+    corner.radius = radius;
+    corner.start_angle = pytrig::atan2(corner.start[1] - corner.center[1], corner.start[0] - corner.center[0]);
+    corner.sweep = -std::copysign(pytrig::PI - angle, cross);
+    corner.setback = setback;
+    return corner;
+}
+
+size_t wrapped(long long index, size_t count) {
+    const long long n = static_cast<long long>(count);
+    return static_cast<size_t>(((index % n) + n) % n);
+}
+
+// sketch_curves.resolve_curves: the two handles of each cubic edge, with the tangent alignments applied.
+std::vector<std::vector<P2>> resolve_curves(const std::vector<const json *> &raw, const std::vector<P2> &points, Dimensions &dimensions) {
+    const size_t count = points.size();
+    if (raw.size() != count) throw ValueError("Supply one curve entry per outgoing sketch edge");
+    std::vector<std::vector<P2>> controls;
+    auto option = [](const json &curve, const char *key) {
+        const json *value = get(curve, key);
+        return value && value->get<bool>();
+    };
+    for (const json *curve : raw) {
+        if (!curve || curve->is_null()) {
+            controls.emplace_back();
+            continue;
+        }
+        if (!curve->is_object()) throw ValueError("Invalid cubic sketch edge");
+        for (const auto &item : curve->items()) {
+            const std::string key(item.key());
+            if (key != "controls" && key != "tangentStart" && key != "tangentEnd") throw ValueError("Invalid cubic sketch edge");
+        }
+        const json *poles = get(*curve, "controls");
+        if (!poles || !poles->is_array() || poles->size() != 2) throw ValueError("A cubic sketch edge needs two planar control points");
+        for (const char *key : {"tangentStart", "tangentEnd"}) {
+            const json *value = get(*curve, key);
+            if (value && !value->is_boolean()) throw ValueError("A cubic tangent option must be true or false");
+        }
+        std::vector<P2> handles;
+        for (size_t k = 0; k < 2; ++k) {
+            const std::vector<double> point = dimensions.vector(&(*poles)[k], 2);
+            handles.push_back({point[0], point[1]});
+        }
+        controls.push_back(handles);
+    }
+    for (size_t i = 0; i < count; ++i) {
+        const json *curve = raw[i];
+        if (!curve || curve->is_null()) continue;
+        for (int side = 0; side < 2; ++side) {
+            if (!option(*curve, side ? "tangentEnd" : "tangentStart")) continue;
+            const P2 joint = points[wrapped(static_cast<long long>(i) + side, count)];
+            const size_t neighbour = wrapped(static_cast<long long>(i) + (side ? 1 : -1), count);
+            const json *neighbour_curve = raw[neighbour];
+            const bool curved = neighbour_curve && !neighbour_curve->is_null();
+            if (curved && option(*neighbour_curve, side ? "tangentStart" : "tangentEnd"))
+                throw ValueError("At a shared cubic vertex, choose only one handle to follow its neighbour");
+            const P2 guide = curved ? controls[neighbour][1 - side] : points[wrapped(static_cast<long long>(i) + (side ? 2 : -1), count)];
+            const double length = distance(joint, controls[i][side]), baseline = distance(joint, guide);
+            if (py_min(length, baseline) <= 1e-9) throw ValueError("Tangent alignment needs a nonzero handle and neighbouring direction");
+            P2 aligned;
+            for (int k = 0; k < 2; ++k) aligned[k] = joint[k] + (joint[k] - guide[k]) * length / baseline;
+            controls[i][side] = aligned;
+            if (std::fabs(aligned[0]) > 100000 || std::fabs(aligned[1]) > 100000)
+                throw ValueError("Aligned curve handle exceeds the sketch coordinate range");
+        }
+    }
+    return controls;
+}
+
+P2 midpoint(const P2 &a, const P2 &b) { return {(a[0] + b[0]) / 2, (a[1] + b[1]) / 2}; }
+
+// sketch_curves.sample_cubic: de Casteljau subdivision until the control hull lies within the tolerance.
+struct Sampler {
+    double tolerance = 0;
+    std::vector<P2> result;
+    void subdivide(const P2 &a, const P2 &b, const P2 &c, const P2 &d, int depth) {
+        const double dx = d[0] - a[0], dy = d[1] - a[1];
+        const double chord = pymath::hypot(dx, dy);
+        if (chord != 0) {
+            double projections[2], deviations[2];
+            const P2 *inner[2] = {&b, &c};
+            for (int k = 0; k < 2; ++k) {
+                const P2 &p = *inner[k];
+                projections[k] = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / chord;
+                deviations[k] = std::fabs((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) / chord;
+            }
+            if (py_max(deviations[0], deviations[1]) <= tolerance && -1e-12 <= projections[0] &&
+                projections[0] <= projections[1] + 1e-12 && projections[1] <= chord + 1e-12) {
+                result.push_back(d);
+                return;
+            }
+        }
+        if (depth >= 20 || result.size() >= 4096)
+            throw ValueError("Curve reverses direction at a cusp or exceeds the sketch sampling budget");
+        const P2 ab = midpoint(a, b), bc = midpoint(b, c), cd = midpoint(c, d);
+        const P2 abc = midpoint(ab, bc), bcd = midpoint(bc, cd);
+        const P2 mid = midpoint(abc, bcd);
+        subdivide(a, ab, abc, mid, depth + 1);
+        subdivide(mid, bcd, cd, d, depth + 1);
+    }
+};
+
+std::vector<P2> sample_cubic(const P2 &start, const std::vector<P2> &controls, const P2 &end) {
+    const double span = py_max(py_max(distance(start, controls[0]), distance(start, controls[1])), distance(start, end));
+    Sampler sampler;
+    sampler.tolerance = py_min(0.01, span * 0.00025);
+    sampler.subdivide(start, controls[0], controls[1], end, 0);
+    return sampler.result;
+}
+
+// sketch_curves.minimum_coordinate: the least value of a scalar cubic on [0, 1].
+double minimum_coordinate(double p0, double p1, double p2, double p3) {
+    const double a = -p0 + 3 * p1 - 3 * p2 + p3, b = 2 * (p0 - 2 * p1 + p2), c = p1 - p0;
+    const double disc = b * b - 4 * a * c;
+    std::vector<double> roots;
+    if (a == 0) {
+        if (b != 0) roots = {-c / b};
+    } else if (disc >= 0) {
+        const double q = -0.5 * (b + std::copysign(std::sqrt(disc), b));
+        if (q != 0) roots = {q / a, c / q};
+        else roots = {0.0};
+    }
+    double least = py_min(p0, p3);
+    for (double t : roots)
+        if (0 < t && t < 1) {
+            const double s = 1 - t;
+            least = py_min(least, std::pow(s, 3.0) * p0 + 3 * s * s * t * p1 + 3 * s * t * t * p2 + std::pow(t, 3.0) * p3);
+        }
+    return least;
+}
+
+// GEOS's signed area of a closed ring (Area::ofRingSigned): the shoelace sum taken about the first x.
+double ring_area(const std::vector<P2> &ring) {
+    const size_t n = ring.size();
+    if (n < 3) return 0.0;
+    P2 p0{}, p1 = ring[0], p2 = ring[1];
+    const double x0 = p1[0];
+    p2[0] -= x0;
+    double sum = 0.0;
+    for (size_t i = 1; i < n - 1; ++i) {
+        p0[1] = p1[1];
+        p1[0] = p2[0];
+        p1[1] = p2[1];
+        p2 = ring[i + 1];
+        p2[0] -= x0;
+        sum += p1[0] * (p0[1] - p2[1]);
+    }
+    return sum / 2.0;
+}
+
+// sketch_profile.profile_geometry, for a sketch without constraints: the sampled outline.
+std::vector<P2> profile_outline(const json &feature, Dimensions &dimensions) {
+    const json *raw = get(feature, "points");
+    if (!raw || !raw->is_array() || raw->size() < 3 || raw->size() > 256) throw ValueError("A sketch needs 3–256 vertices");
+    // solve_profile: the vertices, then the constraints, which are the Python's for now.
+    std::vector<P2> points;
+    for (const json &point : *raw) {
+        const std::vector<double> xy = dimensions.vector(&point, 2);
+        points.push_back({xy[0], xy[1]});
+    }
+    const json *constraints = get(feature, "constraints");
+    if (constraints) {
+        if (!constraints->is_array() || constraints->size() > 128) throw ValueError("A sketch supports up to 128 geometric constraints");
+        if (constraints->size()) throw NotPorted("sketch constraints");
+    }
+    const size_t given = points.size();
+    std::vector<double> radii;
+    const json *fillets = get(feature, "fillets");
+    if (fillets) {
+        if (!fillets->is_array() || fillets->size() != given) throw ValueError("Supply one fillet radius per sketch vertex");
+        for (const json &radius : *fillets) radii.push_back(dimensions.evaluate(&radius));
+    } else {
+        radii.assign(given, 0.0);
+        for (double &radius : radii) radius = dimensions.evaluate_number(radius);
+    }
+    if (*std::min_element(radii.begin(), radii.end()) < 0) throw ValueError("Fillet radii must be zero or positive");
+    std::vector<const json *> curves;
+    const json *raw_curves = get(feature, "curves");
+    if (raw_curves) {
+        if (!raw_curves->is_array() || raw_curves->size() != given) throw ValueError("Supply one curve entry per outgoing sketch edge");
+        for (const json &curve : *raw_curves) curves.push_back(&curve);
+    } else {
+        curves.assign(given, nullptr);
+    }
+    if (points.front() == points.back()) {
+        if (curves.back() && !curves.back()->is_null()) throw ValueError("A duplicate closing vertex cannot start another cubic edge");
+        curves.pop_back();
+        if (radii.back() != 0) throw ValueError("Set the fillet on the first vertex of a closed loop");
+        points.pop_back();
+        radii.pop_back();
+    }
+    bool distinct = points.size() >= 3;
+    for (size_t i = 0; distinct && i < points.size(); ++i)
+        for (size_t j = i + 1; distinct && j < points.size(); ++j) distinct = points[i] != points[j];
+    if (!distinct) throw ValueError("Sketch vertices must be distinct");
+    const size_t n = points.size();
+    const std::vector<std::vector<P2>> controls = resolve_curves(curves, points, dimensions);
+    for (size_t i = 0; i < n; ++i)
+        if (!controls[i].empty() && (radii[i] != 0 || radii[(i + 1) % n] != 0))
+            throw ValueError("Remove the endpoint fillet before making a curved edge. Use tangent handles to round a cubic join.");
+    std::vector<Corner> corners;
+    for (size_t i = 0; i < n; ++i) corners.push_back(corner_of(points[wrapped(static_cast<long long>(i) - 1, n)], points[i], points[(i + 1) % n], radii[i]));
+    const bool revolve = is_text(get(feature, "kind"), "revolve");
+    std::vector<P2> outline;
+    for (size_t i = 0; i < n; ++i) {
+        const Corner &corner = corners[i];
+        const size_t before = wrapped(static_cast<long long>(i) - 1, n);
+        if (corner.setback + corners[before].setback > distance(points[before], points[i]) + 1e-10)
+            throw ValueError("Fillets exceed the available length of the edge leading to point " + std::to_string(i + 1));
+        if (outline.empty() || distance(outline.back(), corner.start) > 1e-10) outline.push_back(corner.start);
+        if (corner.radius != 0) {
+            const int steps = static_cast<int>(py_max(2.0, std::ceil(std::fabs(corner.sweep) / (pytrig::PI / 48))));
+            for (int j = 1; j < steps; ++j) outline.push_back(corner.at(static_cast<double>(j) / steps));
+            outline.push_back(corner.end);
+        }
+        if (!controls[i].empty()) {
+            const P2 end = corners[(i + 1) % n].start;
+            if (revolve && minimum_coordinate(corner.end[0], controls[i][0][0], controls[i][1][0], end[0]) < -1e-10)
+                throw ValueError("Revolve profile radii must be zero or greater along the entire curve");
+            for (const P2 &point : sample_cubic(corner.end, controls[i], end)) outline.push_back(point);
+        }
+        if (outline.size() > 16384) throw ValueError("Sketch exceeds 16384 sampled vertices");
+    }
+    if (outline.size() > 1 && distance(outline.front(), outline.back()) <= 1e-10) outline.pop_back();
+    // Shapely's Polygon(outline): a ring needs four coordinates with its closing one; is_valid is the closed
+    // line's is_simple for a ring of distinct vertices, and the area is GEOS's.
+    if (outline.size() < 3) throw NotPorted("a sketch outline of fewer than three points");
+    Contour ring(outline.begin(), outline.end());
+    ring.push_back(outline.front());
+    const bool valid = line_is_simple(ring);
+    const double area = std::fabs(ring_area(std::vector<P2>(ring.begin(), ring.end())));
+    if (valid && std::fabs(area - 1e-8) <= 1e-14) throw NotPorted("a sketch whose area is within rounding of the limit");
+    if (!valid || area <= 1e-8) throw ValueError("Sketch must enclose an area without crossing itself");
+    if (revolve) {
+        for (const P2 &point : points)
+            if (point[0] < 0) throw ValueError("Revolve profile radii must be zero or greater");
+        for (const P2 &point : outline)
+            if (point[0] < 0) throw ValueError("Revolve profile radii must be zero or greater");
+    }
+    return outline;
+}
+
+// solid_cad._sketch: the outline as an even-odd cross section.
+std::vector<json> sketch_rings(const json &feature, Dimensions &dimensions) {
+    const std::vector<P2> outline = profile_outline(feature, dimensions);
+    json ring = json::array();
+    for (const P2 &point : outline) ring.push_back(json::array({point[0], point[1]}));
+    return normalised({ring}, "evenodd");
+}
+
+// ---- lofts: studio/solid_loft.py's loft_mesh -----------------------------------------------------------
+
+const double kChordTolerance = 0.025;
+
+// solid_loft.Section: a rectangle, ellipse or circle at a height, as four quarter arcs or sides.
+struct Section {
+    std::string kind;
+    double x_radius = 0, y_radius = 0;
+    std::array<double, 3> center{};
+
+    // coefficients(quadrant): x, y, z, a, b mapping a unit-circle quadrant onto an arc or a side.
+    std::array<double, 5> coefficients(int quadrant) const {
+        const double weight = std::sqrt(0.5);
+        const double x = center[0], y = center[1], z = center[2], a = x_radius, b = y_radius;
+        if (kind == "rectangle") {
+            if (quadrant == 0 || quadrant == 2) return {x, y + (quadrant == 0 ? -b : b), z, a / weight, 0.0};
+            return {x + (quadrant == 1 ? a : -a), y, z, 0.0, b / weight};
+        }
+        return {x, y, z, a, b};
+    }
+
+    std::array<double, 3> point(int quadrant, double angle) const {
+        const std::array<double, 5> k = coefficients(quadrant);
+        const double px = k[0] + k[3] * pytrig::cosine(angle) / 1.0;
+        return {px, k[1] + k[4] * pytrig::sine(angle) / 1.0, k[2]};
+    }
+};
+
+// solid_loft.sections: the base at z = 0 and the top at its offset and height.
+std::array<Section, 2> loft_sections(const json &feature, Dimensions &dimensions) {
+    std::array<Section, 2> result;
+    for (int level = 0; level < 2; ++level) {
+        const std::string prefix = level ? "top" : "base";
+        const json *kind = get(feature, (prefix + "Shape").c_str());
+        if (!is_text(kind, "rectangle") && !is_text(kind, "ellipse") && !is_text(kind, "circle"))
+            throw ValueError("Choose a rectangle, ellipse or circle for each loft section");
+        Section &section = result[level];
+        section.kind = kind->get<std::string>();
+        section.x_radius = dimensions.positive(get(feature, (prefix + "Width").c_str())) / 2;
+        section.y_radius = section.kind == "circle" ? section.x_radius : dimensions.positive(get(feature, (prefix + "Depth").c_str())) / 2;
+        if (level == 1) {
+            static const json no_offset = json::array({0, 0});
+            const json *offset = get(feature, "offset");
+            const std::vector<double> shift = dimensions.vector(offset ? offset : &no_offset, 2);
+            section.center = {shift[0], shift[1], dimensions.positive(get(feature, "height"))};
+        }
+    }
+    return result;
+}
+
+// solid_loft.loft_mesh: a ruled loft as a closed mesh of strips and two caps.
+Shape loft(const json &feature, Dimensions &dimensions) {
+    const std::array<Section, 2> sections = loft_sections(feature, dimensions);
+    const Section &base = sections[0], &top = sections[1];
+    long long steps = 1, tiers = 1;
+    if (!(base.kind == "rectangle" && top.kind == "rectangle")) {
+        double radius = 0;
+        bool first = true;
+        double mixed = 0.0;
+        std::array<std::array<double, 4>, 4> pairs{};
+        for (int i = 0; i < 4; ++i) {
+            const std::array<double, 5> low = base.coefficients(i), high = top.coefficients(i);
+            pairs[i] = {low[3], low[4], high[3], high[4]};
+            const double most = py_max(py_max(py_max(low[3], low[4]), high[3]), high[4]);
+            radius = first ? most : py_max(radius, most);
+            first = false;
+        }
+        steps = static_cast<long long>(py_max(2.0, 2 * std::ceil(pytrig::PI / 4 * std::sqrt(radius / (4 * kChordTolerance)))));
+        const double angle = pytrig::PI / (2 * steps);
+        for (const auto &pair : pairs) {
+            const double a = pair[0], b = pair[1], c = pair[2], d = pair[3];
+            // Parallel chords form planar strips; otherwise Z is refined to bound the triangulation's error.
+            if (std::fabs(a * d - b * c) > 1e-14 * py_max(std::fabs(a * d), std::fabs(b * c)))
+                mixed = py_max(py_max(mixed, std::fabs(a - c)), std::fabs(b - d));
+        }
+        tiers = static_cast<long long>(py_max(1.0, std::ceil(angle * mixed / (2 * kChordTolerance))));
+    }
+    const long long count = 4 * steps;
+    if (2 * count * (tiers + 1) > kMaxFaces)
+        throw ValueError("Loft exceeds the solid triangle budget at 0.025 mm tolerance. Reduce its section size or taper.");
+    std::array<std::vector<std::array<double, 3>>, 2> rings;
+    for (int level = 0; level < 2; ++level)
+        for (int i = 0; i < 4; ++i)
+            for (long long j = 0; j < steps; ++j)
+                rings[level].push_back(sections[level].point(i, (i - 1.5 + static_cast<double>(j) / steps) * pytrig::PI / 2));
+    json vertices = json::array();
+    for (long long t = 0; t <= tiers; ++t) {
+        // numpy.linspace(0, 1, tiers + 1): t times the step, and exactly 1 at the end.
+        const double v = t == tiers ? 1.0 : static_cast<double>(t) * (1.0 / static_cast<double>(tiers));
+        for (long long k = 0; k < count; ++k) {
+            json point = json::array();
+            for (int axis = 0; axis < 3; ++axis) point.push_back((1 - v) * rings[0][k][axis] + v * rings[1][k][axis]);
+            vertices.push_back(std::move(point));
+        }
+    }
+    const long long base_center = (tiers + 1) * count;
+    vertices.push_back(json::array({base.center[0], base.center[1], base.center[2]}));
+    vertices.push_back(json::array({top.center[0], top.center[1], top.center[2]}));
+    json faces = json::array();
+    auto face = [&](long long a, long long b, long long c) {
+        faces.push_back(json::array({static_cast<std::uint64_t>(a), static_cast<std::uint64_t>(b), static_cast<std::uint64_t>(c)}));
+    };
+    for (long long tier = 0; tier < tiers; ++tier)
+        for (long long edge = 0; edge < count; ++edge) face(tier * count + edge, tier * count + (edge + 1) % count, tier * count + (edge + 1) % count + count);
+    for (long long tier = 0; tier < tiers; ++tier)
+        for (long long edge = 0; edge < count; ++edge) face(tier * count + edge, tier * count + (edge + 1) % count + count, tier * count + edge + count);
+    for (long long edge = 0; edge < count; ++edge) face(base_center, (edge + 1) % count, edge);
+    for (long long edge = 0; edge < count; ++edge) face(base_center + 1, edge + tiers * count, (edge + 1) % count + tiers * count);
+    json mesh = json::object();
+    mesh["vertices"] = std::move(vertices);
+    mesh["triangles"] = std::move(faces);
+    mesh["weld"] = false;
+    // A mesh that is not a closed solid is the empty solid, as manifold3d's status would report it.
+    try {
+        return ask(json{{"mesh", mesh}}, {});
+    } catch (const ValueError &) {
+        return ask(json{{"union", json::array()}}, {});
+    }
+}
+
 // ---- features --------------------------------------------------------------------------------------
 
 const json *field(const json &object, const char *key) { return get(object, key); }
@@ -557,6 +969,29 @@ Shape primitive(const json &feature, Dimensions &dimensions) {
         sphere["radius"] = dimensions.positive(field(feature, "radius"));
         sphere["segments"] = kSegments;
         shape = ask(json{{"sphere", sphere}}, {});
+    } else if (is_text(kind, "loft")) {
+        shape = loft(feature, dimensions);
+    } else if (is_text(kind, "extrude")) {
+        // CrossSection.extrude(height): one layer, no twist, no scaling.
+        const std::vector<json> rings = sketch_rings(feature, dimensions);
+        json extrude = json::object();
+        extrude["rings"] = json(rings);
+        extrude["height"] = dimensions.positive(field(feature, "height"));
+        extrude["slices"] = 1;
+        extrude["twist"] = 0.0;
+        extrude["scale"] = json::array({1.0, 1.0});
+        extrude["fill"] = "positive";
+        shape = ask(json{{"extrude", extrude}}, {});
+    } else if (is_text(kind, "revolve")) {
+        const json *given_angle = field(feature, "angle");
+        const double angle = given_angle ? dimensions.evaluate(given_angle) : dimensions.evaluate_number(360);
+        if (!(0 < angle && angle <= 360)) throw ValueError("Revolve angle must be above 0 and at most 360 degrees");
+        json revolve = json::object();
+        revolve["rings"] = json(sketch_rings(feature, dimensions));
+        revolve["segments"] = kSegments;
+        revolve["degrees"] = angle;
+        revolve["fill"] = "positive";
+        shape = ask(json{{"revolve", revolve}}, {});
     } else {
         throw ValueError("Unknown solid primitive");
     }
@@ -681,7 +1116,7 @@ Built build(const json *model, const json *order) {
         for (const json &feature : *features)
             if (feature.is_object()) {
                 const json *kind = field(feature, "kind");
-                for (const char *other : {"step", "script", "loft", "extrude", "revolve"})
+                for (const char *other : {"step", "script"})
                     if (is_text(kind, other)) throw NotPorted(std::string("solid features of kind ") + other);
             }
     static const json no_parameters = json::object();

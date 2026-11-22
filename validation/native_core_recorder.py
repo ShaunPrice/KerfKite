@@ -119,11 +119,11 @@ def preview_reference(kind, data):
         if kind == 'solid_cad':
             from studio.solid_cad import rebuild
 
-            result = rebuild(data['model'], backend='python')
+            result = _SOLID.get('rebuild', rebuild)(data['model'], backend='python')
         elif kind == 'solid_cad_section':
             from studio.solid_cad import horizontal_section
 
-            result = horizontal_section(data['model'], data.get('z'), backend='python')
+            result = _SOLID.get('section', horizontal_section)(data['model'], data.get('z'), backend='python')
         elif kind == 'relief':
             result = where_computed_left_out(prepare_relief(data, backend='python', _native_limits=True))
         elif kind == 'tool_changes':
@@ -163,11 +163,17 @@ def _record_preview(module, name, kind):
     setattr(module, name, recorded)
 
 
+# The reference functions as they were before any test replaced them, so that a test watching for calls of the
+# Python history does not see the recorder's own.
+_SOLID = {}
+
+
 def _record_solid_cad():
     """Studio's solid routes: a rebuild asked of the core (model_json), and a horizontal section."""
     import studio.solid_cad as solid_cad
 
     original_json, original_section = solid_cad.model_json, solid_cad.horizontal_section
+    _SOLID.update(rebuild=solid_cad.rebuild, section=original_section)
 
     def record(kind, request):
         if _DEPTH[0] == 0 and _studio_as_left_alone():
