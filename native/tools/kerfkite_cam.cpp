@@ -11,6 +11,7 @@
 //   kerfkite-cam tool-changes PROJECT.json   a router project split into stages for manual tool changes (studio.tool_changes)
 //   kerfkite-cam fixture-collision REQUEST.json   a posted program's moves swept against fixture boxes (studio.fixture_collision)
 //   kerfkite-cam stl-heightmap REQUEST.json  an STL mesh as a relief height field (studio.mesh_import)
+//   kerfkite-cam calibrate                   measure the relief contact on the threads and any GPU, and how to share
 //   kerfkite-cam gerber FILE [--arc-tolerance MM]            a Gerber layer as drawn objects in millimetres
 //   kerfkite-cam gerber-outline FILE [--tolerance MM] [--offset [X,Y]]   a profile layer as closed paths
 //   kerfkite-cam gerber-isolation FILE --tool-width MM [--passes N] [--overlap F] [--mirror-x X]   isolation paths
@@ -347,6 +348,10 @@ int main(int argc, char **argv) {
          command == "excellon-drills") &&
         argc >= 3)
         return board(command, argc, argv);
+    if (command == "calibrate" && argc == 2) {
+        std::cout << kerfkite::relief_calibrate().dump() << "\n";
+        return 0;
+    }
     if (command == "numbers" && argc == 2) return numbers();
     if (command == "arithmetic" && argc == 2) return arithmetic();
     if (command == "simple" && argc == 2) return simple();

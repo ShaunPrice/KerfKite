@@ -10,7 +10,10 @@ height-field rectangle are not modeled.
 
 import base64
 import binascii
+import json
 import math
+import threading
+import time
 
 try:
     from . import _relief_native
@@ -54,6 +57,36 @@ def gpu_status():
     if _relief_native is None or not hasattr(_relief_native, 'gpu_status'):
         return 'no compiled extension'
     return _relief_native.gpu_status()
+
+
+_calibration = {'thread': None, 'report': None}
+
+
+def calibrate_in_background(delay=2.0):
+    """Measure this computer's relief contact once, on a daemon thread, after `delay` seconds: the processor's
+    threads, any GPU fit to use, and both at once. Large jobs then go the way the measurements favour (see
+    kerfkite::relief_calibrate). Studio starts this when it starts, so the measurement follows the computer it
+    runs on today; until it finishes, jobs follow the uncalibrated rule. Returns the thread, or None when there is
+    no compiled extension or a calibration has already been started."""
+    if not _native('auto') or not hasattr(_relief_native, 'calibrate') or _calibration['thread'] is not None:
+        return None
+
+    def measure():
+        time.sleep(delay)
+        try:
+            _calibration['report'] = json.loads(_relief_native.calibrate())
+        except (RuntimeError, ValueError):
+            _calibration['report'] = None
+
+    thread = threading.Thread(target=measure, name='relief-calibration', daemon=True)
+    _calibration['thread'] = thread
+    thread.start()
+    return thread
+
+
+def calibration():
+    """The last calibration report, or None before one has finished."""
+    return _calibration['report']
 
 
 def _rgb_heights(data, depth, limit):

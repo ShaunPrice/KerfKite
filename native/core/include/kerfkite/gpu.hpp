@@ -6,8 +6,9 @@
 // on the CPU; a GPU is never required.
 //
 // What is fit to use is decided once per process, by the environment variable KERFKITE_GPU:
-//   auto (or unset)  a discrete GPU with double precision; integrated GPUs share the CPU's memory and were
-//                    measured slower than the CPU's own threads, so they are left out
+//   auto (or unset)  a GPU with double precision, a discrete one first. An integrated GPU shares the CPU's
+//                    memory and was measured slower than the CPU's own threads on a large processor; a caller
+//                    uses one only where it has measured a gain (shared_memory says which kind it is)
 //   on               any device with double precision, a discrete GPU first (for tests and measurements)
 //   off              never
 //
@@ -52,6 +53,10 @@ bool available();
 
 // The device in use, or why there is none, in one line. It does not look.
 std::string describe();
+
+// Whether the device in use shares the processor's memory, as an integrated GPU does (true when unknown, or when
+// there is no device). It does not look.
+bool shared_memory();
 
 // Runs kernel `name` of the OpenCL C `source` over `items` work items, one global index each. The kernel
 // receives the arguments in order and then two longs: the first item of the slice it is given, and `items`. Its

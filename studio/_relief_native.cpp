@@ -12,6 +12,7 @@ PyObject *core_cam_text(PyObject *, PyObject *);
 PyObject *solid_call(PyObject *, PyObject *);
 PyObject *solid_mesh(PyObject *, PyObject *);
 PyObject *gpu_status(PyObject *, PyObject *);
+PyObject *calibrate(PyObject *, PyObject *);
 PyObject *last_contact(PyObject *, PyObject *);
 
 static PyMethodDef methods[] = {
@@ -28,6 +29,8 @@ static PyMethodDef methods[] = {
      "Run a solid request of the native core with solids kept from earlier calls: (JSON request, kept) -> (JSON answer, solid)."},
     {"solid_mesh", solid_mesh, METH_VARARGS, "The mesh of a kept solid as bytes: (solid) -> (float64 vertices, uint32 triangles)."},
     {"gpu_status", gpu_status, METH_NOARGS, "The GPU in use for relief contact, or why there is none."},
+    {"calibrate", calibrate, METH_NOARGS,
+     "Measure the relief contact on the threads and any GPU and decide how to share large jobs: JSON report."},
     {"last_contact", last_contact, METH_NOARGS,
      "What the calling thread's last relief contact job ran on: 'CPU, n threads' or 'GPU, device'."},
     {nullptr, nullptr, 0, nullptr}};

@@ -476,9 +476,9 @@ def main():
         if pairing['encryption'] == 'none':
             print('The phone monitor is using HTTP: the pairing token and commands are readable on this network.')
         print('Open Control → Phone pendant to view or revoke pairing.', flush=True)
-    create_app(ctl, jobs, allow_hardware=args.enable_hardware, phone_monitor=monitor).run(
-        host='127.0.0.1', port=args.port, threaded=True, debug=False
-    )
+    app = create_app(ctl, jobs, allow_hardware=args.enable_hardware, phone_monitor=monitor)
+    relief.calibrate_in_background()
+    app.run(host='127.0.0.1', port=args.port, threaded=True, debug=False)
 
 
 if __name__ == '__main__':
