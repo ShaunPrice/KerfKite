@@ -1119,8 +1119,13 @@ static void solid_histories() {
     power["model"]["features"][0]["size"][2] = "w ** 2";
     expect(refusal(power) == "declined", "an expression beyond the core's grammar is declined");
     json scripted = request;
-    scripted["model"]["features"][1]["kind"] = "script";
-    expect(refusal(scripted) == "declined", "a scripted feature is declined");
+    scripted["model"]["features"][1] = json::parse(R"({"id": "pins", "kind": "script", "op": "cut", "scriptParameters": {"n": 2},
+        "source": "for (i = [0:n-1]) translate([4 + i * 12, h / 2, -1]) cylinder(h=6, r=1, $fn=12);"})");
+    const double pinned = kerfkite::solid_cad_call("solid-cad", scripted).at("volume").get<double>();
+    expect(pinned < 800 && pinned > 800 - 2 * 3.15 * 4, "a scripted feature cuts two pins with the model's parameters");
+    scripted["model"]["features"][1]["source"] = "square(2);";
+    expect(refusal(scripted) == "pins: A solid feature needs a 3D script. Use linear_extrude() to give a drawing thickness.",
+           "a scripted feature must be a solid");
     // A loft from a 20 mm square to a circle of 20 mm: its volume lies between the circular and square prisms'.
     json lofted = request;
     lofted["model"]["features"] = json::parse(R"([{"id": "funnel", "kind": "loft", "height": 10, "baseShape": "rectangle",
@@ -1141,6 +1146,37 @@ static void solid_histories() {
     section["z"] = 2;
     const json cut = kerfkite::solid_cad_call("solid-cad-section", section);
     expect(cut.at("z") == json(2.0) && cut.at("profiles").size() == 2, "a section through the plate has its outline and the bore");
+}
+
+// The CAD script engine: a module with children, loops, functions and $fn, as a drawing and as a solid; and the
+// reader's and the geometry's messages, with the line and column.
+static void cad_scripts() {
+    const auto preview = [](const char *source) {
+        json request = json::object();
+        request["source"] = source;
+        return kerfkite::solid_cad_call("cad-script", request);
+    };
+    const auto refusal = [&](const char *source) -> std::string {
+        try {
+            preview(source);
+        } catch (const kerfkite::ValueError &error) {
+            return error.what();
+        }
+        return "";
+    };
+    const json ring = preview("module ring(r=4, t=1) { difference() { circle(r=r, $fn=32); circle(r=r-t, $fn=32); } } ring(5);");
+    const double area = ring.at("area").get<double>();
+    expect(ring.at("dimension") == json(2) && ring.at("profiles").size() == 2, "a ring is a drawing of two outlines");
+    expect(area > 3.14 * 9 * 0.95 && area < 3.15 * 9, "a ring's area");
+    const json posts = preview("function twice(x) = 2 * x; $fn = 8;\n"
+                               "module stack(h=2) { for (i = [0:$children-1]) translate([0, 0, i*h]) children(i); }\n"
+                               "stack(h=twice(1)) { cube(2); cylinder(h=2, r=1); }");
+    expect(posts.at("dimension") == json(3) && posts.at("bounds") == json::array({-1.0, -1.0, 0.0, 2.0, 2.0, 4.0}), "a stack of a cube and a cylinder");
+    expect(refusal("cube(1);\n  sphere(-1);") == "Line 2, column 3: sphere: Radius cannot be negative", "a geometry error names its line");
+    expect(refusal("cube(1); \xc3\xa9") == "Line 1, column 10: Unsupported character '\xc3\xa9'", "a printable character is shown");
+    expect(refusal("cube(1); \x07") == "Line 1, column 10: Unsupported character '\\x07'", "a control character is escaped");
+    expect(refusal("x = y; y = x; cube(x);") == "Line 1, column 12: Circular variable definition 'x'", "a circular variable");
+    expect(refusal("cube(\xd9\xa3);").empty(), "an Arabic-Indic digit is a number");
 }
 
 int main() {
@@ -1338,6 +1374,7 @@ int main() {
     fixture_checks();
     stl_height_fields();
     solid_histories();
+    cad_scripts();
     artwork_reliefs();
 
     std::printf(failures ? "%d checks failed\n" : "PASS native core self-test%.0d\n", failures);

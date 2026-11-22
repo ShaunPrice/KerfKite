@@ -93,6 +93,7 @@ setup(
                 'native/core/src/solid/stl.cpp',
                 'native/core/src/solid_command.cpp',
                 'native/core/src/solid_cad.cpp',
+                'native/core/src/scad.cpp',
                 'native/core/src/gpu/opencl.cpp',
             ],
             language='c++',

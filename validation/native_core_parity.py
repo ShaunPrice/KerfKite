@@ -1966,9 +1966,18 @@ def solid_cad_cases(count, seed):
             item['angle'] = rng.choice([360, 90, 180, 400, expression(known)])
 
     def feature(index, known, first):
-        kind = rng.choice(['box', 'box', 'cylinder', 'cylinder', 'sphere', 'extrude', 'revolve', 'loft'])
+        kind = rng.choice(['box', 'box', 'cylinder', 'cylinder', 'sphere', 'extrude', 'revolve', 'loft', 'script'])
         item = {'id': rng.choice([f'f{index}', f'Feature {index}', f'f{index}']), 'kind': kind}
-        if kind in ('extrude', 'revolve'):
+        if kind == 'script':
+            item['source'] = rng.choice([
+                'cube([4, 3, 2]);', 'cylinder(h=5, r=2, $fn=12);', 'translate([2, 2, 0]) sphere(3, $fn=10);',
+                'linear_extrude(height=3) offset(r=1, $fn=8) square([6, 4]);',
+                'for (i = [0:2]) translate([i*4, 0, 0]) cube(2);', 'module m(s=2) cube(s); m(s=x);',
+                f'cube([{rng.choice(known) if known else 3}, 2, 2]);', 'square(3);', 'cube(', 'cube(1); @',
+            ])  # fmt: skip
+            if rng.random() < 0.4:
+                item['scriptParameters'] = rng.choice([{'x': 3}, {'x': 1.5, 'w': 2}, {'bad name': 1}, {'x': 'y'}, None])
+        elif kind in ('extrude', 'revolve'):
             sketch(item, known)
         elif kind == 'loft':
             for level in ('base', 'top'):
@@ -2035,6 +2044,299 @@ def solid_cad_cases(count, seed):
             yield 'solid_cad_section', {**request, 'z': rng.choice([0, 1, 2.5, 6, 'h / 2' if 'h' in known else 3, -1])}
         else:
             yield 'solid_cad', request
+
+
+def cad_script_cases(count, seed):
+    """CAD scripts for the /api/cad-script preview and for scripted features: every primitive and operation
+    with sound and unsound arguments, modules with children(), functions, variables read before they are
+    assigned, loops, ranges, comprehensions, conditionals and the built-in functions, $fn passed down; with the
+    reader's faults (unknown and Unicode characters, Unicode digits, unterminated comments, external files),
+    the evaluator's limits, parameters and overrides (some reserved), and scripts damaged at random."""
+    rng = random.Random(seed)
+    pick = rng.choice
+    risk = [0.0]  # the chance of an unsound choice, set for each script
+
+    def opt(good, bad=()):
+        return pick(bad) if bad and rng.random() < risk[0] else pick(good)
+
+    def number():
+        return opt(['1', '2', '3', '4', '5', '6', '8', '10', '2.5', '.5', '1.5', '1e1', '7.', '0.25'],
+                   ['0', '-1', '20', '1e-3', '360', '1e10', '٣', '1.٥'])  # fmt: skip
+
+    def scalar(depth=0):
+        roll = rng.random()
+        if depth > 2 or roll < 0.4:
+            return number()
+        if roll < 0.55:
+            return opt(['size', 'n', 'r', 'k', 'size / 2', 'PI'], ['true', 'undefined_name', 'x'])
+        if roll < 0.72:
+            op = opt(['+', '*', '+', '-'], ['/', '%', '^', '<', '>=', '==', '!=', '&&', '||', '-'])
+            return f'({scalar(depth + 1)} {op} {scalar(depth + 1)})'
+        if roll < 0.82:
+            name = opt(['abs', 'floor', 'ceil', 'round', 'sqrt', 'twice', 'fact', 'max', 'min', 'pow', 'len', 'norm', 'cos', 'sin'],
+                       ['tan', 'asin', 'acos', 'atan', 'sign', 'ln', 'log', 'exp', 'atan2', 'nosuch', 'deep'])  # fmt: skip
+            if name in ('pow', 'atan2', 'min', 'max'):
+                return f'{name}({scalar(depth + 1)}, {scalar(depth + 1)})'
+            if name in ('len', 'norm'):
+                return f'{name}({vector(depth + 1)})'
+            if name == 'fact':
+                return f'fact({pick(["3", "n", "1"])}) / 2'
+            if name in ('sin', 'cos'):
+                return f'(2 + {name}({scalar(depth + 1)}))'
+            return f'{name}({scalar(depth + 1)})'
+        if roll < 0.88:
+            return f'({scalar(depth + 1)} > 3 ? {scalar(depth + 1)} : {scalar(depth + 1)})'
+        if roll < 0.94:
+            return f'{vector(depth + 1, 3)}[{opt(["0", "1", "2", "k % 2"], ["-1", "0.5", "3"])}]'
+        return opt(['+'], ['-', '!']) + scalar(depth + 1)
+
+    def vector(depth=0, size=None):
+        roll = rng.random()
+        count = size if size else opt([2, 3, 3, 4], [0, 1])
+        if roll < 0.55 or depth > 2:
+            return '[' + ', '.join(scalar(depth + 1) for _ in range(count)) + ']'
+        if roll < 0.7:
+            step = opt(['', ': 1', ': 2', ': 0.5'], [': -1', ': 0'])
+            return f'[0{step} : {opt(["3", "n", "2.5"], ["1023", "2000", "-3"])}]'
+        if roll < 0.85:
+            return f'[for (i = [0:{max(count, 1) - 1}]) {opt(["i + 1", "i*2 + 1", "i/2 + 1"], ["[i, i]", "i - 1"])}]'
+        return f'({vector(depth + 1, count)} {opt(["+", "-"], ["*", "/"])} {opt([vector(depth + 1, count)], [scalar(depth + 1), "[1]"])})'
+
+    def size(dim):
+        roll = rng.random()
+        if roll < 0.6:
+            return '[' + ', '.join(opt(['1', '2', '3', '5', '8', 'size', 'size/2', 'r', '4.5'], ['0', '-1', 'true'])
+                                   for _ in range(dim)) + ']'  # fmt: skip
+        if roll < 0.85:
+            return opt(['2', 'size', '3.5', 'r', scalar()], ['[0, 1]', '[1, 2, 3, 4]', 'true'])
+        return vector(0, dim)
+
+    def facets():
+        return opt(['', '', ', $fn=8', ', $fn=12', ', $fn=16', ', $fn=6', ', $fn=0'],
+                   [', $fn=3', ', $fn=2', ', $fn=300', ', $fn=7.5', ', $fn=true'])  # fmt: skip
+
+    def drawing(depth):
+        roll = rng.random()
+        if depth > 3 or roll < 0.3:
+            primitive = opt(['square', 'square', 'circle', 'circle', 'polygon'], ['children', 'nonsense'])
+            if primitive == 'square':
+                return f'square({size(2)}{opt(["", ", center=true"], [", center=1", ", true"])});'
+            if primitive == 'circle':
+                return f'circle({opt(["r=", "d=", ""], ["r=-", "r=0*"])}{pick(["2", "3", "size/2", "r"])}{facets()});'
+            if primitive == 'children':
+                return pick(['children();', 'children(0);', 'children(5);', 'children(0.5);'])
+            if primitive == 'nonsense':
+                return pick(['cube(1);', 'sphere(2);', 'wheel(1);', 'circle(1) square(1);'])
+            return polygon()
+        operation = opt(['union', 'difference', 'intersection', 'hull', 'translate', 'rotate', 'scale', 'mirror',
+                         'offset', 'multmatrix', 'projection', 'for', 'if', 'module', 'block'])  # fmt: skip
+        inner = ' '.join(drawing(depth + 1) for _ in range(pick([1, 2, 2, 3])))
+        if operation in ('union', 'difference', 'intersection', 'hull'):
+            return f'{operation}() {{ {inner} }}'
+        if operation == 'translate':
+            return f'translate({opt(["[3, 0]", "[1, 2, 0]", "[size, 1]", "v=[2,2]", "[0, 0, 4]"], ["[1]", "3"])}) {{ {inner} }}'
+        if operation == 'rotate':
+            angle = opt(
+                ['45', 'a=30', '[0, 0, 90]', 'a=60, v=[0,0,-1]', 'v=[0,0,1]'], ['[10, 0, 0]', 'a=10, v=[1,0,0]']
+            )
+            return f'rotate({angle}) {{ {inner} }}'
+        if operation == 'scale':
+            return f'scale({opt(["2", "[2, 0.5]", "[1, 1, 3]", "-1"], ["0", "[0, 1]"])}) {{ {inner} }}'
+        if operation == 'mirror':
+            return (
+                f'mirror({opt(["[1, 0]", "[0, 1, 0]", "[1, 1]"], ["[0, 0]", "[1, 0, 1]", "[0, 0, 1]"])}) {{ {inner} }}'
+            )
+        if operation == 'offset':
+            kind = opt(
+                ['r=1', 'delta=1', 'delta=-0.25, chamfer=true', '0.5', 'delta=2'], ['r=0.5, delta=1', 'chamfer=true']
+            )
+            return f'offset({kind}{facets()}) {{ {inner} }}'
+        if operation == 'multmatrix':
+            matrix = opt(['[[1,0,0,2],[0,1,0,3],[0,0,1,0]]', '[[1,1,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]',
+                          '[[0,-1,0,1],[1,0,0,0],[0,0,1,0]]'],
+                         ['[[0,0,0,0],[0,1,0,0],[0,0,1,0]]', '[[1,0,0,0],[0,1,0,0],[0,0,1,1]]',
+                          '[[2,0,0,0],[0,2,0,0],[0,0,1,0],[0,0,1,1]]'])  # fmt: skip
+            return f'multmatrix({matrix}) {{ {inner} }}'
+        if operation == 'projection':
+            return f'projection({opt(["", "cut=true", "cut=false"], ["true", "cut=1"])}) {{ {solid(depth + 1)} }}'
+        if operation == 'for':
+            loops = opt(['[0:2]', '[0:n-1]', '[1, 3]', '[0:0.5:1]'], ['5', '[0:1:2000]'])
+            return f'for (i = {loops}) translate([i*4, 0]) {{ {inner} }}'
+        if operation == 'if':
+            return f'if ({scalar()} > 2) {{ {inner} }} else {{ {drawing(depth + 1)} }}'
+        if operation == 'module':
+            return f'plate({opt(["", "2", "w=3", "1, 2"], ["q=1", "1, 2, 3"])}) {{ {inner} }}'
+        return f'{{ {inner} }}'
+
+    def polygon():
+        return opt([
+            'polygon([[0,0],[6,0],[6,4],[0,4]]);',
+            'polygon(points=[[0,0],[8,0],[8,8],[0,8],[2,2],[6,2],[6,6],[2,6]], paths=[[0,1,2,3],[4,5,6,7]]);',
+            'polygon([for (a = [0:60:300]) [3*cos(a), 3*sin(a)]]);',
+            'polygon([[0,0],[2,0],[2,2],[1,1],[0,2]]);',
+            'polygon([[0,0],[5,0],[5,5],[0,5],[0,0]]);',
+            'polygon([[0,0],[4,0],[4,0],[4,4],[0,4]]);',
+            'polygon(points=[[0,0],[4,0],[2,3]], convexity=2);',
+            'polygon([[0,0],[size,0],[size,r],[0,k]]);',
+        ], [
+            'polygon([[0,0],[4,4],[4,0],[0,4]]);',
+            'polygon([[0,0],[1,0],[0,0]]);',
+            'polygon([[0,0],[3,0]]);',
+            'polygon(points=[[0,0],[4,0],[2,3]], paths=[[0,1,5]]);',
+            'polygon(points=[[0,0],[4,0],[2,3]], paths=[[0,1]]);',
+            'polygon([[0,0],[0,0],[0,0],[0,0]]);',
+            'polygon([[0,0],[2,0],[2,2],[2,0],[0,2]]);',
+            'polygon(points=[[0,0],[4,0],[2,3]], convexity=0);',
+        ])  # fmt: skip
+
+    def polyhedron():
+        return opt([
+            'polyhedron(points=[[0,0,0],[4,0,0],[0,4,0],[0,0,4]], faces=[[0,1,2],[0,3,1],[0,2,3],[1,3,2]]);',
+            'polyhedron(points=[[0,0,0],[2,0,0],[2,2,0],[0,2,0],[0,0,2],[2,0,2],[2,2,2],[0,2,2]],'
+            ' faces=[[0,1,2,3],[4,7,6,5],[0,4,5,1],[1,5,6,2],[2,6,7,3],[3,7,4,0]]);',
+            'polyhedron(points=[[0,0,0],[4,0,0],[4,4,0],[0,4,0],[2,2,5]], faces=[[0,1,2,3],[0,4,1],[1,4,2],[2,4,3],[3,4,0]]);',
+        ], [
+            'polyhedron(points=[[0,0,0],[4,0,0],[0,4,0],[0,0,4]], faces=[[0,2,1],[0,1,3],[0,3,2],[1,2,3]]);',
+            'polyhedron(points=[[0,0,0],[2,0,0],[2,2,0],[0,2,0],[0,0,2],[2,0,2],[2,2,2],[0,2,2]],'
+            ' faces=[[0,1,2,3],[4,5,6,7],[0,4,5,1],[1,5,6,2],[2,6,7,3],[3,7,4,0]]);',
+            'polyhedron(points=[[0,0,0],[4,0,0],[0,4,0],[0,0,4]], faces=[[0,1,1],[0,3,1],[0,2,3],[1,3,2]]);',
+            'polyhedron(points=[[0,0,0],[4,0,0],[0,4,0],[0,0,4]], faces=[[0,1,9],[0,3,1],[0,2,3],[1,3,2]]);',
+            'polyhedron(points=[[0,0,0],[4,0,0],[0,4,0]], faces=[[0,1,2],[0,1,2],[0,1,2],[0,1,2]]);',
+            'polyhedron(points=[[0,0,0],[4,0,0],[0,4,0],[0,0,4]], faces=[[0,1,2],[0,3,1],[0,2,3]]);',
+            'polyhedron(points=[[0,0,0],[4,0,0],[4,4,1],[0,4,0],[2,2,5]], faces=[[0,1,2,3],[0,4,1],[1,4,2],[2,4,3],[3,4,0]]);',
+        ])  # fmt: skip
+
+    def solid(depth):
+        roll = rng.random()
+        if depth > 3 or roll < 0.3:
+            primitive = opt(['cube', 'cube', 'sphere', 'cylinder', 'cylinder', 'polyhedron', 'extrude'])
+            if primitive == 'cube':
+                return f'cube({size(3)}{opt(["", ", center=true"], [", center=1"])});'
+            if primitive == 'sphere':
+                return f'sphere({opt(["r=", "d=", ""], ["r=0*"])}{pick(["2", "3", "size/3"])}{facets()});'
+            if primitive == 'cylinder':
+                dims = opt(['h=4, r=2', 'h=size, d=3', 'h=3, r1=2, r2=0', 'h=3, d1=4, d2=2, center=true', '4, 2, 1'],
+                           ['h=0, r=1', 'h=3, r=1, r1=2', 'h=2, r=-1', 'h=2, r1=0, r2=0', '3, 1, 1, 1, 1'])  # fmt: skip
+                return f'cylinder({dims}{facets()});'
+            if primitive == 'polyhedron':
+                return polyhedron()
+            return extrusion(depth)
+        operation = opt(['union', 'difference', 'intersection', 'hull', 'translate', 'rotate', 'scale', 'mirror',
+                         'multmatrix', 'extrude', 'for', 'if', 'module', 'block'])  # fmt: skip
+        inner = ' '.join(solid(depth + 1) for _ in range(pick([1, 2, 2, 3])))
+        if operation in ('union', 'difference', 'intersection', 'hull'):
+            return f'{operation}() {{ {inner} }}'
+        if operation == 'translate':
+            return f'translate({opt(["[3, 0, 0]", "[1, 2]", "[0, 0, size]", "v=[1, 1, 1]"], ["[1, 2, 3, 4]"])}) {{ {inner} }}'
+        if operation == 'rotate':
+            angle = opt(['[0, 0, 45]', '[30, 20, 10]', 'a=90, v=[1, 0, 0]', 'a=45, v=[1, 1, 0]', 'a=30, v=[0, 0, -2]', '33'],
+                        ['a=[1,2,3], v=[0,0,1]', 'a=10, v=[0,0,0]'])  # fmt: skip
+            return f'rotate({angle}) {{ {inner} }}'
+        if operation == 'scale':
+            return f'scale({opt(["2", "[1, 2, 0.5]", "[2, 3]"], ["[1, 0, 1]"])}) {{ {inner} }}'
+        if operation == 'mirror':
+            return f'mirror({opt(["[1, 0, 0]", "[0, 1, 1]", "[1, 0]"], ["[0, 0, 0]"])}) {{ {inner} }}'
+        if operation == 'multmatrix':
+            matrix = opt(['[[1,0,0,2],[0,1,0,3],[0,0,1,4]]', '[[1,0.5,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]',
+                          '[[0,1,0,0],[1,0,0,0],[0,0,1,0]]'],
+                         ['[[1,0,0,0],[0,1,0,0],[0,0,0,0]]', '[[1,0,0],[0,1,0]]'])  # fmt: skip
+            return f'multmatrix(m={matrix}) {{ {inner} }}'
+        if operation == 'extrude':
+            return extrusion(depth)
+        if operation == 'for':
+            loops = opt(['i = [0:2]', 'i = [0:n-1], j = [0:1]', 'i = [1, 2]'], ['i = [0:n]', 'i = 3'])
+            return f'for ({loops}) translate([i*5, 0, 0]) {{ {inner} }}'
+        if operation == 'if':
+            return f'if ({scalar()} < 4) {{ {inner} }}' + pick(['', f' else {solid(depth + 1)}'])
+        if operation == 'module':
+            return f'post({opt(["", "3", "h=2", "h=1, $fn=6"], ["2, 3", "x=1"])}) {{ {inner} }}'
+        return f'{{ {inner} }}'
+
+    def extrusion(depth):
+        if rng.random() < 0.6:
+            options = opt(['height=3', 'height=size', '3', 'height=2, twist=90', 'height=4, twist=45, slices=3, scale=0.5',
+                           'height=2, center=true', 'height=2, scale=[1, 0.5]', 'height=1, convexity=3'],
+                          ['height=0', 'height=2, twist=400, slices=1', 'height=2, slices=0', 'height=2, scale=-1'])  # fmt: skip
+            return f'linear_extrude({options}) {{ {drawing(depth + 1)} }}'
+        options = opt(['', 'angle=90', 'angle=-180', '$fn=12', 'angle=180, $fn=16'], ['angle=0', 'angle=400', '270, 4'])
+        profile = opt(['translate([2, 0]) square([1, 2]);', 'translate([-4, 0]) square([1, 2]);', 'square([1, 2]);',
+                       'translate([3, 1]) circle(r=1, $fn=8);'],
+                      ['translate([-1, 0]) square([2, 2]);', drawing(depth + 1)])  # fmt: skip
+        return f'rotate_extrude({options}) {{ {profile} }}'
+
+    definitions = [
+        'module plate(w=2, h=1) { linear_extrude(height=h) children(); }',
+        'module plate(w=2, h=1) { offset(r=w/4) children(); }',
+        'module post(h=3, r=1) { cylinder(h=h, r=r); translate([0, 0, h]) children(); }',
+        'module post(h=3) { for (i = [0:$children-1]) translate([0, 0, i*h]) children(i); }',
+        'function twice(x) = 2*x;',
+        'function twice(x, y=1) = x*y + 1;',
+        'function fact(n) = n <= 1 ? 1 : n * fact(n - 1);',
+    ]
+    extras = ['function deep(n) = deep(n + 1);', 'size = r * 2;', '$fn = 10;', '$fn = 0;', 'x = y; y = x;', 'n = 2;']
+    faults = [
+        'cube(1); include <x.scad>', 'cube(1) /* open', 'cube(1); @', 'cube(1); é', 'cube(٣);',
+        'cube(1.٥e١);', 'cube(1);　sphere(1);', "cube(1); '", 'cube(1); \\', 'cube(1); \x07',
+        'cube(1); ​', 'cube(1); \U0001F600', 'cube(1); ­', 'cube([1,2,3);', 'cube(1)', 'cube(1); }',
+        'true = 1;', '$x = 1;', 'module for() {}', 'cube(1, 2, 3);', 'cube(size=1, size=2);', 'cube(center=true, 1);',
+        'cube(1e10);', 'sphere(r=[for (i=[0:2000]) i][0]);', 'cube(x);', 'nosuch();', 'children();',
+        'for (i = [0:1:9999]) cube(1);', 'for (i = [0:20], j = [0:20], k = [0:20]) cube(1);',
+        'x = 1; cube(x == [1] ? 1 : 2);', 'a = [1, [2, [3]]]; cube(a[1][1][0]);',
+        'function deep(n) = deep(n + 1); cube(deep(1));', 'function t(x) = x; cube(t(1, 2, 3));',
+        'function t(x) = x; cube(t(y=2));', 'cube(len(5));', 'cube(norm([3, 4]));', 'cube(min([3, 1, 2]));',
+        'cube(max());', 'cube([1, 2, 3] * [1, 1, 1]);', 'cube(1 / 0);', 'cube(1 % 0);', 'cube((-8) ^ (1/3));',
+        'cube(sqrt(-1));', 'cube(ln(0));', 'cube(exp(800));', 'cube(tan(90));', 'cube(acos(2));',
+        'cube(atan2(1, 1) / 10);', 'cube(round(-2.5) + 4);', 'cube(sign(-3) + 2);', 'cube([true, 2, 3]);',
+        'cube(!0 + 1);', 'cube(1 < 2);', 'cube([1, 2] + [1]);', 'cube([1, 2] < [3, 4]);', '', '// only a comment',
+        ';;;', 'square(0);', 'linear_extrude(1) cube(1);', 'union() { cube(1); square(1); }', 'hull() {}',
+        'difference();', 'cube(1, $fn=8);', 'cube(1, $fa=12);', 'rotate_extrude() cube(1);', 'projection() square(1);',
+        'offset(1) cube(1);', 'cube(1) cube(2);', 'square(1) { square(1); }', 'sphere(99999);',
+        'translate([99999, 0, 0]) cube(10);', 'cube([1, 1, 1e-9]);',
+        'for (i = [0:200]) translate([i * 0.1, 0, 0]) sphere(5, $fn=64);',
+        'linear_extrude(height=1, slices=200) circle(10, $fn=200);', 'cube(1); /* a */ sphere(1); // end',
+        'cube([floor(2.7), ceil(1.2), round(1.5)]);', 'cube([1, 2, 3][floor(1.9)]);',
+        'v = [for (i = [0:3]) i]; cube(len(v));', 'cube(1 + [1, 2] * [3, 4]);',
+        'cube([floor(1e5), 1, 1] * [floor(1e5), 1, 1] / 1e9);', 'cube(pow(2, 3));',
+        'cube([0.1, 0.2, 0.3] * [10, 10, 10]);', 'x = [1:3]; cube(x[2]);', 'cube([0:-1:3] == [] ? 1 : 2);',
+        'if (1) cube(1); else sphere(1);', 'if (0) cube(1);', 'cube(true ? 2 : 3);', 'cube(true + 1);',
+    ]  # fmt: skip
+    for _ in range(count):
+        risk[0] = pick([0.0, 0.0, 0.02, 0.05, 0.2])
+        if rng.random() < 0.15:
+            source = pick(faults)
+        else:
+            parts = []
+            if rng.random() < 0.95:
+                parts += ['size = 6;', 'n = 3;', 'r = size / 3;', 'k = n + 1;']
+            parts += [pick(definitions[0:2]), pick(definitions[2:4]), pick(definitions[4:6]), definitions[6]]
+            if rng.random() < risk[0] * 3:
+                parts.append(pick(extras))
+            body = solid if rng.random() < 0.65 else drawing
+            parts += [body(0) for _ in range(pick([1, 1, 2]))]
+            rng.shuffle(parts)
+            source = pick(['\n', ' ', '\r\n', '\n\t']).join(parts)
+            damage = rng.random()
+            if damage < 0.03 and source:
+                at = rng.randrange(len(source))
+                source = source[:at] + source[at + 1 :]
+            elif damage < 0.05 and source:
+                at = rng.randrange(len(source))
+                source = source[:at] + pick(['#', '"', '.', '[', '(', '$', '&', '|', '1', 'e', ';', ' ']) + source[at:]
+            elif damage < 0.06:
+                source = source[: rng.randrange(len(source) + 1)]
+        payload = {'source': source}
+        if rng.random() < 0.4:
+            payload['parameters'] = {'size': pick([6, 4.5, 'n * 2', 10]), 'n': pick([3, 2, 1, 'k']), 'k': 1}
+            if rng.random() < 0.05:
+                payload['parameters'][pick(['PI', 'for', 'children', 'r'])] = 2
+            if rng.random() < 0.03:
+                payload['parameters'] = pick([{'a': 'b', 'b': 'a'}, {'a': 'zz'}, {'a': 1e6}, [], None])
+        if rng.random() < 0.15:
+            payload['overrides'] = pick([{'size': 4}, {'n': 2.5, 'k': 1}, {'r': 1}, {'size': 8, 'z': 1}] * 3
+                                        + [{'bad name': 1}, {'n': True}, None])  # fmt: skip
+        if rng.random() < 0.02:
+            payload['source'] = pick([None, 5, ['cube(1);'], 'x' * 70000])
+        yield payload
 
 
 def stl_cases(count, seed):
@@ -2138,6 +2440,7 @@ def main():
     parser.add_argument('--fixtures', type=int, default=1500, help='generated fixture clearance checks')
     parser.add_argument('--stl', type=int, default=1000, help='generated STL meshes for relief height fields')
     parser.add_argument('--solid-cad', type=int, default=300, help='generated parametric solid histories and sections')
+    parser.add_argument('--cad-script', type=int, default=1000, help='generated CAD scripts for the script preview')
     parser.add_argument('--skip-suite', action='store_true', help='do not replay the calls made by the test suite')
     parser.add_argument(
         '--without-polygon-operations',
@@ -2267,6 +2570,12 @@ def main():
                 line = preview_reference(kind, data)
                 if line is not None:
                     lines.setdefault(line, 'solid-cad')
+            from studio.scad_geometry import _request as script_request
+
+            for payload in cad_script_cases(args.cad_script, 104):
+                line = preview_reference('cad_script', script_request(payload))
+                if line is not None:
+                    lines.setdefault(line, 'cad-script')
         tally = collections.Counter()
         declined = collections.Counter()
         failures = []
@@ -2285,7 +2594,7 @@ def main():
                     'project', case.get('job', case.get('tool_changes', case.get('fixtures', case.get('stl'))))
                 )
                 if subject is None:
-                    subject = case.get('solid_cad', case.get('solid_cad_section'))
+                    subject = case.get('solid_cad', case.get('solid_cad_section', case.get('cad_script')))
                 if 'relief' in case and 'ok' in got:
                     got = {'ok': where_computed_left_out(got['ok'])}
                 if not shared and 'project' in case and uses_polygon_operation(subject):
@@ -2327,7 +2636,7 @@ def main():
                     compare(lines)
 
     origins = ('suite', 'generated', 'entry/tabs', 'helix', 'v-carve', 'rotary', 'rotary-wrap', 'relief', 'stock')
-    for origin in (*origins, 'tool-changes', 'fixtures', 'stl', 'solid-cad'):
+    for origin in (*origins, 'tool-changes', 'fixtures', 'stl', 'solid-cad', 'cad-script'):
         total = sum(n for (o, _), n in tally.items() if o == origin)
         if not total:
             continue
@@ -2358,6 +2667,8 @@ def main():
         raise SystemExit('No STL height field was reproduced: the comparison did not exercise the reader.')
     if shared and args.solid_cad and not tally['solid-cad', 'program']:
         raise SystemExit('No solid was rebuilt: the comparison did not exercise the parametric history.')
+    if shared and args.cad_script and not tally['cad-script', 'program']:
+        raise SystemExit('No CAD script was previewed: the comparison did not exercise the script engine.')
     if not shared:
         print(
             'PASS for the cases compared; offsets, pockets, fills and V-carves were NOT COMPARED (no compiled extension).'
