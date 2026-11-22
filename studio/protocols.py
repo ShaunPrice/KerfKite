@@ -16,7 +16,8 @@ class Protocol:
 
 
 PROTOCOLS = {
-    row['id']: Protocol(**row) for row in json.loads((Path(__file__).parent / 'static' / 'protocols.json').read_text())
+    row['id']: Protocol(**row)
+    for row in json.loads((Path(__file__).parent / 'static' / 'protocols.json').read_text(encoding='utf-8'))
 }
 
 

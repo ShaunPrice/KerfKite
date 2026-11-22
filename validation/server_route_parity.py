@@ -108,6 +108,11 @@ def media(content_type):
     return content_type.split(';')[0].strip().lower()
 
 
+# Python's mimetypes takes the type of a .js file from the Windows registry, where some systems still give
+# application/javascript; the C++ server always sends text/javascript (RFC 9239).
+SAME_MEDIA = {'application/javascript': 'text/javascript'}
+
+
 def decoded(answer):
     status, content_type, body = answer
     if media(content_type) == JSON:
@@ -115,7 +120,15 @@ def decoded(answer):
             return status, json.loads(body)
         except ValueError:
             return status, ('unreadable JSON', body[:200])
-    return status, (media(content_type), body)
+    return status, (SAME_MEDIA.get(media(content_type), media(content_type)), body)
+
+
+def ports_agree(a, b):
+    """pyserial lists ports through a set, so its order changes from run to run; the C++ server sorts them."""
+    if isinstance(a, list) and isinstance(b, list):
+        key = lambda port: str(port.get('device')) if isinstance(port, dict) else str(port)  # noqa: E731
+        return first_difference(sorted(a, key=key), sorted(b, key=key))
+    return first_difference(a, b)
 
 
 def same(a, b):
@@ -735,7 +748,8 @@ def main():
             native.request('POST', '/api/connect', body({'port': 'simulator'}), JSON, {'X-Studio-Token': ''}),
         )
         for path in get_cases():
-            tally.record(f'{path} GET', reference.request('GET', path), native.request('GET', path))
+            compare = ports_agree if path == '/api/ports' else None
+            tally.record(f'{path} GET', reference.request('GET', path), native.request('GET', path), compare)
         for label, path, raw, kind in malformed_cases():
             tally.record(label, reference.request('POST', path, raw, kind), native.request('POST', path, raw, kind))
         for path, payload in design_cases(rng, args.mutations):
