@@ -381,11 +381,12 @@ Solid step(const Solid &a, const Solid &b, Op op) {
     return result;
 }
 
-// The union of many, by joining neighbours in the list pair by pair until one is left. Each solid then
-// takes part in about log2(n) operations, and material that ends up inside is dropped early. (One
-// arrangement of all of them at once is possible with this engine but much slower where many overlap:
-// every pair of surfaces is then intersected, including the parts deep inside the result.)
-Solid union_of(std::vector<Solid> solids) {
+// The union of solids that overlap one another, by joining neighbours in the list pair by pair until one
+// is left. Each solid then takes part in about log2(n) operations, and material that ends up inside is
+// dropped early. (One arrangement of all of them at once is possible with this engine but much slower
+// where many overlap: every pair of surfaces is then intersected, including the parts deep inside the
+// result.)
+Solid pairwise_union(std::vector<Solid> solids) {
     while (solids.size() > 1) {
         std::vector<Solid> next;
         next.reserve(solids.size() / 2 + 1);
@@ -394,6 +395,94 @@ Solid union_of(std::vector<Solid> solids) {
         solids.swap(next);
     }
     return solids.empty() ? Solid() : solids[0];
+}
+
+// The solids of a list in groups that can touch: two solids are in one group when their bounding boxes
+// meet (overlap, or touch at a face, an edge or a corner of the boxes), and the groups are what that
+// relation joins. Solids of different groups have boxes strictly apart from one another, a whole grid
+// unit at least in some coordinate, so they have no point in common. Groups are in the order of their
+// first solid, and the solids of a group in the order of the list. Found by a sweep along X: the solids in
+// order of the low X of their boxes (then of the list), each compared with those that start before it ends.
+std::vector<std::vector<size_t>> touching_groups(const std::vector<const Mesh *> &meshes) {
+    const size_t n = meshes.size();
+    std::vector<size_t> parent(n), order(n);
+    std::iota(parent.begin(), parent.end(), size_t(0));
+    std::iota(order.begin(), order.end(), size_t(0));
+    std::sort(order.begin(), order.end(), [&](size_t x, size_t y) { return meshes[x]->lo[0] != meshes[y]->lo[0] ? meshes[x]->lo[0] < meshes[y]->lo[0] : x < y; });
+    const auto find = [&](size_t x) {
+        while (parent[x] != x) {
+            parent[x] = parent[parent[x]];
+            x = parent[x];
+        }
+        return x;
+    };
+    for (size_t ii = 0; ii < n; ++ii) {
+        const Mesh &a = *meshes[order[ii]];
+        for (size_t jj = ii + 1; jj < n && meshes[order[jj]]->lo[0] <= a.hi[0]; ++jj) {
+            const Mesh &b = *meshes[order[jj]];
+            if (a.hi[1] < b.lo[1] || b.hi[1] < a.lo[1] || a.hi[2] < b.lo[2] || b.hi[2] < a.lo[2]) continue;
+            const size_t x = find(order[ii]), y = find(order[jj]);
+            if (x != y) parent[std::max(x, y)] = std::min(x, y);
+        }
+    }
+    // A root is the smallest member of its group, so the groups come out in the order of their first solid.
+    std::vector<std::vector<size_t>> groups;
+    std::vector<size_t> slot(n, SIZE_MAX);
+    for (size_t i = 0; i < n; ++i) {
+        const size_t r = find(i);
+        if (slot[r] == SIZE_MAX) {
+            slot[r] = groups.size();
+            groups.emplace_back();
+        }
+        groups[slot[r]].push_back(i);
+    }
+    return groups;
+}
+
+// The union of many. Solids that cannot touch need no Boolean operation: their union is their meshes side
+// by side (Compose). So the list is divided into touching groups; each group is joined pair by pair, and
+// the results of the groups are put together as one mesh. That mesh is a valid solid: each part is one,
+// and two parts are strictly apart, so no triangle of one meets a triangle of another.
+//
+// The groups depend on one another in nothing, and each is computed by operations that keep their counts
+// for their own thread: a later stage can join the groups on several threads and gather them in the order
+// above, with the same result.
+Solid union_of(std::vector<Solid> solids) {
+    solids.erase(std::remove_if(solids.begin(), solids.end(), [](const Solid &s) { return s.empty(); }), solids.end());
+    if (solids.size() <= 1) return solids.empty() ? Solid() : solids[0];
+    std::vector<const Mesh *> meshes;
+    meshes.reserve(solids.size());
+    for (const Solid &s : solids) meshes.push_back(&Access::mesh(s));
+    const std::vector<std::vector<size_t>> groups = touching_groups(meshes);
+    if (groups.size() == 1) return pairwise_union(solids);
+    std::vector<Solid> parts;
+    parts.reserve(groups.size());
+    for (const std::vector<size_t> &group : groups) {
+        std::vector<Solid> members;
+        members.reserve(group.size());
+        for (const size_t i : group) members.push_back(solids[i]);
+        parts.push_back(pairwise_union(members));
+    }
+    size_t vertices = 0, triangles = 0;
+    bool simple = true;
+    for (const Solid &part : parts) {
+        const Mesh &m = Access::mesh(part);
+        vertices += m.v.size();
+        triangles += m.t.size();
+        simple = simple && m.simple;
+    }
+    if (triangles > kMaxTriangles) throw ValueError("union: the result has more than " + std::to_string(kMaxTriangles) + " triangles");
+    std::vector<GridPoint> v;
+    std::vector<Triangle> t;
+    v.reserve(vertices);
+    t.reserve(triangles);
+    for (const Solid &part : parts) {
+        const Mesh &m = Access::mesh(part);
+        const uint32_t offset = static_cast<uint32_t>(v.size());
+        v.insert(v.end(), m.v.begin(), m.v.end());
+        for (const Triangle &tri : m.t) t.push_back(Triangle{{tri[0] + offset, tri[1] + offset, tri[2] + offset}});
+    }
+    return detail::make_solid(std::move(v), std::move(t), simple, "union", true);
 }
 
 }  // namespace
@@ -408,7 +497,14 @@ Solid batch_boolean(const std::vector<Solid> &solids, Op op) {
     }
     if (op == Op::Union) return union_of(solids);
     if (solids[0].empty()) return Solid();
-    return step(solids[0], union_of(std::vector<Solid>(solids.begin() + 1, solids.end())), Op::Difference);
+    // The first less the union of the rest. A solid whose box is strictly apart from the first's has no point
+    // in common with it and takes nothing away: it is left out, and when nothing is left the first is the answer.
+    const Mesh &first = Access::mesh(solids[0]);
+    std::vector<Solid> tools;
+    for (size_t i = 1; i < solids.size(); ++i)
+        if (!solids[i].empty() && !apart(first, Access::mesh(solids[i]))) tools.push_back(solids[i]);
+    if (tools.empty()) return solids[0];
+    return step(solids[0], union_of(std::move(tools)), Op::Difference);
 }
 
 std::size_t count_self_intersections(const Solid &solid) {
@@ -436,6 +532,24 @@ bool verify_exact(const Solid &solid) {
         return false;
     }
     return arrangement.unit_winding();
+}
+
+bool same_shape(const Solid &a, const Solid &b) {
+    const Mesh &ma = Access::mesh(a), &mb = Access::mesh(b);
+    if (ma.t.empty() || mb.t.empty()) return ma.t.empty() && mb.t.empty();
+    for (int k = 0; k < 3; ++k)
+        if (ma.lo[k] != mb.lo[k] || ma.hi[k] != mb.hi[k]) return false;
+    // The arrangement of the two as they stand: no ribbons, and nothing absorbed or rounded. Each cell is
+    // wound by each solid exactly; the solids are one set of points when no cell is inside one alone.
+    detail::Arrangement arrangement;
+    std::vector<detail::Operand> operands;
+    operands.push_back(detail::Operand{&ma.v, &ma.t, 0, false, nullptr});
+    operands.push_back(detail::Operand{&mb.v, &mb.t, 1, false, nullptr});
+    arrangement.load(operands);
+    arrangement.intersect();
+    detail::ExactMesh exact;
+    arrangement.resolve(detail::Rule::Union, exact);
+    return arrangement.windings_agree();
 }
 
 }  // namespace solid

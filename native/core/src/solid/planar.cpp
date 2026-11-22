@@ -1,9 +1,21 @@
 // Exact planar arrangement and triangulation: see planar.hpp.
 //
-// The triangulation is the classical incremental one: each point is inserted into the triangle (or on
-// the edge) that contains it, then each required edge is recovered by flipping the edges that cross it
-// (Sloan, "A fast algorithm for generating constrained Delaunay triangulations", 1993, without the
-// Delaunay step). Because orientation tests are exact, no triangle without area is ever made.
+// The triangulation is the classical incremental Delaunay one (Lawson's flips; the constrained form after
+// Sloan, "A fast algorithm for generating constrained Delaunay triangulations", 1993), written from those
+// descriptions. The points are inserted in the order of a Hilbert curve over their bounding box, so that
+// each is found by a short walk from the one before. Each is put into the triangle (or on the edge) that
+// contains it, and the edges around it are flipped while the point across one of them is certainly inside
+// the circle through the triangle on this side (legalize). Then each required edge is recovered by flipping
+// the edges that cross it, and the edges that are not required are flipped by the same rule until none can
+// be (improve).
+//
+// The rule, exactly: an edge that is not required is flipped when, and only when, the in-circle test of the
+// interval enclosures of the four points (filtered_in_circle) proves the fourth point strictly inside the
+// circle through the other three, and the two triangles form a strictly convex quadrilateral (exact turns).
+// Points on one circle, or so near it that the intervals cannot tell, keep the edge they have; which one that
+// is follows from the fixed order of insertion. Every flip is then a true Delaunay flip, so the flipping
+// ends (each one lowers the points lifted onto the paraboloid), and the result is a fixed function of the
+// points and the required edges. Orientation tests are exact, so no triangle without area is ever made.
 #include "planar.hpp"
 
 #include <algorithm>
@@ -85,6 +97,47 @@ int Planar::filtered_turn(const Local &pa, const Local &pb, const Local &pc) {
     const double bound = (std::fabs(A) * dB + std::fabs(B) * dA + dA * dB + std::fabs(C) * dD + std::fabs(D) * dC + dC * dD +
                           kU * (std::fabs(P) + std::fabs(Q) + std::fabs(value))) * 1.000001 + 0x1p-900;
     return value > bound ? 1 : value < -bound ? -1 : 2;
+}
+
+// The in-circle determinant of a, b, c, d (rows a - d, b - d, c - d, each with its squared length), in
+// interval arithmetic: each operation is rounded to nearest and widened outwards by more than its rounding
+// (exact.hpp), so the interval of the result contains the determinant of every choice of points within the
+// intervals given, the true points among them. Its sign, times the turn of a b c, is positive when d is
+// inside the circle through a, b, c. The turn is taken from the same intervals; when it cannot be told, or
+// the determinant's interval contains zero, the answer is 2. Only + - * and comparisons of doubles are used.
+int Planar::filtered_in_circle(const Interval a[2], const Interval b[2], const Interval c[2], const Interval d[2]) {
+    const Interval adx = a[0] - d[0], ady = a[1] - d[1], bdx = b[0] - d[0], bdy = b[1] - d[1], cdx = c[0] - d[0], cdy = c[1] - d[1];
+    const Interval al = adx * adx + ady * ady, bl = bdx * bdx + bdy * bdy, cl = cdx * cdx + cdy * cdy;
+    const Interval det = adx * (bdy * cl - cdy * bl) - ady * (bdx * cl - cdx * bl) + al * (bdx * cdy - bdy * cdx);
+    const int s = det.sign();
+    if (s != 1 && s != -1) return 2;
+    const Interval turn = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+    const int t = turn.sign();
+    if (t != 1 && t != -1) return 2;
+    return s * t;
+}
+
+int Planar::in_circle(int a, int b, int c, int d) const {
+    return filtered_in_circle(iv_[static_cast<size_t>(a)].data(), iv_[static_cast<size_t>(b)].data(), iv_[static_cast<size_t>(c)].data(), iv_[static_cast<size_t>(d)].data());
+}
+
+// The Hilbert curve's own order of the cells of a 2^16 by 2^16 grid: the cell (x, y) is reached after
+// hilbert_index(x, y) others. Quadrant by quadrant from the largest, turning the frame as the curve does.
+uint64_t Planar::hilbert_index(uint32_t x, uint32_t y) {
+    const uint32_t n = 1u << 16;
+    uint64_t d = 0;
+    for (uint32_t s = n / 2; s > 0; s /= 2) {
+        const uint32_t rx = (x & s) ? 1u : 0u, ry = (y & s) ? 1u : 0u;
+        d += static_cast<uint64_t>(s) * s * ((3u * rx) ^ ry);
+        if (ry == 0) {
+            if (rx == 1) {
+                x = n - 1 - x;
+                y = n - 1 - y;
+            }
+            std::swap(x, y);
+        }
+    }
+    return d;
 }
 
 // The turn of three local vertices: orient() of their points, by two shorter ways where they apply.
@@ -394,10 +447,63 @@ void Planar::insert(int p) {
         if (!found) defect("a point outside the triangulated area");
     }
     const int zeros = (s[0] == 0) + (s[1] == 0) + (s[2] == 0);
-    if (zeros == 0) split_face(t, p);
-    else if (zeros == 1) split_edge(t, s[0] == 0 ? 0 : s[1] == 0 ? 1 : 2, p);
-    else defect("two points at one place");
+    // The triangles made, each with the index of its edge across from p, for legalize().
+    std::vector<std::pair<int, int>> &stack = flip_stack_;
+    stack.clear();
+    const int made = static_cast<int>(tris_.size());
+    if (zeros == 0) {
+        split_face(t, p);
+        stack.emplace_back(t, 0);
+        stack.emplace_back(made, 0);
+        stack.emplace_back(made + 1, 0);
+    } else if (zeros == 1) {
+        const int i = s[0] == 0 ? 0 : s[1] == 0 ? 1 : 2;
+        const bool across = tris_[static_cast<size_t>(t)].n[i] >= 0;
+        const int u = tris_[static_cast<size_t>(t)].n[i];
+        split_edge(t, i, p);
+        stack.emplace_back(t, 2);
+        stack.emplace_back(made, 1);
+        if (across) {
+            stack.emplace_back(u, 2);
+            stack.emplace_back(made + 1, 1);
+        }
+    } else {
+        defect("two points at one place");
+    }
+    legalize(p);
     last_ = vtri_[static_cast<size_t>(p)];
+}
+
+// After p has been inserted: while the point across an edge opposite p is certainly inside the circle
+// through that edge and p, the edge is flipped (the rule at the head of this file), and the two edges
+// opposite p that the flip makes are looked at in turn. Every triangle on the stack has p as its third
+// corner across the edge named, so the triangle across that edge does not have p.
+void Planar::legalize(int p) {
+    std::vector<std::pair<int, int>> &stack = flip_stack_;
+    size_t guard = 0;
+    const size_t limit = 8 * tris_.size() + 64;
+    while (!stack.empty()) {
+        const std::pair<int, int> top = stack.back();
+        stack.pop_back();
+        const int t = top.first, i = top.second;
+        const Tri &tri = tris_[static_cast<size_t>(t)];
+        if (tri.v[(i + 2) % 3] != p) continue;
+        const int u = tri.n[i];
+        if (u < 0) continue;
+        const int a = tri.v[i], b = tri.v[(i + 1) % 3];
+        const Tri &other = tris_[static_cast<size_t>(u)];
+        int j = 0;
+        while (j < 3 && other.n[j] != t) ++j;
+        if (j == 3) defect("broken adjacency");
+        const int d = other.v[(j + 2) % 3];
+        if (in_circle(a, b, p, d) != 1) continue;
+        if (!(o(a, d, p) > 0 && o(d, b, p) > 0)) continue;
+        if (++guard > limit) break;  // cannot happen with true Delaunay flips; a bound all the same
+        flip(t, i);
+        stack.emplace_back(t, 0);
+        stack.emplace_back(u, 0);
+    }
+    stack.clear();
 }
 
 void Planar::enforce(int first, int second) {
@@ -505,28 +611,11 @@ void Planar::enforce(int first, int second) {
     }
 }
 
-// Flips edges that are not required until no triangle pair would be better shaped the other way (the
-// Delaunay rule: the two angles facing an edge sum to at most a half turn). Any triangulation is
-// correct; this one avoids the needless slivers that rounding to the grid would later flatten or turn
-// over. The rule is evaluated in doubles, in a fixed order of correctly rounded operations, so every
-// platform makes the same flips; whether a flip is possible at all is still decided exactly.
+// Flips edges that are not required by the rule at the head of this file until none can be: with the
+// required edges, the triangulation is then constrained Delaunay but for points the intervals cannot place
+// against a circle. Any triangulation is correct; this one avoids the needless slivers that rounding to the
+// grid would later flatten or turn over, and the long triangles that later operations would find in the way.
 void Planar::improve(const std::vector<std::pair<int, int>> &required) {
-    std::vector<std::array<double, 2>> &at = at_;
-    at.resize(pid_.size());
-    for (size_t k = 0; k < pid_.size(); ++k) {
-        const Pt &p = pool_.pts[static_cast<size_t>(pid_[k])];
-        at[k][0] = (p.c[au_].lo + p.c[au_].hi) / 2;
-        at[k][1] = (p.c[av_].lo + p.c[av_].hi) / 2;
-    }
-    // The cotangent of the angle at c facing the edge x-y.
-    const auto cotangent = [&](int x, int y, int c) {
-        const double ax = at[static_cast<size_t>(x)][0] - at[static_cast<size_t>(c)][0], ay = at[static_cast<size_t>(x)][1] - at[static_cast<size_t>(c)][1];
-        const double bx = at[static_cast<size_t>(y)][0] - at[static_cast<size_t>(c)][0], by = at[static_cast<size_t>(y)][1] - at[static_cast<size_t>(c)][1];
-        const double dot = ax * bx + ay * by, cross = std::fabs(ax * by - ay * bx);
-        const double scale = std::fabs(ax * bx) + std::fabs(ay * by) + cross;
-        if (!(scale > 0)) return 0.0;
-        return dot / (cross > 1e-12 * scale ? cross : 1e-12 * scale);
-    };
     std::vector<std::pair<int, int>> &stack = flip_stack_;
     stack.clear();
     for (size_t t = 0; t < tris_.size(); ++t)
@@ -549,7 +638,7 @@ void Planar::improve(const std::vector<std::pair<int, int>> &required) {
         while (j < 3 && other.n[j] != t) ++j;
         if (j == 3) defect("broken adjacency");
         const int d = other.v[(j + 2) % 3];
-        if (!(cotangent(x, y, c) + cotangent(x, y, d) < -1e-9)) continue;
+        if (in_circle(x, y, c, d) != 1) continue;
         if (!(o(x, d, c) > 0 && o(d, y, c) > 0)) continue;
         flip(t, i);
         ++flips;
@@ -571,13 +660,32 @@ void Planar::triangulate(int r0, int r1, int r2) {
     rest.clear();
     for (const int p : points)
         if (p != r0 && p != r1 && p != r2) rest.push_back(p);
-    // Neighbouring points one after another keep the search for the containing triangle short.
-    std::sort(rest.begin(), rest.end(), [&](int x, int y) {
-        const Pt &a = pool_.pts[static_cast<size_t>(x)], &b = pool_.pts[static_cast<size_t>(y)];
-        if (a.c[au_].lo != b.c[au_].lo) return a.c[au_].lo < b.c[au_].lo;
-        if (a.c[av_].lo != b.c[av_].lo) return a.c[av_].lo < b.c[av_].lo;
-        return x < y;
-    });
+    // Neighbouring points one after another keep the search for the containing triangle short: the points
+    // go in the order of a Hilbert curve over their bounding box, by the middles of their intervals (a fixed
+    // computation in doubles), then by id. Only speed depends on the order being a good one; the result
+    // depends on it only through points that the in-circle test cannot place (see the head of this file).
+    for (const int p : rest) pool_.settle(p);
+    {
+        double ulo = 0, uhi = 0, vlo = 0, vhi = 0;
+        for (size_t k = 0; k < rest.size(); ++k) {
+            const Pt &q = pool_.pts[static_cast<size_t>(rest[k])];
+            const double u = (q.c[au_].lo + q.c[au_].hi) / 2, v = (q.c[av_].lo + q.c[av_].hi) / 2;
+            if (k == 0 || u < ulo) ulo = u;
+            if (k == 0 || u > uhi) uhi = u;
+            if (k == 0 || v < vlo) vlo = v;
+            if (k == 0 || v > vhi) vhi = v;
+        }
+        const double su = uhi > ulo ? 65535.0 / (uhi - ulo) : 0.0, sv = vhi > vlo ? 65535.0 / (vhi - vlo) : 0.0;
+        const auto cell = [](double x) { return static_cast<uint32_t>(x < 0 ? 0.0 : x > 65535.0 ? 65535.0 : x); };
+        std::vector<std::pair<uint64_t, int>> keyed(rest.size());
+        for (size_t k = 0; k < rest.size(); ++k) {
+            const Pt &q = pool_.pts[static_cast<size_t>(rest[k])];
+            const double u = (q.c[au_].lo + q.c[au_].hi) / 2, v = (q.c[av_].lo + q.c[av_].hi) / 2;
+            keyed[k] = std::make_pair(hilbert_index(cell((u - ulo) * su), cell((v - vlo) * sv)), rest[k]);
+        }
+        std::sort(keyed.begin(), keyed.end());
+        for (size_t k = 0; k < rest.size(); ++k) rest[k] = keyed[k].second;
+    }
     pid_.insert(pid_.end(), rest.begin(), rest.end());
     std::vector<int> &ids = ids_;
     ids.resize(pid_.size());
@@ -594,12 +702,15 @@ void Planar::triangulate(int r0, int r1, int r2) {
         return ids[lo];
     };
     if (orient(r0, r1, r2) <= 0) defect("the outer triangle is not counter-clockwise");
-    // The coordinates of each local vertex, for o().
+    // The coordinates of each local vertex, for o() and in_circle().
     local_.resize(pid_.size());
+    iv_.resize(pid_.size());
     for (size_t k = 0; k < pid_.size(); ++k) {
         pool_.settle(pid_[k]);
         const Pt &q = pool_.pts[static_cast<size_t>(pid_[k])];
         local_[k] = local_of(q.c[au_], q.c[av_], q.rat < 0);
+        iv_[k][0] = q.c[au_];
+        iv_[k][1] = q.c[av_];
     }
     // The segments each local vertex lies on the line of, from the notes of split().
     line_start_.clear();
