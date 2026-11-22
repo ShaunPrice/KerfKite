@@ -11,6 +11,7 @@
 // reference upper-cases and splits by Unicode's rules.
 #include "kerfkite/program_import.hpp"
 #include "kerfkite/pdf_import.hpp"
+#include "kerfkite/bundle_import.hpp"
 
 #include <algorithm>
 #include <array>
@@ -712,10 +713,13 @@ json import_program(const json &payload) {
 
 }  // namespace
 
-bool program_import_command(const std::string &command) { return command == "program-import" || command == "pdf-import"; }
+bool program_import_command(const std::string &command) {
+    return command == "program-import" || command == "pdf-import" || command == "bundle-import";
+}
 
 Json program_import_call(const std::string &command, const Json &request) {
     if (command == "pdf-import") return import_pdf(request);
+    if (command == "bundle-import") return inspect_bundle(request);
     return import_program(request);
 }
 

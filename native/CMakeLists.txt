@@ -18,7 +18,7 @@ add_library(kerfkite_core STATIC core/src/api.cpp core/src/cam.cpp core/src/dril
   core/src/leveling.cpp core/src/protocols.cpp core/src/relief.cpp core/src/rotary.cpp core/src/router_entry.cpp
   core/src/simple_line.cpp core/src/stock.cpp core/src/tabs.cpp core/src/tool_changes.cpp core/src/fixture_collision.cpp core/src/stl_heightmap.cpp
   core/src/artwork_relief.cpp core/src/program_import.cpp core/src/dxf.cpp
-  core/src/pdf_import.cpp core/src/inflate.cpp)
+  core/src/pdf_import.cpp core/src/inflate.cpp core/src/bundle_import.cpp core/src/python_text.cpp)
 # The core's own JSON reader and writer.
 target_sources(kerfkite_core PRIVATE core/src/json.cpp)
 # Circuit board import: Gerber layers and Excellon drill files.

@@ -8,7 +8,8 @@ are recorded the same way, with their rotary setup, and so are those of studio.r
 studio.simulation.simulate, studio.tool_changes.plan_tool_changes, studio.fixture_collision.check_fixtures and
 studio.mesh_import.stl_heightmap, whose expected answers come from their Python, as the native core is compared
 with; so are Studio's solid routes, its CAD script preview (studio.scad_geometry.preview) and its reader of
-foreign drawings (studio.program_import.import_program) and PDF pages (studio.pdf_import.import_pdf).
+foreign drawings (studio.program_import.import_program), PDF pages (studio.pdf_import.import_pdf) and LightBurn
+bundles (studio.import_bundle.inspect_bundle).
 """
 
 import functools
@@ -144,6 +145,10 @@ def preview_reference(kind, data):
             result = _SOLID.get('pdf', import_pdf)(data, backend='python')
             # Its points are tuples, which JSON carries as lists.
             result = json.loads(json.dumps(result))
+        elif kind == 'bundle_import':
+            from studio.import_bundle import inspect_bundle
+
+            result = _SOLID.get('bundle', inspect_bundle)(data, backend='python')
         elif kind == 'solid_cad_section':
             from studio.solid_cad import horizontal_section
 
@@ -276,6 +281,24 @@ def _record_solid_cad():
         return original_pdf(payload, **kwargs)
 
     pdf_import.import_json, pdf_import.import_pdf = pdf_json, pdf
+
+    import studio.import_bundle as import_bundle
+
+    original_bundle_json, original_bundle = import_bundle.import_json, import_bundle.inspect_bundle
+    _SOLID.update(bundle=original_bundle)
+
+    @functools.wraps(original_bundle_json)
+    def bundle_json(payload):
+        record('bundle_import', payload)
+        return original_bundle_json(payload)
+
+    @functools.wraps(original_bundle)
+    def bundle(payload, **kwargs):
+        if not kwargs:
+            record('bundle_import', payload)
+        return original_bundle(payload, **kwargs)
+
+    import_bundle.import_json, import_bundle.inspect_bundle = bundle_json, bundle
 
 
 def _studio_as_left_alone():

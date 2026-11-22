@@ -63,6 +63,9 @@ setup(
                 # Vector PDF pages, with the core's own inflate for FlateDecode.
                 'native/core/src/pdf_import.cpp',
                 'native/core/src/inflate.cpp',
+                # LightBurn bundles: the ZIP archive and its text members.
+                'native/core/src/bundle_import.cpp',
+                'native/core/src/python_text.cpp',
                 # Circuit board import: Gerber layers and Excellon drill files.
                 'native/core/src/excellon.cpp',
                 'native/core/src/gerber.cpp',

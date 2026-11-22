@@ -91,16 +91,7 @@ bool decimal_digit(uint32_t c, int *value = nullptr) {
     return true;
 }
 
-bool printable(uint32_t c) {
-    const size_t count = sizeof(detail::kNotPrintable) / sizeof(detail::kNotPrintable[0]);
-    size_t low = 0, high = count;
-    while (low < high) {
-        const size_t middle = (low + high) / 2;
-        if (detail::kNotPrintable[middle][1] < c) low = middle + 1;
-        else high = middle;
-    }
-    return !(low < count && detail::kNotPrintable[low][0] <= c);
-}
+bool printable(uint32_t c) { return detail::python_printable(c); }
 
 std::string utf8(uint32_t c) {
     std::string out;

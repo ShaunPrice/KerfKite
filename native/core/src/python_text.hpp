@@ -49,6 +49,16 @@ inline std::string python_strip(const std::string &text, const std::vector<CodeP
     return text.substr(points[first].begin, points[last - 1].end - points[first].begin);
 }
 
+// str.isprintable() of one code point, from the Unicode tables of python_text.cpp.
+bool python_printable(uint32_t c);
+
+// bytes.decode('utf-8') in strict mode: the code points, or false where Python raises UnicodeDecodeError (a
+// sequence that is not well-formed UTF-8 in Unicode's table 3-7).
+bool python_utf8(const unsigned char *data, size_t size, std::vector<uint32_t> &out);
+
+// The UTF-8 bytes of a code point, added to text.
+void append_utf8(std::string &text, uint32_t c);
+
 }  // namespace detail
 }  // namespace kerfkite
 

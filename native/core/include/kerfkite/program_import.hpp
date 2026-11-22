@@ -13,6 +13,7 @@ namespace kerfkite {
 
 // "program-import": {"name", "text", "unit"} -> {"objects", "layers", "presets", "devices", "warnings", "mode"}.
 // "pdf-import": {"content", "page"} -> the same with "page", "pageCount" and "pageSize" (kerfkite/pdf_import.hpp).
+// "bundle-import": {"content", "index"} -> a LightBurn bundle's members or one's text (kerfkite/bundle_import.hpp).
 bool program_import_command(const std::string &command);
 Json program_import_call(const std::string &command, const Json &request);
 

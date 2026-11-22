@@ -8,7 +8,8 @@ namespace detail {
 
 namespace {
 
-struct Broken {};
+struct Broken {};   // data zlib reports an error for
+struct Short {};    // data that ends before the stream does
 struct TooLong {};
 
 class Bits {
@@ -24,7 +25,7 @@ public:
 
     int bit() {
         if (used_ == 8) {
-            if (at_ >= size_) throw Broken();
+            if (at_ >= size_) throw Short();
             current_ = data_[at_++];
             used_ = 0;
         }
@@ -35,7 +36,7 @@ public:
     void align() { used_ = 8; }
 
     unsigned char byte() {
-        if (at_ >= size_) throw Broken();
+        if (at_ >= size_) throw Short();
         return data_[at_++];
     }
 
@@ -52,18 +53,26 @@ private:
 struct Code {
     std::array<int, 16> counts{};
     std::vector<int> symbols;
+    int longest = 0;        // the longest code, zero when there is none
+    bool zeros = false;     // a code-length code without codes, which zlib reads as a length of 0 a bit
 
-    // False for lengths that oversubscribe the code; an incomplete code is allowed, as zlib allows one for a
-    // single distance.
-    bool build(const int *lengths, int n) {
+    // False where zlib rejects the lengths: an oversubscribed code, or an incomplete one other than a single
+    // code of one bit for literals or distances. A code without codes is accepted, as zlib accepts one and
+    // reports an error only when a symbol is read; of_lengths marks the code of the code lengths.
+    bool build(const int *lengths, int n, bool of_lengths = false) {
         counts.fill(0);
         for (int i = 0; i < n; ++i) ++counts[static_cast<size_t>(lengths[i])];
         counts[0] = 0;
+        longest = 0;
+        for (int length = 15; length >= 1 && !longest; --length)
+            if (counts[static_cast<size_t>(length)]) longest = length;
+        zeros = of_lengths && longest == 0;
         int left = 1;
         for (int length = 1; length < 16; ++length) {
             left = left * 2 - counts[static_cast<size_t>(length)];
             if (left < 0) return false;
         }
+        if (longest && left > 0 && (of_lengths || longest != 1)) return false;
         std::array<int, 16> offsets{};
         for (int length = 1; length < 15; ++length) offsets[static_cast<size_t>(length) + 1] = offsets[static_cast<size_t>(length)] + counts[static_cast<size_t>(length)];
         symbols.assign(static_cast<size_t>(n), 0);
@@ -74,12 +83,18 @@ struct Code {
 
     // The next symbol: the code read a bit at a time, most significant bit first, against the first code of
     // each length.
+    // A code no symbol has is an error once its bits are read, as in zlib's tables.
     int decode(Bits &bits) const {
+        if (zeros) {
+            bits.bit();
+            return 0;
+        }
         int code = 0, first = 0, index = 0;
         for (int length = 1; length < 16; ++length) {
             code |= bits.bit();
             const int count = counts[static_cast<size_t>(length)];
             if (code - first < count) return symbols[static_cast<size_t>(index + code - first)];
+            if (length >= longest) break;
             index += count;
             first = (first + count) << 1;
             code <<= 1;
@@ -126,11 +141,12 @@ void fixed_block(Bits &bits, std::vector<unsigned char> &out, size_t limit) {
         for (int i = 144; i < 256; ++i) lengths[i] = 9;
         for (int i = 256; i < 280; ++i) lengths[i] = 7;
         for (int i = 280; i < 288; ++i) lengths[i] = 8;
+        // Distance codes 30 and 31 complete the code and are errors when read, as in zlib.
         Code literal, distance;
         literal.build(lengths, 288);
-        int distances[30];
+        int distances[32];
         for (int &d : distances) d = 5;
-        distance.build(distances, 30);
+        distance.build(distances, 32);
         return std::make_pair(literal, distance);
     }();
     codes(bits, fixed.first, fixed.second, out, limit);
@@ -144,7 +160,7 @@ void dynamic_block(Bits &bits, std::vector<unsigned char> &out, size_t limit) {
     int lengths[320] = {};
     for (int i = 0; i < code_lengths; ++i) lengths[order[i]] = static_cast<int>(bits.take(3));
     Code lengths_code;
-    if (!lengths_code.build(lengths, 19)) throw Broken();
+    if (!lengths_code.build(lengths, 19, true)) throw Broken();
     int total = 0;
     int all[320] = {};
     while (total < literals + distances) {
@@ -155,9 +171,9 @@ void dynamic_block(Bits &bits, std::vector<unsigned char> &out, size_t limit) {
         }
         int value = 0, repeat = 0;
         if (symbol == 16) {
+            repeat = 3 + static_cast<int>(bits.take(2));
             if (total == 0) throw Broken();
             value = all[total - 1];
-            repeat = 3 + static_cast<int>(bits.take(2));
         } else if (symbol == 17) {
             repeat = 3 + static_cast<int>(bits.take(3));
         } else {
@@ -183,6 +199,32 @@ uint32_t adler32(const std::vector<unsigned char> &data) {
 
 }  // namespace
 
+namespace {
+
+// The DEFLATE blocks from the start of the bits; the bytes they take, with the last one whole.
+void blocks(Bits &bits, std::vector<unsigned char> &out, size_t limit) {
+    for (bool last = false; !last;) {
+        last = bits.bit();
+        const unsigned type = bits.take(2);
+        if (type == 0) {
+            bits.align();
+            const unsigned length = bits.byte() | (static_cast<unsigned>(bits.byte()) << 8);
+            const unsigned complement = bits.byte() | (static_cast<unsigned>(bits.byte()) << 8);
+            if ((length ^ 0xffff) != complement) throw Broken();
+            for (unsigned i = 0; i < length; ++i) put(out, bits.byte(), limit);
+        } else if (type == 1) {
+            fixed_block(bits, out, limit);
+        } else if (type == 2) {
+            dynamic_block(bits, out, limit);
+        } else {
+            throw Broken();
+        }
+    }
+    bits.align();
+}
+
+}  // namespace
+
 Inflated zlib_decompress(const unsigned char *data, size_t size, size_t limit, std::vector<unsigned char> &out) {
     out.clear();
     if (size < 2) return Inflated::Broken;
@@ -190,33 +232,50 @@ Inflated zlib_decompress(const unsigned char *data, size_t size, size_t limit, s
     if ((cmf & 15) != 8 || (cmf >> 4) > 7 || ((cmf << 8) | flg) % 31 != 0 || (flg & 32)) return Inflated::Broken;
     try {
         Bits bits(data + 2, size - 2);
-        for (bool last = false; !last;) {
-            last = bits.bit();
-            const unsigned type = bits.take(2);
-            if (type == 0) {
-                bits.align();
-                const unsigned length = bits.byte() | (static_cast<unsigned>(bits.byte()) << 8);
-                const unsigned complement = bits.byte() | (static_cast<unsigned>(bits.byte()) << 8);
-                if ((length ^ 0xffff) != complement) return Inflated::Broken;
-                for (unsigned i = 0; i < length; ++i) put(out, bits.byte(), limit);
-            } else if (type == 1) {
-                fixed_block(bits, out, limit);
-            } else if (type == 2) {
-                dynamic_block(bits, out, limit);
-            } else {
-                return Inflated::Broken;
-            }
-        }
-        bits.align();
+        blocks(bits, out, limit);
         uint32_t check = 0;
         for (int i = 0; i < 4; ++i) check = (check << 8) | bits.byte();
         if (check != adler32(out)) return Inflated::Broken;
     } catch (const Broken &) {
         return Inflated::Broken;
+    } catch (const Short &) {
+        return Inflated::Broken;
     } catch (const TooLong &) {
         return Inflated::TooLong;
     }
     return Inflated::Ok;
+}
+
+Inflated raw_inflate(const unsigned char *data, size_t size, size_t limit, std::vector<unsigned char> &out, bool &ended) {
+    out.clear();
+    ended = false;
+    try {
+        Bits bits(data, size);
+        blocks(bits, out, limit);
+        ended = true;
+    } catch (const Broken &) {
+        return Inflated::Broken;
+    } catch (const Short &) {
+        return Inflated::Ok;
+    } catch (const TooLong &) {
+        return Inflated::TooLong;
+    }
+    return Inflated::Ok;
+}
+
+uint32_t crc32(const unsigned char *data, size_t size) {
+    static const std::array<uint32_t, 256> table = [] {
+        std::array<uint32_t, 256> values{};
+        for (uint32_t n = 0; n < 256; ++n) {
+            uint32_t c = n;
+            for (int k = 0; k < 8; ++k) c = c & 1 ? 0xEDB88320u ^ (c >> 1) : c >> 1;
+            values[n] = c;
+        }
+        return values;
+    }();
+    uint32_t c = 0xFFFFFFFFu;
+    for (size_t i = 0; i < size; ++i) c = table[(c ^ data[i]) & 0xff] ^ (c >> 8);
+    return c ^ 0xFFFFFFFFu;
 }
 
 }  // namespace detail

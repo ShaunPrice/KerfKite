@@ -40,7 +40,9 @@ Eight comparisons, all against values computed by Python in this run:
    here and compared to the tolerance by validation/dxf_import_check.py. And studio.pdf_import's import_pdf for
    PDF pages written as producers write them (pdf_import_cases): paths, fills and their rules, clipping, forms,
    graphics states, optional content, text and images, page trees, boxes, units and rotations, every filter,
-   cross-reference tables and streams, and damaged operators, documents and payloads.
+   cross-reference tables and streams, and damaged operators, documents and payloads. And
+   studio.import_bundle's inspect_bundle for LightBurn bundles (bundle_import_cases): ZIP archives listed and
+   read member by member, sound, unusual and damaged.
 
 For each job the native core must either reproduce the reference exactly (program lines, preview segments,
 length, time, bounds and warnings, and for a rotary job its rotary setup; or the same error message) or
@@ -66,6 +68,7 @@ import argparse
 import base64
 import collections
 import hashlib
+import io
 import itertools
 import json
 import math
@@ -77,6 +80,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -3029,6 +3033,236 @@ def pdf_import_cases(count, seed):
         yield payload
 
 
+def bundle_archive(members, rng, *, comment=b'', comment_field=None, prefix=b'', absolute=False, tail=b''):
+    """A ZIP archive written field by field, so that any field can be what a damaged or unusual archive holds.
+    Each member is a dict: name (bytes), data, and optionally method, level, flags, local_flags, crc, size,
+    csize, version, external, extra, local_name, local_extra, comment and offset."""
+    import zlib
+
+    blob = bytearray(prefix)
+    base = 0 if absolute else len(prefix)
+    directory = bytearray()
+    for m in members:
+        name, raw, method = m['name'], m['data'], m.get('method', 8)
+        if method == 8:
+            packer = zlib.compressobj(m.get('level', 6), zlib.DEFLATED, -15)
+            packed = packer.compress(raw) + packer.flush()
+        else:
+            packed = raw
+        flags = m.get('flags', 0)
+        crc, size, csize = m.get('crc', zlib.crc32(raw)), m.get('size', len(raw)), m.get('csize', len(packed))
+        local_name, local_extra = m.get('local_name', name), m.get('local_extra', b'')
+        offset = len(blob) - base
+        blob += struct.pack(
+            '<4s2B4HL2L2H', b'PK\x03\x04', 20, 0, m.get('local_flags', flags), method, 0, 0x21, crc, csize, size,
+            len(local_name), len(local_extra),
+        )  # fmt: skip
+        blob += local_name + local_extra + packed
+        extra, note = m.get('extra', b''), m.get('comment', b'')
+        directory += struct.pack(
+            '<4s4B4HL2L5H2L', b'PK\x01\x02', 20, 3, m.get('version', 20), 0, flags, method, 0, 0x21, crc, csize,
+            size, len(name), len(extra), len(note), 0, 0, m.get('external', 0o100644 << 16), m.get('offset', offset),
+        )  # fmt: skip
+        directory += name + extra + note
+    start = len(blob) - base
+    blob += directory
+    blob += struct.pack(
+        '<4s4H2LH', b'PK\x05\x06', 0, 0, len(members), len(members), len(directory), start,
+        len(comment) if comment_field is None else comment_field,
+    )  # fmt: skip
+    return bytes(blob + comment + tail)
+
+
+def bundle_import_cases(count, seed):
+    """LightBurn bundles for /api/import-bundle: archives of device, material, preference and project members
+    with LightBurn and other suffixes, stored and deflated, names in UTF-8 and code page 437, unsafe and
+    unprintable names, folders and links, encrypted, patched and newer-version entries, extra fields, comments,
+    data before and after the archive, member text in UTF-8, with a signature, and in UTF-16 either way round,
+    and damage of every kind: changed sizes, checksums, offsets and names, cut and flipped bytes, members that
+    inflate too far, and payloads that are not bundles at all. Each archive is listed and then read member by
+    member."""
+    import zlib
+
+    rng = random.Random(seed)
+    pick = rng.choice
+    suffixes = ['.lbdev', '.lbprefs', '.clb', '.lbrn', '.lbrn2', '.lbset', '.LBDEV', '.Clb', '.txt', '.lbart', '']
+    folders = ['', 'devices/', 'materials/', 'Prefs/', 'a/b/', './', 'x//', 'deep/./er/']
+
+    def name():
+        roll = rng.random()
+        stem = pick(['one', 'Laser', 'ref', 'my prefs', 'pé', 'job-2', 'été', '中', 'x'])
+        text = pick(folders) + stem + pick(suffixes)
+        if roll < 0.06:
+            text = pick(['../wrong.clb', '/abs.lbdev', 'c:drive.lbset', 'back\\slash.clb', 'a/../b.lbrn', '.lbdev',
+                         'dot.lbdev.', 'dir.lbdev/', 'folder/', 'x.lbdev/.', 'tab\there.clb', 'bell\x07.lbset',
+                         'line .clb', 'z' * 509 + '.clb', 'y' * 600 + '.clb', 'soft­.lbdev',
+                         'k.Klb', ' space.lbrn'])  # fmt: skip
+        if rng.random() < 0.6 and all(ord(c) < 128 for c in text):
+            return text.encode(), 0
+        if rng.random() < 0.7:
+            return text.encode('utf-8'), 0x800
+        try:
+            return text.encode('cp437'), 0
+        except UnicodeEncodeError:
+            return text.encode('utf-8'), 0  # read as code page 437, as an unflagged archive is
+
+    def body():
+        roll = rng.random()
+        words = pick(['{"name": "Laser", "speed": %d}' % rng.randint(1, 900), '<Library><Material name="Ply"/></Library>',
+                      'réglage = été → \U0001f600', '', 'a' * rng.randint(1, 600),
+                      json.dumps({'layers': [rng.random() for _ in range(rng.randint(0, 40))]})])  # fmt: skip
+        if roll < 0.45:
+            return words.encode()
+        if roll < 0.55:
+            return b'\xef\xbb\xbf' + words.encode()
+        if roll < 0.63:
+            return words.encode('utf-16')
+        if roll < 0.68:
+            return b'\xfe\xff' + words.encode('utf-16-be')
+        if roll < 0.72:
+            return (
+                b'\xff\xfe'
+                + words.encode('utf-16-le')
+                + pick([b'\x00', b'\x00\xd8', b'\x00\xdc\x41\x00', b'\x3d\xd8A\x00'])
+            )
+        if roll < 0.77:
+            return words.encode() + pick(
+                [b'\xff', b'\xc3', b'\xed\xa0\x80', b'\xf4\x90\x80\x80', b'\xc0\xaf', b'\xe2\x82']
+            )
+        if roll < 0.81:
+            return words.encode() + b'\x00bin'
+        if roll < 0.84:
+            return '\x00'.encode('utf-16')
+        if roll < 0.87:
+            return bytes(rng.randrange(256) for _ in range(rng.randint(0, 64)))
+        return (words * rng.randint(1, 8)).encode()
+
+    def member():
+        raw_name, flags = name()
+        m = {
+            'name': raw_name,
+            'flags': flags,
+            'data': body(),
+            'method': pick([0, 8, 8, 8]),
+            'level': pick([0, 1, 6, 9]),
+        }
+        roll = rng.random()
+        if roll < 0.04:
+            m['external'] = pick([(0o120777 << 16), (0o040755 << 16) | 0x10, 0, 0o060644 << 16, 0x10])
+        elif roll < 0.07:
+            m['flags'] |= pick([1, 8, 0x20, 0x40, 2, 4])
+        elif roll < 0.09:
+            m['method'] = pick([12, 14, 99, 9])
+        elif roll < 0.11:
+            m['version'] = pick([45, 63, 64, 99])
+        elif roll < 0.15:
+            m['extra'] = pick([b'\xfe\xca\x04\x00abcd', b'\x0a\x00\x20\x00' + bytes(32), b'\x01\x00\x08\x00' + bytes(8),
+                               b'\x75\x70\x05\x00\x01abcd', b'\x00\x00\x09\x00abc', b'\xfe', b'ab\x01\x00x'])  # fmt: skip
+        elif roll < 0.18:
+            m['local_extra'] = pick([b'\x55\x54\x05\x00\x01abcd', bytes(rng.randint(1, 30))])
+        elif roll < 0.21:
+            m['comment'] = pick([b'note', 'kommentar é'.encode(), b'PK\x05\x06'])
+        elif roll < 0.25:
+            m['crc'] = rng.randrange(1 << 32)
+        elif roll < 0.30:
+            m['size'] = max(0, len(m['data']) + rng.randint(-5, 5))
+        elif roll < 0.33:
+            m['csize'] = rng.randint(0, 64)
+        elif roll < 0.35:
+            m['local_name'] = pick([b'other.clb', raw_name.upper(), raw_name + b'x', b''])
+        elif roll < 0.37:
+            m['local_flags'] = m['flags'] ^ 0x800
+        elif roll < 0.38:
+            m['size'] = pick([4_000_001, 4_000_000, 2**32 - 1])
+        elif roll < 0.385:
+            m['data'], m['method'] = bytes(rng.randint(4_000_001, 4_200_000)), 8
+            m['size'] = pick([100, 4_000_000, len(m['data'])])
+        return m
+
+    def damaged(blob):
+        blob = bytearray(blob)
+        roll = rng.random()
+        if roll < 0.35 and blob:
+            for _ in range(rng.randint(1, 4)):
+                at = rng.randrange(len(blob))
+                blob[at] ^= 1 << rng.randrange(8)
+        elif roll < 0.55:
+            del blob[rng.randint(0, len(blob)) :]
+        elif roll < 0.7 and len(blob) > 22:
+            # The end record's sizes and offsets.
+            at = len(blob) - 22 + pick([8, 10, 12, 16])
+            blob[at : at + 2] = struct.pack('<H', rng.randrange(1 << 16))
+        elif roll < 0.85:
+            at = rng.randint(0, len(blob))
+            blob[at:at] = bytes(rng.randrange(256) for _ in range(rng.randint(1, 30)))
+        else:
+            blob = blob[: rng.randint(0, len(blob))] + b'PK\x05\x06' + bytes(rng.randint(0, 30))
+        return bytes(blob)
+
+    def payloads(blob, members):
+        content = base64.b64encode(blob).decode()
+        yield {'content': content}
+        for index in range(min(members, 6)):
+            yield {'content': content, 'index': index}
+        if rng.random() < 0.2:
+            yield {'content': content, 'index': pick([True, -1, members, 300, '0', None, 1.0, 10**30, 0.5])}
+
+    made = 0
+    while made < count:
+        roll = rng.random()
+        if roll < 0.05:
+            cases = [
+                [], 'text', {'index': 0}, {'content': 5}, {'content': 'not base64!'}, {'content': 'AQID='},
+                {'content': ''}, {'content': 'éAAA'}, {'content': base64.b64encode(b'not a zip archive').decode()},
+                {'content': base64.b64encode(b'PK\x05\x06' + bytes(18)).decode()},
+                {'content': base64.b64encode(b'PK\x05\x06' + bytes(10)).decode()},
+            ]  # fmt: skip
+            if made < 2:
+                cases.append({'content': 'A' * 5_333_340})
+                cases.append({'content': base64.b64encode(bytes(4_000_001)).decode()})
+            for payload in cases:
+                made += 1
+                yield payload
+            continue
+        if roll < 0.15:
+            # An archive as zipfile writes it.
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, 'w', compression=pick([zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED])) as archive:
+                for _ in range(rng.randint(0, 6)):
+                    raw_name, _ = name()
+                    info = zipfile.ZipInfo(raw_name.decode('utf-8', 'replace'))
+                    if rng.random() < 0.1:
+                        info.external_attr = 0o120777 << 16
+                    archive.writestr(info, body(), compress_type=pick([zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED]))
+                if rng.random() < 0.2:
+                    archive.comment = pick([b'bundle', b'PK\x05\x06', bytes(40)])
+            blob, total = buffer.getvalue(), 6
+        else:
+            many = rng.random() < 0.03
+            members = [member() for _ in range(rng.randint(257, 262) if many else rng.randint(0, 7))]
+            if rng.random() < 0.04 and members:
+                for m in members:
+                    m['size'] = pick([3_999_999, 4_000_000])
+            if rng.random() < 0.05 and len(members) > 1:
+                members[1]['offset'] = 0  # two entries at one header
+            if rng.random() < 0.03 and members:
+                members[0]['offset'] = 2**32 - 10
+            prefix = pick([b'', b'', b'', b'MZ stub ' * rng.randint(1, 8)])
+            comment = pick([b'', b'', b'LightBurn bundle', b'PK\x05\x06xx', bytes(rng.randint(0, 80))])
+            blob = bundle_archive(
+                members, rng, comment=comment, prefix=prefix, absolute=rng.random() < 0.5,
+                comment_field=pick([None, None, None, 0, 200]), tail=pick([b'', b'', b'junk', b'\x00\x00']),
+            )  # fmt: skip
+            if rng.random() < 0.02:
+                blob = blob[:-22] + b'PK\x06\x07' + bytes(16) + blob[-22:]
+            total = len(members)
+            if rng.random() < 0.3:
+                blob = damaged(blob)
+        for payload in payloads(blob, total):
+            made += 1
+            yield payload
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--cli', required=True, type=Path, help='the kerfkite-cam executable')
@@ -3049,6 +3283,7 @@ def main():
     parser.add_argument('--cad-script', type=int, default=1000, help='generated CAD scripts for the script preview')
     parser.add_argument('--program-import', type=int, default=3000, help='generated G-code, HP-GL and INI drawings')
     parser.add_argument('--pdf-import', type=int, default=1500, help='generated PDF pages')
+    parser.add_argument('--bundle-import', type=int, default=3000, help='generated LightBurn bundle requests')
     parser.add_argument('--skip-suite', action='store_true', help='do not replay the calls made by the test suite')
     parser.add_argument(
         '--without-polygon-operations',
@@ -3192,6 +3427,10 @@ def main():
             line = preview_reference('pdf_import', payload)
             if line is not None:
                 lines.setdefault(line, 'pdf-import')
+        for payload in bundle_import_cases(args.bundle_import, 107):
+            line = preview_reference('bundle_import', payload)
+            if line is not None:
+                lines.setdefault(line, 'bundle-import')
         tally = collections.Counter()
         declined = collections.Counter()
         failures = []
@@ -3199,9 +3438,10 @@ def main():
         def compare(lines):
             """Put a set of cases to the native core and count how each was answered."""
             cases.write_text(''.join(line + '\n' for line in lines), encoding='utf-8')
+            # One answer a line; split at newlines alone, as a member's text may hold other line separators.
             answers = subprocess.run(
                 [str(args.cli), 'batch', str(cases)], capture_output=True, text=True, encoding='utf-8', check=True
-            ).stdout.splitlines()
+            ).stdout.split('\n')[:-1]
             assert len(answers) == len(lines), 'The native core did not answer every case.'
             for (line, origin), answer in zip(lines.items(), answers, strict=True):
                 case, got = json.loads(line), json.loads(answer)
@@ -3212,7 +3452,7 @@ def main():
                 if subject is None:
                     subject = case.get('solid_cad', case.get('solid_cad_section', case.get('cad_script')))
                 if subject is None:
-                    subject = case.get('program_import', case.get('pdf_import'))
+                    subject = case.get('program_import', case.get('pdf_import', case.get('bundle_import')))
                 if 'relief' in case and 'ok' in got:
                     got = {'ok': where_computed_left_out(got['ok'])}
                 if not shared and 'project' in case and uses_polygon_operation(subject):
@@ -3263,6 +3503,7 @@ def main():
         'cad-script',
         'program-import',
         'pdf-import',
+        'bundle-import',
     ):
         total = sum(n for (o, _), n in tally.items() if o == origin)
         if not total:
@@ -3298,6 +3539,8 @@ def main():
         raise SystemExit('No CAD script was previewed: the comparison did not exercise the script engine.')
     if args.pdf_import and not tally['pdf-import', 'program']:
         raise SystemExit('No PDF page was read: the comparison did not exercise the PDF reader.')
+    if args.bundle_import and not tally['bundle-import', 'program']:
+        raise SystemExit('No bundle member was read: the comparison did not exercise the bundle reader.')
     if args.program_import and not tally['program-import', 'program']:
         raise SystemExit('No drawing was imported: the comparison did not exercise the program reader.')
     if not shared:

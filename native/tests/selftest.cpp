@@ -1213,6 +1213,22 @@ static void cad_scripts() {
     expect(refusal("cube(\xd9\xa3);").empty(), "an Arabic-Indic digit is a number");
 }
 
+// Standard base64 with padding, for requests that carry a file.
+static std::string base64_text(const std::string &bytes) {
+    static const char *alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string encoded;
+    for (size_t i = 0; i < bytes.size(); i += 3) {
+        const unsigned a = static_cast<unsigned char>(bytes[i]), b = i + 1 < bytes.size() ? static_cast<unsigned char>(bytes[i + 1]) : 0,
+                       c = i + 2 < bytes.size() ? static_cast<unsigned char>(bytes[i + 2]) : 0;
+        const unsigned group = (a << 16) | (b << 8) | c;
+        encoded += alphabet[(group >> 18) & 63];
+        encoded += alphabet[(group >> 12) & 63];
+        encoded += i + 1 < bytes.size() ? alphabet[(group >> 6) & 63] : '=';
+        encoded += i + 2 < bytes.size() ? alphabet[group & 63] : '=';
+    }
+    return encoded;
+}
+
 static void program_imports() {
     const auto read = [](const char *name, const std::string &text, const char *unit = "mm") {
         json request = json::object();
@@ -1294,25 +1310,72 @@ static void program_imports() {
         pdf += line;
     }
     pdf += "trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n" + std::to_string(xref) + "\n%%EOF\n";
-    static const char *alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string encoded;
-    for (size_t i = 0; i < pdf.size(); i += 3) {
-        const unsigned a = static_cast<unsigned char>(pdf[i]), b = i + 1 < pdf.size() ? static_cast<unsigned char>(pdf[i + 1]) : 0,
-                       c = i + 2 < pdf.size() ? static_cast<unsigned char>(pdf[i + 2]) : 0;
-        const unsigned group = (a << 16) | (b << 8) | c;
-        encoded += alphabet[(group >> 18) & 63];
-        encoded += alphabet[(group >> 12) & 63];
-        encoded += i + 1 < pdf.size() ? alphabet[(group >> 6) & 63] : '=';
-        encoded += i + 2 < pdf.size() ? alphabet[group & 63] : '=';
-    }
     json pdf_request = json::object();
-    pdf_request["content"] = encoded;
+    pdf_request["content"] = base64_text(pdf);
     const json page = kerfkite::program_import_call("pdf-import", pdf_request);
     const json &pdf_objects = page.at("objects");
     expect(pdf_objects.size() == 2 && pdf_objects.at(1).at("paths").size() == 2, "a stroke, and a fill with its hole as one object");
     expect(std::fabs(pdf_objects.at(0).at("paths").at(0).at(1).at(0).get<double>() - 25.4) < 1e-12, "72 points are 25.4 mm");
     expect(page.at("pageCount") == json(1) && page.at("warnings").at(1) == json("1 \xc3\x97 text objects omitted; convert text to paths in the source."),
            "the page count and the text skipped");
+}
+
+// A LightBurn bundle written by hand: a stored device file and a text file the reader leaves out.
+static void bundle_imports() {
+    struct Entry {
+        std::string name, data;
+        uint32_t crc;
+    };
+    const Entry entries[] = {{"dev/one.lbdev", "{\"a\":1}", 0x561bacafu}, {"notes.txt", "x", 0x8cdc1683u}};
+    const auto u16 = [](std::string &s, unsigned v) {
+        s += static_cast<char>(v & 255);
+        s += static_cast<char>((v >> 8) & 255);
+    };
+    const auto u32 = [&](std::string &s, uint32_t v) {
+        u16(s, v & 0xffff);
+        u16(s, v >> 16);
+    };
+    std::string zip, directory;
+    for (const Entry &e : entries) {
+        const size_t offset = zip.size();
+        zip += "PK\x03\x04";
+        u16(zip, 20), u16(zip, 0), u16(zip, 0), u16(zip, 0), u16(zip, 0x21);
+        u32(zip, e.crc), u32(zip, static_cast<uint32_t>(e.data.size())), u32(zip, static_cast<uint32_t>(e.data.size()));
+        u16(zip, static_cast<unsigned>(e.name.size())), u16(zip, 0);
+        zip += e.name + e.data;
+        directory += "PK\x01\x02";
+        u16(directory, 0x0314), u16(directory, 20), u16(directory, 0), u16(directory, 0), u16(directory, 0), u16(directory, 0x21);
+        u32(directory, e.crc), u32(directory, static_cast<uint32_t>(e.data.size())), u32(directory, static_cast<uint32_t>(e.data.size()));
+        u16(directory, static_cast<unsigned>(e.name.size())), u16(directory, 0), u16(directory, 0), u16(directory, 0), u16(directory, 0);
+        u32(directory, 0100644u << 16), u32(directory, static_cast<uint32_t>(offset));
+        directory += e.name;
+    }
+    const size_t start = zip.size();
+    zip += directory + "PK\x05\x06";
+    u16(zip, 0), u16(zip, 0), u16(zip, 2), u16(zip, 2);
+    u32(zip, static_cast<uint32_t>(directory.size())), u32(zip, static_cast<uint32_t>(start)), u16(zip, 0);
+    json request = json::object();
+    request["content"] = base64_text(zip);
+    const auto refusal = [&]() -> std::string {
+        try {
+            kerfkite::program_import_call("bundle-import", request);
+        } catch (const kerfkite::ValueError &error) {
+            return error.what();
+        }
+        return "";
+    };
+    const json listing = kerfkite::program_import_call("bundle-import", request);
+    expect(listing.at("files").size() == 1 && listing.at("files").at(0).at("name") == json("one.lbdev") &&
+               listing.at("skipped") == json(1),
+           "a bundle lists its LightBurn member by name and counts the other");
+    request["index"] = 0;
+    expect(kerfkite::program_import_call("bundle-import", request).at("text") == json("{\"a\":1}"), "a stored member's text");
+    request["index"] = 1;
+    expect(refusal() == "Select a supported member of this bundle", "a member without a LightBurn suffix is not read");
+    zip[30 + 13] ^= 1;  // the first member's data, which its CRC-32 no longer matches
+    request["content"] = base64_text(zip);
+    request["index"] = 0;
+    expect(refusal() == "Cannot read the bundle or selected text member", "a member whose CRC-32 does not match");
 }
 
 int main() {
@@ -1512,6 +1575,7 @@ int main() {
     solid_histories();
     cad_scripts();
     program_imports();
+    bundle_imports();
     artwork_reliefs();
 
     std::printf(failures ? "%d checks failed\n" : "PASS native core self-test%.0d\n", failures);

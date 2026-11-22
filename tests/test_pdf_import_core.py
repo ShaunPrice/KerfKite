@@ -1,6 +1,7 @@
 """The native core's PDF reader against the Python reference (pypdf and Shapely), to the bit."""
 
 import base64
+import importlib.util
 import json
 import unittest
 from io import BytesIO
@@ -115,7 +116,9 @@ class NativePDFTests(unittest.TestCase):
                 self.assertIn(message, outcome(given, 'native'))
 
     def test_encrypted_documents_are_refused_or_left_to_the_reference(self):
-        for algorithm, declined in (('RC4-128', False), ('AES-256', True)):
+        # pypdf writes (and reads) AES only with the cryptography package, which Studio does not install.
+        aes = [('AES-256', True)] if importlib.util.find_spec('cryptography') else []
+        for algorithm, declined in [('RC4-128', False), *aes]:
             writer = PdfWriter()
             add_page(writer, b'0 0 m 5 5 l S')
             writer.encrypt('test-document', algorithm=algorithm)

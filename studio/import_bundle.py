@@ -1,4 +1,9 @@
-"""Inspect selected text members of a LightBurn user bundle entirely in memory."""
+"""Inspect selected text members of a LightBurn user bundle entirely in memory.
+
+The native core reads bundles to the bit (native/core/src/bundle_import.cpp) and is used where the compiled
+extension is installed; this module answers what the core declines (ZIP64 records, entries that share a header,
+members that inflate past 4 MB and the like) and is the reference the parity harness compares it with.
+"""
 
 import base64
 import binascii
@@ -10,6 +15,10 @@ from pathlib import PurePosixPath
 
 from flask import jsonify, request
 
+try:  # The native core's port of this module, in the compiled extension.
+    from ._relief_native import core_cam as _core_cam, core_cam_text as _core_cam_text
+except ImportError:
+    _core_cam = _core_cam_text = None
 
 MAX_ARCHIVE = 4_000_000
 MAX_MEMBER = 4_000_000
@@ -39,7 +48,35 @@ def _eligible(entry):
     )
 
 
-def inspect_bundle(payload):
+def import_json(payload):
+    """inspect_bundle(payload) as JSON text written by the core, for a web response, or None: then inspect_bundle."""
+    if _core_cam_text is None:
+        return None
+    try:
+        return _core_cam_text('bundle-import', payload)
+    except NotImplementedError:
+        return None
+
+
+def inspect_bundle(payload, *, backend='auto'):
+    """The supported members of a bundle, or the text of one. backend='auto' reads in the native core where it
+    can and here otherwise; 'python' reads here; 'native' raises NotImplementedError where the core cannot answer."""
+    if backend not in ('auto', 'python', 'native'):
+        raise ValueError('Bundle import backend must be auto, python or native')
+    if backend != 'python':
+        if _core_cam is not None:
+            try:
+                answer = _core_cam('bundle-import', payload)
+            except NotImplementedError:
+                if backend == 'native':
+                    raise
+                answer = None
+            if answer is not None:
+                return answer
+            if backend == 'native':
+                raise NotImplementedError('The bundle request cannot be passed to the native core unchanged')
+        elif backend == 'native':
+            raise NotImplementedError('The native bundle import is not installed')
     if not isinstance(payload, dict) or not isinstance(payload.get('content'), str):
         raise ValueError('Provide bundle content in base64')
     encoded = payload['content']
@@ -86,4 +123,9 @@ def inspect_bundle(payload):
 def register(app):
     @app.post('/api/import-bundle')
     def import_bundle():
-        return jsonify(inspect_bundle(request.get_json()))
+        payload = request.get_json()
+        # The core's own JSON text is the response; the Python answers what the core declines.
+        text = import_json(payload)
+        if text is not None:
+            return app.response_class(text, mimetype='application/json')
+        return jsonify(inspect_bundle(payload, backend='python'))
