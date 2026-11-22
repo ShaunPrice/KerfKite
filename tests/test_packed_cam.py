@@ -1,5 +1,6 @@
 """Parity of the public planar/rotary export and the packed stock/rotary paths."""
 
+import json
 import math
 import unittest
 from unittest.mock import patch
@@ -66,7 +67,7 @@ class PackedCamTests(unittest.TestCase):
     def test_fallback_handles_legacy_five_fields_and_packed_segments(self):
         elements = [[1, 1, 6, 6, -1], [2, 2, 2, 2, -1, {'ignored': True}]]
         data = dict(segments=elements, width=8, height=8)
-        with patch.object(simulation, 'stock_heights', None):
+        with patch.object(simulation, '_core_cam', None):
             height = simulation.simulate(data)
             self.assertEqual(height, simulation.simulate(data, backend='python'))
             with self.assertRaisesRegex(ValueError, 'not installed'):
@@ -79,7 +80,12 @@ class PackedCamTests(unittest.TestCase):
             self.assertEqual(height, simulation.simulate({**data, 'segments': packed}))
 
 
-@unittest.skipIf(simulation.stock_heights is None, 'Build the fast stock kernel to exercise native parity')
+def exact(value):
+    """A form that tells 0 from 0.0 and -0.0 from 0.0."""
+    return json.loads(json.dumps(value), parse_float=lambda text: ('f', text), parse_int=lambda text: ('i', text))
+
+
+@unittest.skipIf(simulation._core_cam is None, 'Build the extension to compare the native core with the reference')
 class NativeStockTests(unittest.TestCase):
     def test_full_grid_and_legacy_shapes(self):
         inputs = [
@@ -90,11 +96,10 @@ class NativeStockTests(unittest.TestCase):
         ]
         for tool in ('flat', 'ball', 'v', 'drill'):
             data = dict(segments=inputs, x=1, y=1, width=8, height=7, tool_shape=tool, tool_diameter=2.7)
-            native = simulation.simulate(data, backend='native')
-            python = simulation.simulate(data, backend='python')
-            for a, b in zip(native.pop('heights'), python.pop('heights')):
-                self.assertTrue(all(math.isclose(i, j, rel_tol=0, abs_tol=1e-12) for i, j in zip(a, b)))
-            self.assertEqual(native, python)
+            # The core's preview is the reference's to the bit: its distances are CPython's hypot.
+            self.assertEqual(
+                exact(simulation.simulate(data, backend='native')), exact(simulation.simulate(data, backend='python'))
+            )
 
     def test_limits_and_non_finite_inputs(self):
         for item in (
@@ -102,21 +107,28 @@ class NativeStockTests(unittest.TestCase):
             [0, 0, 1, math.inf, 0],
             [0, 0, 0, 0, 0, 0, math.nan],
             [0, 0],
-            [0, 0, 1, 1, object()],
+            [0, 0, 1, 1, None],
+            [0, 0, 1, 1, [2]],
         ):
-            for backend in ('python', 'native'):
-                with self.subTest(item=item, backend=backend), self.assertRaises((ValueError, TypeError)):
+            messages = []
+            for backend in ('python', 'auto'):
+                try:
                     simulation.simulate(dict(segments=[item]), backend=backend)
+                except ValueError as error:
+                    messages.append(str(error))
+            with self.subTest(item=item):
+                self.assertEqual(len(messages), 2)
+                self.assertEqual(messages[0], messages[1])
         for backend in ('python', 'native'):
             with self.assertRaisesRegex(ValueError, 'numeric preview range'):
                 simulation.simulate(dict(segments=[[1e308, 0, 1e308, 0, 0]], width=0.1), backend=backend)
         with self.assertRaisesRegex(ValueError, 'Simulation too large'):
             simulation.simulate(dict(segments=[[0, 0, 100, 100, -1]] * 1000, resolution=96), backend='native')
-        call = simulation.stock_heights
-        with self.assertRaises(ValueError):
-            call(b'wrong stride', 48, 10.0, 10.0, 0.0, 0.0, 2.0, 0, 60.0, 10.0)
-        with self.assertRaises(ValueError):
-            call(bytes(7 * 8), 10**8, 10.0, 10.0, 0.0, 0.0, 2.0, 0, 60.0, 10.0)
+        # Text that float() cannot read is the reference's to report, with its own message.
+        with self.assertRaises(NotImplementedError):
+            simulation.simulate(dict(segments=[[0, 0, 1, 1, 'deep']]), backend='native')
+        with self.assertRaisesRegex(ValueError, "could not convert string to float: 'deep'"):
+            simulation.simulate(dict(segments=[[0, 0, 1, 1, 'deep']]))
 
     def test_in_process_geometry_reuses_packed_rows(self):
         p = project()

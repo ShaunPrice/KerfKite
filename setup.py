@@ -31,7 +31,6 @@ setup(
             'studio._relief_native',
             [
                 'studio/_relief_native.cpp',
-                'studio/_stock_native.cpp',
                 'studio/_gcode_native.cpp',
                 # The native core's levelling module and its Python entry point.
                 'studio/_core_native.cpp',
@@ -45,9 +44,12 @@ setup(
                 'native/core/src/knife.cpp',
                 'native/core/src/laser.cpp',
                 'native/core/src/protocols.cpp',
+                # Relief finishing and the stock-removal preview.
+                'native/core/src/relief.cpp',
                 'native/core/src/rotary.cpp',
                 'native/core/src/router_entry.cpp',
                 'native/core/src/simple_line.cpp',
+                'native/core/src/stock.cpp',
                 'native/core/src/tabs.cpp',
                 # Circuit board import: Gerber layers and Excellon drill files.
                 'native/core/src/excellon.cpp',

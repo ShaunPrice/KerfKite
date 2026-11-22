@@ -1,11 +1,16 @@
 """Smoke-test a compiled wheel with its installed interpreter in isolated mode."""
 
 from studio import _relief_native
+from studio.relief import prepare_relief as _relief
 from studio.simulation import simulate
 
-depths = _relief_native.contact([[-1.0]], 2.0, 2.0, 1.0, 1.0, 0.0, 1, 1, "flat")
-assert depths == [[-1.0, -1.0], [-1.0, -1.0]], depths
-assert callable(_relief_native.stock_heights)
+# The native core's contact: a flat cutter on a map of zeros 1 mm below the top stands 1 mm down at each point.
+flat = _relief(
+    dict(heightmap=[[0, 0], [0, 0]], width=2, height=2, depth=1, tool_diameter=1, stepover=1, tool_shape="flat"),
+    backend="native",
+)
+assert flat["path_depths"] == [[-1.0, -1.0, -1.0], [-1.0, -1.0, -1.0], [-1.0, -1.0, -1.0]], flat["path_depths"]
+assert callable(_relief_native.core_cam)
 stock = {
     "segments": [[0, 0, 8, 0, -1, 0, -1]],
     "tool_shape": "flat",
@@ -19,6 +24,7 @@ assert simulate(stock, backend="native")["heights"][0] == [-1.0] * 16
 
 # Exercise the installed CPython extension with sloping moves and multiple cutters.
 from hashlib import sha256
+import json
 import random
 from studio.cam import generate
 from studio.rotary import generate_rotary, wrap_job
@@ -36,13 +42,12 @@ moves = [
     ]
     for _ in range(80)
 ]
+# The core's stock preview is the reference's to the bit on every platform: its distances are CPython's hypot and its
+# one tan is the C library's, which Python calls too.
 for cutter in ('flat', 'ball', 'v', 'drill'):
     case = {**stock, 'segments': moves, 'tool_shape': cutter, 'resolution': 32}
-    reference = simulate(case, backend='python')['heights']
-    native = simulate(case, backend='native')['heights']
-    assert max(abs(v - w) for a, b in zip(reference, native, strict=True) for v, w in zip(a, b, strict=True)) < 1e-10, (
-        cutter
-    )
+    reference = json.dumps(simulate(case, backend='python'), sort_keys=True)
+    assert json.dumps(simulate(case, backend='native'), sort_keys=True) == reference, cutter
 
 options = dict(
     diameter=10,
@@ -199,8 +204,6 @@ assert summary == (732, 13320, 31042, '43cdd9d78de5d07d'), summary
 # that every platform a wheel is built for gives the same bytes. The board is written here because an
 # installed wheel carries no fixtures. It has no arcs and no rotated macro, the two places where the Gerber
 # importer itself calls the platform's mathematics library.
-import json
-
 from studio import pcb_import
 
 assert pcb_import.isolation_available()
@@ -362,7 +365,7 @@ assert (part['volume'], part['bounds'], gasket.area()) == (
     808.9521749015435,
 ), (part['volume'], part['bounds'], gasket.area())
 
-# A relief from a 400-point map sent as RGB bytes, through the compiled contact: every point and depth against a
+# A relief from a 400-point map sent as RGB bytes, through the native core: every point and depth against a
 # recorded digest. The threads change no bit, so it holds on every platform and with any KERFKITE_THREADS. Where
 # the computer has a usable GPU, the same job forced onto it, in a process of its own, must give it too.
 import base64

@@ -9,7 +9,7 @@ The Studio 0.6.1 simulator benchmark uses a 256 × 256 height map, a ball end mi
 | Rotary job generation | 2.586 s | 1.288 s |
 | Process peak resident memory before rotary generation | 94.4 MiB | 90.4 MiB |
 
-Run `python -m validation.benchmark_native result.json` from the checkout with the extension installed. The benchmark requires matching G-code hashes and a maximum stock-cell difference below 1 × 10⁻¹⁰ mm. For the viewport, `python validation/benchmark_viewport.py --browser PATH` compares the same camera orbit through WebGL2 and Canvas. On Apple M4 using Metal, median frame intervals for an 18,432-triangle mesh were 16.7 ms and 50.0 ms respectively.
+Run `python -m validation.benchmark_native result.json` from the checkout with the extension installed. The benchmark requires matching G-code hashes and a maximum stock-cell difference below 1 × 10⁻¹⁰ mm. Since the stock preview moved into the native core it is the reference's to the bit, so that difference is now zero. For the viewport, `python validation/benchmark_viewport.py --browser PATH` compares the same camera orbit through WebGL2 and Canvas. On Apple M4 using Metal, median frame intervals for an 18,432-triangle mesh were 16.7 ms and 50.0 ms respectively.
 
 The indexed artwork catalog retained all 1,768 original entries and all 1,358,040 coordinate pairs in a value-for-value comparison. An isolated Mac process searching metadata and loading one template peaked at 32.6 MiB with the index. The earlier eager loader peaked at 432.8 MiB. The compressed catalog payload decreased from 18.89 MiB to 15.11 MiB.
 
@@ -17,7 +17,7 @@ Pocket's signed Android app was exercised on an ARM64 Android API 37 emulator co
 
 ## Relief contact on threads and the GPU
 
-The relief contact shares its rasters out over the processor's threads and, for large jobs on a computer with a discrete GPU, may run on the GPU, with the same depths to the last bit either way. On a 24-thread laptop a relief from a 1024-point map with a 12 mm ball takes 116 ms on the threads, 104 ms on its RTX 5090 Laptop GPU and 1.77 s on one thread. The measurements, the rules for choosing and the checks are in [Threads and the GPU](NATIVE.md#threads-and-a-gpu-for-large-reliefs); `validation/benchmark_relief.py` repeats them.
+Reliefs are prepared in the native core, whose contact shares its rasters out over the processor's threads and, for large jobs on a computer with a discrete GPU, may run on the GPU, with the same depths to the last bit either way. On a 24-thread laptop a whole relief from a 1024-point image with a 12 mm ball takes 140 ms on the threads, 127 ms on its RTX 5090 Laptop GPU and 1.88 s on one thread, and `/api/relief` answers a relief from that image in half the time it took before the relief moved into the core. The measurements, the rules for choosing and the checks are in [Threads and the GPU](NATIVE.md#threads-and-a-gpu-for-large-reliefs); `validation/benchmark_relief.py` repeats them.
 
 ## G-code and rotary generation after 0.6.1
 

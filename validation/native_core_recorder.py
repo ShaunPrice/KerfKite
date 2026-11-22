@@ -4,7 +4,8 @@ Loaded by validation/native_core_parity.py with ``-p native_core_recorder``. Eac
 project exactly as it was passed and what the Python reference did with it. Calls whose project cannot be
 written as JSON without changing its meaning (tuples, non-finite numbers, non-text keys) are left out, as
 are the rotary generator's internal calls. Top-level calls of studio.rotary's generate_rotary and wrap_job
-are recorded the same way, with their rotary setup.
+are recorded the same way, with their rotary setup, and so are those of studio.relief.prepare_relief and
+studio.simulation.simulate, whose expected answers come from their Python, as the native core is compared with.
 """
 
 import functools
@@ -91,6 +92,57 @@ def rotary_reference(call, subject, options, key):
     return '{%s, "expect": %s}' % (given, json.dumps(expect)), raised
 
 
+def where_computed_left_out(result):
+    """A relief without what says where its contact ran: the same design gives the same surface anywhere."""
+    result = dict(result, surface=dict(result['surface']))
+    result.pop('device', None)
+    result['surface'].pop('backend', None)
+    return result
+
+
+def preview_reference(kind, data):
+    """One case line for a relief ("relief") or a stock preview ("stock") from the Python reference, with the
+    native core's limits for a relief; or None when the request cannot be carried as JSON."""
+    from studio.relief import prepare_relief
+    from studio.simulation import simulate
+
+    if not plain(data):
+        return None
+    given = '"%s": %s' % (kind, json.dumps(data, allow_nan=False))
+    try:
+        if kind == 'relief':
+            result = where_computed_left_out(prepare_relief(data, backend='python', _native_limits=True))
+        else:
+            result = simulate(data, backend='python')
+    except ValueError as error:
+        expect = {'error': str(error)}
+    except Exception as error:  # noqa: BLE001 - recorded by name
+        expect = {'raises': type(error).__name__}
+    else:
+        if not plain(result):
+            return None
+        return '{%s, "expect": %s}' % (given, json.dumps({'ok': result}, allow_nan=False))
+    return '{%s, "expect": %s}' % (given, json.dumps(expect))
+
+
+def _record_preview(module, name, kind):
+    original = getattr(module, name)
+
+    @functools.wraps(original)
+    def recorded(data, *args, **kwargs):
+        if _DEPTH[0] == 0 and not args and not kwargs and _studio_as_left_alone():
+            _DEPTH[0] += 1
+            try:
+                line = preview_reference(kind, data)
+            finally:
+                _DEPTH[0] -= 1
+            if line is not None:
+                CASES.setdefault(line, None)
+        return original(data, *args, **kwargs)
+
+    setattr(module, name, recorded)
+
+
 def _studio_as_left_alone():
     """Whether the reference runs as Studio runs it, with neither fallback library forced."""
     # A test that forces the Shapely fallback for offsets, pockets and fills is not asking the question the
@@ -160,6 +212,12 @@ def pytest_configure(config):
 
     _record_rotary(rotary, 'generate_rotary', 'project')
     _record_rotary(rotary, 'wrap_job', 'job')
+
+    import studio.relief as relief
+    import studio.simulation as simulation
+
+    _record_preview(relief, 'prepare_relief', 'relief')
+    _record_preview(simulation, 'simulate', 'stock')
 
 
 def pytest_sessionfinish(session):

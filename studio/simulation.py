@@ -4,22 +4,47 @@ import math
 from .operations import value
 from .cam_moves import PackedSegments
 
-try:
-    from ._relief_native import stock_heights
+try:  # The native core's stock preview, in the compiled extension.
+    from ._relief_native import core_cam as _core_cam
 except ImportError:
-    stock_heights = None
+    _core_cam = None
 
 
 def simulate(data, *, backend='auto'):
+    """The stock-removal preview of a job's segments.
+
+    backend='auto' runs the native core when the extension is installed and Python otherwise, or when the core
+    declines; 'python' runs this module, the reference; 'native' requires the core."""
+    if backend not in ('auto', 'python', 'native'):
+        raise ValueError('Stock backend must be auto, python or native')
+    if backend == 'native' and _core_cam is None:
+        raise ValueError('Native stock backend is not installed')
     if not isinstance(data, dict):
         raise ValueError('Stock preview requires an object')
+    if backend != 'python' and _core_cam is not None:
+        from .cam import core_answer
+
+        segments = data.get('segments')
+        if isinstance(segments, PackedSegments):
+            # Packed rows cross as their bytes.
+            rest = {key: value for key, value in data.items() if key != 'segments'}
+            answer = core_answer(
+                lambda command, request, packed: _core_cam(command, request, packed, segments.buffer()),
+                'stock',
+                rest,
+                backend,
+            )
+        else:
+            answer = core_answer(_core_cam, 'stock', data, backend)
+        if answer is not None:
+            return answer
     try:
-        return _simulate(data, backend)
+        return _simulate(data)
     except (TypeError, OverflowError) as exc:
         raise ValueError('Stock geometry and dimensions must be numeric') from exc
 
 
-def _simulate(data, backend):
+def _simulate(data):
     segments = data.get('segments', [])
     if not isinstance(segments, (list, PackedSegments)) or len(segments) > 200000:
         raise ValueError('Invalid segment count')
@@ -35,26 +60,7 @@ def _simulate(data, backend):
     if shape not in ('flat', 'ball', 'v', 'drill'):
         raise ValueError('Unknown simulated cutter')
     stock = value(data, 'stock_thickness', 10, 0.01, 200)
-    if backend not in ('auto', 'python', 'native'):
-        raise ValueError('Stock backend must be auto, python or native')
-    if backend == 'native' and stock_heights is None:
-        raise ValueError('Native stock backend is not installed')
-    if backend != 'python' and stock_heights is not None:
-        source = segments.buffer() if isinstance(segments, PackedSegments) else segments
-        surface = stock_heights(
-            source,
-            n,
-            width,
-            height,
-            origin_x,
-            origin_y,
-            diameter,
-            ('flat', 'ball', 'v', 'drill').index(shape),
-            angle,
-            stock,
-        )
-    else:
-        surface = _python_heights(segments, n, width, height, origin_x, origin_y, radius, shape, angle, stock)
+    surface = _python_heights(segments, n, width, height, origin_x, origin_y, radius, shape, angle, stock)
     return {
         'heights': surface,
         'x': origin_x,
