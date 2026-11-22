@@ -149,7 +149,14 @@ class NativeMeshImportTests(unittest.TestCase):
                 data = {'content_base64': base64.b64encode(raw).decode(), 'resolution': resolution}
                 with self.subTest(raw=raw[:40], resolution=resolution):
                     self.assertEqual(answer(data, 'native'), answer(data, 'python'))
-        for data in ({'content_base64': 'AAAA', 'resolution': 64.0}, {'content_base64': 'AA=A'}, {}, None):
+        for data in (
+            {'content_base64': 'AAAA', 'resolution': 64.0},
+            {'content_base64': 'AA=A'},
+            {'content_base64': '\U0001f600' * 1000},
+            {'content_base64': 'AAAA\u00e9AAA'},
+            {},
+            None,
+        ):
             with self.subTest(data=data):
                 self.assertEqual(answer(data, 'native'), answer(data, 'python'))
 

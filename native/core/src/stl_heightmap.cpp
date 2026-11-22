@@ -262,8 +262,14 @@ Json stl_heightmap(const Json &data) {
     if (!content || !content->is_string()) throw ValueError("STL content must be base64, at most 8 MiB decoded");
     const std::string &encoded = content->get_ref<const std::string &>();
     size_t characters = 0;  // len(content): code points, not bytes
-    for (const unsigned char c : encoded) characters += (c & 0xc0) != 0x80;
+    bool ascii = true;
+    for (const unsigned char c : encoded) {
+        characters += (c & 0xc0) != 0x80;
+        ascii = ascii && c < 0x80;
+    }
     if (characters > 4 * ((kMaxBytes + 2) / 3)) throw ValueError("STL content must be base64, at most 8 MiB decoded");
+    // b64decode refuses text that is not ASCII before reading it, so nothing is decoded or allocated for it here.
+    if (!ascii) throw ValueError("Invalid STL base64 data");
     std::vector<unsigned char> raw;
     if (!detail::base64(encoded, raw)) throw ValueError("Invalid STL base64 data");
     if (raw.empty() || raw.size() > kMaxBytes) throw ValueError("STL must contain 1 byte..8 MiB");
