@@ -632,7 +632,7 @@ std::vector<Piece> regions(const json &surface, const Sheet &sheet) {
     std::vector<Piece> pieces;
     const json *loops = get(surface, "boundary");
     if (!loops || loops->is_null()) {
-        for (const Visible &v : sheet.visible) pieces.push_back({v.patch, {}});
+        for (const Visible &v : sheet.visible) pieces.push_back({v.patch, {}, {}, {}});
         return pieces;
     }
     if (!loops->is_array() || loops->size() < 1 || loops->size() > 9) throw ValueError("Draw an outline with up to eight interior holes");

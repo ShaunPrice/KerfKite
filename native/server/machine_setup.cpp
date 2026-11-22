@@ -2,8 +2,11 @@
 // workspace settings that follow. Nothing here writes to a controller.
 #include "machine_setup.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <regex>
+#include <utility>
 
 #include "imported_drawing.hpp"
 #include "protocols.hpp"

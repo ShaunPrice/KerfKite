@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstring>
 #include <set>
+#include <utility>
 
 #include "kerfkite/cam.hpp"
 #include "kerfkite/errors.hpp"

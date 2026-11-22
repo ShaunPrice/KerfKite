@@ -3,8 +3,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <set>
+#include <utility>
 
 #include "kerfkite/errors.hpp"
 #include "os_random.hpp"

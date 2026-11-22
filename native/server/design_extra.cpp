@@ -7,6 +7,7 @@
 #include <cstring>
 #include <map>
 #include <set>
+#include <utility>
 
 #include "kerfkite/cam.hpp"
 #include "kerfkite/errors.hpp"

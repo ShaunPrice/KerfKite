@@ -1,6 +1,8 @@
 // The design routes: studio/design_api.py and the modules it registers (assembly, cad_exchange,
 // fixture_collision, program_import, import_bundle, pcb_api), answered by the core. No machine access.
+#include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 
 #include "kerfkite/artwork_relief.hpp"

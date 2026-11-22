@@ -1,6 +1,8 @@
 // studio.device.DeviceController and studio.rotary.controller_rotary_axes. See machine.hpp.
+#include <algorithm>
 #include <cmath>
 #include <regex>
+#include <utility>
 
 #include "kerfkite/errors.hpp"
 #include "machine.hpp"

@@ -4,6 +4,7 @@
 #define KERFKITE_SERVER_OS_RANDOM_HPP
 
 #include <cstddef>
+#include <stdexcept>
 #include <string>
 
 namespace kerfkite {

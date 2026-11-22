@@ -1,8 +1,13 @@
 // The machine routes of studio/server.py: status and readback, the phone pendant's pairing, probe levelling,
 // the phone's armed preview, connection, the job, the head mode and the controller commands. Each machine route
 // that changes the controller holds its lock for the whole request (see Studio::handle).
+#include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <memory>
+#include <mutex>
 #include <set>
+#include <utility>
 
 #include "kerfkite/cam.hpp"
 #include "kerfkite/errors.hpp"

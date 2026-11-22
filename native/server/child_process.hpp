@@ -4,6 +4,7 @@
 #define KERFKITE_SERVER_CHILD_PROCESS_HPP
 
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 

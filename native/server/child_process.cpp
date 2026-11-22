@@ -2,6 +2,7 @@
 #include "child_process.hpp"
 
 #include <chrono>
+#include <cstdint>
 #include <stdexcept>
 #include <thread>
 

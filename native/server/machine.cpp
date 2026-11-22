@@ -7,12 +7,15 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <deque>
 #include <mutex>
 #include <optional>
 #include <regex>
 #include <thread>
+#include <utility>
 
 #include "kerfkite/errors.hpp"
 #include "kerfkite/number_text.hpp"

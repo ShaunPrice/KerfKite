@@ -1,6 +1,8 @@
 // The controller protocols. See protocols.hpp.
 #include "protocols.hpp"
 
+#include <utility>
+
 #include "kerfkite/errors.hpp"
 #include "protocols_data.hpp"
 

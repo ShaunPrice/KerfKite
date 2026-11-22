@@ -2,6 +2,7 @@
 #include "key_order.hpp"
 
 #include <stdexcept>
+#include <utility>
 
 namespace kerfkite {
 namespace server {
