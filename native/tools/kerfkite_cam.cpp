@@ -11,8 +11,9 @@
 //   kerfkite-cam tool-changes PROJECT.json   a router project split into stages for manual tool changes (studio.tool_changes)
 //   kerfkite-cam fixture-collision REQUEST.json   a posted program's moves swept against fixture boxes (studio.fixture_collision)
 //   kerfkite-cam stl-heightmap REQUEST.json  an STL mesh as a relief height field (studio.mesh_import)
-//   kerfkite-cam solid-cad REQUEST.json      {"model"}: a parametric solid history rebuilt (studio.solid_cad)
-//   kerfkite-cam solid-cad-section REQUEST.json   {"model", "z"}: its material at a height
+//   kerfkite-cam solid-cad REQUEST.json      {"model", "order"}: a parametric solid history rebuilt (studio.solid_cad);
+//                                            "order", optional, lists the parameters in the order to resolve them
+//   kerfkite-cam solid-cad-section REQUEST.json   {"model", "z", "order"}: its material at a height
 //   kerfkite-cam artwork-relief REQUEST.json closed artwork contours as a raised or recessed relief (/api/artwork-relief)
 //   kerfkite-cam artwork-raster REQUEST.json the artwork relief's height field alone
 //   kerfkite-cam calibrate                   measure the relief contact on the threads and any GPU, and how to share
