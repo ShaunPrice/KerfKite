@@ -32,6 +32,20 @@ in text that is read, text must be UTF-8, and a number beyond the range of a dou
 `tests/json_selftest.cpp` checks all of this under CTest; `docs/NATIVE.md` gives the comparisons made with
 Python and with the library this code replaced.
 
+## The workstation server
+
+`kerfkite-studio`, built with the rest, is Studio's local workstation server without Python (`server/`):
+
+    build/native/kerfkite-studio --static studio/static
+
+It serves the editor at `http://127.0.0.1:8765/` with every route of `studio/server.py` over this core, in
+simulator mode unless started with `--enable-hardware`, with its own HTTP server and serial ports and no
+library beyond the C++ standard library and the operating system (Winsock, BCrypt and SetupAPI on Windows).
+STEP exchange and the phone pendant's HTTPS are not in it yet; [docs/NATIVE.md](../docs/NATIVE.md#the-workstation-server)
+says what it reproduces and how it is compared with the Flask app:
+
+    python validation/server_route_parity.py --server build/native/kerfkite-studio
+
 ## Use
 
     kerfkite-cam generate project.json -o program.nc

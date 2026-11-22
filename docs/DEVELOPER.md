@@ -13,7 +13,7 @@ python -m playwright install chromium
 python -m studio.server --port 8765
 ```
 
-Open the printed loopback address. Keep the server's default simulator setting. For the filesystem-only editor open `studio/static/index.html` directly. Its supported CAM subset runs in JavaScript. STEP, assembly solving, fixture checks, bundle inspection and DXF parsing use the Python service.
+Open the printed loopback address. Keep the server's default simulator setting. The C++ workstation server serves the same editor and routes without Python: build the native core (`native/README.md`) and run `build/native/kerfkite-studio --static studio/static`; it has no STEP exchange yet. For the filesystem-only editor open `studio/static/index.html` directly. Its supported CAM subset runs in JavaScript. STEP, assembly solving, fixture checks, bundle inspection and DXF parsing use the Python service.
 
 ## How a design becomes a cut
 

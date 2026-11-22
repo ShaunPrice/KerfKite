@@ -55,6 +55,26 @@ target_link_libraries(kerfkite_core PUBLIC Threads::Threads ${CMAKE_DL_LIBS})
 add_executable(kerfkite-cam tools/kerfkite_cam.cpp)
 target_link_libraries(kerfkite-cam PRIVATE kerfkite_core)
 
+# KerfKite Studio's workstation server (server/): the editor in studio/static served with every route of the
+# Studio API over the core, KerfKite's own HTTP/1.1 server, the controller's serial link and the phone pendant.
+# The C++ standard library and the operating system only; it fetches nothing.
+set(KERFKITE_SERVER_SOURCES server/design_extra.cpp server/design_routes.cpp server/device.cpp server/http.cpp
+  server/key_order.cpp server/machine.cpp server/machine_routes.cpp server/machine_setup.cpp server/os_random.cpp
+  server/phone_jobs.cpp server/phone_monitor.cpp server/protocols.cpp server/serial_port.cpp server/static_files.cpp
+  server/studio.cpp)
+add_library(kerfkite_server STATIC ${KERFKITE_SERVER_SOURCES})
+target_include_directories(kerfkite_server PUBLIC server PRIVATE core/src ${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_link_libraries(kerfkite_server PUBLIC kerfkite_core)
+if(WIN32)
+  target_link_libraries(kerfkite_server PUBLIC ws2_32 bcrypt setupapi)
+endif()
+add_executable(kerfkite-studio server/main.cpp)
+target_include_directories(kerfkite-studio PRIVATE core/src ${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_link_libraries(kerfkite-studio PRIVATE kerfkite_server)
+add_executable(kerfkite_server_selftest tests/server_selftest.cpp)
+target_include_directories(kerfkite_server_selftest PRIVATE core/src ${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_link_libraries(kerfkite_server_selftest PRIVATE kerfkite_server)
+
 # Timings of the solid kernel on the models a Studio user builds, with a hash of each result. With
 # -DKERFKITE_SOLID_PROFILE=ON the kernel also clocks its phases (core/src/solid/timing.hpp); the clocks
 # only measure, and are left out of every other build.
@@ -73,6 +93,8 @@ enable_testing()
 add_executable(kerfkite_selftest tests/selftest.cpp)
 target_link_libraries(kerfkite_selftest PRIVATE kerfkite_core)
 add_test(NAME selftest COMMAND kerfkite_selftest)
+# The workstation server against the editor's files: a simulator and a scripted controller, the loopback only.
+add_test(NAME server COMMAND kerfkite_server_selftest ${CMAKE_CURRENT_SOURCE_DIR}/../studio/static)
 add_executable(kerfkite_json_selftest tests/json_selftest.cpp)
 target_link_libraries(kerfkite_json_selftest PRIVATE kerfkite_core)
 add_test(NAME json COMMAND kerfkite_json_selftest)

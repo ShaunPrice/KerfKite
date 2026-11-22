@@ -3,7 +3,10 @@
 Install the app and Playwright, then run:
     python -m playwright install chromium
     python validation/simulate_solid_workspace.py
-Use --browser PATH to select an installed Chromium executable.
+Use --browser PATH to select an installed Chromium executable. With --url the lessons run against a server
+that is already running instead, such as the C++ workstation server (kerfkite-studio); the lessons that need
+the Python controller object (the synthetic Grbl of machine setup and the phone arm) are then left out, and so is
+STEP exchange (the exchange lesson and the loft lesson's STEP download), which the C++ server does not include.
 """
 
 import argparse
@@ -145,22 +148,26 @@ def run(page):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--browser", help="Path to a Chromium executable")
+    parser.add_argument("--url", help="A Studio server that is already running, such as http://127.0.0.1:8765/")
     args = parser.parse_args()
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
-    controller = DeviceController()
-    jobs = PhoneJobs(controller)
-    monitor = PhoneMonitor(controller, jobs, port=0)
-    app = create_app(controller, jobs, allow_hardware=False, phone_monitor=monitor)
-    server = make_server("127.0.0.1", 0, app, threaded=True)
-    worker = threading.Thread(target=server.serve_forever, daemon=True)
-    worker.start()
+    controller = jobs = monitor = server = worker = None
+    if not args.url:
+        controller = DeviceController()
+        jobs = PhoneJobs(controller)
+        monitor = PhoneMonitor(controller, jobs, port=0)
+        app = create_app(controller, jobs, allow_hardware=False, phone_monitor=monitor)
+        server = make_server("127.0.0.1", 0, app, threaded=True)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+    url = args.url or f"http://127.0.0.1:{server.server_port}/"
     try:
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(executable_path=args.browser)
             try:
                 page = browser.new_page(viewport={"width": 1440, "height": 980}, accept_downloads=True)
                 page.on("dialog", lambda dialog: dialog.accept())
-                page.goto(f"http://127.0.0.1:{server.server_port}/")
+                page.goto(url)
                 run(page)
                 from cad_script_workflow import run as cad_script
                 from rotary_workflow import run as rotary
@@ -203,11 +210,11 @@ def main():
                     lightburn,
                     fixture_imports,
                     assembly_laser,
-                    exchange,
+                    *(() if args.url else (exchange,)),
                     materials,
                     corner,
                     linked_cad,
-                    loft,
+                    *(() if args.url else (loft,)),
                     linked_relief,
                     image_relief,
                     sketch_join,
@@ -220,7 +227,7 @@ def main():
                     machining_lessons,
                     probe_leveling,
                     circuit_board,
-                    machine_setup,
+                    *(() if args.url else (machine_setup,)),
                 ):
                     with browser.new_context(viewport={"width": 1440, "height": 980}, accept_downloads=True) as context:
                         workshop = context.new_page()
@@ -229,6 +236,8 @@ def main():
                         lesson(workshop)
                 from phone_arm_workflow import run as check_phone_arm
 
+                if args.url:
+                    return
                 with browser.new_context(viewport={"width": 1440, "height": 980}) as context:
                     workstation = context.new_page()
                     workstation.on("dialog", lambda dialog: dialog.accept())
@@ -237,10 +246,11 @@ def main():
             finally:
                 browser.close()
     finally:
-        monitor.disable()
-        server.shutdown()
-        worker.join()
-        server.server_close()
+        if server:
+            monitor.disable()
+            server.shutdown()
+            worker.join()
+            server.server_close()
 
 
 if __name__ == "__main__":

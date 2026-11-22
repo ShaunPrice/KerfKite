@@ -7,6 +7,10 @@ on:
       - native/**
       - validation/native_core_parity.py
       - validation/native_core_recorder.py
+      - validation/server_route_parity.py
+      # The workstation server is compared route by route with the Flask app.
+      - studio/server.py
+      - studio/design_api.py
       # The reference computes offsets, pockets, fills and V-carves, and places helical pocket entries,
       # through the extension, which is built from these.
       - studio/operations.py
@@ -45,3 +49,9 @@ jobs:
           cli=build/native/kerfkite-cam
           if [ -f build/native/Release/kerfkite-cam.exe ]; then cli=build/native/Release/kerfkite-cam.exe; fi
           python validation/native_core_parity.py --cli "$cli"
+      - name: Compare the workstation server with the Flask reference
+        shell: bash
+        run: |
+          server=build/native/kerfkite-studio
+          if [ -f build/native/Release/kerfkite-studio.exe ]; then server=build/native/Release/kerfkite-studio.exe; fi
+          python validation/server_route_parity.py --server "$server" --mutations 12

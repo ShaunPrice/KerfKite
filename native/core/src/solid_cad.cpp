@@ -917,11 +917,11 @@ SolvedSketch solve_sketch(const json &feature, Dimensions &dimensions) {
                      "). Check conflicting dimensions or choose another starting geometry");
 }
 
-// sketch_profile.profile_geometry: the sampled outline of the solved sketch.
-std::vector<P2> profile_outline(const json &feature, Dimensions &dimensions) {
+// sketch_profile.profile_geometry: the sampled outline of the solved sketch, or of the points given as solved.
+std::vector<P2> profile_outline(const json &feature, Dimensions &dimensions, const std::vector<P2> *solved = nullptr) {
     const json *raw = get(feature, "points");
     if (!raw || !raw->is_array() || raw->size() < 3 || raw->size() > 256) throw ValueError("A sketch needs 3–256 vertices");
-    std::vector<P2> points = solve_sketch(feature, dimensions).points;
+    std::vector<P2> points = solved ? *solved : solve_sketch(feature, dimensions).points;
     const size_t given = points.size();
     std::vector<double> radii;
     const json *fillets = get(feature, "fillets");
@@ -1433,6 +1433,84 @@ json sketch_solve(const json &request) {
     return result;
 }
 
+json point_list(const std::vector<P2> &points) {
+    json out = json::array();
+    for (const P2 &point : points) out.push_back(json::array({point[0], point[1]}));
+    return out;
+}
+
+// The /api/solid-cad/sketch-points route (design_api.resolve_sketch_points): the solved vertices of a sketch
+// being edited, its sampled outline and the handles of its cubic edges. Unless the sketch is being validated,
+// a step that fails is reported in place of its answer (constraint_error, issue) and the edit goes on.
+json sketch_points(const json &request) {
+    const char *const supply = "Supply sketch points and parameters";
+    const json *payload = request.is_object() ? field(request, "sketch") : nullptr;
+    if (!payload || !payload->is_object()) throw ValueError(supply);
+    const json *raw = get(*payload, "points");
+    if (!raw || !raw->is_array()) throw ValueError(supply);
+    if (raw->size() > 256) throw ValueError("A sketch supports up to 256 vertices");
+    static const json none = json::object();
+    const json *parameters = payload->contains("parameters") ? get(*payload, "parameters") : &none;
+    Dimensions dimensions(parameters, parameter_order(parameters, field(request, "order")));
+    const json *validate_field = get(*payload, "validate");
+    bool validate = false;
+    if (validate_field && !validate_field->is_null()) {
+        if (validate_field->is_boolean()) validate = validate_field->get<bool>();
+        else if (validate_field->is_number()) validate = validate_field->get<double>() != 0;
+        else if (validate_field->is_string()) validate = !validate_field->get_ref<const std::string &>().empty();
+        else validate = !validate_field->empty();  // an array or an object
+    }
+    json result = json::object();
+    result["constraint_error"] = json();
+    result["diagnostics"] = json();
+    std::vector<P2> points;
+    try {
+        const SolvedSketch solved = solve_sketch(*payload, dimensions);
+        points = solved.points;
+        json diagnostics = json::object();
+        diagnostics["dof"] = solved.dof;
+        diagnostics["redundant"] = solved.redundant;
+        diagnostics["iterations"] = solved.iterations;
+        result["diagnostics"] = std::move(diagnostics);
+    } catch (const ValueError &error) {
+        if (validate) throw;
+        for (const json &point : *raw) {
+            const std::vector<double> xy = dimensions.vector(&point, 2);
+            points.push_back({xy[0], xy[1]});
+        }
+        result["constraint_error"] = error.what();
+    }
+    result["outline"] = json();
+    result["issue"] = json();
+    result["handles"] = json();
+    if (validate || payload->contains("fillets") || payload->contains("curves")) {
+        try {
+            result["outline"] = point_list(profile_outline(*payload, dimensions, &points));
+        } catch (const ValueError &error) {
+            if (validate) throw;
+            result["issue"] = error.what();
+        }
+    }
+    if (payload->contains("curves")) {
+        try {
+            const json &curves = payload->at("curves");
+            if (!curves.is_array() || curves.size() != points.size()) throw ValueError("Supply one curve entry per outgoing sketch edge");
+            std::vector<const json *> entries;
+            for (const json &curve : curves) entries.push_back(&curve);
+            json handles = json::array();
+            for (const std::vector<P2> &pair : resolve_curves(entries, points, dimensions))
+                handles.push_back(pair.empty() ? json() : point_list(pair));
+            result["handles"] = std::move(handles);
+        } catch (const ValueError &error) {
+            if (validate) throw;
+            result["issue"] = error.what();
+        }
+    }
+    result["points"] = point_list(points);
+    result["parameters"] = dimensions.values();
+    return result;
+}
+
 // The /api/cad-script route: a CAD script previewed as a drawing or a solid.
 json script_preview(const json &payload) {
     if (!payload.is_object()) throw ValueError("Supply a CAD script");
@@ -1489,12 +1567,13 @@ solid_requests::Shape solid_cad_build(const Json *model, const Json *order) { re
 
 bool solid_cad_command(const std::string &command) {
     return command == "solid-cad" || command == "solid-cad-section" || command == "cad-script" || command == "sketch-solve" ||
-           command == "assembly-solve" || command == "solid-cad-surface";
+           command == "sketch-points" || command == "assembly-solve" || command == "solid-cad-surface";
 }
 
 Json solid_cad_call(const std::string &command, const Json &request) {
     if (command == "cad-script") return script_preview(request);
     if (command == "sketch-solve") return sketch_solve(request);
+    if (command == "sketch-points") return sketch_points(request);
     if (command == "assembly-solve") return assembly_solve(request);
     if (command == "solid-cad-surface") return surface::mesh(request);
     if (!request.is_object()) throw ValueError("Supply a CAD model in the model field");
