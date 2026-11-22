@@ -184,8 +184,58 @@ def _instances(solid, pattern, dimensions, kernel):
     return kernel.Manifold.batch_boolean(copies, kernel.OpType.Add)
 
 
+def _checked(solid, kernel):
+    """The solid, when it is a valid, non-empty solid within the triangle limit."""
+    if solid.status() != kernel.Error.NoError or solid.is_empty():
+        raise ValueError('The operation produced an empty or invalid solid')
+    if solid.num_tri() > _MAX_FACES:
+        raise ValueError('Solid exceeds 75000 triangles')
+    return solid
+
+
+def _one_step(solid, op, tool):
+    return solid + tool if op == 'add' else solid - tool if op == 'cut' else solid ^ tool
+
+
+def _apply_run(solid, run, kernel):
+    """The solid after a run of consecutive features with one operation, as one batch operation.
+
+    Cuts become the solid less the union of their tools, additions one union and intersections one
+    intersection: the same solid as feature after feature, computed once instead of once a feature. That is
+    the larger part of the speed of lazily evaluated solid libraries. The checks of each feature still hold:
+    a run of one operation can only shrink (cuts, intersections) or grow (additions) the solid, so the solid
+    after the run is empty only if one after a feature is, and a solid that exceeds the triangle limit is
+    reported. When the batch fails or its result does not pass the checks, the run is done again feature by
+    feature, so that the error names the feature that causes it, as it always did; and when that way passes
+    every check, its result is used.
+    """
+    op = run[0][1]
+    tools = [tool for _, _, tool in run]
+    if len(tools) == 1:
+        identifier, _, tool = run[0]
+        try:
+            return _checked(_one_step(solid, op, tool), kernel)
+        except ValueError as exc:
+            raise ValueError(f'{identifier}: {exc}') from exc
+    kind = {'add': kernel.OpType.Add, 'cut': kernel.OpType.Subtract, 'intersect': kernel.OpType.Intersect}[op]
+    try:
+        return _checked(kernel.Manifold.batch_boolean([solid, *tools], kind), kernel)
+    except ValueError:
+        pass
+    for identifier, _, tool in run:
+        try:
+            solid = _checked(_one_step(solid, op, tool), kernel)
+        except ValueError as exc:
+            raise ValueError(f'{identifier}: {exc}') from exc
+    return solid
+
+
 def _build(model):
-    """Recompute enabled features in order without modifying the input document."""
+    """Recompute enabled features in order without modifying the input document.
+
+    Consecutive features with the same operation are applied together (_apply_run). Errors are reported in
+    the order of the features, each with the feature's ID.
+    """
     kernel = modelling()
     if not isinstance(model, dict) or type(model.get('version')) is not int or model['version'] != 1:
         raise ValueError('Expected a version 1 solid model')
@@ -194,6 +244,7 @@ def _build(model):
     if not isinstance(features, list) or not 1 <= len(features) <= 64:
         raise ValueError('A solid model needs 1–64 features')
     solid = None
+    run = []  # (identifier, operation, tool) of the features waiting to be applied, all of one operation
     identifiers = set()
     script_budget = None
     if any(isinstance(f, dict) and f.get('kind') == 'script' and f.get('enabled', True) for f in features):
@@ -201,44 +252,51 @@ def _build(model):
 
         script_budget = ScriptGeometryBudget()
     for i, feature in enumerate(features, 1):
+        failure = None
         if not isinstance(feature, dict):
-            raise ValueError(f'Invalid feature {i}')
-        identifier = feature.get('id')
-        if (
-            not isinstance(identifier, str)
-            or not identifier.strip()
-            or len(identifier) > 80
-            or identifier in identifiers
-        ):
-            raise ValueError(f'Feature {i} needs a unique ID of 1–80 characters')
-        identifiers.add(identifier)
-        if type(feature.get('enabled', True)) is not bool:
-            raise ValueError(f'{identifier}: enabled must be true or false')
-        if not feature.get('enabled', True):
-            continue
-        try:
-            op = feature.get('op', 'add')
-            if op not in ('add', 'cut', 'intersect'):
-                raise ValueError('Choose add, cut or intersect')
-            if solid is None and op != 'add':
-                raise ValueError('First enabled feature must add material')
-            tool = _instances(
-                _primitive(feature, dimensions, kernel, script_budget), feature.get('pattern'), dimensions, kernel
-            )
-            if solid is None:
-                solid = tool
-            elif op == 'add':
-                solid = solid + tool
-            elif op == 'cut':
-                solid = solid - tool
-            else:
-                solid = solid ^ tool
-            if solid.status() != kernel.Error.NoError or solid.is_empty():
-                raise ValueError('The operation produced an empty or invalid solid')
-            if solid.num_tri() > _MAX_FACES:
-                raise ValueError('Solid exceeds 75000 triangles')
-        except ValueError as exc:
-            raise ValueError(f'{identifier}: {exc}') from exc
+            failure = ValueError(f'Invalid feature {i}')
+        else:
+            identifier = feature.get('id')
+            if (
+                not isinstance(identifier, str)
+                or not identifier.strip()
+                or len(identifier) > 80
+                or identifier in identifiers
+            ):
+                failure = ValueError(f'Feature {i} needs a unique ID of 1–80 characters')
+            elif type(feature.get('enabled', True)) is not bool:
+                failure = ValueError(f'{identifier}: enabled must be true or false')
+        if failure is None:
+            identifiers.add(identifier)
+            if not feature.get('enabled', True):
+                continue
+            try:
+                op = feature.get('op', 'add')
+                if op not in ('add', 'cut', 'intersect'):
+                    raise ValueError('Choose add, cut or intersect')
+                if solid is None and not run and op != 'add':
+                    raise ValueError('First enabled feature must add material')
+                tool = _instances(
+                    _primitive(feature, dimensions, kernel, script_budget), feature.get('pattern'), dimensions, kernel
+                )
+                if solid is None and not run:
+                    # The first feature is the solid itself, checked as such.
+                    solid = _checked(tool, kernel)
+                    continue
+            except ValueError as exc:
+                failure = ValueError(f'{identifier}: {exc}')
+                failure.__cause__ = exc
+        if failure is not None:
+            # A feature before this one that fails comes first.
+            if run:
+                _apply_run(solid, run, kernel)
+            raise failure
+        if run and run[-1][1] != op:
+            solid = _apply_run(solid, run, kernel)
+            run = []
+        run.append((identifier, op, tool))
+    if run:
+        solid = _apply_run(solid, run, kernel)
     if solid is None:
         raise ValueError('Enable at least one additive feature')
     return solid, dimensions, kernel

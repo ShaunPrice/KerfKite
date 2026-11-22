@@ -3,7 +3,9 @@ import math
 import struct
 import unittest
 from collections import Counter
+from unittest import mock
 
+from studio import solid_cad
 from studio.solid_cad import binary_stl, horizontal_section, model_stl, rebuild
 
 
@@ -23,6 +25,22 @@ def plate():
             },
         ],
     }
+
+
+def bored(count, *extra):
+    """The plate's base with `count` separate bores cut by features of their own, then `extra` features."""
+    bores = [
+        {'id': f'bore{i}', 'kind': 'cylinder', 'op': 'cut', 'radius': 1.5, 'height': 8, 'origin': [5 + 7 * i, 15, -1]}
+        for i in range(count)
+    ]
+    return {**plate(), 'features': [plate()['features'][0], *bores, *extra]}
+
+
+def one_by_one(solid, run, kernel):
+    """Each feature of a run on its own, as the history was built before runs were applied together."""
+    for _, op, tool in run:
+        solid = solid_cad._checked(solid_cad._one_step(solid, op, tool), kernel)
+    return solid
 
 
 class SolidCadTests(unittest.TestCase):
@@ -89,6 +107,41 @@ class SolidCadTests(unittest.TestCase):
         self.assertAlmostEqual(rebuild(model)['volume'], 2000 * math.pi / 3, delta=10)
         model['features'] = [{'id': 'cone', 'kind': 'cylinder', 'radius': 3, 'topRadius': 0, 'height': 10}]
         self.assertAlmostEqual(rebuild(model)['volume'], 30 * math.pi, delta=0.1)
+
+    def test_runs_of_one_operation_give_the_solid_of_feature_after_feature(self):
+        boss = {'id': 'boss', 'kind': 'cylinder', 'radius': 3, 'height': 4, 'origin': [20, 5, 5]}
+        cap = {'id': 'cap', 'kind': 'box', 'size': [6, 6, 2], 'origin': [17, 2, 8]}
+        trim = {'id': 'trim', 'kind': 'box', 'op': 'intersect', 'size': [38, 28, 9], 'origin': [1, 1, -1]}
+        model = bored(5, boss, cap, trim)
+        together = rebuild(model)
+        with mock.patch.object(solid_cad, '_apply_run', one_by_one):
+            apart = rebuild(model)
+            apart_solid = solid_cad._build(model)[0]
+        self.assertEqual(together['bounds'], apart['bounds'])
+        self.assertAlmostEqual(together['volume'], apart['volume'], delta=1e-9 * apart['volume'])
+        self.assertEqual(len(together['profiles']), len(apart['profiles']))
+        # The same set of points: nothing is in one and not in the other.
+        together_solid = solid_cad._build(model)[0]
+        self.assertTrue((together_solid - apart_solid).is_empty())
+        self.assertTrue((apart_solid - together_solid).is_empty())
+        # The trim keeps the plate within 1..39 x 1..29 and the boss below 8 mm; the cap lies above it.
+        expected = 38 * 28 * 6 - 5 * math.pi * 1.5**2 * 6 + math.pi * 3**2 * 2
+        self.assertAlmostEqual(together['volume'], expected, delta=0.5)
+
+    def test_a_run_names_the_feature_that_fails_and_errors_keep_their_order(self):
+        everything = {'id': 'everything', 'kind': 'box', 'op': 'cut', 'size': [60, 50, 20], 'origin': [-5, -5, -5]}
+        bad = {'id': 'bad', 'kind': 'box', 'op': 'cut', 'size': [0, 2, 2]}
+        for model, named in (
+            (bored(3, everything), 'everything: The operation produced an empty or invalid solid'),
+            (bored(2, everything, bad), 'everything: The operation produced an empty or invalid solid'),
+            (bored(3, bad), 'bad: '),
+        ):
+            with self.subTest(named=named), self.assertRaises(ValueError) as caught:
+                rebuild(model)
+            self.assertTrue(str(caught.exception).startswith(named), str(caught.exception))
+        model = bored(3)
+        model['features'][2]['enabled'] = False
+        self.assertEqual(len(rebuild(model)['profiles']), 3)
 
     def test_bad_histories_and_expressions_fail_atomically(self):
         invalid = [

@@ -83,6 +83,11 @@ public:
     // tell" (see arrangement.cpp).
     static std::array<double, 5> plane_in_doubles(const Plane &pl);
     static int side_in_doubles(const double plane[5], const int64_t *p);
+    // Two grid triangles a and b that each cross the plane of the other with every corner strictly off it:
+    // side_a[k] is the side of the plane of b that corner k of a is on, side_b[k] that of corner k of b for
+    // the plane of a (each 1 or -1, and not all alike). True when they certainly have no point in common:
+    // their two segments on the line where the planes meet are apart. Exact (see arrangement.cpp).
+    static bool apart_on_line(const int64_t *const a[3], const int side_a[3], const int64_t *const b[3], const int side_b[3]);
     // Of the loaded triangles: whether two lie in one plane, and the coordinate axis along which the
     // plane of one is seen without being edge-on (the largest component of its normal).
     bool same_plane(int a, int b) const;

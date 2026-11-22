@@ -284,6 +284,38 @@ int Arrangement::side_in_doubles(const double plane[5], const int64_t *p) {
     return value > bound ? 1 : value < -bound ? -1 : 2;
 }
 
+// Whether two crossing triangles have no point in common, from the orientations of their corners alone,
+// without making the points where their edges cross the planes.
+//
+// Let a0 be the corner of a alone on its side of the plane B of b, and a1, a2 the other two; let b0 be the
+// corner of b alone on its side of the plane A of a, and b1, b2 the other two in the cyclic order of b.
+// The edges a0 a1 and a0 a2 cross B at X1 and X2, and the edges b0 b1 and b0 b2 cross A at Y1 and Y2; all
+// four lie on the line L where the planes meet, and a meets L in the segment X1 X2, b in Y1 Y2 (Y1 != Y2,
+// since b0 is off A). The triangles have a point in common exactly when those segments do.
+//
+// Within B the line through b0 and b1 crosses L at Y1, and the points of L on the side of that line where
+// b2 is are those beyond Y1 towards Y2. With X = a0 + t (ak - a0), 0 < t < 1, and the determinant
+// o(p, q, r, s) = det[q - p, r - p, s - p], which is linear in each point:
+//     o(b0, b1, a0, X) = t o(b0, b1, a0, ak),
+// and, X being in B, o(b0, b1, X, a0) = -o(b0, b1, a0, X) has the sign of the side of the line b0 b1 that
+// X is on (+ on b2's side) times S = sign o(b0, b1, b2, a0), the side of B that a0 is on. So X lies on b2's
+// side of the line b0 b1 exactly when -S sign o(b0, b1, a0, ak) > 0, and strictly beyond Y1, away from Y2,
+// when it is < 0. In the same way X lies strictly beyond Y2, away from Y1, when S sign o(b0, b2, a0, ak) < 0
+// (the side of the line b0 b2 where b1 is gives o(b0, b2, b1, a0) = -S). The segments are apart exactly when
+// X1 and X2 are both strictly beyond Y1, or both strictly beyond Y2; any other answer, a zero included,
+// leaves the pair to the full computation. Each o is of four grid points, exact in 128 bits.
+bool Arrangement::apart_on_line(const int64_t *const a[3], const int side_a[3], const int64_t *const b[3], const int side_b[3]) {
+    int ia = 0, ib = 0;
+    while (ia < 3 && (side_a[ia] == side_a[(ia + 1) % 3] || side_a[ia] == side_a[(ia + 2) % 3])) ++ia;
+    while (ib < 3 && (side_b[ib] == side_b[(ib + 1) % 3] || side_b[ib] == side_b[(ib + 2) % 3])) ++ib;
+    if (ia == 3 || ib == 3) return false;
+    const int64_t *a0 = a[ia], *a1 = a[(ia + 1) % 3], *a2 = a[(ia + 2) % 3];
+    const int64_t *b0 = b[ib], *b1 = b[(ib + 1) % 3], *b2 = b[(ib + 2) % 3];
+    const int s = side_a[ia];
+    if (-s * orient3d_grid(b0, b1, a0, a1) < 0 && -s * orient3d_grid(b0, b1, a0, a2) < 0) return true;
+    return s * orient3d_grid(b0, b2, a0, a1) < 0 && s * orient3d_grid(b0, b2, a0, a2) < 0;
+}
+
 void Arrangement::add_triangle(int v0, int v1, int v2, int operand, int label) {
     SoupTriangle s;
     s.v[0] = v0;
@@ -822,6 +854,14 @@ bool Arrangement::pair(int i, int j) {
         const auto passes = [](const int side[3]) { return side[0] * side[1] < 0 || side[1] * side[2] < 0 || side[0] * side[2] < 0; };
         if (passes(side_b) || passes(side_a)) operand_crossed_[static_cast<size_t>(ta.operand)] = 1;
     }
+    // Most crossing pairs found in a chain of cuts are a long triangle of a flat face and a triangle of a
+    // tool far along the line where their planes meet. Where no corner of either lies in the other's plane,
+    // that is decided from the corners (apart_on_line) before any point is made for the pair.
+    if (shared == 0 && side_a[0] && side_a[1] && side_a[2] && side_b[0] && side_b[1] && side_b[2]) {
+        const int64_t *const corners_a[3] = {grid(ta.v[0]), grid(ta.v[1]), grid(ta.v[2])};
+        const int64_t *const corners_b[3] = {grid(tb.v[0]), grid(tb.v[1]), grid(tb.v[2])};
+        if (apart_on_line(corners_a, side_a, corners_b, side_b)) return false;
+    }
     if (probe_only_) {
         // A triangle with one corner in the other's plane and the other two on one side of it touches the
         // plane at that corner only: ends() would give that corner alone. The pair is then decided below
@@ -931,17 +971,23 @@ void Arrangement::subdivide_cluster(Planar &planar, const std::vector<int> &memb
     struct EdgeOwner {
         int a, b, member;  // a < b; member indexes `members`
     };
+    // The members that have each edge: (edge, member) by edge, then member.
+    std::vector<std::pair<int, int>> edge_members;
+    edge_members.reserve(3 * members.size());
+    for (size_t m = 0; m < members.size(); ++m) {
+        const SoupTriangle &t = tris_[static_cast<size_t>(members[m])];
+        for (int k = 0; k < 3; ++k) {
+            const std::pair<int, int> e(std::min(t.v[k], t.v[(k + 1) % 3]), std::max(t.v[k], t.v[(k + 1) % 3]));
+            edge_members.emplace_back(static_cast<int>(std::lower_bound(edges.begin(), edges.end(), e) - edges.begin()), static_cast<int>(m));
+        }
+    }
+    std::sort(edge_members.begin(), edge_members.end());
     std::vector<EdgeOwner> owners;
     for (const PlanarSegment &piece : planar.pieces) {
         if (piece.source < 0) continue;
         // The members that have the edge this piece is part of.
-        const std::pair<int, int> &e = edges[static_cast<size_t>(piece.source)];
-        for (size_t m = 0; m < members.size(); ++m) {
-            const SoupTriangle &t = tris_[static_cast<size_t>(members[m])];
-            for (int k = 0; k < 3; ++k)
-                if (std::min(t.v[k], t.v[(k + 1) % 3]) == e.first && std::max(t.v[k], t.v[(k + 1) % 3]) == e.second)
-                    owners.push_back(EdgeOwner{std::min(piece.a, piece.b), std::max(piece.a, piece.b), static_cast<int>(m)});
-        }
+        for (auto it = std::lower_bound(edge_members.begin(), edge_members.end(), std::make_pair(piece.source, -1)); it != edge_members.end() && it->first == piece.source; ++it)
+            owners.push_back(EdgeOwner{std::min(piece.a, piece.b), std::max(piece.a, piece.b), it->second});
     }
     std::sort(owners.begin(), owners.end(), [](const EdgeOwner &x, const EdgeOwner &y) { return x.a != y.a ? x.a < y.a : x.b != y.b ? x.b < y.b : x.member < y.member; });
     owners.erase(std::unique(owners.begin(), owners.end(), [](const EdgeOwner &x, const EdgeOwner &y) { return x.a == y.a && x.b == y.b && x.member == y.member; }), owners.end());
