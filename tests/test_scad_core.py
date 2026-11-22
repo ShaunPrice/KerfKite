@@ -123,8 +123,9 @@ class NativeScriptTests(unittest.TestCase):
         client = create_app().test_client()
         headers = {'X-Studio-Token': client.get('/api/session').json['token']}
         payload = {'source': 'linear_extrude(2) circle(3, $fn=12);', 'parameters': {'w': 2}}
-        with patch.object(scad_geometry, 'build_script', side_effect=AssertionError('the Python ran')):
+        with patch.object(scad_geometry, 'preview', wraps=scad_geometry.preview) as reference:
             response = client.post('/api/cad-script', json=payload, headers=headers)
+        reference.assert_not_called()
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_data(), preview_json(payload))
         self.assertEqual(response.get_json()['dimension'], 3)

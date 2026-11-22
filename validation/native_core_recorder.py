@@ -22,7 +22,10 @@ _DEPTH = [0]
 def plain(value):
     """Whether JSON text carries this value to another program unchanged."""
     kind = type(value)
-    if value is None or kind in (bool, str, int):
+    if kind is str:
+        # A lone surrogate is Python text but not UTF-8, which the core's JSON is.
+        return value.isascii() or not any('\ud800' <= c <= '\udfff' for c in value)
+    if value is None or kind in (bool, int):
         return True
     if kind is float:
         return math.isfinite(value)
