@@ -38,6 +38,7 @@ type state struct {
 	physical bool
 	sync.Mutex
 	phase, detail string
+	note          string // what happened to the shortcuts the person asked for
 	active        bool
 	desktopOpen   bool
 	automatic     bool
@@ -269,6 +270,12 @@ func main() {
 		return
 	}
 	payload := filepath.Dir(ex)
+	program := ex
+	if resolved, e := filepath.EvalSymlinks(ex); e == nil {
+		program = resolved
+	}
+	userHome, _ := os.UserHomeDir()
+	spots := findPlaces(runtime.GOOS, program, userHome, os.Getenv)
 	if runtime.GOOS == "darwin" {
 		payload = filepath.Join(payload, "..", "Resources")
 	}
@@ -319,6 +326,9 @@ func main() {
 		return
 	}
 	defer output.Close()
+	spots.refresh(output)
+	// The shortcut choices appear with the first workshop choice, then as buttons.
+	offered := filepath.Join(data, "shortcuts-offered")
 	var secret [24]byte
 	if _, err = rand.Read(secret[:]); err != nil {
 		return
@@ -373,11 +383,28 @@ func main() {
 			switch r.FormValue("action") {
 			case "launch":
 				st.Lock()
-				if st.phase == "Choose your workshop" {
+				launched := st.phase == "Choose your workshop"
+				if launched {
 					st.phase = "Opening the workshop"
 					st.choices <- options{hardware: r.FormValue("hardware") == "yes", step: r.FormValue("step") == "yes", desktop: r.FormValue("interface") == "native", remember: r.FormValue("remember") == "yes"}
 				}
 				st.Unlock()
+				if launched && r.FormValue("shortcuts") == "offered" {
+					st.addShortcuts(spots, r.FormValue("menu") == "yes", r.FormValue("icon") == "yes", output)
+					if err := os.WriteFile(offered, []byte("asked\n"), 0600); err != nil {
+						fmt.Fprintln(output, err)
+					}
+				}
+			case "add-menu":
+				st.addShortcuts(spots, true, false, output)
+			case "add-icon":
+				st.addShortcuts(spots, false, true, output)
+			case "show-volume":
+				if volume := spots.offers().Volume; volume != "" {
+					if err := exec.Command("open", volume).Start(); err != nil {
+						fmt.Fprintln(output, err)
+					}
+				}
 			case "setup-next":
 				err := os.Remove(filepath.Join(data, "native-simulation"))
 				if err != nil && !os.IsNotExist(err) {
@@ -419,9 +446,10 @@ func main() {
 			http.Error(w, "Unsupported method", 405)
 			return
 		}
+		shortcuts, first := spots.offers(), !exists(offered)
 		st.Lock()
 		defer st.Unlock()
-		form.Execute(w, map[string]any{"Phase": st.phase, "Detail": st.detail, "Active": st.active, "Choose": st.phase == "Choose your workshop", "Ready": st.phase == "Your workshop is ready", "Token": token, "Studio": studioURL, "Log": logfile})
+		form.Execute(w, map[string]any{"Phase": st.phase, "Detail": st.detail, "Active": st.active, "Choose": st.phase == "Choose your workshop", "Ready": st.phase == "Your workshop is ready", "Token": token, "Studio": studioURL, "Log": logfile, "Offers": shortcuts, "First": first, "Note": st.note})
 	})
 	srv := &http.Server{ReadHeaderTimeout: 5 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Host != address {

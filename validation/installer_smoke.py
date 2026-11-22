@@ -134,11 +134,27 @@ def check(exe, data, offline, step, native=False, target=None):
     env = {**os.environ, "KERFKITE_DATA_DIR": str(data)}
     if offline:
         env["UV_OFFLINE"] = "1"
+    places = data / "shortcut-check"
+    if sys.platform.startswith("linux"):
+        # Keep the menu entry and desktop shortcut out of the runner's own folders.
+        (places / "Desktop").mkdir(parents=True, exist_ok=True)
+        env.update(XDG_DATA_HOME=str(places / "share"), XDG_DESKTOP_DIR=str(places / "Desktop"))
     proc = subprocess.Popen([exe], env=env)
     try:
         page = page_when(proc, "Choose your workshop")
-        submit(page, "launch", **({"step": "yes"} if step else {}))
+        fields = {"step": "yes"} if step else {}
+        asked = 'name="shortcuts" value="offered"' in page
+        if asked and sys.platform.startswith("linux"):
+            fields.update(shortcuts="offered", menu="yes", icon="yes")
+        submit(page, "launch", **fields)
         page = page_when(proc, "Your workshop is ready")
+        if asked and sys.platform.startswith("linux"):
+            shortcut = (places / "Desktop/kerfkite-studio.desktop").read_text()
+            assert f'Exec="{exe}"' in shortcut and os.access(places / "Desktop/kerfkite-studio.desktop", os.X_OK)
+            portable = places / "share/applications/org.kerfkite.Studio.Portable.desktop"
+            # An installed package already has its menu entry; a portable copy gets one.
+            assert portable.exists() != Path("/usr/share/applications/org.kerfkite.Studio.desktop").exists()
+            assert "Open it from there next time" in page or not portable.exists()
         session = json.loads(read(STUDIO + "api/session"))
         assert session["hardware_enabled"] is False
         assert b"KerfKite Studio" in read(STUDIO)
