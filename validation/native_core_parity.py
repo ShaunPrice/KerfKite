@@ -37,7 +37,10 @@ Eight comparisons, all against values computed by Python in this run:
 10. Foreign drawings: studio.program_import's import_program for posted G-code, HP-GL plotter files and LinuxCNC
    INI files, sound, damaged and refused, with every filename suffix and unit (program_import_cases). Program
    text that is not ASCII is declined. DXF drawings, which the core reads with its own reader, are left out
-   here and compared to the tolerance by validation/dxf_import_check.py.
+   here and compared to the tolerance by validation/dxf_import_check.py. And studio.pdf_import's import_pdf for
+   PDF pages written as producers write them (pdf_import_cases): paths, fills and their rules, clipping, forms,
+   graphics states, optional content, text and images, page trees, boxes, units and rotations, every filter,
+   cross-reference tables and streams, and damaged operators, documents and payloads.
 
 For each job the native core must either reproduce the reference exactly (program lines, preview segments,
 length, time, bounds and warnings, and for a rotary job its rotary setup; or the same error message) or
@@ -2683,6 +2686,349 @@ def program_import_cases(count, seed):
         yield payload
 
 
+def _lzw(data):
+    """LZW codes for data, as PDF's LZWDecode reads them, written by pypdf's encoder (PDF 1.7, 7.4.4.2)."""
+    from pypdf._codecs._codecs import LzwCodec
+
+    return LzwCodec().encode(data)
+
+
+def _run_length(data):
+    out = bytearray()
+    for i in range(0, len(data), 100):
+        chunk = data[i : i + 100]
+        out += bytes([len(chunk) - 1]) + chunk
+    return bytes(out + b'\x80')
+
+
+def pdf_document(pages, rng, objects_in_streams=False, table=None):
+    """A PDF of the given pages, written as PDF producers write them: each page a dict of its entries, with
+    'content' (bytes or a list of bytes) and optional 'forms', 'states' and 'images'; inherited attributes
+    on a parent node. The cross-reference is a table or a stream, with objects in an object stream."""
+    import zlib
+
+    objects = {}
+
+    def new(body):
+        number = len(objects) + 1
+        objects[number] = body
+        return number
+
+    def stream(data, extra=b''):
+        kind = rng.choice(['plain', 'flate', 'flate', 'hex', 'a85', 'lzw', 'rl', 'chain'])
+        if kind == 'flate':
+            data, extra = zlib.compress(data), extra + b'/Filter /FlateDecode'
+        elif kind == 'hex':
+            data, extra = data.hex().encode() + b'>', extra + b'/Filter /ASCIIHexDecode'
+        elif kind == 'a85':
+            data, extra = base64.a85encode(data, adobe=True), extra + b'/Filter /ASCII85Decode'
+        elif kind == 'lzw':
+            data, extra = _lzw(data), extra + b'/Filter /LZWDecode'
+        elif kind == 'rl':
+            data, extra = _run_length(data), extra + b'/Filter /RunLengthDecode'
+        elif kind == 'chain':
+            data, extra = (
+                base64.a85encode(zlib.compress(data), adobe=True),
+                extra + b'/Filter [/ASCII85Decode /FlateDecode]',
+            )
+        return ('stream', b'<< /Length %d %s >>' % (len(data), extra), data)
+
+    page_numbers = []
+    parent = new(None)
+    for page in pages:
+        resources = []
+        for name, (form_content, form_extra) in page.get('forms', {}).items():
+            resources.append(
+                (b'XObject', name, new(stream(form_content, b'/Type /XObject /Subtype /Form ' + form_extra)))
+            )
+        for name, image in page.get('images', {}).items():
+            resources.append(
+                (
+                    b'XObject',
+                    name,
+                    new(
+                        stream(
+                            b'\x00' * 4,
+                            b'/Type /XObject /Subtype /Image /Width 2 /Height 2 /BitsPerComponent 8 /ColorSpace /DeviceGray',
+                        )
+                    ),
+                )
+            )
+        for name, state in page.get('states', {}).items():
+            resources.append((b'ExtGState', name, new(b'<< /Type /ExtGState ' + state + b' >>')))
+        grouped = {}
+        for category, name, number in resources:
+            grouped.setdefault(category, []).append(b'/%s %d 0 R' % (name, number))
+        resource_text = b'<< ' + b' '.join(b'/%s << %s >>' % (k, b' '.join(v)) for k, v in grouped.items()) + b' >>'
+        content = page['content']
+        if isinstance(content, list):
+            contents = b'[' + b' '.join(b'%d 0 R' % new(stream(c)) for c in content) + b']'
+        else:
+            contents = b'%d 0 R' % new(stream(content))
+        entries = page.get('entries', b'/MediaBox [0 0 144 180]')
+        if page.get('no_resources'):
+            body = b'<< /Type /Page /Parent %d 0 R %s /Contents %s >>' % (parent, entries, contents)
+        else:
+            body = b'<< /Type /Page /Parent %d 0 R %s /Resources %s /Contents %s >>' % (
+                parent,
+                entries,
+                resource_text,
+                contents,
+            )
+        page_numbers.append(new(body))
+    inherited = pages[0].get('inherited', b'') if pages else b''
+    objects[parent] = b'<< /Type /Pages /Count %d /Kids [%s] %s >>' % (
+        len(page_numbers),
+        b' '.join(b'%d 0 R' % n for n in page_numbers),
+        inherited,
+    )
+    catalog = new(b'<< /Type /Catalog /Pages %d 0 R >>' % parent)
+    head = b'%PDF-1.' + (b'5' if table is False else b'4') + b'\n%\xe2\xe3\xcf\xd3\n'
+    out = bytearray(head)
+    offsets = {}
+    use_stream = table is False or (table is None and rng.random() < 0.4)
+    packed = {}
+    if use_stream and objects_in_streams:
+        # Plain dictionaries go into one object stream.
+        members = [n for n, body in objects.items() if not isinstance(body, tuple)]
+        if members:
+            header, data = [], b''
+            for n in members:
+                header.append(b'%d %d' % (n, len(data)))
+                data += objects[n] + b'\n'
+            first = b' '.join(header) + b'\n'
+            container = len(objects) + 1
+            objects[container] = (
+                'stream',
+                b'<< /Type /ObjStm /N %d /First %d /Length %d >>' % (len(members), len(first), len(first + data)),
+                first + data,
+            )
+            for index, n in enumerate(members):
+                packed[n] = (container, index)
+    for number in sorted(objects):
+        if number in packed:
+            continue
+        body = objects[number]
+        offsets[number] = len(out)
+        if isinstance(body, tuple):
+            _, dictionary, data = body
+            out += b'%d 0 obj\n%s\nstream\n' % (number, dictionary) + data + b'\nendstream\nendobj\n'
+        else:
+            out += b'%d 0 obj\n%s\nendobj\n' % (number, body)
+    size = max(objects) + 1
+    if use_stream:
+        xref_number = size
+        size += 1
+        rows = [b'\x00\x00\x00\xff\xff']
+        for n in range(1, size):
+            if n == xref_number:
+                rows.append(b'\x01' + len(out).to_bytes(3, 'big') + b'\x00')
+            elif n in packed:
+                rows.append(b'\x02' + packed[n][0].to_bytes(3, 'big') + bytes([packed[n][1]]))
+            else:
+                rows.append(b'\x01' + offsets[n].to_bytes(3, 'big') + b'\x00')
+        data = b''.join(rows)
+        predictor = rng.random() < 0.5
+        if predictor:
+            previous, encoded = bytes(5), b''
+            for row in rows:
+                encoded += b'\x02' + bytes((a - b) & 0xFF for a, b in zip(row, previous))
+                previous = row
+            data = zlib.compress(encoded)
+            parms = b'/DecodeParms << /Predictor 12 /Columns 5 >>'
+        else:
+            data = zlib.compress(data)
+            parms = b''
+        start = len(out)
+        out += (
+            b'%d 0 obj\n<< /Type /XRef /Size %d /W [1 3 1] /Root %d 0 R /Filter /FlateDecode %s /Length %d >>\nstream\n'
+            % (xref_number, size, catalog, parms, len(data))
+        )
+        out += data + b'\nendstream\nendobj\n'
+    else:
+        start = len(out)
+        out += b'xref\n0 %d\n0000000000 65535 f \n' % size
+        for n in range(1, size):
+            out += b'%010d 00000 n \n' % offsets[n]
+        out += b'trailer\n<< /Size %d /Root %d 0 R >>\n' % (size, catalog)
+    out += b'startxref\n%d\n%%%%EOF\n' % start
+    return bytes(out)
+
+
+def pdf_import_cases(count, seed):
+    """PDF pages for /api/pdf-import: strokes and fills of lines, rectangles and curves (c, v, y) under
+    transformation matrices; closed paths; fills by the even-odd and nonzero rules, nested, separate,
+    touching and overlapping; clipping by rectangles, convex and other paths; forms with matrices and boxes,
+    nested; graphics states with alpha, soft masks and dashes; marked and optional content; text, shading
+    and images; page trees with inherited boxes and resources, crop boxes, user units and rotations; every
+    filter, cross-reference tables and streams with predictors and object streams; and damaged operators,
+    operands, documents and payloads."""
+    rng = random.Random(seed)
+    pick = rng.choice
+    risk = [0.0]
+
+    def opt(good, bad=()):
+        return pick(bad) if bad and rng.random() < risk[0] else pick(good)
+
+    def n(low=-20, high=160):
+        value = rng.uniform(low, high)
+        return pick(['%d' % round(value), '%.1f' % value, '%.3f' % value, '%.2f' % value])
+
+    def path():
+        roll = rng.random()
+        if roll < 0.35:
+            return f'{n()} {n()} {n(1, 60)} {n(1, 60)} re'
+        if roll < 0.55:
+            corners = [(n(), n()) for _ in range(rng.randint(2, 6))]
+            text = f'{corners[0][0]} {corners[0][1]} m ' + ' '.join(f'{x} {y} l' for x, y in corners[1:])
+            return text + pick(['', ' h', ' h'])
+        if roll < 0.8:
+            text = f'{n()} {n()} m '
+            for _ in range(rng.randint(1, 3)):
+                op = pick(['c', 'c', 'v', 'y'])
+                count = 6 if op == 'c' else 4
+                text += ' '.join(n() for _ in range(count)) + f' {op} '
+            return text + pick(['', 'h'])
+        if roll < 0.9:
+            # Nested squares for fill rules.
+            x, y, size = rng.uniform(0, 80), rng.uniform(0, 80), rng.uniform(20, 60)
+            inner = size * rng.uniform(0.2, 0.7)
+            outer = f'{x:.2f} {y:.2f} {size:.2f} {size:.2f} re'
+            if rng.random() < 0.5:
+                return outer + f' {x + (size - inner) / 2:.2f} {y + (size - inner) / 2:.2f} {inner:.2f} {inner:.2f} re'
+            # The inner one drawn the other way round.
+            a, b = x + (size - inner) / 2, y + (size - inner) / 2
+            return (
+                outer
+                + f' {a:.2f} {b:.2f} m {a:.2f} {b + inner:.2f} l {a + inner:.2f} {b + inner:.2f} l {a + inner:.2f} {b:.2f} l h'
+            )
+        return opt(['0 0 m 50 50 l'], ['m', '1 2 3 l', '0 0 m 1 2 3 4 c', '5 5 l', '1 2 3 4 5 v', 'h 1 1 l'])
+
+    def paint():
+        return opt(['S', 'f', 'f*', 'B', 'b', 's', 'B*', 'b*', 'F', 'n', 'S', 'f'], ['W n', 'W* n'])
+
+    def content(depth=0, forms=()):
+        ops = []
+        for _ in range(rng.randint(1, 14)):
+            roll = rng.random()
+            if roll < 0.45:
+                ops.append(f'{path()} {paint()}')
+            elif roll < 0.55:
+                ops.append(
+                    pick(['q', 'Q', 'q', 'Q']) if rng.random() < risk[0] else 'q ' + f'{path()} {paint()}' + ' Q'
+                )
+            elif roll < 0.63:
+                ops.append(
+                    pick(
+                        [
+                            f'1 0 0 1 {n()} {n()} cm',
+                            f'2 0 0 2 {n()} {n()} cm',
+                            '0 1 -1 0 100 0 cm',
+                            f'{n(0.5, 2)} 0.2 -0.1 {n(0.5, 2)} 5 5 cm',
+                        ]
+                    )
+                )
+            elif roll < 0.7:
+                ops.append(pick([f'{n()} {n()} {n(5, 80)} {n(5, 80)} re W n', '10 10 m 90 10 l 50 90 l h W n', '10 10 m 90 10 l 10 90 l 90 90 l h W n',
+                                 '0 0 144 180 re W* n', '20 20 m 80 20 l 80 80 l 20 80 l W n']))  # fmt: skip
+            elif roll < 0.75:
+                ops.append(pick(['[3 2] 0 d', '[] 0 d', '/GS0 gs', '/GS1 gs', '/GS2 gs', '/GS3 gs']))
+            elif roll < 0.8:
+                ops.append(
+                    pick(['/OC /L1 BDC 0 0 m 10 10 l S EMC', '/Span BMC 0 0 m 20 5 l S EMC', '/OC /L1 BDC /F0 Do EMC'])
+                )
+            elif roll < 0.86:
+                ops.append(
+                    pick(
+                        [
+                            'BT /F1 12 Tf 10 10 Td (Label) Tj ET',
+                            'BT 7 Tr (Clip) Tj ET 0 0 m 5 5 l S',
+                            'BT [(A) 2 (B)] TJ ET',
+                            "BT (x) ' ET",
+                        ]
+                    )
+                )
+            elif roll < 0.9:
+                ops.append(pick(['/Sh0 sh', '/Im0 Do']))
+            elif roll < 0.96 and forms:
+                ops.append(f'q 1 0 0 1 {n(0, 40)} {n(0, 40)} cm /{pick(forms)} Do Q')
+            else:
+                ops.append(
+                    opt(
+                        ['0 0 m 1 1 l S'],
+                        [
+                            'Q',
+                            'EMC',
+                            'q q',
+                            '/Missing gs',
+                            '/Nothing Do',
+                            '1 0 0 cm',
+                            '/Span BMC',
+                            '1e400 0 m 1 1 l S',
+                            '99999999999 0 m 1 1 l S',
+                        ],
+                    )
+                )
+        return ' '.join(ops).encode()
+
+    for index in range(count):
+        risk[0] = pick([0.0, 0.0, 0.0, 0.05, 0.2])
+        forms = {}
+        if rng.random() < 0.4:
+            for k in range(rng.randint(1, 2)):
+                extra = pick([b'/BBox [0 0 40 40]', b'/BBox [0 0 40 40] /Matrix [2 0 0 1 0 0]', b'/BBox [5 5 60 30] /Matrix [1 0 0 1 3 4]',
+                              b'/BBox [0 0 40 40] /Group << /S /Transparency >>', b'/BBox [-10 -10 200 200]'])  # fmt: skip
+                forms[f'F{k}'.encode()] = (content(1), extra)
+        states = {
+            b'GS0': b'/CA 0.5 /ca 0.5',
+            b'GS1': pick([b'/ca 0', b'/CA 0']),
+            b'GS2': pick([b'/SMask /None', b'/SMask << /S /Luminosity >>']),
+            b'GS3': pick([b'/D [[2 1] 0]', b'/D [[] 0]']),
+        }
+        page = {
+            'content': content(0, [f.decode() for f in forms]),
+            'forms': forms,
+            'states': states,
+            'images': {b'Im0': True} if rng.random() < 0.5 else {},
+        }
+        roll = rng.random()
+        entries = [b'/MediaBox [0 0 144 180]']
+        if roll < 0.15:
+            entries.append(pick([b'/CropBox [18 36 126 144]', b'/CropBox [0 0 300 300]', b'/CropBox [50 50 40 40]']))
+        if rng.random() < 0.2:
+            entries.append(
+                pick([b'/Rotate 90', b'/Rotate 180', b'/Rotate 270', b'/Rotate -90', b'/Rotate 45', b'/Rotate 450'])
+            )
+        if rng.random() < 0.1:
+            entries.append(pick([b'/UserUnit 2', b'/UserUnit 0.5']))
+        if rng.random() < 0.1:
+            entries.append(b'/Annots [<< /Type /Annot /Subtype /Text /Rect [0 0 10 10] >>]')
+        page['entries'] = b' '.join(entries)
+        if rng.random() < 0.1:
+            page['content'] = [page['content'], content(0)]
+        pages = [page]
+        if rng.random() < 0.2:
+            pages.append({'content': content(0), 'entries': b'', 'inherited': b'', 'states': states})
+            pages[0]['inherited'] = b'/MediaBox [0 0 200 200]'
+            pages[1]['entries'] = b''
+        if rng.random() < 0.05:
+            pages[0]['no_resources'] = True
+        data = pdf_document(pages, rng, objects_in_streams=rng.random() < 0.5)
+        number = rng.randint(1, len(pages)) if rng.random() < 0.9 else pick([0, len(pages) + 1, True, 1.0, '1'])
+        payload = {'content': base64.b64encode(data).decode('ascii'), 'page': number}
+        if rng.random() < 0.04:
+            payload = pick([
+                {'content': 'not base64!'},
+                {'content': base64.b64encode(b'not a PDF').decode()},
+                {'content': base64.b64encode(b'%PDF-1.5\nmissing xref').decode()},
+                {'content': base64.b64encode(data[: len(data) // 2]).decode()},
+                {'page': 1},
+                [],
+                {'content': 5},
+            ])  # fmt: skip
+        yield payload
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--cli', required=True, type=Path, help='the kerfkite-cam executable')
@@ -2702,6 +3048,7 @@ def main():
     parser.add_argument('--solid-cad', type=int, default=300, help='generated parametric solid histories and sections')
     parser.add_argument('--cad-script', type=int, default=1000, help='generated CAD scripts for the script preview')
     parser.add_argument('--program-import', type=int, default=3000, help='generated G-code, HP-GL and INI drawings')
+    parser.add_argument('--pdf-import', type=int, default=1500, help='generated PDF pages')
     parser.add_argument('--skip-suite', action='store_true', help='do not replay the calls made by the test suite')
     parser.add_argument(
         '--without-polygon-operations',
@@ -2841,6 +3188,10 @@ def main():
             line = preview_reference('program_import', payload)
             if line is not None:
                 lines.setdefault(line, 'program-import')
+        for payload in pdf_import_cases(args.pdf_import, 106):
+            line = preview_reference('pdf_import', payload)
+            if line is not None:
+                lines.setdefault(line, 'pdf-import')
         tally = collections.Counter()
         declined = collections.Counter()
         failures = []
@@ -2861,7 +3212,7 @@ def main():
                 if subject is None:
                     subject = case.get('solid_cad', case.get('solid_cad_section', case.get('cad_script')))
                 if subject is None:
-                    subject = case.get('program_import')
+                    subject = case.get('program_import', case.get('pdf_import'))
                 if 'relief' in case and 'ok' in got:
                     got = {'ok': where_computed_left_out(got['ok'])}
                 if not shared and 'project' in case and uses_polygon_operation(subject):
@@ -2903,7 +3254,16 @@ def main():
                     compare(lines)
 
     origins = ('suite', 'generated', 'entry/tabs', 'helix', 'v-carve', 'rotary', 'rotary-wrap', 'relief', 'stock')
-    for origin in (*origins, 'tool-changes', 'fixtures', 'stl', 'solid-cad', 'cad-script', 'program-import'):
+    for origin in (
+        *origins,
+        'tool-changes',
+        'fixtures',
+        'stl',
+        'solid-cad',
+        'cad-script',
+        'program-import',
+        'pdf-import',
+    ):
         total = sum(n for (o, _), n in tally.items() if o == origin)
         if not total:
             continue
@@ -2936,6 +3296,8 @@ def main():
         raise SystemExit('No solid was rebuilt: the comparison did not exercise the parametric history.')
     if shared and args.cad_script and not tally['cad-script', 'program']:
         raise SystemExit('No CAD script was previewed: the comparison did not exercise the script engine.')
+    if args.pdf_import and not tally['pdf-import', 'program']:
+        raise SystemExit('No PDF page was read: the comparison did not exercise the PDF reader.')
     if args.program_import and not tally['program-import', 'program']:
         raise SystemExit('No drawing was imported: the comparison did not exercise the program reader.')
     if not shared:

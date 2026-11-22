@@ -137,6 +137,13 @@ as Studio's **Import** does (`core/src/program_import.cpp`, the port of `studio/
 core's own DXF reader, `core/src/dxf.cpp`): the artwork, layers, presets, devices and warnings, or the
 reference's message. Program text that is not ASCII, and DXF splines given only by fit points, are declined.
 
+    kerfkite-cam pdf-import request.json
+
+reads one page of a PDF (`{"content": base64 text of the file, "page"}`) as Studio's **Import** does
+(`core/src/pdf_import.cpp`, the port of `studio/pdf_import.py`, with the core's own inflate,
+`core/src/inflate.cpp`): the page's vector paths as a draft in millimetres, with its warnings, page count and
+size, or the reference's message.
+
     kerfkite-cam artwork-relief request.json
 
 turns closed artwork contours (`paths`) into a raised or recessed relief, as Studio's **Artwork relief**

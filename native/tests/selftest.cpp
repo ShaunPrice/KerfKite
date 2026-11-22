@@ -1273,6 +1273,46 @@ static void program_imports() {
     expect(plate.at("layers").at(0).at("color") == json("#ff0000") && plate.at("warnings").at(0) == json("Skipped DXF entities: TEXT (1)"),
            "a DXF layer's colour and the entities skipped");
     expect(refusal("plate.dxf", "hello") == "Cannot read this ASCII DXF drawing", "text that is not a DXF");
+
+    // A PDF page, written by hand: a stroke, a closed fill with a hole, and text that is skipped.
+    const std::string content = "0 0 m 72 0 l S 10 10 50 50 re 20 20 10 10 re f* BT (Hi) Tj ET";
+    std::string pdf = "%PDF-1.4\n";
+    std::vector<size_t> offsets;
+    const auto object = [&](const std::string &body) {
+        offsets.push_back(pdf.size());
+        pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n";
+    };
+    object("<< /Type /Catalog /Pages 2 0 R >>");
+    object("<< /Type /Pages /Count 1 /Kids [3 0 R] >>");
+    object("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 144 144] /Contents 4 0 R >>");
+    object("<< /Length " + std::to_string(content.size()) + " >>\nstream\n" + content + "\nendstream");
+    const size_t xref = pdf.size();
+    pdf += "xref\n0 5\n0000000000 65535 f \n";
+    for (const size_t offset : offsets) {
+        char line[32];
+        std::snprintf(line, sizeof line, "%010zu 00000 n \n", offset);
+        pdf += line;
+    }
+    pdf += "trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n" + std::to_string(xref) + "\n%%EOF\n";
+    static const char *alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string encoded;
+    for (size_t i = 0; i < pdf.size(); i += 3) {
+        const unsigned a = static_cast<unsigned char>(pdf[i]), b = i + 1 < pdf.size() ? static_cast<unsigned char>(pdf[i + 1]) : 0,
+                       c = i + 2 < pdf.size() ? static_cast<unsigned char>(pdf[i + 2]) : 0;
+        const unsigned group = (a << 16) | (b << 8) | c;
+        encoded += alphabet[(group >> 18) & 63];
+        encoded += alphabet[(group >> 12) & 63];
+        encoded += i + 1 < pdf.size() ? alphabet[(group >> 6) & 63] : '=';
+        encoded += i + 2 < pdf.size() ? alphabet[group & 63] : '=';
+    }
+    json pdf_request = json::object();
+    pdf_request["content"] = encoded;
+    const json page = kerfkite::program_import_call("pdf-import", pdf_request);
+    const json &pdf_objects = page.at("objects");
+    expect(pdf_objects.size() == 2 && pdf_objects.at(1).at("paths").size() == 2, "a stroke, and a fill with its hole as one object");
+    expect(std::fabs(pdf_objects.at(0).at("paths").at(0).at(1).at(0).get<double>() - 25.4) < 1e-12, "72 points are 25.4 mm");
+    expect(page.at("pageCount") == json(1) && page.at("warnings").at(1) == json("1 \xc3\x97 text objects omitted; convert text to paths in the source."),
+           "the page count and the text skipped");
 }
 
 int main() {

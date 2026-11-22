@@ -8,7 +8,7 @@ are recorded the same way, with their rotary setup, and so are those of studio.r
 studio.simulation.simulate, studio.tool_changes.plan_tool_changes, studio.fixture_collision.check_fixtures and
 studio.mesh_import.stl_heightmap, whose expected answers come from their Python, as the native core is compared
 with; so are Studio's solid routes, its CAD script preview (studio.scad_geometry.preview) and its reader of
-foreign drawings (studio.program_import.import_program).
+foreign drawings (studio.program_import.import_program) and PDF pages (studio.pdf_import.import_pdf).
 """
 
 import functools
@@ -138,6 +138,12 @@ def preview_reference(kind, data):
                 return None
 
             result = _SOLID.get('import', import_program)(data, backend='python')
+        elif kind == 'pdf_import':
+            from studio.pdf_import import import_pdf
+
+            result = _SOLID.get('pdf', import_pdf)(data, backend='python')
+            # Its points are tuples, which JSON carries as lists.
+            result = json.loads(json.dumps(result))
         elif kind == 'solid_cad_section':
             from studio.solid_cad import horizontal_section
 
@@ -252,6 +258,24 @@ def _record_solid_cad():
         return original_import(payload, **kwargs)
 
     program_import.import_json, program_import.import_program = import_json, import_program
+
+    import studio.pdf_import as pdf_import
+
+    original_pdf_json, original_pdf = pdf_import.import_json, pdf_import.import_pdf
+    _SOLID.update(pdf=original_pdf)
+
+    @functools.wraps(original_pdf_json)
+    def pdf_json(payload):
+        record('pdf_import', payload)
+        return original_pdf_json(payload)
+
+    @functools.wraps(original_pdf)
+    def pdf(payload, **kwargs):
+        if not kwargs:
+            record('pdf_import', payload)
+        return original_pdf(payload, **kwargs)
+
+    pdf_import.import_json, pdf_import.import_pdf = pdf_json, pdf
 
 
 def _studio_as_left_alone():

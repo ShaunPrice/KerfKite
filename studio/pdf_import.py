@@ -1,4 +1,11 @@
-"""Extract authored PDF vector paths into a review draft, in millimetres."""
+"""Extract authored PDF vector paths into a review draft, in millimetres.
+
+With the compiled extension, import_pdf is answered by the native core's port of this module
+(native/core/src/pdf_import.cpp), which reads the PDF itself and gives the same draft, warnings and messages to
+the bit for the files PDF producers write. This module, with pypdf and Shapely, stays as the reference and
+answers what the core declines: files pypdf would repair, encrypted files, inline images, and the few
+decisions that turn on rounding.
+"""
 
 import base64
 from collections import Counter
@@ -14,6 +21,11 @@ from shapely.strtree import STRtree
 
 from .program_import import Drawing, MAX_PATHS, MAX_POINTS
 from .sketch_curves import sample_cubic
+
+try:  # The native core's port of this module, in the compiled extension.
+    from ._relief_native import core_cam as _core_cam, core_cam_text as _core_cam_text
+except ImportError:
+    _core_cam = _core_cam_text = None
 
 
 IDENTITY = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
@@ -320,7 +332,35 @@ class Extraction:
             raise ValueError('PDF has an unclosed graphics state or marked-content block')
 
 
-def import_pdf(payload):
+def import_json(payload):
+    """import_pdf(payload) as JSON text written by the core, for a web response, or None: then import_pdf."""
+    if _core_cam_text is None:
+        return None
+    try:
+        return _core_cam_text('pdf-import', payload)
+    except NotImplementedError:
+        return None
+
+
+def import_pdf(payload, *, backend='auto'):
+    """The review draft of one PDF page. backend='auto' reads in the native core where it can and here
+    otherwise; 'python' reads here; 'native' raises NotImplementedError where the core cannot answer."""
+    if backend not in ('auto', 'python', 'native'):
+        raise ValueError('PDF import backend must be auto, python or native')
+    if backend != 'python':
+        if _core_cam is not None:
+            try:
+                answer = _core_cam('pdf-import', payload)
+            except NotImplementedError:
+                if backend == 'native':
+                    raise
+                answer = None
+            if answer is not None:
+                return answer
+            if backend == 'native':
+                raise NotImplementedError('The PDF cannot be passed to the native core unchanged')
+        elif backend == 'native':
+            raise NotImplementedError('The native PDF import is not installed')
     if not isinstance(payload, dict) or not isinstance(payload.get('content'), str):
         raise ValueError('Choose a PDF document')
     encoded = payload['content']

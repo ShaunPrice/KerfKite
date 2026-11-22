@@ -10,6 +10,7 @@
 // tolerance. Declined (NotPorted), for the Python to answer: program text that is not ASCII, which the
 // reference upper-cases and splits by Unicode's rules.
 #include "kerfkite/program_import.hpp"
+#include "kerfkite/pdf_import.hpp"
 
 #include <algorithm>
 #include <array>
@@ -711,10 +712,10 @@ json import_program(const json &payload) {
 
 }  // namespace
 
-bool program_import_command(const std::string &command) { return command == "program-import"; }
+bool program_import_command(const std::string &command) { return command == "program-import" || command == "pdf-import"; }
 
 Json program_import_call(const std::string &command, const Json &request) {
-    (void)command;
+    if (command == "pdf-import") return import_pdf(request);
     return import_program(request);
 }
 

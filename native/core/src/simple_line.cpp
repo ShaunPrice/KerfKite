@@ -515,4 +515,10 @@ LineCheck check_line(const std::vector<std::array<double, 2>> &path, LineMethod 
 
 std::uint64_t line_check_budget() { return detail::kSimpleLineBudget; }
 
+int geos_orientation(const std::array<double, 2> &p1, const std::array<double, 2> &p2, const std::array<double, 2> &q) {
+    detail::Meter meter;
+    meter.limit = UINT64_MAX;
+    return detail::orientation(p1, p2, q, meter);
+}
+
 }  // namespace kerfkite

@@ -22,8 +22,9 @@
 //                                            and interferences (studio.assembly)
 //   kerfkite-cam artwork-relief REQUEST.json closed artwork contours as a raised or recessed relief (/api/artwork-relief)
 //   kerfkite-cam artwork-raster REQUEST.json the artwork relief's height field alone
-//   kerfkite-cam program-import REQUEST.json {"name", "text", "unit"}: posted G-code, HP-GL or a LinuxCNC INI read as
-//                                            artwork for review (/api/program-import, studio.program_import)
+//   kerfkite-cam program-import REQUEST.json {"name", "text", "unit"}: posted G-code, HP-GL, a LinuxCNC INI or a DXF
+//                                            drawing read as artwork for review (/api/program-import)
+//   kerfkite-cam pdf-import REQUEST.json     {"content": base64, "page"}: a PDF page's vector paths (/api/pdf-import)
 //   kerfkite-cam calibrate                   measure the relief contact on the threads and any GPU, and how to share
 //   kerfkite-cam gerber FILE [--arc-tolerance MM]            a Gerber layer as drawn objects in millimetres
 //   kerfkite-cam gerber-outline FILE [--tolerance MM] [--offset [X,Y]]   a profile layer as closed paths
@@ -238,6 +239,8 @@ int batch(const std::string &path) {
                 job = kerfkite::solid_cad_call("sketch-solve", request.at("sketch_solve"));
             else if (request.contains("program_import"))
                 job = kerfkite::program_import_call("program-import", request.at("program_import"));
+            else if (request.contains("pdf_import"))
+                job = kerfkite::program_import_call("pdf-import", request.at("pdf_import"));
             else if (request.contains("assembly_solve"))
                 job = kerfkite::solid_cad_call("assembly-solve", request.at("assembly_solve"));
             else if (request.contains("relief"))
@@ -368,7 +371,7 @@ int main(int argc, char **argv) {
          command == "solid" || command == "rotary" || command == "rotary-wrap" || command == "relief" || command == "stock" ||
          command == "tool-changes" || command == "fixture-collision" || command == "stl-heightmap" ||
          command == "solid-cad" || command == "solid-cad-section" || command == "cad-script" || command == "sketch-solve" || command == "assembly-solve" ||
-         command == "artwork-relief" || command == "artwork-raster" || command == "program-import") &&
+         command == "artwork-relief" || command == "artwork-raster" || command == "program-import" || command == "pdf-import") &&
         argc == 3)
         return request(command, argv[2]);
     if ((command == "polygon-batch" || command == "solid-batch") && argc == 3)

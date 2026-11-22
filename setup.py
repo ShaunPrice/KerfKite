@@ -60,6 +60,9 @@ setup(
                 # Foreign drawings and toolpaths: G-code, HP-GL and LinuxCNC INI import.
                 'native/core/src/program_import.cpp',
                 'native/core/src/dxf.cpp',
+                # Vector PDF pages, with the core's own inflate for FlateDecode.
+                'native/core/src/pdf_import.cpp',
+                'native/core/src/inflate.cpp',
                 # Circuit board import: Gerber layers and Excellon drill files.
                 'native/core/src/excellon.cpp',
                 'native/core/src/gerber.cpp',

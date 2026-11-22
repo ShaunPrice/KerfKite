@@ -706,9 +706,13 @@ def import_program(payload, *, backend='auto'):
 def register(app):
     @app.post('/api/pdf-import')
     def review_pdf():
-        from .pdf_import import import_pdf
+        from . import pdf_import
 
-        return jsonify(import_pdf(request.get_json()))
+        payload = request.get_json()
+        text = pdf_import.import_json(payload)
+        if text is not None:
+            return app.response_class(text, mimetype='application/json')
+        return jsonify(pdf_import.import_pdf(payload, backend='python'))
 
     @app.post('/api/program-import')
     def program_import():

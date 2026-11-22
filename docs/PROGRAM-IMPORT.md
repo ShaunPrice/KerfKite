@@ -17,7 +17,7 @@ Straight lines, rectangles, closed paths and cubic Béziers retain their transfo
 
 The review lists omitted text, images, shades, dashed strokes, hidden content, masked forms and unsupported areas of clipping. Paint that crosses a clipping boundary is omitted in full. Convert labels and dashes to paths, apply clips and resolve overlapping fill outlines in the drawing program before re-export. Password-protected PDFs require an unencrypted export. For scanned artwork, import the image using the image engraving or camera tracing tools.
 
-The workstation and authenticated hosted editor read PDFs using the installed Python library. For offline browser editing, save the converted Studio project and reopen it in the browser editor. [pypdf](https://github.com/py-pdf/pypdf)
+The workstation and authenticated hosted editor read PDFs with Studio's native core where the compiled extension is installed, and with the installed Python library otherwise; both give the same draft. Files the core does not read as they stand (damaged files that pypdf repairs, encrypted files, pages with inline images) are read by the Python library. For offline browser editing, save the converted Studio project and reopen it in the browser editor. [pypdf](https://github.com/py-pdf/pypdf)
 
 ## DXF contours
 
