@@ -114,7 +114,15 @@ rebuilds a parametric solid history (`{"model": ...}`) as Studio's 3D CAD does (
 the port of `studio/solid_cad.py`): parameters and their expressions, boxes, cylinders, spheres, sketched
 extrusions and revolutions, lofts and scripted features, patterns and runs of Boolean operations on the
 solid kernel, with the mesh, measures and silhouette. `solid-cad-section` (`{"model", "z"}`) gives the
-material at a height. STEP features and sketches with constraints are still Python's.
+material at a height, and `sketch-solve` (`{"feature", "parameters", "order"}`, the parameters' names in
+the order Studio evaluates them, which decides which of two circular definitions is reported) a sketch's
+vertices with its constraints solved. STEP features are still Python's.
+
+    kerfkite-cam assembly-solve request.json
+
+solves an assembly (`{"assembly", "mesh", "orders"}`, with each part model's parameter order as for
+`sketch-solve`) as Studio's **Assemblies** does (`core/src/assembly.cpp`, the port of `studio/assembly.py`):
+the parts placed by their mates, with the contacts and interferences between them.
 
     kerfkite-cam cad-script request.json
 

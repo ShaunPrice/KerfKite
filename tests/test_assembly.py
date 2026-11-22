@@ -148,3 +148,49 @@ class AssemblyTests(unittest.TestCase):
         result = client.post('/api/assembly/solve', json={'assembly': doc, 'mesh': True})
         self.assertEqual(result.status_code, 200)
         self.assertIn('vertices', result.get_json()['parts']['Shaft'])
+
+
+try:
+    from studio import _relief_native as native
+except ImportError:
+    native = None
+
+
+@unittest.skipUnless(native is not None and hasattr(native, 'core_cam'), 'the compiled extension is not installed')
+class NativeAssemblyTests(unittest.TestCase):
+    def test_the_core_agrees_with_the_numpy_reference(self):
+        seated = example_assembly()
+        seated['constraints'] = [
+            {
+                'kind': 'planar',
+                'parent': 'Bearing plate',
+                'child': 'Shaft',
+                'parentFrame': {'origin': [0, 0, 8]},
+                'childFrame': {'origin': [0, 0, 2]},
+            }
+        ]
+        offset = example_assembly()
+        offset['mates'][0]['parentFrame']['origin'][0] += 4
+        pair = assembly(block('A'), block('B', [2, 0, 0]))
+        for name, document in (('example', example_assembly()), ('seated', seated), ('offset', offset), ('pair', pair)):
+            with self.subTest(assembly=name):
+                core = solve(document, True, backend='native')
+                reference = solve(document, True, backend='python')
+                self.assertEqual(core['contacts'], reference['contacts'])
+                self.assertEqual(
+                    [c['parts'] for c in core['interferences']], [c['parts'] for c in reference['interferences']]
+                )
+                for part, placed in reference['parts'].items():
+                    np.testing.assert_allclose(core['parts'][part]['matrix'], placed['matrix'], atol=1e-5)
+        for broken in (
+            {'version': 2},
+            assembly(block('same'), block('same')),
+            assembly(block('A'), mates=[{'child': 'A'}]),
+        ):
+            with self.subTest(broken=broken):
+                messages = []
+                for backend in ('native', 'python'):
+                    with self.assertRaises(ValueError) as caught:
+                        solve(broken, backend=backend)
+                    messages.append(str(caught.exception))
+                self.assertEqual(messages[0], messages[1])

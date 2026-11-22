@@ -1960,6 +1960,21 @@ def solid_cad_cases(count, seed):
             for key, closing in (('fillets', 0), ('curves', None)):
                 if key in item:
                     item[key] = item[key] + [closing]
+        if rng.random() < 0.25:
+            # Relations the core's solver satisfies (the reference asks the same solver), some contradictory.
+            relations = [{'kind': 'fixed', 'point': 0, 'value': [rng.choice([0, 2, 10]), rng.choice([0, 3])]}]
+            for _ in range(rng.randint(1, 3)):
+                kind = rng.choice(['distance', 'parallel', 'perpendicular', 'angle', 'equal'])
+                a, b = rng.sample(range(n), 2)
+                if kind == 'distance':
+                    relations.append(
+                        {'kind': kind, 'points': [a, b], 'value': rng.choice([5, 8, 12, 'w' if 'w' in known else 6])}
+                    )
+                else:
+                    relations.append(
+                        {'kind': kind, 'edges': [a, b], **({'value': rng.choice([30, 90])} if kind == 'angle' else {})}
+                    )
+            item['constraints'] = relations
         if item['kind'] == 'extrude':
             item['height'] = expression(known)
         elif rng.random() < 0.7:

@@ -16,7 +16,9 @@ namespace kerfkite {
 // the order they are resolved in; without it they are resolved in the order of their names. "cad-script":
 // {"source", "parameters", "overrides", "order"} -> the /api/cad-script preview (core/src/scad.cpp): {"dimension": 2,
 // "profiles", "bounds", "area"} for a drawing, {"dimension": 3, "vertices", "triangles", "bounds", "volume"} for a
-// solid.
+// solid. "sketch-solve": {"feature", "parameters", "order"} -> studio.sketch_constraints.solve_profile: {"points",
+// "dof", "redundant", "iterations"}. "assembly-solve": {"assembly", "mesh", "orders"} -> studio.assembly.solve:
+// {"parts", "contacts", "interferences"} (core/src/assembly.cpp).
 bool solid_cad_command(const std::string &command);
 Json solid_cad_call(const std::string &command, const Json &request);
 
