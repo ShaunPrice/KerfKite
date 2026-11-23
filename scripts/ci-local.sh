@@ -379,18 +379,12 @@ job_test() {
   # test.yml, step "actions/setup-node@v4" with node-version: '22'
   step "actions/setup-node: Node.js $NODE_VERSION" setup_node "$NODE_VERSION" "$work/bin"
 
-  # test.yml, step: run: python -m pip install ".[mcp,web]" setuptools
-  run python -m pip install ".[mcp,web]" setuptools
+  # The tools the checks use: the linter, Shapely as the polygon tests' oracle and the MCP client SDK for the
+  # smoke test. (test.yml installed the Python service and built its extension here; Studio has none since 0.7.)
+  run python -m pip install "ruff>=0.8" "shapely>=2.1,<3" "mcp>=1.30,<2"
 
-  # test.yml, step: run: python setup.py build_ext --inplace
-  run python setup.py build_ext --inplace
-
-  # test.yml, step: run: python -c "from studio import _relief_native; print(_relief_native.__file__)"
-  run python -c "from studio import _relief_native; print(_relief_native.__file__)"
-
-  # Added after test.yml was removed: the lint gate configured in pyproject.toml.
-  run python -m pip install "ruff>=0.8"
-  run python -m ruff check studio
+  # The lint gate configured in pyproject.toml, over all the Python left.
+  run python -m ruff check .
   run python -m ruff format --check .
 
   # The native programs, as scripts/install.sh builds them: the fixture and the MCP check start them from build/native.
