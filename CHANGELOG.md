@@ -2,7 +2,9 @@
 
 Notable changes to KerfKite Studio and KerfKite Pocket. Versions before this file was introduced are described in the [GitHub release notes](https://github.com/ShaunPrice/KerfKite/releases) and the [release review](docs/RELEASE-REVIEW.md).
 
-## Unreleased
+## 0.7.0 — 2026-11-24
+
+Studio 0.7.0 is the first release in which every part of Studio is a native program and no Python is installed, downloaded or run. Some entries below mention the compiled extension, the wheels, Shapely, manifold3d, GEOS or the `cryptography` package. Those entries record steps taken while the Python service was still in place. In 0.7.0 the native programs always do that work, the wheels are no longer published, and the phone pendant's HTTPS comes from the relay `kerfkite-pendant-tls`, which uses Go's standard library and no `cryptography` package.
 
 ### Changed
 - **Studio is the native programs; Python is removed.** The Python service (`studio/*.py`), its compiled extension, `setup.py` and the package metadata are gone, and with them every Python dependency of Studio (Flask, pyserial, Shapely, NumPy, manifold3d, ezdxf, pypdf, cheroot, cryptography, FastMCP, OCP). The workstation server `kerfkite-studio`, the HTTPS editor `kerfkite-web`, the MCP assistant server `kerfkite-mcp`, `kerfkite-cam` and the STEP add-on `kerfkite-step` do all of its work. The Python reference, its tests and the harnesses that compared the programs with it are kept at the last commit that had them, and continuous integration runs those comparisons from there against every build ([The Python reference](docs/DEVELOPER.md#the-python-reference)).
