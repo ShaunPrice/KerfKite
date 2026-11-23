@@ -98,17 +98,15 @@ State &state() {
     return s;
 }
 
+#if !defined(__APPLE__)
+// The library and its device descriptions, which macOS does not use (see look).
 void *open_library() {
 #if defined(_WIN32)
     // GPU drivers install OpenCL.dll in the system folder. Looking only there means that a file of that name
     // beside the program or in the working folder is never loaded.
     return reinterpret_cast<void *>(LoadLibraryExA("OpenCL.dll", nullptr, 0x00000800 /* LOAD_LIBRARY_SEARCH_SYSTEM32 */));
 #else
-#if defined(__APPLE__)
-    const char *names[] = {"/System/Library/Frameworks/OpenCL.framework/OpenCL"};
-#else
     const char *names[] = {"libOpenCL.so.1", "libOpenCL.so"};
-#endif
     for (const char *name : names)
         if (void *library = dlopen(name, RTLD_NOW | RTLD_LOCAL)) return library;
     return nullptr;
@@ -133,6 +131,7 @@ std::string text_info(const Functions &cl, cl_device_id device, cl_uint what) {
     if (cl.GetDeviceInfo(device, what, sizeof text - 1, text, nullptr) != 0) return "";
     return text;
 }
+#endif
 
 // Looks for the library and a device, once. The caller holds the lock.
 void look(State &s) {
@@ -142,6 +141,13 @@ void look(State &s) {
         s.status = "turned off by KERFKITE_GPU=off";
         return;
     }
+#if defined(__APPLE__)
+    // macOS runs on the threads. Apple's OpenCL is deprecated and has no double precision on Apple silicon. On an
+    // Intel Mac, a relief forced onto it (its processor device) had not finished after 300 s; the threads took
+    // 0.7 s. A stalled run would also hold the lock that every relief job takes to ask for the GPU.
+    s.status = "not used on macOS: Apple's OpenCL is deprecated and stalled on an Intel Mac";
+    return;
+#else
     const bool permissive = setting == "on";
     void *library = open_library();
     if (!library) {
@@ -226,6 +232,7 @@ void look(State &s) {
     s.usable = true;
     s.status = text_info(cl, s.device, kDeviceName) + " (" + text_info(cl, s.device, kDeviceVersion) + ", " +
                std::to_string(best_units) + " compute units)";
+#endif
 }
 
 State &ready() {
