@@ -113,7 +113,7 @@ int main(int argc, char **argv) {
             }
         }).detach();
         std::printf("KerfKite Studio at http://127.0.0.1:%d/\n", server.port());
-        // The desktop launcher waits for this line before it opens the editor (studio/desktop_server.py).
+        // The desktop launcher waits for this line before it opens the editor (packaging/desktop/main.go).
         std::printf("KERFKITE_READY\n");
         std::fflush(stdout);
         server.serve([&](const kerfkite::http::Request &r) { return studio.handle(r); },

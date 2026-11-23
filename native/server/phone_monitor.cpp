@@ -131,10 +131,18 @@ std::string PhoneMonitor::fragment() const {
 }
 
 PhoneMonitor::~PhoneMonitor() {
-    std::lock_guard<std::recursive_mutex> hold(lock_);
-    relay_.reset();
-    if (listener_) listener_->stop();
-    if (worker_.joinable()) worker_.join();
+    std::unique_ptr<http::Server> listener;
+    std::thread worker;
+    {
+        std::lock_guard<std::recursive_mutex> hold(lock_);
+        relay_.reset();
+        if (listener_) listener_->stop();
+        listener = std::move(listener_);
+        worker = std::move(worker_);
+    }
+    // Before any member goes: the requests still being answered use this monitor, and its lock.
+    if (worker.joinable()) worker.join();
+    listener.reset();
 }
 
 namespace {
@@ -272,8 +280,11 @@ Json PhoneMonitor::enable() {
 }
 
 Json PhoneMonitor::disable() {
-    std::lock_guard<std::recursive_mutex> hold(lock_);
-    if (listener_) {
+    std::unique_ptr<http::Server> listener;
+    std::thread worker;
+    {
+        std::lock_guard<std::recursive_mutex> hold(lock_);
+        if (!listener_) return info();
         {
             Hold machine(jobs_.lock_ref());
             revoked_ = true;
@@ -281,11 +292,16 @@ Json PhoneMonitor::disable() {
         }
         relay_.reset();  // its input closes and it ends
         listener_->stop();
-        if (worker_.joinable()) worker_.join();
-        listener_.reset();
+        listener = std::move(listener_);
+        worker = std::move(worker_);
         token_.clear();
         fingerprint_.clear();
     }
+    // Outside the monitor's lock, which a request still being answered may be waiting for: the listener waits
+    // for those answers before it goes.
+    if (worker.joinable()) worker.join();
+    listener.reset();
+    std::lock_guard<std::recursive_mutex> hold(lock_);
     return info();
 }
 

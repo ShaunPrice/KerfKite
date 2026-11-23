@@ -989,6 +989,58 @@ std::string round_trip(int port, const std::string &raw) {
     return reply;
 }
 
+// A connection that sends nothing, for the server to wait on.
+long long connect_only(int port) {
+    const auto s = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(static_cast<uint16_t>(port));
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    ::connect(s, reinterpret_cast<sockaddr *>(&address), sizeof address);
+    return static_cast<long long>(s);
+}
+
+void close_only(long long s) {
+#ifdef _WIN32
+    ::closesocket(static_cast<SOCKET>(s));
+#else
+    ::close(static_cast<int>(s));
+#endif
+}
+
+// The server goes only after the answers it started, which may use what its owner owns; a connection still
+// sending its request does not hold it up for the 30 s read timeout.
+void http_server_lifetime() {
+    std::atomic<bool> entered{false}, answered{false};
+    auto server = std::make_unique<http::Server>("127.0.0.1", 0);
+    const int port = server->port();
+    std::thread worker([&] {
+        server->serve(
+            [&](const http::Request &) {
+                entered = true;
+                std::this_thread::sleep_for(std::chrono::milliseconds(400));
+                answered = true;
+                return http::Response::json("{}");
+            },
+            nullptr);
+    });
+    const long long idle = connect_only(port);  // accepted first: the server answers in arrival order
+    std::string reply;
+    std::thread asker([&] { reply = round_trip(port, "GET /slow HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"); });
+    for (int i = 0; i < 2000 && !entered; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    CHECK(entered);
+    const auto start = std::chrono::steady_clock::now();
+    server->stop();
+    worker.join();
+    server.reset();
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    CHECK(answered);
+    CHECK(seconds < 5);
+    asker.join();
+    CHECK_TEXT(reply, "HTTP/1.1 200 OK");
+    close_only(idle);
+}
+
 void http_server() {
     Studio studio(options());
     http::Server server("127.0.0.1", 0);
@@ -1219,6 +1271,7 @@ int main(int argc, char **argv) {
     key_order_reading();
     pendant_tls();
     http_server();
+    http_server_lifetime();
     step_checks_of_the_text();
     step_without_open_cascade();
     step_with_open_cascade();

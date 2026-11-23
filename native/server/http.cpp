@@ -3,7 +3,11 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
+#include <condition_variable>
 #include <cstring>
+#include <mutex>
+#include <set>
 #include <stdexcept>
 #include <thread>
 
@@ -18,6 +22,7 @@ using socklen_t = int;
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -48,6 +53,31 @@ const Socket kNoSocket = -1;
 void close_socket(Socket s) { ::close(s); }
 void winsock() {}
 #endif
+
+// Whether a connection is waiting on the listening socket, after at most `milliseconds`.
+bool waiting(Socket s, int milliseconds) {
+#ifdef _WIN32
+    WSAPOLLFD p{};
+    p.fd = s;
+    p.events = POLLRDNORM;
+    return WSAPoll(&p, 1, milliseconds) > 0;
+#else
+    pollfd p{};
+    p.fd = s;
+    p.events = POLLIN;
+    return ::poll(&p, 1, milliseconds) > 0;
+#endif
+}
+
+// Ends a connection's wait for more of its request; it can still send.
+void cut_reading(Socket s) {
+#ifdef _WIN32
+    ::shutdown(s, SD_RECEIVE);
+    CancelIoEx(reinterpret_cast<HANDLE>(s), nullptr);  // a recv blocked on another thread returns at once
+#else
+    ::shutdown(s, SHUT_RD);
+#endif
+}
 
 bool send_all(Socket s, const char *data, size_t size) {
     while (size > 0) {
@@ -239,7 +269,17 @@ bool percent_decode(std::string_view text, std::string &out) {
     return true;
 }
 
-Server::Server(const std::string &host, int port) {
+// What the connections' threads share with the server. They hold it, never the Server, so a thread that ends
+// after the server is gone touches nothing freed.
+struct Server::Connections {
+    std::mutex lock;
+    std::condition_variable idle;
+    bool stopping = false;
+    int running = 0;            // connections being answered, each on a thread of its own
+    std::set<Socket> reading;   // of those, the ones still sending their request
+};
+
+Server::Server(const std::string &host, int port) : connections_(std::make_shared<Connections>()) {
     winsock();
     const Socket s = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (s == kNoSocket) throw std::runtime_error("Cannot create a listening socket");
@@ -268,50 +308,71 @@ Server::Server(const std::string &host, int port) {
 
 Server::~Server() {
     stop();
+    {
+        std::unique_lock<std::mutex> hold(connections_->lock);
+        connections_->idle.wait(hold, [this] { return connections_->running == 0; });
+    }
+    // Closed only now, when no accept can be using it: a number closed sooner could be another socket's by then.
+    if (socket_ >= 0) close_socket(static_cast<Socket>(socket_));
 }
 
 void Server::stop() {
-    stopping_ = true;
-    if (socket_ >= 0) {
-        const Socket s = static_cast<Socket>(socket_);
-        socket_ = -1;
-#ifdef _WIN32
-        ::shutdown(s, SD_BOTH);
-#else
-        ::shutdown(s, SHUT_RDWR);
+    std::lock_guard<std::mutex> hold(connections_->lock);
+    connections_->stopping = true;
+    for (const Socket s : connections_->reading) cut_reading(s);
+#ifndef _WIN32
+    // Linux stops listening and wakes serve() at once; elsewhere serve() sees the stop at its next look.
+    if (socket_ >= 0) ::shutdown(static_cast<Socket>(socket_), SHUT_RD);
 #endif
-        close_socket(s);
-    }
 }
 
 void Server::serve(const Handler &handler, const Limit &limit, int connections) {
-    while (!stopping_ && socket_ >= 0) {
+    const std::shared_ptr<Connections> state = connections_;
+    const Socket listening = static_cast<Socket>(socket_);
+    for (;;) {
+        {
+            std::lock_guard<std::mutex> hold(state->lock);
+            if (state->stopping) break;
+        }
+        if (!waiting(listening, 100)) continue;
         sockaddr_in peer{};
         socklen_t length = sizeof peer;
-        const Socket client = ::accept(static_cast<Socket>(socket_), reinterpret_cast<sockaddr *>(&peer), &length);
+        const Socket client = ::accept(listening, reinterpret_cast<sockaddr *>(&peer), &length);
         if (client == kNoSocket) {
-            if (stopping_) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));  // out of descriptors, say: no busy loop
             continue;
         }
-        if (active_ >= connections) {
-            close_socket(client);
-            continue;
+        {
+            std::lock_guard<std::mutex> hold(state->lock);
+            if (state->stopping || state->running >= connections) {
+                close_socket(client);
+                continue;
+            }
+            ++state->running;
+            state->reading.insert(client);
         }
         char text[INET_ADDRSTRLEN] = {0};
         inet_ntop(AF_INET, &peer.sin_addr, text, sizeof text);
-        ++active_;
-        std::thread([this, client, address = std::string(text), handler, limit] {
+        std::thread([state, client, address = std::string(text), handler, limit] {
 #ifdef _WIN32
             DWORD timeout = 30000;
             setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char *>(&timeout), sizeof timeout);
+            setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char *>(&timeout), sizeof timeout);
 #else
             timeval timeout{30, 0};
             setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout);
+            setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof timeout);
 #ifdef SO_NOSIGPIPE
             int yes = 1;
             setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &yes, sizeof yes);
 #endif
 #endif
+            // Once its request is in, stop() leaves the connection to be answered. Taken off before the socket
+            // closes, so stop() never cuts a number that has been closed.
+            const auto request_in = [&state, client] {
+                std::lock_guard<std::mutex> hold(state->lock);
+                state->reading.erase(client);
+            };
             Request request;
             request.peer = address;
             std::string data;
@@ -368,9 +429,11 @@ void Server::serve(const Handler &handler, const Limit &limit, int connections) 
                         if (!receive(client, rest)) throw 400;
                     request.body = rest.substr(0, size);
                 }
+                request_in();
                 const Response response = handler(request);
                 reply(client, &request, response);
             } catch (int status) {
+                request_in();
                 if (status) {
                     Response refused = Response::error(status, status == 413 ? "The request is larger than this route accepts"
                                                                             : status == 431 ? "The request's header fields are too large"
@@ -378,6 +441,7 @@ void Server::serve(const Handler &handler, const Limit &limit, int connections) 
                     reply(client, nullptr, refused);
                 }
             } catch (const std::exception &) {
+                request_in();
                 reply(client, nullptr, Response::error(500, "Internal error"));
             }
 #ifdef _WIN32
@@ -386,7 +450,11 @@ void Server::serve(const Handler &handler, const Limit &limit, int connections) 
             ::shutdown(client, SHUT_WR);
 #endif
             close_socket(client);
-            --active_;
+            {
+                std::lock_guard<std::mutex> hold(state->lock);
+                --state->running;
+            }
+            state->idle.notify_all();
         }).detach();
     }
 }

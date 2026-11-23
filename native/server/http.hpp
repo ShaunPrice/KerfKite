@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstddef>
 #include <functional>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -53,6 +54,9 @@ class Server {
 public:
     // Binds host:port (port 0 asks for any free port) and listens. Throws std::runtime_error when it cannot.
     Server(const std::string &host, int port);
+    // Stops, then waits until every request being answered has its answer: a handler may use what the owner of
+    // the server owns. Destroy the server only after the thread running serve() has returned, and not while
+    // holding anything a handler takes.
     ~Server();
     Server(const Server &) = delete;
     Server &operator=(const Server &) = delete;
@@ -60,13 +64,15 @@ public:
     int port() const { return port_; }
     // Accepts connections until stop(), each answered on a thread of its own, at most `connections` at once.
     void serve(const Handler &handler, const Limit &limit, int connections = 64);
+    // Ends serve() within a tenth of a second. A connection still sending its request is closed; a request
+    // already in is answered.
     void stop();
 
 private:
+    struct Connections;  // shared with the connections' threads, which never use the Server itself
     long long socket_ = -1;
     int port_ = 0;
-    std::atomic<bool> stopping_{false};
-    std::atomic<int> active_{0};
+    std::shared_ptr<Connections> connections_;
 };
 
 // The reason phrase of a status code.
