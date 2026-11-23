@@ -211,6 +211,12 @@ class _Forward(http.server.BaseHTTPRequestHandler):
     do_HEAD = do_POST = do_GET
 
 
+def drain(stream):
+    """Read what a server prints until it closes, keeping none of it, so that a full pipe never stops it."""
+    for _ in stream:
+        pass
+
+
 @contextlib.contextmanager
 def studio(given=None, args=(), port=0, env=None):
     """kerfkite-studio on the loopback, yielding a Running once it is ready; stopped afterwards."""
@@ -241,7 +247,7 @@ def studio(given=None, args=(), port=0, env=None):
         if url is None or process.poll() is not None:
             raise RuntimeError('kerfkite-studio did not start:\n' + ''.join(lines[-20:]))
         # Keep reading what it prints, so that a full pipe never stops it.
-        threading.Thread(target=lambda: [None for _ in process.stdout], daemon=True).start()
+        threading.Thread(target=drain, args=(process.stdout,), daemon=True).start()
         yield Running(url, monitor, token)
     finally:
         process.terminate()
@@ -289,7 +295,7 @@ def web(given=None, users=(), args=()):
             lines = [process.stdout.readline(), process.stdout.readline()]
             if 'HTTPS editor and upload inbox' not in lines[0] or process.poll() is not None:
                 raise RuntimeError('kerfkite-web did not start: ' + ''.join(lines))
-            threading.Thread(target=lambda: [None for _ in process.stdout], daemon=True).start()
+            threading.Thread(target=drain, args=(process.stdout,), daemon=True).start()
             yield Web(origin, cert, data, path)
         finally:
             process.terminate()

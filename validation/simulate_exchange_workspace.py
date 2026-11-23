@@ -6,6 +6,7 @@ Open CASCADE add-on), with the editor's session token.
 
 import base64
 import json
+import urllib.parse
 from pathlib import Path
 
 from playwright.sync_api import expect
@@ -13,7 +14,8 @@ from playwright.sync_api import expect
 
 def call(page, route, payload):
     """A route of the page's workstation server, as the editor calls it."""
-    origin = page.url[: page.url.index('/', page.url.index('//') + 2) + 1]
+    address = urllib.parse.urlsplit(page.url)
+    origin = f'{address.scheme}://{address.netloc}/'
     token = page.request.get(origin + 'api/session').json()['token']
     headers = {'Content-Type': 'application/json', 'X-Studio-Token': token}
     response = page.request.post(origin + route, data=json.dumps(payload), headers=headers)
