@@ -248,6 +248,10 @@ type request struct {
 	Timeout   float64           `json:"timeout_seconds"`
 	Limit     int64             `json:"limit"`      // the most of the answer's body to read
 	CheckOnly bool              `json:"check_only"` // only read ca_file: {} when it holds a certificate
+	// For a URL whose host is an address: the name the TLS certificate is checked for (and sent as SNI where it is
+	// one), and the Host header to send, so that an address resolved beforehand is the one connected to.
+	ServerName string `json:"server_name"`
+	Host       string `json:"host"`
 }
 
 // answer is what -fetch prints: the status, the headers and the body (base64 in JSON), or what went wrong. Its head
@@ -259,7 +263,8 @@ type answer struct {
 	Body        []byte              `json:"body,omitempty"`
 	HeadLines   int                 `json:"head_lines,omitempty"`
 	LongestLine int                 `json:"longest_line,omitempty"`
-	Head        string              `json:"head,omitempty"` // the last head's header lines, ends kept, each byte a character
+	Head        string              `json:"head,omitempty"`  // the last head's header lines, ends kept, each byte a character
+	Short       bool                `json:"short,omitempty"` // the body ended before its Content-Length
 	Error       string              `json:"error,omitempty"`
 }
 
@@ -380,6 +385,9 @@ func fetch(in io.Reader) answer {
 				}
 				verified := config.Clone()
 				verified.ServerName = host
+				if r.ServerName != "" {
+					verified.ServerName = r.ServerName
+				}
 				return keep((&tls.Dialer{NetDialer: dialer, Config: verified}).DialContext(ctx, network, address))
 			},
 		},
@@ -396,6 +404,9 @@ func fetch(in io.Reader) answer {
 		outgoing.Header.Set(name, value)
 	}
 	outgoing.Header.Set("User-Agent", "KerfKite-Studio")
+	if r.Host != "" {
+		outgoing.Host = r.Host
+	}
 	response, err := client.Do(outgoing)
 	if err != nil {
 		return answer{Error: "the receiver did not answer"}
@@ -411,7 +422,7 @@ func fetch(in io.Reader) answer {
 	if err != nil && !(errors.Is(err, io.ErrUnexpectedEOF) && response.ContentLength >= 0) {
 		return answer{Error: "the answer did not arrive whole"}
 	}
-	out := answer{Status: response.StatusCode, Headers: response.Header, Body: body}
+	out := answer{Status: response.StatusCode, Headers: response.Header, Body: body, Short: err != nil}
 	opened.Lock()
 	if opened.conn != nil {
 		out.HeadLines, out.LongestLine, out.Head = headLines(opened.conn.recorded())

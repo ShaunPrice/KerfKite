@@ -399,7 +399,7 @@ func TestFetch(t *testing.T) {
 	// A receiver with a certificate of its own authority, as kerfkite-web destination --ca-file trusts.
 	directory := t.TempDir()
 	certFile, keyFile := filepath.Join(directory, "receiver.pem"), filepath.Join(directory, "receiver-key.pem")
-	if err := makeCertificate(certFile, keyFile, []string{"127.0.0.1"}, 1, time.Now()); err != nil {
+	if err := makeCertificate(certFile, keyFile, []string{"127.0.0.1", "keys.example"}, 1, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	pair, err := tls.LoadX509KeyPair(certFile, keyFile)
@@ -416,6 +416,8 @@ func TestFetch(t *testing.T) {
 		body, _ := io.ReadAll(r.Body)
 		seen <- r.Method + " " + r.URL.Path + " " + r.Header.Get("Authorization") + " " + string(body)
 		switch r.URL.Path {
+		case "/host":
+			w.Write([]byte(r.Host))
 		case "/moved":
 			http.Redirect(w, r, "/api/receive", http.StatusFound)
 		case "/big":
@@ -456,7 +458,7 @@ func TestFetch(t *testing.T) {
 		t.Fatalf("the answer must be cut at the limit: %d bytes", len(a.Body))
 	}
 	<-seen
-	if a := ask("/short", certFile); a.Error != "" || a.Status != 200 || string(a.Body) != "hello" || a.HeadLines != 1 || a.LongestLine != 20 {
+	if a := ask("/short", certFile); a.Error != "" || a.Status != 200 || string(a.Body) != "hello" || !a.Short || a.HeadLines != 1 || a.LongestLine != 20 {
 		t.Fatalf("an answer cut short of its length is what arrived, with its head's one line: %+v", a)
 	}
 	<-seen
@@ -466,6 +468,18 @@ func TestFetch(t *testing.T) {
 	<-seen
 	if a := ask("/api/receive", ""); a.Error == "" {
 		t.Fatal("a certificate the system does not trust must be refused")
+	}
+	// An address resolved beforehand: the certificate is checked for the name, which is also the Host header.
+	named := func(name string) answer {
+		text, _ := json.Marshal(request{Method: "GET", URL: base + "/host", CAFile: certFile, Timeout: 5, ServerName: name, Host: name})
+		return fetch(strings.NewReader(string(text)))
+	}
+	if a := named("keys.example"); a.Error != "" || a.Status != 200 || string(a.Body) != "keys.example" || a.Short {
+		t.Fatalf("a request to an address for a name: %+v", a)
+	}
+	<-seen
+	if a := named("other.example"); a.Error == "" {
+		t.Fatalf("a certificate that is not for the name must be refused: %+v", a)
 	}
 	if a := ask("/api/receive", filepath.Join(directory, "missing.pem")); a.Error != "ca_file" {
 		t.Fatalf("a missing CA file: %+v", a)

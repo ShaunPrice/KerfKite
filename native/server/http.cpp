@@ -121,6 +121,28 @@ std::string trimmed(std::string_view text) {
     return std::string(text.substr(a, b - a));
 }
 
+// After a refusal: the sending side closed, then at most 4 MiB or two seconds of what the client still sends read
+// and dropped.
+void drain(Socket s) {
+#ifdef _WIN32
+    ::shutdown(s, SD_SEND);
+    DWORD timeout = 500;
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char *>(&timeout), sizeof timeout);
+#else
+    ::shutdown(s, SHUT_WR);
+    timeval timeout{0, 500000};
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout);
+#endif
+    char buffer[16384];
+    size_t total = 0;
+    const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (total < (4u << 20) && std::chrono::steady_clock::now() < until) {
+        const auto got = ::recv(s, buffer, sizeof buffer, 0);
+        if (got <= 0) break;
+        total += static_cast<size_t>(got);
+    }
+}
+
 void reply(Socket s, const Request *request, const Response &response) {
     std::string head = "HTTP/1.1 " + std::to_string(response.status) + " " + reason(response.status) + "\r\n";
     bool typed = false;
@@ -128,7 +150,7 @@ void reply(Socket s, const Request *request, const Response &response) {
         head += h.first + ": " + h.second + "\r\n";
         if (lower(h.first) == "content-type") typed = true;
     }
-    if (!typed && !response.body.empty()) head += "Content-Type: application/octet-stream\r\n";
+    if (!typed && !response.untyped && !response.body.empty()) head += "Content-Type: application/octet-stream\r\n";
     head += "Content-Length: " + std::to_string(response.body.size()) + "\r\nConnection: close\r\n\r\n";
     if (!send_all(s, head.data(), head.size())) return;
     if (request && request->method == "HEAD") return;
@@ -444,6 +466,7 @@ void Server::serve(const Handler &handler, const Limit &limit, int connections, 
                 request.method = line.substr(0, a);
                 request.target = line.substr(a + 1, b - a - 1);
                 if (line.compare(b + 1, 5, "HTTP/") != 0) throw 400;
+                request.version = line.substr(b + 1);
                 for (size_t at = line_end == std::string::npos ? head.size() : line_end + 2; at < head.size();) {
                     size_t next = head.find("\r\n", at);
                     if (next == std::string::npos) next = head.size();
@@ -487,6 +510,9 @@ void Server::serve(const Handler &handler, const Limit &limit, int connections, 
                                                                             : status == 431 ? "The request's header fields are too large"
                                                                                             : "Malformed HTTP request");
                     reply(client, nullptr, refused);
+                    // What the client still sends is read and dropped for a moment, so that closing does not reset the
+                    // connection before the client has read the refusal.
+                    drain(client);
                 }
             } catch (const std::exception &) {
                 request_in();

@@ -17,6 +17,7 @@
 
 #include "kerfkite/decimal.hpp"
 #include "kerfkite/errors.hpp"
+#include "python_text.hpp"
 
 namespace kerfkite {
 namespace server {
@@ -256,6 +257,231 @@ bool conform(const Json &schema, const Json &value, const std::string &where, Js
     return true;
 }
 
+// ---- the SDK's reading of messages (mcp.types with pydantic in lax mode) ------------------------------
+
+// Rust's char::is_whitespace, Unicode's White_Space, which pydantic trims from a number written as text: what
+// str.isspace() takes, less U+001C to U+001F.
+bool white_space(uint32_t c) { return detail::python_space(c) && !(c >= 0x1c && c <= 0x1f); }
+
+// pydantic's lax int: a whole number, true or false, a float of a whole value within 64 bits, or text: white
+// space about it, a sign, digits with single underscores between them, and a point with zeros only after it.
+bool lax_int(const Json &v) {
+    if (v.is_boolean() || v.is_number_integer()) return true;
+    if (v.is_number_float()) {
+        const double d = v.get<double>();
+        return std::isfinite(d) && d == std::floor(d) && std::fabs(d) < 9223372036854775808.0;
+    }
+    if (!v.is_string()) return false;
+    const std::vector<detail::CodePoint> points = detail::code_points(v.get<std::string>());
+    size_t a = 0, b = points.size();
+    while (a < b && white_space(points[a].code)) ++a;
+    while (b > a && white_space(points[b - 1].code)) --b;
+    if (a < b && (points[a].code == '+' || points[a].code == '-')) ++a;
+    bool digit = false, point = false, zeros = false;
+    for (size_t i = a; i < b; ++i) {
+        const uint32_t c = points[i].code;
+        if (point) {
+            if (c != '0') return false;
+            zeros = true;
+        } else if (c >= '0' && c <= '9') {
+            digit = true;
+        } else if (c == '_') {
+            if (i == a || i + 1 >= b || !(points[i - 1].code >= '0' && points[i - 1].code <= '9') || !(points[i + 1].code >= '0' && points[i + 1].code <= '9'))
+                return false;
+        } else if (c == '.' && digit) {
+            point = true;
+        } else {
+            return false;
+        }
+    }
+    return digit && (!point || zeros);
+}
+
+// pydantic's lax bool: true or false, 0 or 1, or the words it knows in any case.
+bool lax_bool(const Json &v) {
+    if (v.is_boolean()) return true;
+    if (v.is_number()) return v.get<double>() == 0 || v.get<double>() == 1;
+    if (!v.is_string()) return false;
+    std::string word = v.get<std::string>();
+    for (char &c : word) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    for (const char *known : {"0", "off", "f", "false", "n", "no", "1", "on", "t", "true", "y", "yes"})
+        if (word == known) return true;
+    return false;
+}
+
+bool absent(const Json *v) { return !v || v->is_null(); }
+bool is_text(const Json *v) { return v && v->is_string(); }
+
+// An optional object (absent or null passes) whose members, where given, pass their checks.
+bool optional_object(const Json *v, std::initializer_list<std::pair<const char *, std::function<bool(const Json *)>>> fields = {}) {
+    if (absent(v)) return true;
+    if (!v->is_object()) return false;
+    for (const auto &field : fields)
+        if (!field.second(member(*v, field.first))) return false;
+    return true;
+}
+
+bool optional_text(const Json *v) { return absent(v) || v->is_string(); }
+
+bool text_values(const Json *v) {  // dict[str, str] | None
+    if (absent(v)) return true;
+    if (!v->is_object()) return false;
+    for (const auto &item : v->items())
+        if (!item.value().is_string()) return false;
+    return true;
+}
+
+// RequestParams: task (TaskMetadata, ttl a strict int) and _meta (progressToken text or an int).
+bool base_params(const Json &params) {
+    if (!optional_object(member(params, "task"), {{"ttl", [](const Json *ttl) { return absent(ttl) || ttl->is_number_integer(); }}})) return false;
+    return optional_object(member(params, "_meta"), {{"progressToken", [](const Json *t) { return absent(t) || t->is_string() || lax_int(*t); }}});
+}
+
+// The special schemes of the URL Standard.
+bool special_scheme(const std::string &scheme) {
+    return scheme == "http" || scheme == "https" || scheme == "ws" || scheme == "wss" || scheme == "ftp" || scheme == "file";
+}
+
+}  // namespace
+
+bool resource_address(const std::string &given, std::string &address) {
+    // The URL Standard's parse without a base, as pydantic's AnyUrl makes it: C0 controls and spaces about the text
+    // and tabs and line ends in it removed, a scheme, and a host where the scheme or "//" asks for one.
+    size_t a = 0, b = given.size();
+    while (a < b && static_cast<unsigned char>(given[a]) <= 0x20) ++a;
+    while (b > a && static_cast<unsigned char>(given[b - 1]) <= 0x20) --b;
+    std::string text;
+    for (size_t i = a; i < b; ++i)
+        if (given[i] != '\t' && given[i] != '\n' && given[i] != '\r') text += given[i];
+    const size_t colon = text.find(':');
+    if (colon == std::string::npos || colon == 0 || !std::isalpha(static_cast<unsigned char>(text[0]))) return false;
+    std::string scheme = text.substr(0, colon);
+    for (char &c : scheme) {
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '+' && c != '-' && c != '.') return false;
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    std::string rest = text.substr(colon + 1);
+    const bool special = special_scheme(scheme);
+    if (special || rest.compare(0, 2, "//") == 0) {
+        size_t start = 0;
+        if (special)
+            while (start < rest.size() && (rest[start] == '/' || rest[start] == '\\')) ++start;
+        else
+            start = 2;
+        size_t end = start;
+        while (end < rest.size() && !std::strchr(special ? "/\\?#" : "/?#", rest[end])) ++end;
+        std::string authority = rest.substr(start, end - start);
+        const size_t at = authority.rfind('@');
+        if (at != std::string::npos) authority = authority.substr(at + 1);
+        std::string host = authority, port;
+        if (!host.empty() && host[0] == '[') {
+            const size_t close = host.find(']');
+            if (close == std::string::npos) return false;
+            port = host.substr(close + 1);
+            host = host.substr(0, close + 1);
+            if (!port.empty() && port[0] != ':') return false;
+        } else {
+            const size_t c = host.find(':');
+            if (c != std::string::npos) {
+                port = host.substr(c);
+                host = host.substr(0, c);
+            }
+        }
+        for (const char c : host.size() > 1 && host[0] == '[' ? std::string() : host)
+            if (std::strchr(" #/:<>?@[\\]^|", c) || static_cast<unsigned char>(c) < 0x20 || (special && (c == '%' || c == 0x7f))) return false;
+        if (special && scheme != "file" && host.empty()) return false;
+        if (port.size() > 1) {
+            const std::string digits = port.substr(1);
+            if (!std::all_of(digits.begin(), digits.end(), [](char c) { return c >= '0' && c <= '9'; })) return false;
+            const size_t first = digits.find_first_not_of('0');
+            if (first != std::string::npos && (digits.size() - first > 5 || std::stol(digits.substr(first)) > 65535)) return false;
+        }
+        if (special) rest = "//" + rest.substr(start);
+    }
+    address = scheme + ":" + rest;
+    return true;
+}
+
+namespace {
+
+// Whether a request's parameters are what the SDK's ClientRequest takes for its method (unknown methods fail).
+bool valid_request(const std::string &method, const Json *params) {
+    const bool none = absent(params);
+    if (!none && !base_params(*params)) return false;
+    if (method == "ping") return true;
+    if (method == "tools/list" || method == "prompts/list" || method == "resources/list" || method == "resources/templates/list" || method == "tasks/list")
+        return none || optional_text(member(*params, "cursor"));
+    if (none) return false;  // the other methods' parameters are required
+    const Json &p = *params;
+    if (method == "initialize") {
+        const Json *version = member(p, "protocolVersion");
+        if (!version || !(version->is_string() || lax_int(*version))) return false;
+        const auto nested = [](const Json *v) { return optional_object(v); };
+        const Json *capabilities = member(p, "capabilities");
+        if (absent(capabilities) || !capabilities->is_object()) return false;
+        const Json *experimental = member(*capabilities, "experimental");
+        if (!absent(experimental)) {
+            if (!experimental->is_object()) return false;
+            for (const auto &item : experimental->items())
+                if (!item.value().is_object()) return false;
+        }
+        if (!optional_object(member(*capabilities, "sampling"), {{"context", nested}, {"tools", nested}}) ||
+            !optional_object(member(*capabilities, "elicitation"), {{"form", nested}, {"url", nested}}) ||
+            !optional_object(member(*capabilities, "roots"), {{"listChanged", [](const Json *v) { return absent(v) || lax_bool(*v); }}}) ||
+            !optional_object(member(*capabilities, "tasks"),
+                             {{"list", nested},
+                              {"cancel", nested},
+                              {"requests", [&](const Json *v) {
+                                   return optional_object(v, {{"sampling", [&](const Json *w) { return optional_object(w, {{"createMessage", nested}}); }},
+                                                              {"elicitation", [&](const Json *w) { return optional_object(w, {{"create", nested}}); }}});
+                               }}}))
+            return false;
+        const Json *info = member(p, "clientInfo");
+        if (absent(info) || !info->is_object() || !is_text(member(*info, "name")) || !is_text(member(*info, "version")) ||
+            !optional_text(member(*info, "title")) || !optional_text(member(*info, "websiteUrl")))
+            return false;
+        const Json *icons = member(*info, "icons");
+        if (!absent(icons)) {
+            if (!icons->is_array()) return false;
+            for (const Json &icon : *icons) {
+                const Json *sizes = member(icon, "sizes");
+                if (!icon.is_object() || !is_text(member(icon, "src")) || !optional_text(member(icon, "mimeType"))) return false;
+                if (!absent(sizes) && (!sizes->is_array() || std::any_of(sizes->begin(), sizes->end(), [](const Json &v) { return !v.is_string(); })))
+                    return false;
+            }
+        }
+        return true;
+    }
+    if (method == "completion/complete") {
+        const Json *ref = member(p, "ref"), *argument = member(p, "argument");
+        if (absent(ref) || !ref->is_object()) return false;
+        const Json *type = member(*ref, "type");
+        const bool resource = is_text(type) && type->get<std::string>() == "ref/resource" && is_text(member(*ref, "uri"));
+        const bool prompt = is_text(type) && type->get<std::string>() == "ref/prompt" && is_text(member(*ref, "name"));
+        if (!resource && !prompt) return false;
+        if (absent(argument) || !argument->is_object() || !is_text(member(*argument, "name")) || !is_text(member(*argument, "value"))) return false;
+        return optional_object(member(p, "context"), {{"arguments", text_values}});
+    }
+    if (method == "logging/setLevel") {
+        const Json *level = member(p, "level");
+        if (!is_text(level)) return false;
+        for (const char *known : {"debug", "info", "notice", "warning", "error", "critical", "alert", "emergency"})
+            if (level->get<std::string>() == known) return true;
+        return false;
+    }
+    if (method == "prompts/get") return is_text(member(p, "name")) && text_values(member(p, "arguments"));
+    if (method == "resources/read" || method == "resources/subscribe" || method == "resources/unsubscribe") {
+        std::string address;
+        return is_text(member(p, "uri")) && resource_address(member(p, "uri")->get<std::string>(), address);
+    }
+    if (method == "tools/call") {
+        const Json *arguments = member(p, "arguments");
+        return is_text(member(p, "name")) && (absent(arguments) || arguments->is_object());
+    }
+    if (method == "tasks/get" || method == "tasks/result" || method == "tasks/cancel") return is_text(member(p, "taskId"));
+    return false;
+}
+
 }  // namespace
 
 Json checked_arguments(const Json &schema, const Json &arguments) {
@@ -282,75 +508,85 @@ void Server::add(Tool tool) {
 
 void Server::add(Resource resource) { resources_.push_back(std::move(resource)); }
 
-std::string Server::receive(const Json &message, Exchange &exchange) {
-    if (message.is_array()) {
-        if (message.empty()) return failure(Json(), -32600, "Invalid Request");
-        std::string out;
-        for (const Json &one : message) {
-            const std::string answer = receive(one, exchange);
-            if (!answer.empty()) out += (out.empty() ? "" : ",") + answer;
-        }
-        return out.empty() ? std::string() : "[" + out + "]";
-    }
-    if (!message.is_object()) return failure(Json(), -32600, "Invalid Request");
-    const Json *method = member(message, "method");
-    const Json *id = member(message, "id");
-    if (!method) return std::string();  // a response, or nothing: no answer
-    if (!method->is_string()) return id ? failure(*id, -32600, "Invalid Request") : std::string();
-    if (!id) return std::string();  // a notification (initialized, cancelled, roots changed)
-    if (!(id->is_string() || id->is_number_integer())) return failure(Json(), -32600, "Invalid Request");
-    try {
-        return request(message, exchange);
-    } catch (const std::exception &e) {
-        return failure(*id, -32603, e.what());
-    }
+Kind classify(const Json &message) {
+    // JSONRPCMessage.model_validate: whichever of its four models the message passes, an error first.
+    if (!message.is_object() || !is_text(member(message, "jsonrpc")) || member(message, "jsonrpc")->get<std::string>() != "2.0") return Kind::invalid;
+    const Json *id = member(message, "id"), *method = member(message, "method"), *params = member(message, "params");
+    const Json *result = member(message, "result"), *error = member(message, "error");
+    const bool strict_id = id && (id->is_number_integer() || id->is_string());  // RequestId: a strict int or text
+    if (id && (id->is_string() || lax_int(*id)) && error && error->is_object() && member(*error, "code") && lax_int(*member(*error, "code")) &&
+        is_text(member(*error, "message")))
+        return Kind::error;
+    const bool request_like = is_text(method) && (absent(params) || params->is_object());
+    if (request_like && strict_id) return Kind::request;
+    if (strict_id && result && result->is_object()) return Kind::response;
+    if (request_like) return Kind::notification;
+    return Kind::invalid;
 }
 
-std::string Server::request(const Json &message, Exchange &exchange) {
+std::string Server::answer(const Json &message, Exchange &exchange, bool stateful) {
     const Json &id = message.at("id");
     const std::string method = message.at("method").get<std::string>();
     const Json *given = member(message, "params");
-    const Json params = given && given->is_object() ? *given : Json::object();
-    if (method == "initialize") {
-        const Json *asked = member(params, "protocolVersion");
-        const std::string version = asked && asked->is_string() && kVersions.count(asked->get<std::string>()) ? asked->get<std::string>() : kLatest;
-        const Json *capabilities = member(params, "capabilities");
-        client_confirms_ = capabilities && member(*capabilities, "elicitation") != nullptr;
-        return reply(id, "{\"protocolVersion\":" + text(version) +
-                             ",\"capabilities\":{\"logging\":{},\"resources\":{\"subscribe\":false,\"listChanged\":false},"
-                             "\"tools\":{\"listChanged\":false}},\"serverInfo\":{\"name\":" +
-                             text(name_) + ",\"version\":" + text(version_) + "},\"instructions\":" + text(instructions_) + "}");
-    }
-    if (method == "ping" || method == "logging/setLevel") return reply(id, "{}");
-    if (method == "tools/list") {
-        std::string out;
-        for (const Entry &entry : tools_) {
-            const Tool &t = entry.tool;
-            out += (out.empty() ? "" : ",") + std::string("{\"name\":") + text(t.name) + ",\"description\":" + text(t.description) + ",\"inputSchema\":" +
-                   t.input_schema;
-            if (!t.output_schema.empty()) out += ",\"outputSchema\":" + t.output_schema;
-            if (!t.annotations.empty()) out += ",\"annotations\":" + t.annotations;
-            out += "}";
+    // The session's ClientRequest, then (with a session) initialize before all but ping.
+    if (!valid_request(method, given) || (stateful && !initialized_ && method != "initialize" && method != "ping"))
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + id.dump() + ",\"error\":{\"code\":-32602,\"message\":\"Invalid request parameters\",\"data\":\"\"}}";
+    const Json params = absent(given) ? Json::object() : *given;
+    try {
+        if (method == "initialize") {
+            const Json *asked = member(params, "protocolVersion");
+            const std::string version = asked->is_string() && kVersions.count(asked->get<std::string>()) ? asked->get<std::string>() : kLatest;
+            const Json *capabilities = member(params, "capabilities");
+            if (stateful) {
+                client_confirms_ = !absent(member(*capabilities, "elicitation"));
+                initialized_ = true;
+            }
+            return reply(id, "{\"protocolVersion\":" + text(version) +
+                                 ",\"capabilities\":{\"experimental\":{},\"logging\":{},\"prompts\":{\"listChanged\":true},\"resources\":{\"subscribe\":false,"
+                                 "\"listChanged\":true},\"tools\":{\"listChanged\":true},\"extensions\":{\"io.modelcontextprotocol/ui\":{}}},\"serverInfo\":{\"name\":" +
+                                 text(name_) + ",\"version\":" + text(version_) + "},\"instructions\":" + text(instructions_) + "}");
         }
-        return reply(id, "{\"tools\":[" + out + "]}");
+        if (method == "ping" || method == "logging/setLevel") return reply(id, "{}");
+        if (method == "tools/list") {
+            std::string out;
+            for (const Entry &entry : tools_) {
+                const Tool &t = entry.tool;
+                out += (out.empty() ? "" : ",") + std::string("{\"name\":") + text(t.name) + ",\"description\":" + text(t.description) + ",\"inputSchema\":" +
+                       t.input_schema;
+                if (!t.output_schema.empty()) out += ",\"outputSchema\":" + t.output_schema;
+                if (!t.annotations.empty()) out += ",\"annotations\":" + t.annotations;
+                out += ",\"_meta\":{\"fastmcp\":{\"tags\":[]}}}";
+            }
+            return reply(id, "{\"tools\":[" + out + "]}");
+        }
+        if (method == "tools/call") return call(id, params, exchange);
+        if (method == "resources/list") {
+            std::string out;
+            for (const Resource &r : resources_)
+                out += (out.empty() ? "" : ",") + std::string("{\"name\":") + text(r.name) + ",\"uri\":" + text(r.uri) + ",\"mimeType\":" + text(r.mime_type) +
+                       ",\"_meta\":{\"fastmcp\":{\"tags\":[]}}}";
+            return reply(id, "{\"resources\":[" + out + "]}");
+        }
+        if (method == "resources/templates/list") return reply(id, "{\"resourceTemplates\":[]}");
+        if (method == "resources/read") {
+            std::string address;
+            resource_address(params.at("uri").get<std::string>(), address);
+            for (const Resource &r : resources_)
+                if (address == r.uri)
+                    return reply(id, "{\"contents\":[{\"uri\":" + text(r.uri) + ",\"mimeType\":" + text(r.mime_type) + ",\"text\":" + text(r.read()) + "}]}");
+            return failure(id, -32002, "Resource not found: Unknown resource: " + detail::python_repr(address));
+        }
+        if (method == "prompts/list") return reply(id, "{\"prompts\":[]}");
+        if (method == "prompts/get") return failure(id, 0, "Unknown prompt: " + detail::python_repr(params.at("name").get<std::string>()));
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + id.dump() + ",\"error\":{\"code\":-32601,\"message\":\"Method not found\"}}";
+    } catch (const std::exception &e) {
+        return failure(id, 0, e.what());
     }
-    if (method == "tools/call") return call(id, params, exchange);
-    if (method == "resources/list") {
-        std::string out;
-        for (const Resource &r : resources_)
-            out += (out.empty() ? "" : ",") + std::string("{\"name\":") + text(r.name) + ",\"uri\":" + text(r.uri) + ",\"mimeType\":" + text(r.mime_type) + "}";
-        return reply(id, "{\"resources\":[" + out + "]}");
-    }
-    if (method == "resources/templates/list") return reply(id, "{\"resourceTemplates\":[]}");
-    if (method == "resources/read") {
-        const Json *uri = member(params, "uri");
-        for (const Resource &r : resources_)
-            if (uri && uri->is_string() && uri->get<std::string>() == r.uri)
-                return reply(id, "{\"contents\":[{\"uri\":" + text(r.uri) + ",\"mimeType\":" + text(r.mime_type) + ",\"text\":" + text(r.read()) + "}]}");
-        return failure(id, -32002, "Unknown resource: " + (uri && uri->is_string() ? uri->get<std::string>() : std::string()));
-    }
-    if (method == "prompts/list") return reply(id, "{\"prompts\":[]}");
-    return failure(id, -32601, "Method not found: " + method);
+}
+
+void Server::notified(const Json &message) {
+    // InitializedNotification ends the session's initialization as the initialize request does.
+    if (is_text(member(message, "method")) && member(message, "method")->get<std::string>() == "notifications/initialized") initialized_ = true;
 }
 
 std::string Server::call(const Json &id, const Json &params, Exchange &exchange) {
@@ -358,12 +594,15 @@ std::string Server::call(const Json &id, const Json &params, Exchange &exchange)
     const Entry *entry = nullptr;
     for (const Entry &e : tools_)
         if (name && name->is_string() && name->get<std::string>() == e.tool.name) entry = &e;
-    if (!entry) return failure(id, -32602, "Unknown tool: " + (name && name->is_string() ? name->get<std::string>() : std::string()));
-    const Tool &tool = entry->tool;
-    const Json *given = member(params, "arguments");
     const auto error = [&](const std::string &message) {
         return reply(id, "{\"content\":[{\"type\":\"text\",\"text\":" + text(message) + "}],\"isError\":true}");
     };
+    if (!entry) return error("Unknown tool: " + detail::python_repr(name->get<std::string>()));
+    const Tool &tool = entry->tool;
+    const Json *given = member(params, "arguments");
+    // A task-augmented call (SEP-1686): FastMCP's tools here run only in the request.
+    if (!absent(member(params, "task")))
+        return error("Error calling tool '" + tool.name + "': FunctionTool 'tool:" + tool.name + "@' does not support task-augmented execution");
     Json arguments;
     try {
         arguments = checked_arguments(entry->schema, given && !given->is_null() ? *given : Json::object());
@@ -459,11 +698,6 @@ private:
     bool closed_ = false;
 };
 
-class NoExchange : public Exchange {
-public:
-    std::string confirm(const std::string &) override { throw std::runtime_error("this transport cannot ask the client"); }
-};
-
 }  // namespace
 
 void serve_stdio(Server &server, std::istream &in, std::ostream &out) {
@@ -474,59 +708,32 @@ void serve_stdio(Server &server, std::istream &in, std::ostream &out) {
     std::vector<std::thread> calls;
     std::string line;
     while (std::getline(in, line)) {
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        if (line.find_first_not_of(" \t") == std::string::npos) continue;
-        Json message;
-        try {
-            message = Json::parse(line);
-        } catch (const std::exception &) {
-            exchange.write(failure(Json(), -32700, "Parse error"));
+        // JSONRPCMessage.model_validate_json of each line: one that is no message is reported to the client as the
+        // SDK's server reports an exception from its stream.
+        Json message = Json::parse(line, nullptr, false);
+        const Kind kind = message.is_discarded() ? Kind::invalid : classify(message);
+        if (kind == Kind::invalid) {
+            exchange.write("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/message\",\"params\":{\"level\":\"error\",\"logger\":\"mcp.server.exception_handler\","
+                           "\"data\":\"Internal Server Error\"}}");
             continue;
         }
-        if (message.is_object() && !message.contains("method") && (message.contains("result") || message.contains("error"))) {
+        if (kind == Kind::response || kind == Kind::error) {
             exchange.answered(message);
             continue;
         }
-        const Json *method = member(message, "method");
-        const bool long_running = message.is_array() || (method && method->is_string() && method->get<std::string>() == "tools/call");
-        if (!long_running) {
-            const std::string answer = server.receive(message, exchange);
-            if (!answer.empty()) exchange.write(answer);
+        if (kind == Kind::notification) {
+            server.notified(message);
             continue;
         }
-        calls.emplace_back([&server, &exchange, message] {
-            const std::string answer = server.receive(message, exchange);
-            if (!answer.empty()) exchange.write(answer);
-        });
+        const bool long_running = message.at("method").get<std::string>() == "tools/call";
+        if (!long_running) {
+            exchange.write(server.answer(message, exchange, true));
+            continue;
+        }
+        calls.emplace_back([&server, &exchange, message] { exchange.write(server.answer(message, exchange, true)); });
     }
     exchange.close();
     for (std::thread &t : calls) t.join();
-}
-
-http::Response serve_http(Server &server, const http::Request &request) {
-    if (request.method != "POST") {
-        http::Response r = http::Response::error(405, "Use POST for messages; this server has no event stream");
-        r.headers.emplace_back("Allow", "POST");
-        return r;
-    }
-    const std::string *accept = request.header("accept");
-    if (accept && accept->find("application/json") == std::string::npos && accept->find("*/*") == std::string::npos)
-        return http::Response::error(406, "Accept application/json: this server answers each message as JSON");
-    if (request.media_type() != "application/json") return http::Response::error(415, "Send the message as application/json");
-    Json message;
-    try {
-        message = Json::parse(request.body);
-    } catch (const std::exception &) {
-        return http::Response::json(failure(Json(), -32700, "Parse error"), 400);
-    }
-    NoExchange exchange;
-    const std::string answer = server.receive(message, exchange);
-    if (answer.empty()) {
-        http::Response accepted;
-        accepted.status = 202;
-        return accepted;
-    }
-    return http::Response::json(answer);
 }
 
 }  // namespace mcp
