@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 cd "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-if [ ! -x .venv/bin/python ]; then
-  echo 'Install first: python3 -m venv .venv && .venv/bin/python -m pip install .'
+if [ ! -x build/native/kerfkite-studio ]; then
+  echo 'Build first: sh scripts/install.sh'
   exit 1
 fi
-exec .venv/bin/python -m studio.server "$@"
+exec build/native/kerfkite-studio --static studio/static "$@"

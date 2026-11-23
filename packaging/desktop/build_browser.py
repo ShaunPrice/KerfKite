@@ -1,39 +1,28 @@
-"""Package the released KerfKite local-file editor for desktop browsers on SBCs."""
+"""Package the KerfKite local-file editor for desktop browsers on SBCs, from this source tree's editor files."""
 
 import argparse
-from email.parser import BytesParser
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 from zipfile import ZipFile, ZIP_DEFLATED
 
+ROOT = Path(__file__).resolve().parents[2]
 
-def build(wheel, output):
+
+def build(output, static=ROOT / "studio/static", version=None):
+    version = version or (ROOT / "VERSION").read_text(encoding="utf-8").strip()
     output.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         package = root / "package"
         share = package / "usr/share"
         editor = share / "kerfkite-browser"
-        with ZipFile(wheel) as source:
-            (metadata,) = (name for name in source.namelist() if name.endswith(".dist-info/METADATA"))
-            info = BytesParser().parsebytes(source.read(metadata))
-            if info["Name"] != "kerfkite-studio":
-                raise ValueError("Expected a KerfKite Studio wheel")
-            prefix = "studio/static/"
-            for member in source.namelist():
-                if member.startswith(prefix) and not member.endswith("/"):
-                    relative = Path(member[len(prefix) :])
-                    if relative.is_absolute() or ".." in relative.parts:
-                        raise ValueError("Invalid static asset path")
-                    dest = editor / relative
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    dest.write_bytes(source.read(member))
+        shutil.copytree(static, editor, ignore=shutil.ignore_patterns("__pycache__"))
 
         for name in ("index.html", "app.js", "offline-cam.js", "app-icon.png", "vendor/Studio-MIT.txt"):
             if not (editor / name).is_file():
-                raise ValueError(f"The wheel is missing {name}")
+                raise ValueError(f"The editor's files lack {name}")
         with ZipFile(output / "KerfKite-Browser-Editor.zip", "w", ZIP_DEFLATED) as portable:
             for file in sorted(editor.rglob("*")):
                 if file.is_file():
@@ -54,7 +43,7 @@ def build(wheel, output):
         control = package / "DEBIAN/control"
         control.parent.mkdir()
         control.write_text(
-            f"Package: kerfkite-browser\nVersion: {info['Version']}-1\n"
+            f"Package: kerfkite-browser\nVersion: {version}-1\n"
             "Architecture: all\nSection: graphics\nPriority: optional\n"
             "Maintainer: KerfKite Studio contributors <maintainers@users.noreply.github.com>\n"
             "Depends: xdg-utils\nRecommends: chromium | firefox-esr | firefox\n"
@@ -68,7 +57,6 @@ def build(wheel, output):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("wheel", type=Path)
     parser.add_argument("output", type=Path)
     args = parser.parse_args()
-    build(args.wheel, args.output)
+    build(args.output)

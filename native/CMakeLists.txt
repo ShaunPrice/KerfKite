@@ -84,11 +84,11 @@ target_link_libraries(kerfkite-studio PRIVATE kerfkite_server)
 add_executable(kerfkite-web server/web_main.cpp)
 target_include_directories(kerfkite-web PRIVATE core/src ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(kerfkite-web PRIVATE kerfkite_server)
-# The assistant server (studio/mcp_server.py without Python): the Model Context Protocol over standard input and
-# output or HTTP. It reports Studio's version, read from the Python package until there is none.
-file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/../studio/__init__.py KERFKITE_VERSION_LINE REGEX "^__version__ = ")
-string(REGEX REPLACE "^__version__ = [\"']([^\"']+)[\"'].*$" "\\1" KERFKITE_VERSION "${KERFKITE_VERSION_LINE}")
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../studio/__init__.py)
+# The assistant server: the Model Context Protocol over standard input and output or HTTP. It reports Studio's
+# version, from the VERSION file at the top of the source.
+file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/../VERSION KERFKITE_VERSION LIMIT_COUNT 1)
+string(STRIP "${KERFKITE_VERSION}" KERFKITE_VERSION)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../VERSION)
 add_executable(kerfkite-mcp server/mcp_main.cpp)
 target_include_directories(kerfkite-mcp PRIVATE core/src ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_compile_definitions(kerfkite-mcp PRIVATE KERFKITE_VERSION="${KERFKITE_VERSION}")

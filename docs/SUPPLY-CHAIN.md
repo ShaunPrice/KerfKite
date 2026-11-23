@@ -62,8 +62,7 @@ Each of these goes when the part that uses it is ported, under rule 5.
 | Component | Use | Plan |
 | --- | --- | --- |
 | Go standard library | The launcher | Keep: it is the language's own library, with no other packages. |
-| uv, downloaded by pinned SHA-256 for each platform | Installing the Python environment on first run | Goes when Python goes. Until then it stays pinned by hash. |
-| The locked Python packages, each pinned by hash (`packaging/desktop/requirements.lock`) | The installed environment | As for each package above. |
+| uv, and the locked Python packages it installed | Installing the Python environment on first run | **Removed**: the packages carry the native programs and install no Python. |
 
 ## Build and checks
 
@@ -102,13 +101,11 @@ Every part of the product reaches a user through an installer, so each part, and
 
 | Part | What the installer puts in place | State |
 | --- | --- | --- |
-| Studio and its Python environment | The launcher, the locked Python packages, and the compiled extension for the platform. Probe levelling and circuit-board import live in that extension, so they arrive with it. | Installed today; the installer check exercises it. |
-| Studio without Python | The launcher, `kerfkite-studio`, the pendant's relay, `kerfkite-cam` and the editor's files; nothing is downloaded on the first start. | Packaging is ready (`build.py --native`, the **Build the desktop programs without Python** workflow); the releases do not use it yet. |
-| The in-house kernels (2D polygons, 3D solids, JSON) | Nothing separate: they are compiled into the core and the extension. | All three arrive with the extension and are in use. The installed-wheel check runs offsets, a pocket and a fill through the polygon kernel and compares the programs with a recorded digest; it models a part and a drawing through the solid and polygon kernels, by Studio's own entry points, and compares every vertex, triangle and outline with a recorded digest. |
-| `kerfkite-cam`, the command-line tool | The program for the platform. | **Not installed yet.** GEOS is out of it and it carries no third-party code; adding it to the installers is what remains. |
+| Studio | The launcher, `kerfkite-studio` with the editor's files, `kerfkite-web`, `kerfkite-mcp` with the template collection, `kerfkite-cam` and the pendant's relay; nothing is downloaded on the first start. Probe levelling and circuit-board import live in the core, so they arrive with the programs. | Packaging is ready (`build.py`, the **Build the desktop programs without Python** workflow); **not in a release yet**. The installer check starts the installed launcher and exercises the server. |
+| The in-house kernels (2D polygons, 3D solids, JSON) | Nothing separate: they are compiled into the programs. | In use. The self-tests, which run on every platform the programs are built for, include a digest of generated solids that must be the same everywhere. |
 | The editor of the C++ application | The program, and the Qt libraries it uses as separate files beside it, with Qt's notice, licence text and source offer. | To be built; the installer work is part of that stage, not after it. |
-| STEP add-on | Open Cascade and its wrapper, as a component the user chooses, with its notice and licence text. | Installed today as an option of the Python service (the installer check has a STEP run). For the C++ server, `kerfkite-step` and the Open Cascade 7.9.3 libraries with their notices: a Setup component on Windows, carried by the macOS and Linux packages; packaging is ready, **not in a release yet**. |
-| Encrypted links | The cryptography library for the platform. | Installed today. |
+| STEP add-on | `kerfkite-step` and the Open Cascade 7.9.3 libraries with their notices, as separate files: a Setup component on Windows, carried by the macOS and Linux packages. | Packaging is ready, **not in a release yet**; the installer check writes and reads a part through it. |
+| Encrypted links | Nothing separate: the system's cryptography and the Go relay. | In use. |
 | KerfKite Pocket | The signed APK, downloaded from the release. | Published separately. |
 
 Rules for this:

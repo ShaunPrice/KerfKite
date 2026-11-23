@@ -13,12 +13,12 @@ Download the desktop package from the [official KerfKite release](https://github
 
 ### First launch
 
-1. The desktop launcher opens a setup tab in your default browser. Keep the computer online while it downloads the private Python runtime and the design libraries. A first install can take several minutes on a Pi. The launcher shows the current stage.
+1. The desktop launcher opens a setup tab in your default browser. From Studio 0.7 everything Studio needs is in the package, so the first launch downloads nothing and works offline. Earlier releases downloaded a private Python runtime and the design libraries on first launch, which needed an internet connection.
 2. The first time, **Shortcuts** offers a KerfKite Studio shortcut on the desktop on macOS and Linux, and on the portable Linux edition an entry in the applications menu. Both are ticked; untick what you do not want. On macOS, the system may ask once whether KerfKite Studio may use the Desktop folder. To add one later, choose **Add a desktop shortcut** or **Add to the applications menu** in the launcher once the workshop is ready.
-3. Leave **Native desktop** selected and choose **Start workshop**. The application window opens when the simulator is ready. To use a browser instead, select **Web browser** during startup, then choose **Open in browser**. In **Projects → Try a sample**, load the badge and generate a preview. The simulator works offline on subsequent launches. The portable desktop packages use the Python relief engine. Select **Add STEP import and export** before starting a workshop to download the optional exchange libraries. For a commissioned machine, expand **Physical machine access** and enable controller ports for that session. Studio still requires a separate connection. Native C++ acceleration, HTTPS serving and MCP are available through the source installation below.
+3. Leave **Native desktop** selected and choose **Start workshop**. The application window opens when the simulator is ready. To use a browser instead, select **Web browser** during startup, then choose **Open in browser**. In **Projects → Try a sample**, load the badge and generate a preview. The setup page says whether STEP import and export is installed: the macOS and Linux packages carry it, and on Windows it is a component you choose in Setup. For a commissioned machine, expand **Physical machine access** and enable controller ports for that session. Studio still requires a separate connection. The HTTPS editor and the MCP assistant server are installed beside Studio (see below).
 4. Save your document and close the desktop window, then use **Quit KerfKite** in the launcher tab to shut down the local simulator. Reopening the application shortcut brings back that tab. Download important projects as portable files.
 
-When **Open directly next time** is selected, the next launch opens the native simulator window directly. Closing that window shows the launcher. Choose **Show setup next launch** there to change STEP or controller options on the next start. Controller access always requires an explicit choice in setup.
+When **Open directly next time** is selected, the next launch opens the native simulator window directly. Closing that window shows the launcher. Choose **Show setup next launch** there to change the controller options on the next start. Controller access always requires an explicit choice in setup.
 
 ### Desktop window requirements
 
@@ -32,13 +32,13 @@ The macOS window uses AppKit and the system WebKit. Keep macOS and Safari update
 
 ### Updates, setup problems and removal
 
-Quit KerfKite, download the newer package and install it over the previous version. On macOS choose **Replace**. Studio keeps the same local browser address across launches so a browser profile can reopen its saved projects. Each desktop user has a separate runtime.
+Quit KerfKite, download the newer package and install it over the previous version. On macOS choose **Replace**. Studio keeps the same local browser address across launches so a browser profile can reopen its saved projects.
 
-If setup fails, check the internet connection and available space, then choose **Retry**. Setup needs access to GitHub, Python runtime downloads and the Python Package Index. For a port conflict, quit any other KerfKite launcher or Studio server using port 18764 or 18765. If the browser did not open, visit `http://127.0.0.1:18764/` on the same computer. The setup page shows the location of `setup.log` when an error occurs.
+If Studio does not start, choose **Retry**. For a port conflict, quit any other KerfKite launcher or Studio server using port 18764 or 18765. If the browser did not open, visit `http://127.0.0.1:18764/` on the same computer. The setup page shows the location of `setup.log` when an error occurs.
 
-Uninstall through **Installed apps** on Windows, which also removes the Start menu entry and the desktop shortcut. On macOS move the app to Trash and delete the KerfKite Studio shortcut from the desktop. On Linux remove the package in your software manager and delete `kerfkite-studio.desktop` from the desktop. For the portable Linux edition remove its extracted folder, the desktop shortcut and `~/.local/share/applications/org.kerfkite.Studio.Portable.desktop`. To reclaim downloaded runtimes after quitting, remove only the KerfKite runtime folder for your account:
+Uninstall through **Installed apps** on Windows, which also removes the Start menu entry and the desktop shortcut. On macOS move the app to Trash and delete the KerfKite Studio shortcut from the desktop. On Linux remove the package in your software manager and delete `kerfkite-studio.desktop` from the desktop. For the portable Linux edition remove its extracted folder, the desktop shortcut and `~/.local/share/applications/org.kerfkite.Studio.Portable.desktop`. The launcher keeps its log and settings in a folder of your account. Earlier packages also installed a private Python runtime there; to reclaim that space after quitting, remove its `runtime-…` folders, or the whole folder to reset the launcher:
 
-| Platform | Runtime folder |
+| Platform | Launcher folder |
 | --- | --- |
 | Windows | `%LOCALAPPDATA%\KerfKite Studio\Data` |
 | macOS | `~/Library/Application Support/KerfKite Studio` |
@@ -46,37 +46,30 @@ Uninstall through **Installed apps** on Windows, which also removes the Start me
 
 ## Source installation
 
-Use 64-bit Python 3.12 where possible. The source setup below supports optional services and an explicitly enabled hardware controller.
+The source build makes the same programs the packages carry: the workstation server `kerfkite-studio`, the HTTPS editor `kerfkite-web`, the MCP assistant server `kerfkite-mcp`, `kerfkite-cam`, and, where their tools are installed, the TLS relay `kerfkite-pendant-tls` (Go) and the STEP add-on `kerfkite-step` (Open CASCADE 7.6 or later). It needs CMake 3.16 or newer and a C++17 compiler, and downloads nothing. It supports the optional services and an explicitly enabled hardware controller.
 
 See [Platforms](PLATFORMS.md) for installation targets and measured CAD/CAM acceptance on macOS, Windows, Linux and Raspberry Pi.
 
 ## 1. Obtain the source
 
-Clone the public repository with `git clone https://github.com/ShaunPrice/KerfKite.git` or download its source archive. Open a terminal in the directory containing `pyproject.toml`, `start.sh` and `studio/`. Keep the complete tree together. Do not copy a macOS `.venv` or compiled extension to a Pi or Windows computer; each host needs its own installation.
+Clone the public repository with `git clone https://github.com/ShaunPrice/KerfKite.git` or download its source archive. Open a terminal in the directory containing `VERSION`, `start.sh` and `native/`. Keep the complete tree together. Do not copy a build from one computer to another; each host builds its own.
 
 ## 2. Install on Raspberry Pi OS or Debian/Ubuntu Linux
 
-Use a 64-bit operating system. On the Pi, install the Python virtual environment package and optional C++ build tools:
+Use a 64-bit operating system. Install the build tools, and Go for HTTPS pairing and hosted transfers:
 
 ```sh
 sudo apt update
-sudo apt install python3 python3-venv python3-dev build-essential
-python3 --version
-sh scripts/install.sh --web --mcp
+sudo apt install build-essential cmake golang
+sh scripts/install.sh
 sh start.sh --port 8765
 ```
 
-If the OS Python is older than 3.10, use a supported newer OS/Python installation. `CNC_PYTHON` can choose an already installed interpreter:
-
-```sh
-CNC_PYTHON=python3.12 sh scripts/install.sh --web --mcp
-```
-
-The `--web` installer option adds HTTPS services; `--mcp` adds the assistant workshop MCP server. Omit either option if you do not need it. Open **http://127.0.0.1:8765** on the Pi's desktop browser. This local editor listener deliberately binds to loopback.
+For STEP import and export, also install `libocct-data-exchange-dev` and `libocct-modeling-algorithms-dev` before building. `scripts/install.sh` builds into `build/native` and runs the self-tests. Open **http://127.0.0.1:8765** on the Pi's desktop browser. This local editor listener deliberately binds to loopback.
 
 ## 3. Install on macOS
 
-Install 64-bit Python 3.12 first. The old system Python is unsuitable. For the optional C++ relief engine, install Apple's command line tools and complete any displayed installation dialog:
+Install Apple's command line tools and complete any displayed installation dialog, then CMake (for example with Homebrew, `brew install cmake go`):
 
 ```sh
 xcode-select --install
@@ -85,33 +78,23 @@ xcode-select --install
 Then, from the project directory:
 
 ```sh
-python3 --version
-sh scripts/install.sh --web --mcp
+sh scripts/install.sh
 sh start.sh --port 8765
 ```
 
-Open **http://127.0.0.1:8765**. If `python3` points to an older interpreter, set `CNC_PYTHON` to your Python 3.12 executable when installing. Metal is not required; no custom Metal compute backend is implemented.
+Open **http://127.0.0.1:8765**. For STEP import and export, build Open CASCADE first as `native/README.md` describes. Metal is not required; no custom Metal compute backend is implemented.
 
 ## 4. Install on Windows 11 x86-64
 
-Install 64-bit Python 3.12. The optional C++ extension needs Microsoft Visual C++ Build Tools with the C++ workload and Windows SDK. Without those tools, installation can use the Python relief fallback.
-
-The following manual commands work without changing PowerShell script execution policy. Run from the project directory:
+Install Visual Studio 2022 (or its Build Tools) with the **Desktop development with C++** workload, which includes CMake, and optionally Go. From a Developer PowerShell for Visual Studio, in the project directory:
 
 ```powershell
-py -3.12 -m venv .venv
-.venv\Scripts\python.exe -m pip install ".[web,mcp]"
+cmake -S native -B build\native -A x64
+cmake --build build\native --config Release --parallel
 .\start.bat --port 8765
 ```
 
-Alternatively, after reviewing the supplied script and where local execution policy permits:
-
-```powershell
-.\scripts\install.ps1 -Web -Mcp -Python "C:\Path\To\Python312\python.exe"
-.\start.bat --port 8765
-```
-
-Open **http://127.0.0.1:8765**. The PowerShell installer has not been executed on Windows in this project; use the manual commands if your execution policy blocks scripts. Do not change a managed organization's execution policy merely to run this installer.
+Alternatively, after reviewing the supplied script and where local execution policy permits, `.\scripts\install.ps1` runs the same build and the self-tests. Open **http://127.0.0.1:8765**. Do not change a managed organization's execution policy merely to run this installer.
 
 ## 5. First simulator session
 
@@ -123,25 +106,15 @@ Open **http://127.0.0.1:8765**. The PowerShell installer has not been executed o
 
 The default server permits simulator connections only. Physical serial ports require an explicit restart with `--enable-hardware`, machine commissioning and verified machine/tool settings. Installing the software does not commission a machine. The supplied machine profile belongs to the project's reference machine; users of other machines must configure their own travel, heads and tools.
 
-## Optional native C++ relief engine
-
-The installer tries to compile the extension if a suitable compiler and Python development headers exist. The extension is optional; the Python implementation remains available. Check which engine was installed:
-
-```sh
-.venv/bin/python -c "from studio.relief import _relief_native; print('C++' if _relief_native is not None else 'Python fallback')"
-```
-
-On Windows substitute `.venv\Scripts\python.exe` for `.venv/bin/python`. After adding compiler tools, rerun the installer to rebuild for this host. The engine accelerates relief contact calculations; it does not change physical controller speed. See the validation reports for measured Pi workloads and their limits.
-
 ## Offline file editor
 
-Open `studio/static/index.html` directly from the filesystem. Keep its vendor, font, icon and sibling script files together. There is no login in this mode. Drawing, templates, portable projects and supported contour CAM work locally; advanced server-dependent geometry and relief calculations require the Python service. The UI should report unsupported operations instead of treating them as completed calculations.
+Open `studio/static/index.html` directly from the filesystem. Keep its vendor, font, icon and sibling script files together. There is no login in this mode. Drawing, templates, portable projects and supported contour CAM work locally; advanced server-dependent geometry and relief calculations require the workstation server. The UI should report unsupported operations instead of treating them as completed calculations.
 
 Use portable project files to move between the file editor and the server editor. Browser storage permissions differ for `file://`; if the project library is unavailable, use Download project. Uploading from this editor still requires an authenticated HTTPS receiver and an explicitly configured file-upload receiver option.
 
 ## HTTPS editor and Pi upload inbox
 
-The service is `kerfkite-web`, in the program folder beside `kerfkite-studio` with its TLS relay `kerfkite-pendant-tls`; it needs no Python. Releases that still carry the Python service run `.venv/bin/python -m studio.web_server` (with the `web` extra) in its place, with the same commands and options. Replace `YOUR_USERNAME`, hostnames and addresses with real values.
+The service is `kerfkite-web`, in the program folder beside `kerfkite-studio` with its TLS relay `kerfkite-pendant-tls` (in `build/native` for a source build). Replace `YOUR_USERNAME`, hostnames and addresses with real values.
 
 Create a user. The password is prompted for twice; no default password exists:
 
@@ -180,25 +153,25 @@ For internet hosting use a real DNS name, publicly trusted certificate and delib
 
 In the desktop installer, choose **Start workshop → Open Studio → Control → Phone pendant → Enable phone pairing**. Enter the server address reachable from the phone. Follow the [Android connection guide](PHONE-CONNECTIONS.md) to pair over Wi-Fi, USB tethering or Bluetooth tethering.
 
-From the command line, `sh start.sh --monitor` with the `web` extra installed serves an encrypted monitor whose certificate is identified in the pairing link; add `--monitor-plaintext` for Pocket 0.4.1 and earlier. To serve a certificate of your own instead, supply one valid for the server hostname used on the phone:
+From the command line, `sh start.sh --monitor` with the TLS relay built serves an encrypted monitor whose certificate is identified in the pairing link; add `--monitor-plaintext` for Pocket 0.4.1 and earlier. To serve a certificate of your own instead, supply one valid for the server hostname used on the phone:
 
 ```sh
 sh start.sh --monitor --monitor-port 8766 --monitor-cert server.pem --monitor-key server-key.pem
 ```
 
-The console displays a fresh pairing URL containing a random token. Replace its `<PI-LAN-IP>` placeholder with the certificate's matching host/IP, then open it on the phone. Treat this URL as a credential; do not include it in screenshots or repository files. Restarting revokes it. This example remains simulator-only. Without the `web` extra the monitor falls back to HTTP on the LAN and the console says so.
+The console displays a fresh pairing URL containing a random token. Replace its `<PI-LAN-IP>` placeholder with the certificate's matching host/IP, then open it on the phone. Treat this URL as a credential; do not include it in screenshots or repository files. Restarting revokes it. This example remains simulator-only. Without the TLS relay the monitor falls back to HTTP on the LAN and the console says so.
 
 Monitor control is distinct from the upload inbox. Releasing a software pendant or sending feed hold is not a physical emergency stop, and accepted/buffered motion can continue depending on firmware.
 
 ## MCP assistant workshop
 
-Install with `--mcp`, then configure your MCP client to launch the absolute path to `.venv/bin/python` (Windows: `.venv\Scripts\python.exe`) with arguments `-m`, `studio.mcp_server` and the project directory as its working directory. The MCP installer option installs the workshop browser unless an existing Chromium executable is configured. The [assistant setup guide](MCP.md) covers Claude, ChatGPT, optional HTTP hosting and access to the workshop. No MCP setup automatically connects or moves a machine.
+Configure your MCP client to launch the absolute path to `kerfkite-mcp` (in the program folder, or `build/native` for a source build) with `--output-dir` and a private folder. Its workshop opens an installed Google Chrome, Chromium or Microsoft Edge. The [assistant setup guide](MCP.md) covers Claude, ChatGPT, optional HTTP hosting and access to the workshop. No MCP setup automatically connects or moves a machine.
 
 ## Updating, stopping and removing
 
-Stop the foreground service with Ctrl+C. Before updating, download unsaved projects and back up `web-data`, exported template libraries and configuration. Install new source into the same project, rerun the installer, restart the service and refresh the browser after saving its work. Native extensions must be rebuilt for a different OS, CPU architecture or incompatible Python version.
+Stop the foreground service with Ctrl+C. Before updating, download unsaved projects and back up `web-data`, exported template libraries and configuration. Update the source in the same project, rerun the build, restart the service and refresh the browser after saving its work. A build is made for one OS and CPU architecture.
 
-Removing `.venv` removes that installation's Python dependencies. Removing source does not delete browser IndexedDB projects; browser site-data controls manage those separately. Keep or remove `web-data` deliberately according to whether its accounts/files are still needed. Do not delete the only copy of project files when uninstalling.
+Removing `build` removes the programs a source build made. Removing source does not delete browser IndexedDB projects; browser site-data controls manage those separately. Keep or remove `web-data` deliberately according to whether its accounts/files are still needed. Do not delete the only copy of project files when uninstalling.
 
 ## Reopening a project in an older Studio version
 

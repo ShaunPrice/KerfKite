@@ -55,7 +55,10 @@ FunctionEnd
 Section "KerfKite Studio and its Start menu shortcut" SecStudio
   SectionIn RO
   SetOutPath "$INSTDIR"
+  ; An installation of a release that set up a private Python runtime: its wheel and locked requirements go.
   Delete "$INSTDIR\kerfkite_studio-*.whl"
+  Delete "$INSTDIR\requirements.lock"
+  Delete "$INSTDIR\step.lock"
   File /r "payload\*"
   File "app.ico"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
@@ -70,8 +73,8 @@ SectionEnd
 Section "Desktop shortcut" SecDesktop
   CreateShortcut "$DESKTOP\KerfKite Studio.lnk" "$INSTDIR\KerfKite.exe" "" "$INSTDIR\app.ico"
 SectionEnd
-; The workstation server without Python can carry STEP exchange: its Open CASCADE add-on and libraries (LGPL 2.1),
-; a component of its own. A reinstall without it removes it.
+; STEP exchange is the Open CASCADE add-on and its libraries (LGPL 2.1), a component of its own. A reinstall without
+; it removes it.
 !if /FileExists "step\kerfkite-step.exe"
 Section "STEP import and export (Open CASCADE)" SecStep
   SetOutPath "$INSTDIR"

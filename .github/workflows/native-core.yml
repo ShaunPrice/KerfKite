@@ -10,6 +10,7 @@ on:
       - validation/server_route_parity.py
       - validation/web_route_parity.py
       - validation/web_store_fixture.py
+      - validation/check_installed_cam.py
       - validation/mcp_parity.py
       - validation/mcp_remote_parity.py
       - validation/mcp_http_parity.py
@@ -74,6 +75,9 @@ jobs:
       - name: Test the phone pendant's TLS relay
         shell: bash
         run: cd packaging/pendant-tls && GO111MODULE=off CGO_ENABLED=0 go test -count=1 .
+      - name: Check the pinned results of the installed extension
+        # The operations, part and drawing check_installed_cam.py pins, which the wheel builds checked before.
+        run: python validation/check_installed_cam.py
       - name: Compare with the Python reference
         shell: bash
         run: |

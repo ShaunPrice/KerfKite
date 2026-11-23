@@ -8,7 +8,7 @@ Three botanical tags share a sheet. The **Layers** tab separates engraving, lett
 
 ## Install KerfKite
 
-Choose the installer for the computer where you want to design. The download links below follow the [latest public release](https://github.com/ShaunPrice/KerfKite/releases/latest). First launch needs an internet connection to set up the desktop tools. Choose **Native desktop → Start workshop** to open the simulator in its own application window. Leave **Open directly next time** selected to start there on later launches.
+Choose the installer for the computer where you want to design. The download links below follow the [latest public release](https://github.com/ShaunPrice/KerfKite/releases/latest). From Studio 0.7 the packages carry everything they need, so the first launch works offline; earlier releases set up their desktop tools online on first launch. Choose **Native desktop → Start workshop** to open the simulator in its own application window. Leave **Open directly next time** selected to start there on later launches.
 
 | Device | Download | How to open it |
 | --- | --- | --- |

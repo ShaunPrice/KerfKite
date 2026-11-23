@@ -20,17 +20,17 @@ The Apple silicon and Intel macOS runners and both Linux architectures passed na
 
 ## Platform support
 
-The desktop installers provide AppKit on macOS, Windows Forms and WebView2 on Windows, and GTK 3 with WebKitGTK on Linux. Each native window embeds the shared editor and connects to a local Python service. The browser interface remains available from the launcher. The service provides solid modelling, CAM and simulation. The Android edition provides native 2D design, portable project and SVG exchange, and a CNC pendant paired with the Studio server.
+The desktop installers provide AppKit on macOS, Windows Forms and WebView2 on Windows, and GTK 3 with WebKitGTK on Linux. Each native window embeds the shared editor and connects to the local workstation server, `kerfkite-studio`, which the package carries; no Python is installed. The browser interface remains available from the launcher. The server provides solid modelling, CAM and simulation. The Android edition provides native 2D design, portable project and SVG exchange, and a CNC pendant paired with the Studio server.
 
 | Platform | Source installation and earlier hardware checks |
 |---|---|
-| macOS, Apple Silicon | Install 64-bit Python 3.12 and run the macOS installer below. The CAD and machining harness and Chrome editing workflows passed on macOS ARM64. |
-| macOS, Intel | For a source installation, use x86-64 Python. The published Intel desktop package passed on a hosted Intel macOS runner. |
-| Windows 11, x86-64 | Install 64-bit Python 3.12 and use the PowerShell installer. Package installation and all four core CAD and machining scenarios passed on an x64 Windows build 26300 machine. |
-| Windows 10, x86-64 | Use 64-bit Python 3.12 and the same PowerShell installer. A Windows 10 runtime and UI test is pending. |
-| Linux, x86-64 | Use 64-bit Python 3.11 or 3.12 on a recent glibc distribution. Installation and all four core scenarios passed on Ubuntu 24.04 x86-64 under WSL. |
-| Linux, ARM64 | Use a 64-bit OS and Python environment. The four core scenarios passed on Debian ARM64 on a physical Raspberry Pi 5. |
-| Raspberry Pi 4B or 5, 4 GB or 8 GB | Use 64-bit Raspberry Pi OS with a supported Python. On a Pi 5 with 8 GB, the server fixture passed under a 1.5 GiB memory ceiling and a two-core CPU quota in 5.49 s. Peak Python process RSS was 54,048 KiB. The Chromium browser and server also passed all nine CAD workflow groups together under a 2 GiB ceiling and two-core quota on that Pi 5, including sketch drag, project reopening, STL and router relief transfer. Pi 4 and whole-browser use on a physical 4 GB board still need measurement. |
+| macOS, Apple Silicon | Build with the commands below (Apple command line tools and CMake). The CAD and machining harness and Chrome editing workflows passed on macOS ARM64. |
+| macOS, Intel | A source build on the Intel Mac makes x86-64 programs. The published Intel desktop package passed on a hosted Intel macOS runner. |
+| Windows 11, x86-64 | Build with Visual Studio 2022's C++ tools and the PowerShell script. Package installation and all four core CAD and machining scenarios passed on an x64 Windows build 26300 machine. |
+| Windows 10, x86-64 | Use the same build tools and PowerShell script. A Windows 10 runtime and UI test is pending. |
+| Linux, x86-64 | Build on a recent glibc distribution with a C++17 compiler and CMake. Installation and all four core scenarios passed on Ubuntu 24.04 x86-64 under WSL. |
+| Linux, ARM64 | Use a 64-bit OS. The four core scenarios passed on Debian ARM64 on a physical Raspberry Pi 5. |
+| Raspberry Pi 4B or 5, 4 GB or 8 GB | Use 64-bit Raspberry Pi OS. On a Pi 5 with 8 GB, Studio 0.6.1's Python server fixture passed under a 1.5 GiB memory ceiling and a two-core CPU quota in 5.49 s, with a peak process RSS of 54,048 KiB; the native workstation server has not been measured on the Pi yet. The Chromium browser and that server also passed all nine CAD workflow groups together under a 2 GiB ceiling and two-core quota on that Pi 5, including sketch drag, project reopening, STL and router relief transfer. Pi 4 and whole-browser use on a physical 4 GB board still need measurement. |
 | Android 8.0 (API 26) or later, minimum supported RAM 2 GB | Install the Android APK or build it from source. The editor, project and SVG exchange, cold-relaunch persistence and server-paired pendant controls were exercised on a 2 GB ARM64 emulator running API 37. Pocket 0.4.1 also passed on a physical Samsung Galaxy S23 Ultra (SM-S918B, Android 17, One UI 9.0); see [Android](ANDROID.md#physical-handset-check) for the scope and the preview-selection defect found in 0.4.1. |
 
 ## Desktop commands
@@ -45,11 +45,11 @@ sh start.sh --port 8765
 On Windows 10/11 in PowerShell:
 
 ```powershell
-.\scripts\install.ps1 -Python C:\Python312\python.exe
+.\scripts\install.ps1
 .\start.bat --port 8765
 ```
 
-Set the executable path to the installed 64-bit Python. Open the printed localhost address. Add HTTPS/web or MCP extras as described in [Install](INSTALL.md). The geometry kernel and browser renderer use CPU resources. Custom Metal rendering and 32-bit x86/ARM builds have no acceptance evidence.
+Run it from a Developer PowerShell for Visual Studio 2022. Open the printed localhost address. The HTTPS editor and the MCP assistant server are built with the workstation server; see [Install](INSTALL.md). The geometry kernel and browser renderer use CPU resources. Custom Metal rendering and 32-bit x86/ARM builds have no acceptance evidence.
 
 ## Raspberry Pi sizing
 

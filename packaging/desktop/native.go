@@ -6,9 +6,9 @@ import (
 	"runtime"
 )
 
-// A package of the workstation server without Python (native/server) carries kerfkite-studio beside the
-// launcher, the editor's files in static/ and, when STEP exchange was installed with it, the Open CASCADE
-// add-on kerfkite-step. Such a package needs no Python runtime and nothing downloaded on its first start.
+// A package carries the workstation server (native/server), kerfkite-studio, beside the launcher, the editor's
+// files in static/ and, when STEP exchange was installed with it, the Open CASCADE add-on kerfkite-step. It
+// needs nothing downloaded on its first start.
 
 func executable(name string) string {
 	if runtime.GOOS == "windows" {
@@ -27,7 +27,7 @@ func directory(path string) bool {
 	return err == nil && info.IsDir()
 }
 
-// nativeServer is the package's C++ workstation server, or "" for a package that installs the Python service.
+// nativeServer is the package's workstation server, or "" when the package is incomplete.
 func nativeServer(payload string) string {
 	server := filepath.Join(payload, executable("kerfkite-studio"))
 	if !regularFile(server) || !regularFile(filepath.Join(payload, "static", "index.html")) {
@@ -41,8 +41,8 @@ func stepInstalled(payload string) bool {
 	return regularFile(filepath.Join(payload, executable("kerfkite-step")))
 }
 
-// nativeArguments starts the server as studio.desktop_server starts the Python service: the launcher's
-// port, the simulator unless the operator enabled the controller ports for this session.
+// nativeArguments starts the server on the launcher's port, in the simulator unless the operator enabled the
+// controller ports for this session.
 func nativeArguments(payload string, hardware bool) []string {
 	args := []string{"--port", "18765", "--static", filepath.Join(payload, "static")}
 	if hardware {
