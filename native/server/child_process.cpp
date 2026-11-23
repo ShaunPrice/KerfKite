@@ -217,6 +217,9 @@ struct ChildProcess::Handles {
 };
 
 ChildProcess::ChildProcess(const std::string &program, const std::vector<std::string> &arguments) : handles_(new Handles) {
+    // posix_spawn reports a program that cannot run only where the C library and the kernel can tell it (older glibc
+    // and user-mode emulators start a child that exits with 127 instead), so check first and refuse alike everywhere.
+    if (::access(program.c_str(), X_OK) != 0) throw std::runtime_error("the relay could not be started");
     int to_child[2], from_child[2];
     if (::pipe(to_child) != 0) throw std::runtime_error("the relay's input could not be made");
     if (::pipe(from_child) != 0) {
