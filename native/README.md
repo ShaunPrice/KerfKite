@@ -42,10 +42,15 @@ It serves the editor at `http://127.0.0.1:8765/` with every route of `studio/ser
 simulator mode unless started with `--enable-hardware`, with its own HTTP server and serial ports and no
 library beyond the C++ standard library and the operating system (Winsock, BCrypt and SetupAPI on Windows).
 The phone pendant's HTTPS is `kerfkite-pendant-tls` (`../packaging/pendant-tls`, Go's standard library), built
-beside the server when Go is installed. STEP exchange is not in it yet; [docs/NATIVE.md](../docs/NATIVE.md#the-workstation-server)
-says what it reproduces and how it is compared with the Flask app:
+beside the server when Go is installed. STEP exchange is `kerfkite-step` (`step/`), the one program linked to
+Open CASCADE (LGPL 2.1, as replaceable shared libraries), built beside the server when CMake finds Open CASCADE
+7.6 or later (`-DOpenCASCADE_DIR=<prefix>/lib/cmake/opencascade`; Ubuntu's `libocct-data-exchange-dev` and
+`libocct-modeling-algorithms-dev`, or a build of 7.9.3); without it the server answers that STEP needs Open
+CASCADE. [docs/NATIVE.md](../docs/NATIVE.md#the-workstation-server) says what it reproduces and how it is
+compared with the Flask app:
 
     python validation/server_route_parity.py --server build/native/kerfkite-studio
+    python validation/step_exchange_parity.py --server build/native/kerfkite-studio
 
 ## Use
 
@@ -131,7 +136,9 @@ extrusions and revolutions, lofts and scripted features, patterns and runs of Bo
 solid kernel, with the mesh, measures and silhouette. `solid-cad-section` (`{"model", "z"}`) gives the
 material at a height, and `sketch-solve` (`{"feature", "parameters", "order"}`, the parameters' names in
 the order Studio evaluates them, which decides which of two circular definitions is reported) a sketch's
-vertices with its constraints solved. STEP features are still Python's.
+vertices with its constraints solved. STEP features need the server's STEP add-on, which tessellates them;
+`kerfkite-cam` declines them. `step-part` and `step-faces` give the exact steps and faces of a part and of a
+surface that the add-on builds in Open CASCADE for STEP export.
 
     kerfkite-cam assembly-solve request.json
 

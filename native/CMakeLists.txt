@@ -61,7 +61,7 @@ target_link_libraries(kerfkite-cam PRIVATE kerfkite_core)
 set(KERFKITE_SERVER_SOURCES server/child_process.cpp server/design_extra.cpp server/design_routes.cpp server/device.cpp server/http.cpp
   server/key_order.cpp server/machine.cpp server/machine_routes.cpp server/machine_setup.cpp server/os_random.cpp
   server/phone_jobs.cpp server/phone_monitor.cpp server/protocols.cpp server/serial_port.cpp server/static_files.cpp
-  server/studio.cpp)
+  server/step_exchange.cpp server/studio.cpp)
 add_library(kerfkite_server STATIC ${KERFKITE_SERVER_SOURCES})
 target_include_directories(kerfkite_server PUBLIC server PRIVATE core/src ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(kerfkite_server PUBLIC kerfkite_core)
@@ -82,6 +82,27 @@ if(KERFKITE_GO)
     COMMENT "Building the phone pendant's TLS relay with Go"
     VERBATIM)
   add_dependencies(kerfkite-pendant-tls kerfkite-studio)
+endif()
+# STEP exchange through Open CASCADE (LGPL 2.1 with the OCCT exception): a program of its own, kerfkite-step, linked
+# to Open CASCADE's shared libraries so that they stay files that can be replaced. Built when Open CASCADE is found
+# (-DOpenCASCADE_DIR=<its lib/cmake/opencascade>); without it the server answers that STEP needs Open CASCADE.
+find_package(OpenCASCADE CONFIG QUIET NO_CMAKE_PACKAGE_REGISTRY NO_CMAKE_SYSTEM_PACKAGE_REGISTRY)
+if(OpenCASCADE_FOUND)
+  if(TARGET TKDESTEP)
+    set(KERFKITE_OCCT_STEP TKDESTEP)  # 7.8 and later
+  else()
+    set(KERFKITE_OCCT_STEP TKSTEP TKSTEPBase TKSTEPAttr TKSTEP209 TKXSBase)
+  endif()
+  add_executable(kerfkite-step step/kerfkite_step.cpp)
+  target_include_directories(kerfkite-step PRIVATE core/src ${OpenCASCADE_INCLUDE_DIR})
+  target_link_libraries(kerfkite-step PRIVATE kerfkite_core ${KERFKITE_OCCT_STEP} TKBO TKPrim TKMesh TKShHealing TKTopAlgo TKGeomAlgo
+    TKBRep TKGeomBase TKG3d TKG2d TKMath TKernel)
+  set_target_properties(kerfkite-step PROPERTIES BUILD_RPATH "${OpenCASCADE_LIBRARY_DIR}" INSTALL_RPATH "$ORIGIN")
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # The search path also for the libraries' own dependencies on one another (DT_RPATH, not DT_RUNPATH).
+    target_link_options(kerfkite-step PRIVATE "LINKER:--disable-new-dtags")
+  endif()
+  message(STATUS "kerfkite-step: STEP exchange with Open CASCADE ${OpenCASCADE_VERSION}")
 endif()
 add_executable(kerfkite_machine_selftest tests/machine_selftest.cpp)
 target_link_libraries(kerfkite_machine_selftest PRIVATE kerfkite_server)
@@ -109,13 +130,18 @@ target_link_libraries(kerfkite_selftest PRIVATE kerfkite_core)
 add_test(NAME selftest COMMAND kerfkite_selftest)
 # The controller transports against scripted firmware on a virtual clock.
 add_test(NAME machine COMMAND kerfkite_machine_selftest)
-# The workstation server against the editor's files: a simulator and a scripted controller, the loopback only.
+# The workstation server against the editor's files: a simulator and a scripted controller, the loopback only;
+# with the pendant's TLS relay and the STEP add-on where they are built.
+set(KERFKITE_SERVER_TEST ${CMAKE_CURRENT_SOURCE_DIR}/../studio/static)
 if(KERFKITE_GO)
-  add_test(NAME server COMMAND kerfkite_server_selftest ${CMAKE_CURRENT_SOURCE_DIR}/../studio/static
-    $<TARGET_FILE_DIR:kerfkite-studio>/kerfkite-pendant-tls${CMAKE_EXECUTABLE_SUFFIX})
+  list(APPEND KERFKITE_SERVER_TEST $<TARGET_FILE_DIR:kerfkite-studio>/kerfkite-pendant-tls${CMAKE_EXECUTABLE_SUFFIX})
 else()
-  add_test(NAME server COMMAND kerfkite_server_selftest ${CMAKE_CURRENT_SOURCE_DIR}/../studio/static)
+  list(APPEND KERFKITE_SERVER_TEST -)
 endif()
+if(TARGET kerfkite-step)
+  list(APPEND KERFKITE_SERVER_TEST $<TARGET_FILE:kerfkite-step>)
+endif()
+add_test(NAME server COMMAND kerfkite_server_selftest ${KERFKITE_SERVER_TEST})
 add_executable(kerfkite_json_selftest tests/json_selftest.cpp)
 target_link_libraries(kerfkite_json_selftest PRIVATE kerfkite_core)
 add_test(NAME json COMMAND kerfkite_json_selftest)

@@ -6,7 +6,8 @@ Install the app and Playwright, then run:
 Use --browser PATH to select an installed Chromium executable. With --url the lessons run against a server
 that is already running instead, such as the C++ workstation server (kerfkite-studio); the lessons that need
 the Python controller object (the synthetic Grbl of machine setup and the phone arm) are then left out, and so is
-STEP exchange (the exchange lesson and the loft lesson's STEP download), which the C++ server does not include.
+STEP exchange (the exchange lesson and the loft lesson's STEP download) unless --step says the server has it (the
+C++ server with its Open CASCADE add-on, kerfkite-step).
 """
 
 import argparse
@@ -149,7 +150,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--browser", help="Path to a Chromium executable")
     parser.add_argument("--url", help="A Studio server that is already running, such as http://127.0.0.1:8765/")
+    parser.add_argument("--step", action="store_true", help="The server at --url has STEP exchange")
     args = parser.parse_args()
+    step = not args.url or args.step
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
     controller = jobs = monitor = server = worker = None
     if not args.url:
@@ -210,11 +213,11 @@ def main():
                     lightburn,
                     fixture_imports,
                     assembly_laser,
-                    *(() if args.url else (exchange,)),
+                    *((exchange,) if step else ()),
                     materials,
                     corner,
                     linked_cad,
-                    *(() if args.url else (loft,)),
+                    *((loft,) if step else ()),
                     linked_relief,
                     image_relief,
                     sketch_join,

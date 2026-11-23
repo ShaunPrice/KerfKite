@@ -18,13 +18,15 @@ namespace {
 void usage() {
     std::fprintf(stderr,
                  "usage: kerfkite-studio [--port N] [--enable-hardware] [--monitor] [--monitor-port N] [--monitor-plaintext]\n"
-                 "                       [--monitor-cert FILE --monitor-key FILE] [--pendant-tls PROGRAM] [--static DIR]\n"
+                 "                       [--monitor-cert FILE --monitor-key FILE] [--pendant-tls PROGRAM] [--step PROGRAM]\n"
+                 "                       [--static DIR]\n"
                  "  --enable-hardware   operator opt-in to physical controller ports; requires machine setup and supervised commissioning\n"
                  "  --monitor           enable paired phone monitor and job controls on the LAN\n"
                  "  --monitor-plaintext serve the phone monitor over HTTP: needed for Pocket 0.4.1 and earlier, which cannot\n"
                  "                      verify a pinned certificate\n"
                  "  --monitor-cert, --monitor-key   an HTTPS certificate and its private key for the phone monitor\n"
-                 "  --pendant-tls       the phone pendant's TLS relay (default: kerfkite-pendant-tls beside this program)\n");
+                 "  --pendant-tls       the phone pendant's TLS relay (default: kerfkite-pendant-tls beside this program)\n"
+                 "  --step              the Open CASCADE STEP add-on (default: kerfkite-step beside this program, when installed)\n");
 }
 
 }  // namespace
@@ -55,6 +57,7 @@ int main(int argc, char **argv) {
         else if (arg == "--monitor-key") options.monitor_key = value();
         else if (arg == "--monitor-host") options.monitor_host = value();  // for tests: 127.0.0.1 keeps the pendant off the LAN
         else if (arg == "--pendant-tls") options.pendant_tls = value();
+        else if (arg == "--step") options.step_program = value();
         else if (arg == "--help" || arg == "-h") {
             usage();
             return 0;
@@ -80,6 +83,15 @@ int main(int argc, char **argv) {
 #endif
         const std::string beside = program_directory(argv[0]) + "/" + relay;
         if (file_exists(beside)) options.pendant_tls = beside;
+    }
+    if (options.step_program.empty()) {
+#ifdef _WIN32
+        const char *add_on = "kerfkite-step.exe";
+#else
+        const char *add_on = "kerfkite-step";
+#endif
+        const std::string beside = program_directory(argv[0]) + "/" + add_on;
+        if (file_exists(beside)) options.step_program = beside;
     }
     try {
         Studio studio(options);

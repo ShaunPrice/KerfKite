@@ -94,8 +94,9 @@ Spec surface_spec(const json &surface, const json *order) {
             bool good = degrees->is_array() && degrees->size() == 2;
             for (size_t a = 0; good && a < 2; ++a) {
                 const json &d = degrees->at(a);
-                good = d.is_number_integer() && !d.is_number_unsigned() && d.get<long long>() >= 1 && d.get<long long>() < spec.size[a];
-                if (good) spec.degree[a] = static_cast<int>(d.get<long long>());
+                // type(d) is int, of any size and either sign: JSON text reads a whole number of no sign as unsigned.
+                good = d.is_number_integer() && d.get<double>() >= 1 && d.get<double>() < spec.size[a];
+                if (good) spec.degree[a] = static_cast<int>(d.get<double>());
             }
             if (!good) throw ValueError("Each B-spline degree must be at least one and less than its pole count");
         }
@@ -472,25 +473,25 @@ struct Piece {
     std::array<double, 4> clip{};  // u0, v0, u1, v1 of the rectangle the piece is cut to
 };
 
-// The bounds of a piece as the reference's polygon has them: its corners are the outline's own (the core's are
-// rounded to its grid) or lie on the clipping rectangle, whose sides are exact.
-std::array<double, 4> exact_bounds(const Piece &piece) {
+// A point of a piece's outline as the reference's polygon has it: its corners are the outline's own (the core's
+// are rounded to its grid) or lie on the clipping rectangle, whose sides are exact.
+UV exact_point(const Piece &piece, const Vec2 &p) {
     const double step = 2 / (kScale * 1e6);  // two steps of the arrangement's grid, in parameters
+    UV at = {p.x / kScale, p.y / kScale};
+    for (const UV &q : piece.corners)
+        if (std::fabs(q[0] - at[0]) <= step && std::fabs(q[1] - at[1]) <= step) return q;
+    for (size_t axis = 0; axis < 2; ++axis)
+        for (const double side : {piece.clip[axis], piece.clip[axis + 2]})
+            if (std::fabs(at[axis] - side) <= step) at[axis] = side;
+    return at;
+}
+
+// The bounds of a piece as the reference's polygon has them.
+std::array<double, 4> exact_bounds(const Piece &piece) {
     std::array<double, 4> bounds = {1e300, 1e300, -1e300, -1e300};
     for (const Ring &ring : piece.outline)
         for (const Vec2 &p : ring) {
-            UV at = {p.x / kScale, p.y / kScale};
-            bool corner = false;
-            for (const UV &q : piece.corners)
-                if (std::fabs(q[0] - at[0]) <= step && std::fabs(q[1] - at[1]) <= step) {
-                    at = q;
-                    corner = true;
-                    break;
-                }
-            if (!corner)
-                for (size_t axis = 0; axis < 2; ++axis)
-                    for (const double side : {piece.clip[axis], piece.clip[axis + 2]})
-                        if (std::fabs(at[axis] - side) <= step) at[axis] = side;
+            const UV at = exact_point(piece, p);
             bounds[0] = std::min(bounds[0], at[0]), bounds[2] = std::max(bounds[2], at[0]);
             bounds[1] = std::min(bounds[1], at[1]), bounds[3] = std::max(bounds[3], at[1]);
         }
@@ -762,6 +763,84 @@ Json mesh(const Json &request) {
     out["faces"] = static_cast<long long>(meshes.size());
     out["solids"] = 0;
     out["resolvedPatches"] = sheet.resolved;
+    return out;
+}
+
+namespace {
+
+// A piece's UV outline as orient(polygon, sign=1.0) gives it to _surface_face: the shell counter-clockwise, then the
+// holes clockwise, each closed by its first point. Points that the arrangement's grid merges are given once.
+json uv_domain(const Piece &piece) {
+    json shell = json::array(), holes = json::array();
+    for (const Ring &ring : piece.outline) {
+        std::vector<UV> points;
+        for (const Vec2 &p : ring) {
+            const UV at = exact_point(piece, p);
+            if (points.empty() || points.back() != at) points.push_back(at);
+        }
+        while (points.size() > 1 && points.back() == points.front()) points.pop_back();
+        if (points.size() < 3) continue;
+        points.push_back(points.front());
+        json loop = json::array();
+        for (const UV &at : points) loop.push_back(json::array({at[0], at[1]}));
+        if (solid::ring_area(ring) > 0) shell = loop;
+        else holes.push_back(loop);
+    }
+    json domain = json::array({shell});
+    for (const json &hole : holes) domain.push_back(hole);
+    return domain;
+}
+
+}  // namespace
+
+Json step_faces(const Json &request) {
+    const json *surface = request.is_object() ? get(request, "surface") : nullptr;
+    const json none;
+    const Sheet sheet = sheet_of(surface ? *surface : none, present(get(request, "order")), get(request, "orders"));
+    const std::vector<Piece> pieces = regions(*surface, sheet);
+    json faces = json::array();
+    for (const Piece &piece : pieces) {
+        const Spec &spec = sheet.specs[piece.patch];
+        std::array<double, 4> window = sheet.trim;
+        for (const Visible &v : sheet.visible)
+            if (v.patch == piece.patch) window = v.window;
+        json face = json::object();
+        try {
+            patch_mesh(spec, window);  // the editor's degeneracy check, which _surface_face makes first
+        } catch (const ValueError &error) {
+            // Raised where the reference raises it: after the faces before this one are built.
+            face["error"] = error.what();
+            faces.push_back(face);
+            break;
+        }
+        face["kind"] = spec.bezier ? "bezier" : "bspline";
+        face["poles"] = pole_rows(spec);
+        face["weights"] = weight_rows(spec);
+        if (!spec.bezier) {
+            // _knots: open uniform knots, full multiplicity at the ends and simple interior knots.
+            json degrees = json::array(), knots = json::array(), multiplicities = json::array();
+            for (int axis = 0; axis < 2; ++axis) {
+                const int size = spec.size[axis], degree = spec.degree[axis];
+                const std::vector<double> distinct = linspace(0.0, 1.0, size - degree + 1);
+                json values = json::array(), counts = json::array();
+                for (size_t k = 0; k < distinct.size(); ++k) {
+                    values.push_back(distinct[k]);
+                    counts.push_back(k == 0 || k + 1 == distinct.size() ? degree + 1 : 1);
+                }
+                degrees.push_back(degree);
+                knots.push_back(values);
+                multiplicities.push_back(counts);
+            }
+            face["degrees"] = degrees;
+            face["knots"] = knots;
+            face["multiplicities"] = multiplicities;
+        }
+        if (piece.outline.empty()) face["window"] = json::array({window[0], window[1], window[2], window[3]});
+        else face["domain"] = uv_domain(piece);
+        faces.push_back(face);
+    }
+    json out = json::object();
+    out["faces"] = faces;
     return out;
 }
 

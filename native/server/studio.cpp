@@ -10,10 +10,12 @@
 #include "kerfkite/cam.hpp"
 #include "kerfkite/errors.hpp"
 #include "kerfkite/number_text.hpp"
+#include "kerfkite/solid_cad.hpp"
 #include "project.hpp"
 #include "os_random.hpp"
 #include "phone_monitor.hpp"
 #include "static_files.hpp"
+#include "step_exchange.hpp"
 
 namespace kerfkite {
 namespace server {
@@ -111,6 +113,14 @@ Studio::Studio(Options options, MachineOptions machine)
     monitor_ = std::make_unique<PhoneMonitor>(device_, jobs_, options_.static_dir, options_.monitor_port, options_.monitor_plaintext,
                                               options_.enable_hardware, options_.monitor_host, options_.pendant_tls, options_.monitor_cert,
                                               options_.monitor_key);
+    step_ = std::make_shared<StepExchange>(options_.step_program);
+    // Solid features of kind step: cad_exchange.step_manifold's order, the content's checks before Open CASCADE.
+    set_step_mesher([step = step_](const Json &content) {
+        const std::string raw = StepExchange::decode(&content);
+        if (!step->available()) throw ValueError(kNoStep);
+        StepExchange::check(raw);
+        return step->inspect(raw);
+    });
     add("GET", "/api/session", [this](const http::Request &) {
         json out = json::object();
         out["token"] = token_;

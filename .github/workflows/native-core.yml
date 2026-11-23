@@ -9,7 +9,9 @@ on:
       - validation/native_core_recorder.py
       - validation/server_route_parity.py
       - validation/pendant_tls_pin_check.py
+      - validation/step_exchange_parity.py
       - packaging/pendant-tls/**
+      - studio/cad_exchange.py
       # The workstation server is compared route by route with the Flask app.
       - studio/server.py
       - studio/design_api.py
@@ -41,9 +43,14 @@ jobs:
           cache: false
       - name: Install the Python reference with its compiled extension
         # Offsets, pockets, fills and V-carves are compared through the extension, so it must have been built.
-        run: python -m pip install -e ".[dev]"
+        # The step extra (OCP) is the reference for STEP exchange.
+        run: python -m pip install -e ".[dev,step]"
         env:
           KERFKITE_REQUIRE_NATIVE: "1"
+      - name: Install Open CASCADE for the STEP add-on
+        # Ubuntu's own build (7.6); the releases use 7.9.3, the reference's.
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libocct-data-exchange-dev libocct-modeling-algorithms-dev libtbb-dev
       - name: Build the native core
         run: |
           cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release
@@ -68,3 +75,6 @@ jobs:
       - name: Check Pocket's certificate pinning against the workstation server
         if: runner.os == 'Linux'
         run: python validation/pendant_tls_pin_check.py --server build/native/kerfkite-studio
+      - name: Compare STEP exchange with the reference's Open CASCADE
+        if: runner.os == 'Linux'
+        run: python validation/step_exchange_parity.py --server build/native/kerfkite-studio --parts 40 --surfaces 40

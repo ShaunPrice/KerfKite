@@ -39,6 +39,7 @@ from studio.server import create_app  # noqa: E402
 
 PCB = ROOT / 'tests' / 'pcb'
 NO_STEP = 'STEP exchange needs Open CASCADE, which this build of KerfKite Studio does not include'
+NO_OCP = 'Install the Studio step extra to enable Open CASCADE STEP exchange'
 JSON = 'application/json'
 STOCK = 'application/vnd.kerfkite.stock-v1'
 
@@ -208,6 +209,25 @@ def closed(triangles):
     return all(edges.get((b, a), 0) == count for (a, b), count in edges.items())
 
 
+def step_agrees(reference, native):
+    """STEP answers of Open CASCADE on both sides (the reference's OCP, the C++ server's add-on): documents by what
+    they describe and imports by their counts and measures, as validation/step_exchange_parity.py compares them."""
+    from validation.step_exchange_parity import agree, measures
+
+    if isinstance(reference, tuple) and isinstance(native, tuple):
+        if reference[0] != native[0]:
+            return f'{reference[0]} against {native[0]}'
+        if reference[0] == 'model/step':
+            return agree(measures(reference[1]), measures(native[1]), 1e-9)
+        return None  # an STL of a document: the tessellation of the release in use
+    keys = ('faces', 'solids', 'solidOnly', 'volume', 'area', 'bounds')
+    if not (
+        isinstance(reference, dict) and isinstance(native, dict) and all(k in reference and k in native for k in keys)
+    ):
+        return first_difference(reference, native)
+    return agree({k: reference[k] for k in keys}, {k: native[k] for k in keys}, 1e-9)
+
+
 def extrusion_agrees(reference, native):
     if not same(reference['height'], native['height']):
         return f'height {reference["height"]} against {native["height"]}'
@@ -232,7 +252,12 @@ class Tally:
         route = label.split(' ')[0]
         self.by_route[route] = self.by_route.get(route, 0) + 1
         (rs, rv), (ns, nv) = decoded(reference), decoded(native)
-        if ns == 400 and isinstance(nv, dict) and nv.get('error') == NO_STEP:
+        if ns == 400 and isinstance(nv, dict) and str(nv.get('error')).endswith(NO_STEP):
+            # A server without the STEP add-on; a solid feature of kind step names its feature first.
+            self.no_step += 1
+            return
+        if rs == 400 and isinstance(rv, dict) and NO_OCP in str(rv.get('error')):
+            # A reference without OCP (the step extra): validation/step_exchange_parity.py compares STEP.
             self.no_step += 1
             return
         if rs == 500 and ns == 400 and isinstance(nv, dict) and 'error' in nv:
@@ -408,6 +433,8 @@ def design_cases(rng, count):
         'height': 40,
     }
     surface = {'surface': {'kind': 'bspline', 'poles': [[[0, 0, 0], [0, 12, 3]], [[20, 0, 4], [20, 12, 0]]]}}
+    net = [[[10 * i, 10 * j, (i * j) % 3] for j in range(3)] for i in range(3)]
+    degrees = {'surface': {'kind': 'bspline', 'degrees': [1, 2], 'poles': net}}
     program = {'filename': 'part.nc', 'content': 'G21\nG90\nG0 X10 Y10\nG1 Z-1 F100\nG1 X20 F600\nM2\n'}
     relief_settings = relief_sample()
     from validation.pdf_import_workflow import example_pdf
@@ -445,7 +472,7 @@ def design_cases(rng, count):
         '/api/pdf-import': [{'content': pdf}, {'content': pdf, 'page': 2}],
         '/api/import-bundle': [{'content': bundle}, {'content': bundle, 'index': 1}],
         '/api/pcb-import': [board, dict(board, side='bottom'), dict(board, copper=None, tool_width=None)],
-        '/api/solid-cad/surface': [surface],
+        '/api/solid-cad/surface': [surface, degrees],
         '/api/solid-cad/exchange-stl': [surface, {'model': plate()}],
         '/api/solid-cad/stl': [{'model': plate()}],
         '/api/solid-cad/step/export': [surface, {'model': plate()}],
@@ -757,6 +784,10 @@ def main():
             compare = None
             if path == '/api/extrude':
                 compare = extrusion_agrees
+            elif path.startswith('/api/solid-cad/step/') or (
+                path == '/api/solid-cad/exchange-stl' and 'content' in payload
+            ):
+                compare = step_agrees
             elif path == '/api/geometry':
                 try:
                     distance = float(payload.get('distance', 0)) if payload.get('action') == 'offset' else 0.0

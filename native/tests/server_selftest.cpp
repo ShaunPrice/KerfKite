@@ -29,6 +29,7 @@
 #include "key_order.hpp"
 #include "kerfkite/json.hpp"
 #include "phone_monitor.hpp"
+#include "step_exchange.hpp"
 #include "studio.hpp"
 
 #ifdef _WIN32
@@ -1019,13 +1020,184 @@ void http_server() {
 
 }  // namespace
 
+// ---- STEP exchange: the routes' own checks, and the Open CASCADE add-on when it is built -------------------
+
+std::string step_program;
+
+std::string base64_text(const std::string &bytes) {
+    static const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    for (size_t i = 0; i < bytes.size(); i += 3) {
+        unsigned v = static_cast<unsigned char>(bytes[i]) << 16;
+        if (i + 1 < bytes.size()) v |= static_cast<unsigned char>(bytes[i + 1]) << 8;
+        if (i + 2 < bytes.size()) v |= static_cast<unsigned char>(bytes[i + 2]);
+        out += alphabet[(v >> 18) & 63];
+        out += alphabet[(v >> 12) & 63];
+        out += i + 1 < bytes.size() ? alphabet[(v >> 6) & 63] : '=';
+        out += i + 2 < bytes.size() ? alphabet[v & 63] : '=';
+    }
+    return out;
+}
+
+std::string header_of(const http::Response &response, const char *name) {
+    for (const auto &h : response.headers)
+        if (h.first == name) return h.second;
+    return std::string();
+}
+
+void step_without_open_cascade() {
+    Options o = options();
+    o.step_program.clear();
+    Studio studio(o);
+    Client client{studio};
+    const std::string document = base64_text("ISO-10303-21;\nHEADER;\nENDSEC;\nDATA;\nENDSEC;\nEND-ISO-10303-21;\n");
+    // The reference decodes the content before it asks for Open CASCADE.
+    CHECK(error_of(client.post("/api/solid-cad/step/import", Json::object())) == "Select a STEP file up to 1.5 MB");
+    CHECK(error_of(client.post("/api/solid-cad/step/import", Json::parse(R"({"content": "abc!"})"))) == "Invalid STEP file encoding");
+    CHECK(error_of(client.post("/api/solid-cad/step/import", with(Json::object(), "content", Json(document)))) == kNoStep);
+    CHECK(error_of(client.post("/api/solid-cad/step/export", Json::parse(R"({"content": 5})"))) == "Select a STEP file up to 1.5 MB");
+    CHECK(error_of(client.post("/api/solid-cad/step/export", Json::object())) == kNoStep);
+    CHECK(error_of(client.post("/api/solid-cad/exchange-stl", with(Json::object(), "content", Json(document)))) == kNoStep);
+    // A solid feature of kind step names its feature.
+    Json model = Json::parse(R"({"version": 1, "features": [{"id": "part", "kind": "step"}]})");
+    model["features"][0]["content"] = document;
+    CHECK(error_of(client.post("/api/solid-cad", with(Json::object(), "model", model))) == std::string("part: ") + kNoStep);
+    model["features"][0]["content"] = 7;
+    CHECK(error_of(client.post("/api/solid-cad", with(Json::object(), "model", model))) == "part: Select a STEP file up to 1.5 MB");
+#ifndef _WIN32
+    // An add-on that answers nothing: the request is refused, the server goes on.
+    o.step_program = "/bin/true";
+    Studio broken(o);
+    Client second{broken};
+    CHECK(error_of(second.post("/api/solid-cad/step/import", with(Json::object(), "content", Json(document)))) ==
+          "Open CASCADE could not translate this STEP shape");
+    CHECK(error_of(second.post("/api/solid-cad/step/export", Json::parse(R"({"model": {"version": 1, "features": [{"id": "b", "kind": "box", "size": [1, 2, 3]}]}})"))) ==
+          "Could not translate the geometry to STEP");
+    o.step_program = "/nonexistent/kerfkite-step";
+    Studio missing(o);
+    Client third{missing};
+    CHECK_TEXT(error_of(third.post("/api/solid-cad/step/import", with(Json::object(), "content", Json(document)))), "could not be started");
+#endif
+}
+
+void step_checks_of_the_text() {
+    const auto refused = [](const std::string &raw) {
+        try {
+            StepExchange::check(raw);
+        } catch (const std::exception &e) {
+            return std::string(e.what());
+        }
+        return std::string();
+    };
+    const std::string good = "ISO-10303-21;\nDATA;\nENDSEC;\nEND-ISO-10303-21;\n";
+    CHECK(refused(good).empty());
+    CHECK(refused(" \r\n\t" + std::string("iso-10303-21;") + good.substr(13)).empty());  // stripped, any case
+    CHECK(refused("ISO-10303-22;" + good.substr(13)) == "Supply an ISO 10303-21 STEP file up to 1.5 MB");
+    CHECK(refused(good + std::string(1500001 - good.size(), ' ')) == "Supply an ISO 10303-21 STEP file up to 1.5 MB");
+    CHECK(refused(good + std::string(101, ' ')) == "Incomplete STEP document or STEP entity budget exceeded");
+    CHECK(refused("ISO-10303-21;" + std::string(35001, '=') + "END-ISO-10303-21;") == "Incomplete STEP document or STEP entity budget exceeded");
+    CHECK(refused("ISO-10303-21;" + std::string(35000, '=') + "end-iso-10303-21;").empty());
+    // _decode counts characters, not bytes: two million at most.
+    const Json long_text(std::string(2000000, 'A'));
+    CHECK(StepExchange::decode(&long_text).size() == 1500000);
+    const Json longer(std::string(2000004, 'A'));
+    bool too_long = false;
+    try {
+        StepExchange::decode(&longer);
+    } catch (const kerfkite::ValueError &e) {
+        too_long = std::string(e.what()) == "Select a STEP file up to 1.5 MB";
+    }
+    CHECK(too_long);
+}
+
+void step_with_open_cascade() {
+    if (step_program.empty()) return;
+    Options o = options();
+    o.step_program = step_program;
+    Studio studio(o);
+    Client client{studio};
+    // A part: a plate with a bore, written as STEP and read back.
+    const Json plate = Json::parse(R"({"version": 1, "parameters": {"w": 40}, "features": [
+        {"id": "base", "kind": "box", "size": ["w", 30, 6]},
+        {"id": "bore", "kind": "cylinder", "op": "cut", "radius": 4, "height": 8, "origin": [20, 15, -1]}]})");
+    const http::Response written = client.post("/api/solid-cad/step/export", with(Json::object(), "model", plate));
+    CHECK(written.status == 200);
+    CHECK(header_of(written, "Content-Type") == "model/step");
+    CHECK(header_of(written, "Content-Disposition") == "attachment; filename=\"model.step\"");
+    CHECK(written.body.compare(0, 13, "ISO-10303-21;") == 0);
+    const Json content(base64_text(written.body));
+    const http::Response read = client.post("/api/solid-cad/step/import", with(Json::object(), "content", content));
+    CHECK(read.status == 200);
+    const Json shape = parsed(read);
+    CHECK(shape.is_object() && shape.at("solids") == Json(1) && shape.at("faces") == Json(7) && shape.at("solidOnly") == Json(true));
+    const double volume = 40.0 * 30 * 6 - 3.141592653589793 * 16 * 6;
+    CHECK(shape.is_object() && std::fabs(shape.at("volume").get<double>() - volume) < 1e-6 * volume);
+    CHECK(shape.is_object() && std::fabs(shape.at("bounds")[3].get<double>() - 40) < 1e-6 && shape.at("triangles").size() > 10);
+    // The same document as STL, and written again.
+    const http::Response stl = client.post("/api/solid-cad/exchange-stl", with(Json::object(), "content", content));
+    CHECK(stl.status == 200 && header_of(stl, "Content-Type") == "model/stl" && stl.body.size() == 84 + 50 * shape.at("triangles").size());
+    const http::Response again = client.post("/api/solid-cad/step/export", with(Json::object(), "content", content));
+    CHECK(again.status == 200 && again.body.compare(0, 13, "ISO-10303-21;") == 0);
+    // The imported solid as a feature of another part.
+    Json model = Json::parse(R"({"version": 1, "features": [{"id": "plate", "kind": "step"},
+        {"id": "notch", "kind": "box", "op": "cut", "size": [5, 5, 10], "origin": [-1, -1, -2]}]})");
+    model["features"][0]["content"] = content;
+    const Json built = parsed(client.post("/api/solid-cad", with(Json::object(), "model", model)));
+    CHECK(built.is_object() && built.contains("volume") && std::fabs(built.at("volume").get<double>() - (volume - 4 * 4 * 6)) < 0.5);
+    // Every kind of feature: lofts, sketches with fillets and a cubic edge, revolutions, patterns and turns.
+    const Json every = Json::parse(R"({"version": 1, "features": [
+        {"id": "loft", "kind": "loft", "baseShape": "rectangle", "baseWidth": 30, "baseDepth": 20, "topShape": "circle", "topWidth": 12, "height": 15},
+        {"id": "boss", "kind": "extrude", "height": 5, "origin": [0, 0, 15], "points": [[-8, -8], [8, -8], [8, 8], [-8, 8]], "fillets": [2, 0, 2, 0]},
+        {"id": "curve", "kind": "extrude", "height": 3, "op": "cut", "origin": [0, 0, 18], "points": [[-3, -3], [3, -3], [3, 3]],
+         "curves": [null, {"controls": [[5, -1], [5, 1]]}, null]},
+        {"id": "ring", "kind": "revolve", "angle": 270, "op": "add", "points": [[16, 0], [18, 0], [18, 4], [16, 4]], "rotation": [0, 0, 45]},
+        {"id": "pins", "kind": "cylinder", "radius": 1, "height": 30, "op": "cut", "origin": [10, 0, -5],
+         "pattern": {"kind": "polar", "count": 4, "angle": 90}},
+        {"id": "cone", "kind": "cylinder", "radius": 3, "topRadius": 1, "height": 4, "origin": [0, 0, 20],
+         "pattern": {"kind": "linear", "count": 2, "step": [0, 0, 0.5]}},
+        {"id": "ball", "kind": "sphere", "radius": 2, "op": "add", "origin": [0, 0, 25]}]})");
+    const http::Response everything = client.post("/api/solid-cad/step/export", with(Json::object(), "model", every));
+    CHECK(everything.status == 200);
+    const Json part = parsed(client.post("/api/solid-cad/step/import", with(Json::object(), "content", Json(base64_text(everything.body)))));
+    CHECK(part.is_object() && part.at("solids") == Json(1) && part.at("solidOnly") == Json(true) && part.at("faces").get<long long>() > 20);
+    // A trimmed B-spline surface with a hole, and a joined sheet.
+    const Json surface = Json::parse(R"({"surface": {"kind": "bspline", "poles": [[[0, 0, 0], [0, 10, 2], [0, 20, 0]], [[10, 0, 3], [10, 10, 5],
+        [10, 20, 3]], [[20, 0, 0], [20, 10, 2], [20, 20, 0]]], "boundary": [[[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]],
+        [[0.4, 0.4], [0.4, 0.6], [0.6, 0.6], [0.6, 0.4]]]}})");
+    const http::Response sheet = client.post("/api/solid-cad/step/export", surface);
+    CHECK(sheet.status == 200);
+    const Json face = parsed(client.post("/api/solid-cad/step/import", with(Json::object(), "content", Json(base64_text(sheet.body)))));
+    CHECK(face.is_object() && face.at("faces") == Json(1) && face.at("solids") == Json(0) && face.at("solidOnly") == Json(false));
+    CHECK(face.is_object() && std::fabs(face.at("bounds")[0].get<double>() - 2) < 0.2);
+    const Json joined = Json::parse(R"({"surface": {"kind": "sheet", "axis": "u", "patches": [
+        {"poles": [[[0, 0, 0], [0, 10, 0]], [[10, 0, 2], [10, 10, 2]]]},
+        {"poles": [[[10, 0, 2], [10, 10, 2]], [[20, 0, 0], [20, 10, 0]]], "continuity": "position"}]}})");
+    const http::Response two = client.post("/api/solid-cad/step/export", joined);
+    CHECK(two.status == 200);
+    const Json shell = parsed(client.post("/api/solid-cad/step/import", with(Json::object(), "content", Json(base64_text(two.body)))));
+    CHECK(shell.is_object() && shell.at("faces") == Json(2));
+    // The reference's refusals, in its order.
+    CHECK(error_of(client.post("/api/solid-cad/step/export", Json::object())) == "Choose one part, surface or imported STEP document");
+    Json both = surface;
+    both["model"] = plate;
+    CHECK(error_of(client.post("/api/solid-cad/step/export", both)) == "Choose one part, surface or imported STEP document");
+    Json scripted = Json::parse(R"({"version": 1, "features": [{"id": "s", "kind": "script", "source": "cube([4, 3, 2]);"}]})");
+    CHECK_TEXT(error_of(client.post("/api/solid-cad/step/export", with(Json::object(), "model", scripted))), "Script surfaces are tessellated");
+    const Json damaged(base64_text("ISO-10303-21;\nthis is not STEP\nEND-ISO-10303-21;\n"));
+    const std::string unread = error_of(client.post("/api/solid-cad/step/import", with(Json::object(), "content", damaged)));
+    CHECK(unread == "Open CASCADE could not read this STEP document" || unread == "STEP contains no transferable geometry or too many roots");
+    const Json empty(base64_text("ISO-10303-21;\nHEADER;\nENDSEC;\nDATA;\nENDSEC;\nEND-ISO-10303-21;\n"));
+    CHECK_TEXT(error_of(client.post("/api/solid-cad/step/import", with(Json::object(), "content", empty))), "STEP");
+}
+
 int main(int argc, char **argv) {
-    if (argc != 2 && argc != 3) {
-        std::fprintf(stderr, "usage: kerfkite_server_selftest STATIC_DIR [PENDANT_TLS_RELAY]\n");
+    if (argc < 2 || argc > 4) {
+        std::fprintf(stderr, "usage: kerfkite_server_selftest STATIC_DIR [PENDANT_TLS_RELAY|-] [STEP_ADD_ON]\n");
         return 2;
     }
     static_dir = argv[1];
-    if (argc == 3) relay_program = argv[2];
+    if (argc >= 3 && std::string(argv[2]) != "-") relay_program = argv[2];
+    if (argc == 4) step_program = argv[3];
 #ifdef _WIN32
     WSADATA data;
     WSAStartup(MAKEWORD(2, 2), &data);
@@ -1044,6 +1216,9 @@ int main(int argc, char **argv) {
     key_order_reading();
     pendant_tls();
     http_server();
+    step_checks_of_the_text();
+    step_without_open_cascade();
+    step_with_open_cascade();
     std::printf("%d checks, %d failed\n", checks, failures);
     return failures ? 1 : 0;
 }

@@ -1,5 +1,6 @@
-// A program started with its standard input and output on pipes, for the phone pendant's TLS relay
-// (packaging/pendant-tls): the server reads the lines it announces and ends it by closing its input.
+// A program started with its standard input and output on pipes: the phone pendant's TLS relay
+// (packaging/pendant-tls), whose lines the server reads and which ends when its input closes, and the STEP
+// add-on (native/step), which reads one request and answers it.
 #ifndef KERFKITE_SERVER_CHILD_PROCESS_HPP
 #define KERFKITE_SERVER_CHILD_PROCESS_HPP
 
@@ -24,6 +25,8 @@ public:
     // The next line of its standard output, without the line end; false at the end of its output, or when
     // no whole line arrives within the time.
     bool readline(std::string &line, double seconds);
+    // Writes all of bytes to its standard input; false when it has stopped reading.
+    bool write(const std::string &bytes);
     // The program's signal to end.
     void close_input();
     // Whether it has ended within the time.

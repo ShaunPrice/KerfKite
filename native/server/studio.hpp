@@ -20,6 +20,7 @@ namespace kerfkite {
 namespace server {
 
 class PhoneMonitor;
+class StepExchange;
 
 struct Options {
     int port = 8765;
@@ -32,6 +33,7 @@ struct Options {
     std::function<double()> clock;         // monotonic seconds for the phone's armed preview; the steady clock when empty
     bool monitor_plaintext = false;
     std::string static_dir;  // the editor's files (studio/static)
+    std::string step_program;  // the Open CASCADE add-on (kerfkite-step), or empty: STEP exchange unavailable
 };
 
 using Route = std::function<http::Response(const http::Request &)>;
@@ -50,6 +52,7 @@ public:
     Device &device() { return device_; }
     PhoneJobs &jobs() { return jobs_; }
     PhoneMonitor &monitor() { return *monitor_; }
+    StepExchange &step() { return *step_; }
     const Options &options() const { return options_; }
 
     void add(const std::string &method, const std::string &path, Route route);
@@ -67,6 +70,7 @@ private:
     Device device_;
     PhoneJobs jobs_;
     std::unique_ptr<PhoneMonitor> monitor_;
+    std::shared_ptr<StepExchange> step_;
     std::map<std::string, Route> routes_;
 };
 

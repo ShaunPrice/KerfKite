@@ -22,6 +22,7 @@
 #include "protocols.hpp"
 #include "solid_cad_build.hpp"
 #include "solid_requests.hpp"
+#include "step_exchange.hpp"
 #include "studio.hpp"
 #include "surface.hpp"
 
@@ -33,8 +34,6 @@ namespace {
 using json = Json;
 using http::Request;
 using http::Response;
-
-const char *kNoStep = "STEP exchange needs Open CASCADE, which this build of KerfKite Studio does not include";
 
 // body(message): the request's JSON object, or a 400 with the route's message.
 json body(const Request &request, const char *message) {
@@ -250,21 +249,57 @@ void add_design_routes(Studio &studio) {
         const json surface = data.contains("surface") ? data.at("surface") : json();
         return text_json(surface::mesh(surface_request(surface, text.member("surface"))));
     });
-    studio.add("POST", "/api/solid-cad/step/import", [exchange_payload](const Request &request) -> Response {
-        exchange_payload(request);
-        throw ValueError(kNoStep);
+    // STEP through the Open CASCADE add-on: the reference's checks of the request first, in its order.
+    StepExchange &step = studio.step();
+    studio.add("POST", "/api/solid-cad/step/import", [exchange_payload, &step](const Request &request) {
+        const json data = exchange_payload(request);
+        const std::string raw = StepExchange::decode(member(data, "content"));
+        if (!step.available()) throw ValueError(kNoStep);
+        StepExchange::check(raw);
+        return text_json(step.inspect(raw));
     });
-    studio.add("POST", "/api/solid-cad/step/export", [exchange_payload](const Request &request) -> Response {
-        exchange_payload(request);
-        throw ValueError(kNoStep);
+    studio.add("POST", "/api/solid-cad/step/export", [exchange_payload, &step](const Request &request) {
+        const json data = exchange_payload(request);
+        std::string raw;
+        const bool source = data.contains("content");
+        if (source) raw = StepExchange::decode(&data.at("content"));
+        if (!step.available()) throw ValueError(kNoStep);
+        const json *surface = member(data, "surface"), *model = member(data, "model");
+        if (surface && surface->is_null()) surface = nullptr;
+        if (model && model->is_null()) model = nullptr;
+        if ((surface != nullptr) + (model != nullptr) + source != 1) throw ValueError("Choose one part, surface or imported STEP document");
+        json what = json::object();
+        if (surface) {
+            const KeyOrder text = key_order(request.body);
+            what["faces"] = surface::step_faces(surface_request(*surface, text.member("surface"))).at("faces");
+        } else if (model) {
+            json core = json::object();
+            core["model"] = *model;
+            if (member(*model, "parameters") && member(*model, "parameters")->is_object())
+                core["order"] = order_at(key_order(request.body), {"model", "parameters"});
+            what["features"] = solid_cad_call("step-part", core).at("features");
+        } else {
+            StepExchange::check(raw);
+            what["source"] = data.at("content");
+        }
+        Response r;
+        r.headers.emplace_back("Content-Type", "model/step");
+        r.headers.emplace_back("Content-Disposition", "attachment; filename=\"model.step\"");
+        r.body = step.write(what);
+        return r;
     });
-    studio.add("POST", "/api/solid-cad/exchange-stl", [exchange_payload](const Request &request) {
+    studio.add("POST", "/api/solid-cad/exchange-stl", [exchange_payload, &step](const Request &request) {
         const json data = exchange_payload(request);
         if (data.contains("surface")) {
             const KeyOrder text = key_order(request.body);
             return stl_response(mesh_stl(surface::mesh(surface_request(data.at("surface"), text.member("surface")))), nullptr);
         }
-        if (data.contains("content")) throw ValueError(kNoStep);
+        if (data.contains("content")) {
+            const std::string raw = StepExchange::decode(&data.at("content"));
+            if (!step.available()) throw ValueError(kNoStep);
+            StepExchange::check(raw);
+            return stl_response(mesh_stl(step.inspect(raw)), nullptr);
+        }
         const json *model = member(data, "model");
         const json order = model && member(*model, "parameters") && member(*model, "parameters")->is_object()
                                ? order_at(key_order(request.body), {"model", "parameters"})

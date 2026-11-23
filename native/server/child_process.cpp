@@ -16,6 +16,7 @@
 #include <csignal>
 #include <fcntl.h>
 #include <poll.h>
+#include <pthread.h>
 #include <spawn.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -153,7 +154,7 @@ bool ChildProcess::readline(std::string &line, double seconds) {
         DWORD available = 0;
         if (!PeekNamedPipe(handles_->output, nullptr, 0, nullptr, &available, nullptr)) return false;  // ended
         if (available) {
-            char buffer[512];
+            char buffer[65536];
             DWORD got = 0;
             if (!ReadFile(handles_->output, buffer, available < sizeof buffer ? available : sizeof buffer, &got, nullptr) || got == 0) return false;
             pending_.append(buffer, got);
@@ -162,6 +163,17 @@ bool ChildProcess::readline(std::string &line, double seconds) {
         if (remaining(deadline) <= 0) return false;
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
+}
+
+bool ChildProcess::write(const std::string &bytes) {
+    size_t sent = 0;
+    while (handles_->input && sent < bytes.size()) {
+        const DWORD chunk = static_cast<DWORD>(bytes.size() - sent < (1u << 20) ? bytes.size() - sent : (1u << 20));
+        DWORD wrote = 0;
+        if (!WriteFile(handles_->input, bytes.data() + sent, chunk, &wrote, nullptr) || wrote == 0) return false;
+        sent += wrote;
+    }
+    return sent == bytes.size();
 }
 
 void ChildProcess::close_input() {
@@ -264,12 +276,39 @@ bool ChildProcess::readline(std::string &line, double seconds) {
         const int ready = ::poll(&waiting, 1, static_cast<int>(left * 1000) + 1);
         if (ready < 0 && errno == EINTR) continue;
         if (ready <= 0) return false;
-        char buffer[512];
+        char buffer[65536];
         const ssize_t got = ::read(handles_->output, buffer, sizeof buffer);
         if (got < 0 && errno == EINTR) continue;
         if (got <= 0) return false;  // ended
         pending_.append(buffer, static_cast<size_t>(got));
     }
+}
+
+bool ChildProcess::write(const std::string &bytes) {
+    // A program that has stopped reading raises SIGPIPE: held back for this thread, and taken if it came.
+    sigset_t pipe_signal, before;
+    sigemptyset(&pipe_signal);
+    sigaddset(&pipe_signal, SIGPIPE);
+    pthread_sigmask(SIG_BLOCK, &pipe_signal, &before);
+    size_t sent = 0;
+    bool broken = false;
+    while (handles_->input >= 0 && sent < bytes.size()) {
+        const ssize_t wrote = ::write(handles_->input, bytes.data() + sent, bytes.size() - sent);
+        if (wrote < 0 && errno == EINTR) continue;
+        if (wrote <= 0) {
+            broken = errno == EPIPE;
+            break;
+        }
+        sent += static_cast<size_t>(wrote);
+    }
+    if (broken) {
+        sigset_t pending;
+        sigemptyset(&pending);
+        int taken = 0;
+        if (sigpending(&pending) == 0 && sigismember(&pending, SIGPIPE)) sigwait(&pipe_signal, &taken);
+    }
+    pthread_sigmask(SIG_SETMASK, &before, nullptr);
+    return sent == bytes.size();
 }
 
 void ChildProcess::close_input() {

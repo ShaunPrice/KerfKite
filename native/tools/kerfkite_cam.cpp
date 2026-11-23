@@ -379,7 +379,7 @@ int main(int argc, char **argv) {
          command == "solid" || command == "rotary" || command == "rotary-wrap" || command == "relief" || command == "stock" ||
          command == "tool-changes" || command == "fixture-collision" || command == "stl-heightmap" ||
          command == "solid-cad" || command == "solid-cad-section" || command == "cad-script" || command == "sketch-solve" || command == "assembly-solve" ||
-         command == "solid-cad-surface" ||
+         command == "solid-cad-surface" || command == "step-part" || command == "step-faces" ||
          command == "artwork-relief" || command == "artwork-raster" || command == "program-import" || command == "pdf-import" ||
          command == "bundle-import") &&
         argc == 3)
