@@ -793,8 +793,12 @@ static void rotary() {
     expect(given_refusal(R"({"mode":"router","lines":["G21","G90","G94","G1 X1 X2","M5"]})") == canonical, "a word given twice");
     expect(given_refusal(R"({"mode":"router","lines":["G21","M3 S100"]})") == "Rotary source must end with spindle off (M5)",
            "a program that leaves the spindle on");
-    expect(given_refusal("{\"mode\":\"router\",\"lines\":[\"G21\",\"G1 X1\xc2\xa0Y2\",\"M5\"]}") == "declined: G-code text that is not ASCII",
-           "text that is not ASCII is declined, not guessed");
+    // A rotary source is ASCII: the post copies its spindle and dwell lines into the program a controller runs.
+    expect(given_refusal("{\"mode\":\"router\",\"lines\":[\"G21\",\"G1 X1\xc2\xa0Y2\",\"M5\"]}") == "Rotary source G-code must be ASCII text",
+           "a space of another script in a rotary source");
+    expect(given_refusal("{\"mode\":\"router\",\"lines\":[\"G21\",\"G90\",\"G94\",\"M3 S\xd9\xa1\xd9\xa0\",\"M5\"]}") ==
+               "Rotary source G-code must be ASCII text",
+           "Arabic-Indic digits in a spindle line are not copied to the controller");
 }
 
 // Relief finishing and the stock preview (studio/relief.py, studio/simulation.py): small cases as the reference
@@ -922,6 +926,13 @@ static void fixture_checks() {
                "Jaw requires a positive size on every axis",
            "a box of no width is refused");
     expect(refusal(R"({"lines":[]})") == "Check a generated program with 1–250000 lines", "an empty program is refused");
+    // Lines that are not ASCII are read as Python's str methods and re read them.
+    expect(refusal("{\"lines\":[\"G21\",\"G90\",\"M3 \xc5\xbf" "1000\",\"G0 X1\"]}") == "(nothing thrown)",
+           "str.upper() makes a long s an S");
+    expect(refusal("{\"lines\":[\"G21\",\"G90\",\"G0 X1 \xc3\x9f\"]}") == "Cannot check line 3: unsupported or duplicate word SS",
+           "a word is named upper-cased, as the reference names it");
+    expect(refusal("{\"lines\":[\"G21\",\"G90\",\"\xef\xbc\xa7" "0 X1\"]}") == "Cannot check line 3: unsupported instruction \xef\xbc\xa7" "0",
+           "a fullwidth G is no G");
 }
 
 // STL height fields (studio/mesh_import.py): a ramp of two facets as the reference rasterises it, and refusals.
@@ -1265,7 +1276,23 @@ static void program_imports() {
     expect(refusal("part.plt", "IN;LB text;") == "Invalid plotter values at instruction 2", "label text is not a value");
     expect(refusal("part.plt", "IN;EA4,4;") == "Unsupported HP-GL instruction 2: EA. Export plain, unscaled pen paths.", "filled shapes are refused");
     expect(refusal("part.svg", "G1") == "Choose an ASCII DXF, G-code or HP-GL drawing", "an unknown suffix");
-    expect(refusal("part.nc", "G21 (\xc3\xa9)") == "declined", "program text that is not ASCII is Python's");
+    // Text that is not ASCII is read as Python's str methods and re read it.
+    const json script = read("part.nc", "G21\nG0 X0 Y0 (\xc3\x98 6 mm)\nG1 X\xd9\xa3 Y\xd9\xa4 F100");
+    expect(script.at("objects").at(0).at("paths").at(0) == json::parse("[[0.0, 0.0], [3.0, 4.0]]"),
+           "a comment that is not ASCII is left out, and Arabic-Indic digits are numbers, as \\d and float() read them");
+    expect(refusal("part.nc", "G21 (\xc3\xa9)").compare(0, 40, "File contains no supported drawing paths") == 0,
+           "a program of a comment that is not ASCII has no paths");
+    expect(refusal("part.nc", "G21\xe2\x80\xa8G0 X0 Y0\r\xe2\x80\xa8G1 X3 Y4 F100\nG1 X1 Q1") == "G-code line 5: unsupported or duplicate Q word",
+           "U+2028 ends a line, and after a carriage return it ends another");
+    expect(refusal("cutter.plt", "IN;SP1;PD400,0;\xc3\x84" "B1;") == "Unsupported HP-GL instruction 4: \xc3\x84" "B. Export plain, unscaled pen paths.",
+           "an HP-GL instruction is named in its own letters");
+    expect(refusal("cutter.plt", "IN;\xc3\x9fX;") == "Invalid plotter values at instruction 2", "str.upper() makes \xc3\x9f two letters");
+    expect(refusal("machine.ini", "#\xc4\xb0NCLUDE other.ini\n[TRAJ]\nLINEAR_UNITS=mm") ==
+               "Supply a self-contained LinuxCNC INI with resolved axis limits",
+           "re.I matches U+0130 in INCLUDE as it matches i");
+    const json german = read("machine.ini", "[TRAJ]\nLINEAR_UNITS = mm # f\xc3\xbcr\n[ax\xc4\xb1s_x]\nMIN_LIMIT = -\xd9\xa1\nMAX_LIMIT = 300\n"
+                                              "[AXIS_Y]\nMIN_LIMIT = 0\nMAX_LIMIT = 200");
+    expect(german.at("devices").at(0).at("width") == json(301.0), "a dotless i upper-cases to I, and Arabic-Indic digits are a limit");
     // A DXF drawing, by the core's own reader.
     std::string dxf;
     for (const char *pair : {"0", "SECTION", "2", "HEADER", "9", "$INSUNITS", "70", "4", "0", "ENDSEC", "0", "SECTION", "2", "TABLES", "0",

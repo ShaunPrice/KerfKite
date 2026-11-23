@@ -192,7 +192,8 @@ std::string joined(const std::vector<double> &values) {
     return out;
 }
 
-json hpgl(const std::string &text) {
+// shown: the upper-cased text of a drawing that is not ASCII, whose statements a message quotes.
+json hpgl(const std::string &text, const std::string *shown = nullptr) {
     Drawing drawing;
     drawing.mode = "knife";
     bool absolute = true, down = false;
@@ -275,7 +276,14 @@ json hpgl(const std::string &text) {
             add_distinct(entry->second, values[0]);
             if (entry->second.size() > 16) throw ValueError("Too many different settings for a single pen");
         } else {
-            throw ValueError("Unsupported HP-GL instruction " + std::to_string(idx) + ": " + op + ". Export plain, unscaled pen paths.");
+            std::string named = op;  // statement[:2]: its first two code points
+            if (shown) {
+                const std::string original = split(*shown, ';')[idx - 1];
+                const std::string statement = python_strip(original, code_points(original));
+                const std::vector<CodePoint> points = code_points(statement);
+                named = statement.substr(0, points.size() > 2 ? points[2].begin : statement.size());
+            }
+            throw ValueError("Unsupported HP-GL instruction " + std::to_string(idx) + ": " + named + ". Export plain, unscaled pen paths.");
         }
     }
     flush();
@@ -589,15 +597,39 @@ bool ini_number(const std::string &text) {
     return end == text.size();
 }
 
-json linuxcnc_ini(const std::string &text) {
+// re.match(r'^\s*#\s*INCLUDE\b', line, re.I) of a line that is not ASCII: with re.I, U+0130 and U+0131 match I as i
+// does, and \b looks at the next character as \w does.
+bool includes_unicode(const std::string &line) {
+    const std::vector<CodePoint> points = code_points(line);
+    size_t i = 0;
+    while (i < points.size() && python_space(points[i].code)) ++i;
+    if (i >= points.size() || points[i].code != '#') return false;
+    ++i;
+    while (i < points.size() && python_space(points[i].code)) ++i;
+    static const char word[] = "INCLUDE";
+    for (size_t k = 0; k < 7; ++k, ++i) {
+        if (i >= points.size()) return false;
+        const uint32_t c = points[i].code;
+        const uint32_t up = c >= 'a' && c <= 'z' ? c - 'a' + 'A' : c;
+        if (up != static_cast<uint32_t>(word[k]) && !(word[k] == 'I' && (c == 0x130 || c == 0x131))) return false;
+    }
+    return i >= points.size() || !python_word(points[i].code);
+}
+
+// original: the text of an INI that is not ASCII, for its include check; text is then its ASCII rendering after
+// str.upper().
+json linuxcnc_ini(const std::string &text, const std::string *original = nullptr) {
     std::map<std::string, std::set<std::string>> known = {{"TRAJ", {"LINEAR_UNITS", "COORDINATES"}}};
     for (const char axis : std::string("XYZ")) known[std::string("AXIS_") + axis] = {"MIN_LIMIT", "MAX_LIMIT", "MAX_VELOCITY", "MAX_ACCELERATION"};
     std::map<std::pair<std::string, std::string>, std::string> values;
     std::string section;
     const std::vector<std::string> lines = split_lines(text);
+    const std::vector<std::string> given = original ? python_splitlines(*original) : std::vector<std::string>();
+    if (original && given.size() != lines.size()) throw std::logic_error("The INI's lines were not read alike");
     for (size_t index = 1; index <= lines.size(); ++index) {
         const std::string &line = lines[index - 1];
-        if (includes(line)) throw ValueError("Supply a self-contained LinuxCNC INI with resolved axis limits");
+        if (original ? includes_unicode(given[index - 1]) : includes(line))
+            throw ValueError("Supply a self-contained LinuxCNC INI with resolved axis limits");
         const size_t cut = line.find_first_of(";#");
         const std::string entry = strip(cut == std::string::npos ? line : line.substr(0, cut));
         if (!entry.empty() && entry[0] == '[') {
@@ -704,10 +736,13 @@ json import_program(const json &payload) {
     const bool plotter = suffix == ".plt" || suffix == ".hpgl" || suffix == ".hpg";
     const bool program = suffix == ".gcode" || suffix == ".nc" || suffix == ".ngc" || suffix == ".cnc" || suffix == ".tap";
     if (suffix == ".dxf") return dxf_drawing(text, units.at(unit));
-    if ((suffix == ".ini" || plotter || program) && !ascii) throw NotPorted("drawing text that is not ASCII");
-    if (suffix == ".ini") return linuxcnc_ini(text);
-    if (plotter) return hpgl(text);
-    if (program) return gcode(text, units.at(unit));
+    // Text that is not ASCII is read in its ASCII rendering (python_text.hpp) after str.upper(), as the reference
+    // upper-cases each line, statement or entry before it reads it: the same lines, words and numbers. The
+    // upper-cased text names what a message quotes, and the INI's include check reads the text itself.
+    const std::string upper_text = ascii ? std::string() : python_upper(text);
+    if (suffix == ".ini") return ascii ? linuxcnc_ini(text) : linuxcnc_ini(python_ascii(upper_text, true), &text);
+    if (plotter) return ascii ? hpgl(text) : hpgl(python_ascii(upper_text, false), &upper_text);
+    if (program) return gcode(ascii ? text : python_ascii(upper_text, true), units.at(unit));
     throw ValueError("Choose an ASCII DXF, G-code or HP-GL drawing");
 }
 

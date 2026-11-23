@@ -22,6 +22,8 @@ Eight comparisons, all against values computed by Python in this run:
    drive on each kind of planar job, then for generated projects of all the kinds above with rotary setups
    that are sometimes refused (rotary_cases); and wrap_job for planar programs given as G-code, as generated
    or with lines added, removed or changed (rotary_wrap_cases). The suite's own calls are recorded as well.
+   A given program with text that is not ASCII is defined by the core: it refuses it, where the reference read
+   digits and spaces of other scripts and copied them into the program; such cases are counted apart.
 5. Reliefs and stock previews: studio.relief.prepare_relief for height fields given as numbers and as image
    bytes (relief_cases), compared with the Python reference given the core's limits, and studio.simulation's
    simulate for the segments of generated jobs (stock_cases). Where the contact ran (CPU or GPU) is left out.
@@ -29,14 +31,14 @@ Eight comparisons, all against values computed by Python in this run:
    the same and with different tools, valid and not (tool_change_cases). Each stage is a whole job, compared
    with the job the Python CAM generates for it.
 7. Fixture clearance: studio.fixture_collision.check_fixtures for generated programs, with lines added or changed,
-   swept against generated boxes (fixture_cases). Lines that are not ASCII are declined.
+   swept against generated boxes (fixture_cases), lines that are not ASCII among them.
 8. STL height fields: studio.mesh_import.stl_heightmap for binary and ASCII meshes, at every resolution, damaged
    in the ways the reader must refuse (stl_cases).
 9. Solids and CAD scripts: parametric solid histories and their sections (solid_cad_cases), and CAD scripts for
    the script preview (cad_script_cases), both through the compiled extension's kernel.
 10. Foreign drawings: studio.program_import's import_program for posted G-code, HP-GL plotter files and LinuxCNC
-   INI files, sound, damaged and refused, with every filename suffix and unit (program_import_cases). Program
-   text that is not ASCII is declined. DXF drawings, which the core reads with its own reader, are left out
+   INI files, sound, damaged and refused, with every filename suffix and unit, and text that is not ASCII
+   (program_import_cases). DXF drawings, which the core reads with its own reader, are left out
    here and compared to the tolerance by validation/dxf_import_check.py. And studio.pdf_import's import_pdf for
    PDF pages written as producers write them (pdf_import_cases): paths, fills and their rules, clipping, forms,
    graphics states, optional content, text and images, page trees, boxes, units and rotations, every filter,
@@ -1520,7 +1522,16 @@ def rotary_cases(count, seed):
 
 # Lines put into a planar program to test the rotary post's reading of given G-code: comments, duplicate and
 # lowercase words, blank and oversized lines, unusual numbers and separators, and commands it does not take.
+# The core's refusal of a rotary source that is not ASCII (native/core/src/rotary.cpp).
+NOT_ASCII_ROTARY = 'Rotary source G-code must be ASCII text'
+
 ODD_LINES = [
+    # Text that is not ASCII: the core refuses it in a rotary source, which the reference copied into the program.
+    'G1 X\u0661',
+    'M3 S\u0661\u0660\u0660\u0660',
+    'G4 P\u0665',
+    'G1\u00a0X1',
+    'M5\u00a0',
     '(comment)',
     'G1 X1 X2',
     'g1 x1',
@@ -1841,6 +1852,11 @@ def fixture_cases(count, seed, generate):
         'G0 X1e3', 'G0 x10', 'g1 x5 y5 f300', 'G0 X1.', 'G0 X.5', 'G0 X-', 'G1 X10 X11', 'G4', 'G4 P1', 'M3 S1000',
         'M6 T2', 'G0', 'G0 F100', 'G2 X1', '  G0   Y20  ', 'G0\tX3', 'G0 X2000000', 'G0 X+5', 'G0 X-0', 'M30', '', 7,
         'G0 X5\x1fY3', 'T1', 'G0 X1 Y2 Z3 F4', 'G0 X' + '9' * 300, 'G0 Z\u00b2',
+        # Read as the reference's str methods read them: other digits and spaces, letters str.upper() makes ASCII
+        # or longer, and lines counted in code points.
+        'G0 X\u0661\u0662', 'g0\u00a0x5', 'M3 \u017f1000', '\uff270 X1', 'G0 X1 \u00df', 'G0 X\u00e9',
+        'G0 X1 ' + '\u00e9' * 200, 'G0 X1 ' + '\u00e9' * 260, 'G1\u3000X5 F\u0665\u0660\u0660', '\u0131',
+        'G0 X\uff15', '\u2028', 'G0 Y\u0663\u2009',
     ]  # fmt: skip
     for _ in range(count):
         lines = list(rng.choice(programs))
@@ -2458,13 +2474,58 @@ def program_import_cases(count, seed):
     HP-GL with pens up and down, absolute and relative moves, arcs, circles, pen speeds and forces; LinuxCNC
     INI files with units, coordinates and axis limits; long runs of contours that are batched; every limit;
     each with words, values and statements made unsound at random, under every suffix and unit, and payloads
-    the request itself refuses. DXF drawings and text that is not ASCII are the core's to decline."""
+    the request itself refuses; and text that is not ASCII, which the core reads as Python's str methods do. DXF
+    drawings are the core's to decline."""
     rng = random.Random(seed)
     pick = rng.choice
     risk = [0.0]
 
     def opt(good, bad=()):
         return pick(bad) if bad and rng.random() < risk[0] else pick(good)
+
+    def outside_ascii(text):
+        """The text with characters outside ASCII, which a reader takes as Python's str methods and re do:
+        digits of other scripts, other spaces and line boundaries, letters str.upper() makes ASCII or longer,
+        and comments."""
+        chars = list(text)
+        for _ in range(rng.randint(1, 4)):
+            roll, at = rng.random(), rng.randrange(len(chars) + 1)
+            digits = [k for k, c in enumerate(chars) if '0' <= c <= '9']
+            spaces = [k for k, c in enumerate(chars) if c == ' ']
+            if roll < 0.25 and digits:
+                k = pick(digits)
+                chars[k] = chr(pick([0x660, 0x6F0, 0x966, 0xFF10, 0x1D7CE]) + int(chars[k]))
+            elif roll < 0.45 and spaces:
+                chars[pick(spaces)] = pick(['\u00a0', '\u3000', '\u2009', '\u1680'])
+            elif roll < 0.6:
+                chars.insert(at, pick(['\u017f', '\u0131', '\u00df', '\ufb01', '\u00e9', '\u00c4', '\u01f0',
+                                       '\u0149', '\u0390', '\u00b2', '\u216b', '\u0130']))  # fmt: skip
+            elif roll < 0.75:
+                chars.insert(at, pick(['\u2028', '\u2029', '\x85', '\r\u2028', '\x0b']))
+            else:
+                chars.insert(at, pick(['(Ø 6 mm °)', '; café', ' (Fräser)', '\ufeff', '# für']))
+        return ''.join(chars)
+
+    # Drawings that are not ASCII, each read once.
+    yield from [
+        {'name': 'part.nc', 'text': 'G21\nG0 X0 Y0 (Ø 6 mm)\nG1 X\u0663 Y\u0664 F100\n'},
+        {'name': 'part.nc', 'text': 'G21\u2028G0 X0 Y0\r\u2028G1 X3\u00a0Y4 F100\nG1 X5 Y5 Q1'},
+        {'name': 'part.nc', 'text': 'g21\ng0 x0 y0\ng1 x3 y4 \u017f1000 f100'},
+        {'name': 'part.nc', 'text': 'G21\nG0 X0 Y0\nG1 X3 Y4 F100 \u00e9'},
+        {'name': 'part.plt', 'text': 'IN;SP1;PU0,0;PD\u0664\u0660\u0660,0;\u00c4B1;'},
+        {'name': 'part.plt', 'text': 'in;sp1;pu0,0;pd400\u3000400;\u00dfx;'},
+        {'name': 'part.plt', 'text': 'IN;SP1;PD400,0,400,400;\ufb01;'},
+        {'name': 'part.plt', 'text': 'IN;SP1;PD400,0,400,400;\u0390;'},
+        {'name': 'machine.ini', 'text': '[TRAJ]\nLINEAR_UNITS = mm  # Millimeter für die Maschine\n[AXIS_X]\n'
+         'MIN_LIMIT = -\u0661\nMAX_LIMIT = 300\n[AXIS_Y]\nMIN_LIMIT = 0\nMAX_LIMIT = 200\n'},
+        {'name': 'machine.ini', 'text': '[TRAJ]\nLINEAR_UNITS=mm\n[ax\u0131s_x]\nMIN_LIMIT=0\nMAX_LIMIT=300\n'
+         '[AXIS_Y]\nMIN_LIMIT=0\nMAX_LIMIT=200'},
+        {'name': 'machine.ini', 'text': '#\u0130NCLUDE other.ini\n[TRAJ]\nLINEAR_UNITS=mm'},
+        {'name': 'machine.ini', 'text': '# include\u00e9\n[TRAJ]\nLINEAR_UNITS=mm\n[AXIS_X]\nMIN_LIMIT=0\n'
+         'MAX_LIMIT=300\n[AXIS_Y]\nMIN_LIMIT=0\nMAX_LIMIT=200'},
+        {'name': 'machine.ini', 'text': '\u3000#\u00a0\u0131nclude x\n[TRAJ]\nLINEAR_UNITS=mm'},
+        {'name': 'machine.ini', 'text': '# include\u00b7x\n[TRAJ]\nLINEAR_UNITS=mm'},
+    ]  # fmt: skip
 
     def value(low, high, digits=3):
         roll = rng.random()
@@ -2687,6 +2748,8 @@ def program_import_cases(count, seed):
             ])  # fmt: skip
         if rng.random() < 0.03 and isinstance(payload, dict) and isinstance(payload.get('text'), str):
             payload['text'] = pick(['\ufeff', '\ufeff\ufeff', '']) + payload['text'] + pick(['', ' é', '\u2028G1 X1'])
+        elif rng.random() < 0.15 and isinstance(payload, dict) and isinstance(payload.get('text'), str):
+            payload['text'] = outside_ascii(payload['text'])
         yield payload
 
 
@@ -3460,6 +3523,10 @@ def main():
                 elif 'declined' in got:
                     tally[origin, 'declined'] += 1
                     declined[got['declined']] += 1
+                elif got.get('error') == NOT_ASCII_ROTARY and not json.dumps(subject, ensure_ascii=False).isascii():
+                    # Defined by the core: a rotary source is ASCII. The reference read digits and spaces of
+                    # other scripts there and copied them into the program a controller runs.
+                    tally[origin, 'defined'] += 1
                 elif 'raises' in expect:
                     # The reference stopped with something other than a rejection; there is no behaviour to match.
                     tally[origin, 'reference raised ' + expect['raises']] += 1
@@ -3512,6 +3579,7 @@ def main():
         print(
             f'{origin:12s} {total:5d} cases: {tally[origin, "program"]} programs and {tally[origin, "rejection"]} rejections'
             f' reproduced ({same * 100 / total:.1f}%), {tally[origin, "declined"]} declined as not ported'
+            + (f', {tally[origin, "defined"]} defined by the core' if tally[origin, 'defined'] else '')
             + (f', {tally[origin, "left out"]} with polygon operations NOT COMPARED' if not shared else '')
         )
     if declined:

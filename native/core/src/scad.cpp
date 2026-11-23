@@ -44,7 +44,6 @@
 #include "py_trig.hpp"
 #include "python_text.hpp"
 #include "simple_line.hpp"
-#include "unicode_tables.hpp"
 
 namespace kerfkite {
 namespace scad {
@@ -81,13 +80,9 @@ std::string quoted(const std::string &text) { return "'" + text + "'"; }  // rep
 // ---- characters ---------------------------------------------------------------------------------------
 
 bool decimal_digit(uint32_t c, int *value = nullptr) {
-    const uint32_t *runs = detail::kDecimalDigitRuns;
-    const size_t count = sizeof(detail::kDecimalDigitRuns) / sizeof(detail::kDecimalDigitRuns[0]);
-    const uint32_t *after = std::upper_bound(runs, runs + count, c);
-    if (after == runs) return false;
-    const uint32_t start = *(after - 1);
-    if (c - start >= 10) return false;
-    if (value) *value = static_cast<int>(c - start);
+    const int digit = detail::python_decimal(c);
+    if (digit < 0) return false;
+    if (value) *value = digit;
     return true;
 }
 

@@ -49,8 +49,48 @@ inline std::string python_strip(const std::string &text, const std::vector<CodeP
     return text.substr(points[first].begin, points[last - 1].end - points[first].begin);
 }
 
+// text.split(): the runs of code points between whitespace.
+inline std::vector<std::string> python_split(const std::string &text) {
+    std::vector<std::string> words;
+    const std::vector<CodePoint> points = code_points(text);
+    for (size_t i = 0; i < points.size();) {
+        while (i < points.size() && python_space(points[i].code)) ++i;
+        const size_t first = i;
+        while (i < points.size() && !python_space(points[i].code)) ++i;
+        if (i > first) words.push_back(text.substr(points[first].begin, points[i - 1].end - points[first].begin));
+    }
+    return words;
+}
+
 // str.isprintable() of one code point, from the Unicode tables of python_text.cpp.
 bool python_printable(uint32_t c);
+
+// The value of a decimal digit (general category Nd, what \d matches and float() reads), or -1.
+int python_decimal(uint32_t c);
+
+// Whether the pattern \w matches one code point: str.isalnum(), or the underscore.
+bool python_word(uint32_t c);
+
+// The one to three code points str.upper() makes of one, added to out.
+void python_upper(uint32_t c, std::vector<uint32_t> &out);
+
+// str.upper() of text.
+std::string python_upper(const std::string &text);
+
+// A line boundary of str.splitlines(); "\r\n" is one.
+inline bool python_line_break(uint32_t c) {
+    return (c >= 0x0a && c <= 0x0d) || (c >= 0x1c && c <= 0x1e) || c == 0x85 || c == 0x2028 || c == 0x2029;
+}
+
+// str.splitlines() of text.
+std::vector<std::string> python_splitlines(const std::string &text);
+
+// Text that is not ASCII, in ASCII for a reader of ASCII text written after Python's str methods and re module:
+// whitespace becomes a space and a decimal digit its ASCII digit, as \s, \d, strip(), split() and float() take
+// them; any other character becomes \x01, which none of those matches and no reader's grammar holds. With lines,
+// a line boundary becomes \x0b, one boundary for splitlines() that pairs with no other; without, a space. Each
+// code point becomes one byte, so a byte's place is its code point's.
+std::string python_ascii(const std::string &text, bool lines);
 
 // bytes.decode('utf-8') in strict mode: the code points, or false where Python raises UnicodeDecodeError (a
 // sequence that is not well-formed UTF-8 in Unicode's table 3-7).

@@ -5,6 +5,7 @@ Notable changes to KerfKite Studio and KerfKite Pocket. Versions before this fil
 ## Unreleased
 
 ### Changed
+- The native core reads text that is not ASCII in foreign drawings and fixture checks, which it declined to the Python before: posted G-code, HP-GL and LinuxCNC INI files with comments in other languages, other spaces and line boundaries, and digits of other scripts are read as Python's `str` methods and `re` read them, and the messages name what they quote as the Python did. `validation/native_core_parity.py` now puts such text in its drawings and programs and reproduced all 18,625 drawings and 8,000 checks. A rotary source that is not ASCII is refused (**Rotary source G-code must be ASCII text**): the Python read digits and spaces of other scripts there and copied them into the program a controller runs.
 - The Linux desktop window is a C program on GTK 3 (`packaging/desktop/linux/`) in place of the Python GTK script, so the Debian package no longer depends on Python or its GTK bindings. It finds WebKitGTK 4.1, or else 4.0, when it starts; `kerfkite-native --check` reports which. Menus, toolbar, inspector, file dialogs, downloads and the help and print windows behave as before. Its smoke test (`kerfkite-native-smoke`, built from the same sources) drives the window against the C++ workstation server under a virtual display in CI.
 
 ### Added

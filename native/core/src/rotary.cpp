@@ -7,6 +7,7 @@
 // library's asinh as CPython calls it, and libm pow for squares, as the reference does.
 #include "kerfkite/rotary.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <cstdint>
@@ -169,10 +170,17 @@ double word_value(std::string_view number) {
 }
 
 // _blocks(): each line split into tokens and checked as the reference checks a line of text.
+// G-code the rotary post takes is ASCII: it copies spindle and dwell lines into the program a controller runs.
+// (The Python reference read digits and spaces of any script there, and copied them.)
+const char *const kNotAscii = "Rotary source G-code must be ASCII text";
+
+bool ascii_text(const std::string &text) {
+    return std::all_of(text.begin(), text.end(), [](char c) { return static_cast<unsigned char>(c) < 0x80; });
+}
+
 void parse(const std::string &item, Block &block) {
+    if (!ascii_text(item)) throw ValueError(kNotAscii);
     if (item.size() > 256) throw ValueError("Invalid or oversized source G-code line");
-    for (const unsigned char c : item)
-        if (c >= 0x80) throw NotPorted("G-code text that is not ASCII");
     size_t begin = 0, end = item.size();
     while (begin < end && space(item[begin])) ++begin;
     while (end > begin && space(item[end - 1])) --end;
@@ -295,16 +303,14 @@ Wrapped wrap(const Source &job, const json &options, bool generated) {
     }
     if (!generated)
         for (const std::string *line : source) {
-            for (const unsigned char c : *line)
-                if (c >= 0x80) throw NotPorted("G-code text that is not ASCII");
+            if (!ascii_text(*line)) throw ValueError(kNotAscii);
             if (line->size() > 256) throw ValueError("Invalid or oversized source G-code line");
         }
     if (*source.back() == "M30") source.pop_back();
     if (source.empty()) throw ValueError("Rotary source must end with spindle off (M5)");
     {
         const std::string &last = *source.back();
-        for (const unsigned char c : last)
-            if (c >= 0x80) throw NotPorted("G-code text that is not ASCII");
+        if (!ascii_text(last)) throw ValueError(kNotAscii);
         size_t begin = 0, end = last.size();
         while (begin < end && space(last[begin])) ++begin;
         while (end > begin && space(last[end - 1])) --end;
