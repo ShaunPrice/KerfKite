@@ -199,8 +199,8 @@ Job entry_job(const json &project, const std::vector<Contour> &source, const std
                 }
                 move(path[0][0], path[0][1], bottom, false, feed);
             } else {
-                // The reference divides by these; a zero would stop it with an error that is not a rejection.
-                if (!(slope * perimeter > 0)) throw NotPorted("ramps along contours of no length");
+                // The reference divided by these, and stopped with a ZeroDivisionError for a contour of no length.
+                if (!(slope * perimeter > 0)) throw ValueError("Ramp entries need contours of measurable length");
                 const double turns = py_max(1, std::ceil(drop / (slope * perimeter)));
                 if (!(turns <= 200000) || line_count + static_cast<size_t>(turns) * (path.size() - 1) > 200000)
                     throw ValueError("Contour ramp exceeds the path segment limit");

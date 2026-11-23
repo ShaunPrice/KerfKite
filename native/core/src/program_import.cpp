@@ -7,8 +7,8 @@
 // long runs of contours, every message, and the warnings and presets with Python's '{:g}' format.
 //
 // DXF drawings go to the core's own reader (dxf.cpp), whose outlines agree with the reference's to the
-// tolerance. Declined (NotPorted), for the Python to answer: program text that is not ASCII, which the
-// reference upper-cases and splits by Unicode's rules.
+// tolerance. Text that is not ASCII is read in its ASCII rendering after str.upper() (python_text.hpp), with
+// the reference's Unicode rules for lines, case, spaces and digits.
 #include "kerfkite/program_import.hpp"
 #include "kerfkite/pdf_import.hpp"
 #include "kerfkite/bundle_import.hpp"
@@ -438,7 +438,8 @@ json gcode(const std::string &text, double default_scale) {
         const auto has = [&](char key) { return args.count(key) != 0; };
         if (has('F')) {
             double feed = 0;
-            if (!text::rounded(args['F'] * scale, 5, feed)) throw NotPorted("a feed beyond the exact range of round()");
+            // A word is at most 1e7, so a feed of 2.54e8 mm/min at most, well inside the exact range of round().
+            if (!text::rounded(args['F'] * scale, 5, feed)) throw std::logic_error("A feed beyond the exact range of round()");
             add_distinct(feeds, feed);
         }
         if (has('S')) add_distinct(speeds, args['S']);
@@ -703,9 +704,17 @@ std::string suffix_of(const std::string &name) {
 #if defined(_WIN32)
     for (char &c : path)
         if (c == '\\') c = '/';
-    // A UNC or device path's anchor (\\server\share, \\?\...) is no part of the name: Python's to parse.
-    if (path.compare(0, 2, "//") == 0) throw NotPorted("a UNC or device drawing filename");
-    if (path.size() >= 2 && path[1] == ':' && ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z'))) path = path.substr(2);
+    // A UNC or device path's anchor (\\server\share, \\?\C:) is no part of the name: its first two components.
+    if (path.compare(0, 2, "//") == 0) {
+        size_t at = 2;
+        for (int part = 0; part < 2 && at != std::string::npos; ++part) {
+            const size_t slash = path.find('/', at);
+            at = slash == std::string::npos ? std::string::npos : slash + 1;
+        }
+        path = at == std::string::npos ? std::string() : path.substr(at);
+    } else if (path.size() >= 2 && path[1] == ':' && ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z'))) {
+        path = path.substr(2);
+    }
 #endif
     std::string last;
     for (const std::string &part : split(path, '/'))

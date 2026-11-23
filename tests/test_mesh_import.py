@@ -4,6 +4,7 @@ import math
 import os
 import random
 import struct
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -160,12 +161,12 @@ class NativeMeshImportTests(unittest.TestCase):
             with self.subTest(data=data):
                 self.assertEqual(answer(data, 'native'), answer(data, 'python'))
 
-    def test_padding_after_whole_groups_goes_to_the_reference(self):
-        # Python 3.12.3 reads "AAAA=" as three bytes and 3.13 refuses it: the core declines, so the Python in use answers.
+    def test_padding_after_whole_groups_is_refused(self):
+        # Python 3.12.3 read "AAAA=" as three bytes; 3.12.10 and 3.13 refuse it, and so does the core.
         data = {'content_base64': 'AAAA=', 'resolution': 8}
-        with self.assertRaises(NotImplementedError):
-            stl_heightmap(data, backend='native')
-        self.assertEqual(answer(data, 'auto'), answer(data, 'python'))
+        self.assertEqual(answer(data, 'native')[0], 'error')
+        if sys.version_info >= (3, 12, 10):
+            self.assertEqual(answer(data, 'native'), answer(data, 'python'))
 
     def test_the_work_limit_matches_the_reference(self):
         wide = [[(0, 0, 0), (100, 0, 1), (100, 100, 2)]] * 130

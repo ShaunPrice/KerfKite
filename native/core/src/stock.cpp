@@ -18,6 +18,7 @@
 #include "kerfkite/parallel.hpp"
 #include "kerfkite/py_math.hpp"
 #include "project.hpp"
+#include "python_text.hpp"
 
 namespace kerfkite {
 
@@ -45,15 +46,14 @@ double value(const json &data, const char *key, double fallback, double lo, doub
 }
 
 // float(value) for one value of a preview row: a number, a bool, or numeric text. Anything else raises TypeError
-// in the reference, which simulate reports as below; text that float() cannot read raises a message quoting it,
-// which is declined.
+// in the reference, which simulate reports as below; text that float() cannot read raises float()'s own message.
 double row_value(const json &item) {
     double result = 0;
     if (item.is_boolean()) return item.get<bool>() ? 1.0 : 0.0;
     if (plain_number(item, result)) return result;
     if (item.is_string()) {
         if (float_from_text(item.get_ref<const std::string &>(), result)) return result;
-        throw NotPorted("preview rows with text that is not a number");
+        throw ValueError("could not convert string to float: " + python_repr(item.get_ref<const std::string &>()));
     }
     throw ValueError("Stock geometry and dimensions must be numeric");
 }

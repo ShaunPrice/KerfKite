@@ -491,7 +491,8 @@ Wrapped wrap(const Source &job, const json &options, bool generated) {
     if (job.warnings) {
         for (const std::string &warning : *job.warnings) result.warnings.push_back(warning);
     } else if (job.given_warnings) {
-        if (!job.given_warnings->is_array()) throw NotPorted("rotary job warnings that are not a list");
+        // The reference took list() of anything iterable here: the letters of text, the names of an object.
+        if (!job.given_warnings->is_array()) throw ValueError("A rotary job's warnings must be a list");
         for (const json &warning : *job.given_warnings) result.warnings.push_back(warning);
     }
     result.warnings.push_back(drive + " rotates about " + along_word +

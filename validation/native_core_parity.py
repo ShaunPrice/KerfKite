@@ -2444,7 +2444,7 @@ def stl_cases(count, seed):
         raw = ascii_stl(triangles) if rng.random() < 0.5 else binary_stl(triangles)
         data = {'content_base64': base64.b64encode(raw).decode(), 'resolution': rng.choice([2, 3, 8, 16, 33, 64, 128])}
         if len(raw) % 3 == 0 and rng.random() < 0.03:
-            data['content_base64'] += '='  # read by some Python releases, refused by others: declined
+            data['content_base64'] += '='  # refused, as Python 3.12.10 and later refuse it
         roll = rng.random()
         if roll < 0.03:
             data['resolution'] = rng.choice([1, 129, 64.0, True, None, '64'])

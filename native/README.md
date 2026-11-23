@@ -232,10 +232,10 @@ the part that touches and where, or refuses the first line it cannot read.
 
 Every operation of a job (lines, drilling, knife paths, offsets, pockets, fills, V-carving, entries and
 tabs) is now ported, so no job is declined for its operation. A request the core cannot fully reproduce is
-still declined, never approximated: a number written in non-ASCII digits or beyond the range of a double; a
-contour whose self-crossing test turns on rounding inside GEOS, or needs more work than the core allows;
-and a few degenerate contours under tabs and ramps (a segment of no length, a tab that starts before the
-seam). The core never writes a program for a case it does not reproduce.
+still declined, never approximated: a number beyond the range of a double, and a contour whose self-crossing
+test turns on rounding inside GEOS or needs more work than the core allows. (Digits of other scripts are read
+as Python's float() reads them, a ramp along a contour of no length is refused, and the degenerate tab states
+the checks rule out are internal errors.) The core never writes a program for a case it does not reproduce.
 
 ## Solid kernel
 

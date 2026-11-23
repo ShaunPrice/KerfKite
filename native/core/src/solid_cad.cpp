@@ -991,7 +991,8 @@ std::vector<P2> profile_outline(const json &feature, Dimensions &dimensions, con
     if (outline.size() > 1 && distance(outline.front(), outline.back()) <= 1e-10) outline.pop_back();
     // Shapely's Polygon(outline): a ring needs four coordinates with its closing one; is_valid is the closed
     // line's is_simple for a ring of distinct vertices, and the area is GEOS's.
-    if (outline.size() < 3) throw NotPorted("a sketch outline of fewer than three points");
+    // Shapely refused a ring of fewer than three points with its own message; such a sketch encloses nothing.
+    if (outline.size() < 3) throw ValueError("Sketch must enclose an area without crossing itself");
     Contour ring(outline.begin(), outline.end());
     ring.push_back(outline.front());
     const bool valid = line_is_simple(ring);

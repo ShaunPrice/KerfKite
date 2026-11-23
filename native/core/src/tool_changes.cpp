@@ -237,14 +237,14 @@ Json plan_tool_changes(const Json &project) {
         const Job job = generate(stage_project);
         total += job.lines.size();
         if (total > 200000) throw ValueError("Tool-change plan exceeds 200000 total lines");
-        // ending = lines[:-1] if lines[-1] == 'M30' else lines; then ending[-1] and ending[-2]. Where the
-        // reference would index past the start it raises IndexError, which is not a refusal: declined.
-        if (job.lines.empty()) throw NotPorted("a tool-change stage with no program");
-        const size_t ending = job.lines.back() == "M30" ? job.lines.size() - 1 : job.lines.size();
-        if (ending == 0) throw NotPorted("a tool-change stage with no program");
+        // ending = lines[:-1] if lines[-1] == 'M30' else lines; then ending[-1] and ending[-2]. A stage too
+        // short for those does not end retracted either (the reference stopped there with an IndexError).
         const char *unsafe = "Generated stage does not end retracted with spindle off";
+        if (job.lines.empty()) throw ValueError(unsafe);
+        const size_t ending = job.lines.back() == "M30" ? job.lines.size() - 1 : job.lines.size();
+        if (ending == 0) throw ValueError(unsafe);
         if (job.lines[ending - 1] != "M5") throw ValueError(unsafe);
-        if (ending < 2) throw NotPorted("a tool-change stage of one program line");
+        if (ending < 2) throw ValueError(unsafe);
         if (job.lines[ending - 2].rfind("G0 Z", 0) != 0) throw ValueError(unsafe);
         json stage = to_json(job);
         stage["stage"] = static_cast<int64_t>(index + 1);

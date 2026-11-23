@@ -3,6 +3,7 @@
 import base64
 import json
 import random
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -132,14 +133,16 @@ class NativeReliefTests(unittest.TestCase):
             with self.subTest(name):
                 self.assertEqual(self.both(data)[0], 'error')
 
-    def test_padding_after_whole_groups_goes_to_the_reference(self):
-        # Some Python releases read "...=" after whole groups (3.11.18, 3.12.3) and others refuse it (3.12.10, 3.13):
-        # the core declines, so the Python in use answers. (Within the length the image allows; longer text is refused before it is read.)
+    def test_padding_after_whole_groups_is_refused(self):
+        # Some Python releases read "...=" after whole groups (3.11.18, 3.12.3); 3.12.10 and 3.13 refuse it, and so
+        # does the core. (Within the length the image allows; longer text is refused before it is read.)
         raw = base64.b64encode(bytes(range(6))).decode()
         data = dict(sample(heightmap=None), heightmap_rgb=raw + '==', heightmap_size=[2, 2])
         del data['heightmap']
-        with self.assertRaises(NotImplementedError):
+        with self.assertRaises(ValueError):
             relief.prepare_relief(data, backend='native')
+        if sys.version_info < (3, 12, 10):
+            return
         try:
             expected = (
                 'ok',
