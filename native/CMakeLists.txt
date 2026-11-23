@@ -62,7 +62,7 @@ set(KERFKITE_SERVER_SOURCES server/child_process.cpp server/design_extra.cpp ser
   server/key_order.cpp server/machine.cpp server/machine_routes.cpp server/machine_setup.cpp server/os_crypto.cpp server/os_random.cpp
   server/phone_jobs.cpp server/phone_monitor.cpp server/protocols.cpp server/serial_port.cpp server/sqlite_reader.cpp
   server/static_files.cpp server/step_exchange.cpp server/studio.cpp server/web_app.cpp server/web_store.cpp server/web_transfer.cpp
-  server/mcp.cpp server/mcp_tools.cpp)
+  server/browser.cpp server/mcp.cpp server/mcp_tools.cpp server/workshop.cpp)
 add_library(kerfkite_server STATIC ${KERFKITE_SERVER_SOURCES})
 target_include_directories(kerfkite_server PUBLIC server PRIVATE core/src ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(kerfkite_server PUBLIC kerfkite_core)

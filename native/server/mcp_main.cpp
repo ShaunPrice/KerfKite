@@ -19,6 +19,7 @@
 #include "mcp.hpp"
 #include "mcp_tools.hpp"
 #include "static_files.hpp"
+#include "workshop.hpp"
 
 namespace {
 
@@ -52,7 +53,7 @@ int main(int argc, char **argv) {
 #ifndef _WIN32
     std::signal(SIGPIPE, SIG_IGN);
 #endif
-    std::string output = (std::filesystem::current_path() / "artifacts").u8string(), transport = "stdio", static_dir, templates, step, relay;
+    std::string output = (std::filesystem::current_path() / "artifacts").u8string(), transport = "stdio", static_dir, templates, step, relay, chromium;
     int port = 8775;
     bool show = false;
     for (int i = 1; i < argc; ++i) {
@@ -71,6 +72,7 @@ int main(int argc, char **argv) {
         else if (arg == "--templates") templates = value();
         else if (arg == "--step") step = value();
         else if (arg == "--tls-relay") relay = value();
+        else if (arg == "--chromium") chromium = value();
         else if (arg == "-h" || arg == "--help") {
             std::printf("usage: kerfkite-mcp [-h] [--output-dir OUTPUT_DIR] [--transport {stdio,http}] [--port PORT] [--show-workshop]\n");
             return 0;
@@ -79,7 +81,6 @@ int main(int argc, char **argv) {
         }
     }
     (void)port;
-    (void)show;
     if (step.empty()) step = beside(argv[0], "kerfkite-step");
     if (relay.empty()) relay = beside(argv[0], "kerfkite-pendant-tls");
     try {
@@ -87,7 +88,15 @@ int main(int argc, char **argv) {
         Artifacts artifacts(output);
         const bool remote = transport == "http";
         mcp::Server server("KerfKite Studio", KERFKITE_VERSION, kInstructions);
-        add_design_tools(server, artifacts, step);
+        // In the order Studio's Python server registered them, as clients list them.
+        const auto design_call = add_design_tools(server, artifacts, step);
+        WorkshopOptions options;
+        options.static_dir = static_dir;
+        options.step_program = step;
+        options.chromium = chromium;
+        options.show = show;
+        Workshop workshop(artifacts, options);
+        add_workshop_tools(server, workshop, design_call);
         add_artifact_tools(server, artifacts);
         add_artwork_tools(server, artifacts, find_catalog(templates, static_dir), remote);
         if (transport == "stdio") {

@@ -20,6 +20,7 @@
 using socklen_t = int;
 #else
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <poll.h>
@@ -287,6 +288,9 @@ Server::Server(const std::string &host, int port) : connections_(std::make_share
     winsock();
     const Socket s = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (s == kNoSocket) throw std::runtime_error("Cannot create a listening socket");
+#ifndef _WIN32
+    ::fcntl(s, F_SETFD, FD_CLOEXEC);  // programs the server starts (the relay, the STEP add-on, a browser) do not hold it
+#endif
     int yes = 1;
 #ifdef _WIN32
     setsockopt(s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char *>(&yes), sizeof yes);
@@ -377,6 +381,9 @@ void Server::serve(const Handler &handler, const Limit &limit, int connections, 
             std::this_thread::sleep_for(std::chrono::milliseconds(20));  // out of descriptors, say: no busy loop
             continue;
         }
+#ifndef _WIN32
+        ::fcntl(client, F_SETFD, FD_CLOEXEC);
+#endif
         {
             std::lock_guard<std::mutex> hold(state->lock);
             if (state->stopping || state->running >= connections) {

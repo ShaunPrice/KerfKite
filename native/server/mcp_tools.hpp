@@ -37,8 +37,9 @@ mcp::Tool declared(const std::string &name, std::function<mcp::Result(const Json
 // on this computer (the HTTP transport).
 void add_artwork_tools(mcp::Server &server, const Artifacts &artifacts, const std::string &catalog, bool remote);
 
-// design_actions and design_call: Studio's design routes, called in this process.
-void add_design_tools(mcp::Server &server, const Artifacts &artifacts, const std::string &step_program);
+// design_actions and design_call: Studio's design routes, called in this process. The answer is design_call's own
+// function, for the workshop's solid export.
+std::function<Json(const std::string &, const Json &)> add_design_tools(mcp::Server &server, const Artifacts &artifacts, const std::string &step_program);
 
 // workshop_upload and workshop_read_file.
 void add_artifact_tools(mcp::Server &server, const Artifacts &artifacts);

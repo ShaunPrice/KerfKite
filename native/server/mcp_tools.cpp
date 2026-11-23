@@ -595,28 +595,13 @@ std::string folded(const std::string &text) { return ascii_lower(text); }
 
 }  // namespace
 
-void add_design_tools(mcp::Server &server, const Artifacts &artifacts, const std::string &step_program) {
+std::function<Json(const std::string &, const Json &)> add_design_tools(mcp::Server &server, const Artifacts &artifacts, const std::string &step_program) {
     auto design = std::make_shared<DesignRoutes>(step_program);
     const Artifacts *store = &artifacts;
-    server.add(declared("design_actions", [design](const Json &a, mcp::Exchange &) {
-        const std::string query = folded(a.at("query").get<std::string>());
-        Json out = Json::array();
-        for (const auto &route : design->routes) {
-            const auto field = kFields.find(route.first);
-            const std::string inputs = field == kFields.end() ? "Studio JSON payload" : field->second;
-            if (folded(route.first + " " + inputs).find(query) == std::string::npos) continue;
-            Json item = Json::object();
-            item["action"] = route.first;
-            item["method"] = route.second.first;
-            item["inputs"] = inputs;
-            out.push_back(item);
-        }
-        return value(out);
-    }));
-    server.add(declared("design_call", [design, store](const Json &a, mcp::Exchange &) {
-        const auto found = design->routes.find(a.at("action").get<std::string>());
+    // design_call(action, payload): small JSON inline, anything larger or binary as an artifact.
+    auto call = [design, store](const std::string &action, const Json &given) -> Json {
+        const auto found = design->routes.find(action);
         if (found == design->routes.end()) throw ValueError("Unknown action. Use design_actions to list supported names.");
-        const Json &given = a.at("payload");
         const Json payload = given.is_null() || (given.is_object() && given.empty()) ? Json::object() : given;
         const std::string body = payload.dump();
         if (body.size() > kLimit) throw ValueError("Payload exceeds 8 MiB.");
@@ -636,7 +621,7 @@ void add_design_tools(mcp::Server &server, const Artifacts &artifacts, const std
         if (response.status != 200) throw ValueError("This design operation returned HTTP " + std::to_string(response.status));
         std::string type, disposition;
         for (const auto &h : response.headers) {
-            std::string name = ascii_lower(h.first);
+            const std::string name = ascii_lower(h.first);
             if (name == "content-type") type = h.second;
             if (name == "content-disposition") disposition = h.second;
         }
@@ -645,7 +630,7 @@ void add_design_tools(mcp::Server &server, const Artifacts &artifacts, const std
         if (json && response.body.size() <= 24576) {
             Json out = Json::object();
             out["result"] = Json::parse(response.body);
-            return value(out);
+            return out;
         }
         std::string filename;
         const size_t at = disposition.rfind("filename=");
@@ -655,8 +640,25 @@ void add_design_tools(mcp::Server &server, const Artifacts &artifacts, const std
             while (!filename.empty() && filename.back() == '"') filename.pop_back();
         }
         if (filename.empty()) filename = json ? "result.json" : media == "model/stl" ? "part.stl" : "result.bin";
-        return value(store->create_file(filename, response.body));
+        return store->create_file(filename, response.body);
+    };
+    server.add(declared("design_actions", [design](const Json &a, mcp::Exchange &) {
+        const std::string query = folded(a.at("query").get<std::string>());
+        Json out = Json::array();
+        for (const auto &route : design->routes) {
+            const auto field = kFields.find(route.first);
+            const std::string inputs = field == kFields.end() ? "Studio JSON payload" : field->second;
+            if (folded(route.first + " " + inputs).find(query) == std::string::npos) continue;
+            Json item = Json::object();
+            item["action"] = route.first;
+            item["method"] = route.second.first;
+            item["inputs"] = inputs;
+            out.push_back(item);
+        }
+        return value(out);
     }));
+    server.add(declared("design_call", [call](const Json &a, mcp::Exchange &) { return value(call(a.at("action").get<std::string>(), a.at("payload"))); }));
+    return call;
 }
 
 void add_artifact_tools(mcp::Server &server, const Artifacts &artifacts) {
