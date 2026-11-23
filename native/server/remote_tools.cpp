@@ -21,9 +21,11 @@
 #endif
 
 #include "child_process.hpp"
+#include "ip_address.hpp"
 #include "kerfkite/errors.hpp"
 #include "os_crypto.hpp"
 #include "os_random.hpp"
+#include "python_text.hpp"
 #include "studio.hpp"
 #include "web_store.hpp"
 #include "web_transfer.hpp"
@@ -127,14 +129,7 @@ bool is_utf8(const std::string &text) { return utf8_error(text).empty(); }
 // The code points of UTF-8 text.
 std::vector<unsigned> code_points(const std::string &text) {
     std::vector<unsigned> out;
-    for (size_t i = 0; i < text.size();) {
-        const unsigned char c = static_cast<unsigned char>(text[i]);
-        const size_t n = c < 0x80 ? 1 : c < 0xe0 ? 2 : c < 0xf0 ? 3 : 4;
-        unsigned code = n == 1 ? c : c & (0x3fu >> (n - 1));
-        for (size_t k = 1; k < n && i + k < text.size(); ++k) code = (code << 6) | (static_cast<unsigned char>(text[i + k]) & 0x3fu);
-        out.push_back(code);
-        i += n;
-    }
+    for (const detail::CodePoint &p : detail::code_points(text)) out.push_back(p.code);
     return out;
 }
 
@@ -154,21 +149,10 @@ size_t character_offset(const std::string &text, size_t count) {
     return at;
 }
 
-// str.isspace() of one character, which is also what \s matches in a str pattern.
-bool python_space(unsigned code) {
-    return (code >= 0x09 && code <= 0x0d) || (code >= 0x1c && code <= 0x20) || code == 0x85 || code == 0xa0 || code == 0x1680 ||
-           (code >= 0x2000 && code <= 0x200a) || code == 0x2028 || code == 0x2029 || code == 0x202f || code == 0x205f || code == 0x3000;
-}
+bool python_space(unsigned code) { return detail::python_space(code); }
 
 // str.strip() of UTF-8 text.
-std::string python_strip(const std::string &text) {
-    const std::vector<unsigned> points = code_points(text);
-    size_t first = 0, last = points.size();
-    while (first < last && python_space(points[first])) ++first;
-    while (last > first && python_space(points[last - 1])) --last;
-    const size_t start = character_offset(text, first);
-    return text.substr(start, character_offset(text, last) - start);
-}
+std::string python_strip(const std::string &text) { return detail::python_strip(text, detail::code_points(text)); }
 
 // str.replace(old, new): every occurrence, left to right, in one pass.
 std::string replace_all(const std::string &text, const std::string &old, const std::string &replacement) {
@@ -180,35 +164,53 @@ std::string replace_all(const std::string &text, const std::string &old, const s
 }
 
 bool ascii_digit(char c) { return c >= '0' && c <= '9'; }
-bool ascii_hex(char c) { return ascii_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'); }
 
-// int(text, base) for base 10 or 16: white space about it, a sign, for 16 an optional 0x, and single
-// underscores between digits (or after the 0x). Its magnitude's digits without leading zeros, or false where int()
-// raises ValueError. Own rule: only ASCII digits are digits (int() also reads other scripts' decimal digits).
+// int(text, base) for base 10 or 16, as CPython reads a str: first each code point past ASCII becomes a space if
+// it is whitespace or its ASCII digit if it is a decimal digit, and the text ends at any other (where parsing then
+// fails); then PyLong_FromString reads the ASCII: ASCII white space about it, a sign, for 16 an optional 0x and one
+// underscore after it, and single underscores between digits. Its magnitude's digits in ASCII without leading zeros,
+// or false where int() raises ValueError.
 bool python_int(const std::string &given, int base, bool &negative, std::string &digits) {
-    std::string s = python_strip(given);
-    negative = false;
-    if (!s.empty() && (s[0] == '+' || s[0] == '-')) {
-        negative = s[0] == '-';
-        s.erase(0, 1);
-    }
-    bool prefixed = false;
-    if (base == 16 && s.size() >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
-        s.erase(0, 2);
-        prefixed = true;
-    }
-    const auto digit = [&](char c) { return base == 16 ? ascii_hex(c) : ascii_digit(c); };
-    digits.clear();
-    for (size_t i = 0; i < s.size(); ++i) {
-        if (s[i] == '_') {
-            const bool after = i > 0 ? digit(s[i - 1]) : prefixed;
-            if (!after || i + 1 >= s.size() || !digit(s[i + 1])) return false;
-            continue;
+    std::string ascii;
+    for (const detail::CodePoint &p : detail::code_points(given)) {
+        if (p.code < 127) {
+            ascii += static_cast<char>(p.code);
+        } else if (detail::python_space(p.code)) {
+            ascii += ' ';
+        } else {
+            const int d = detail::python_decimal(p.code);
+            if (d < 0) return false;
+            ascii += static_cast<char>('0' + d);
         }
-        if (!digit(s[i])) return false;
-        digits += static_cast<char>(s[i] >= 'A' && s[i] <= 'F' ? s[i] - 'A' + 'a' : s[i]);
     }
-    if (digits.empty()) return false;
+    const auto space = [](char c) { return c == ' ' || (c >= '\t' && c <= '\r'); };
+    const auto value = [&](char c) -> int {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (base == 16 && c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (base == 16 && c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
+    };
+    size_t at = 0;
+    while (at < ascii.size() && space(ascii[at])) ++at;
+    negative = false;
+    if (at < ascii.size() && (ascii[at] == '+' || ascii[at] == '-')) negative = ascii[at++] == '-';
+    if (base == 16 && at + 1 < ascii.size() && ascii[at] == '0' && (ascii[at + 1] == 'x' || ascii[at + 1] == 'X')) {
+        at += 2;
+        if (at < ascii.size() && ascii[at] == '_') ++at;
+    }
+    if (at < ascii.size() && ascii[at] == '_') return false;
+    digits.clear();
+    char previous = 0;
+    for (; at < ascii.size() && (value(ascii[at]) >= 0 || ascii[at] == '_'); previous = ascii[at++]) {
+        if (ascii[at] == '_') {
+            if (previous == '_') return false;
+        } else {
+            digits += "0123456789abcdef"[value(ascii[at])];
+        }
+    }
+    if (previous == '_' || digits.empty()) return false;
+    while (at < ascii.size() && space(ascii[at])) ++at;
+    if (at != ascii.size()) return false;
     digits.erase(0, std::min(digits.find_first_not_of('0'), digits.size() - 1));
     if (digits == "0") negative = false;
     return true;
@@ -226,33 +228,7 @@ const char *python_type(const Json &v) {
     return "dict";
 }
 
-// repr() of a str: in single quotes unless it holds one and no double quote, with the escapes for its control
-// characters. Own rule: characters past ASCII are written as they are, as repr() writes the printable ones.
-std::string python_repr_text(const std::string &s) {
-    const bool single = s.find('\'') == kNone || s.find('"') != kNone;
-    const char quote = single ? '\'' : '"';
-    std::string out(1, quote);
-    for (const char ch : s) {
-        const unsigned char c = static_cast<unsigned char>(ch);
-        if (ch == quote || ch == '\\') {
-            out += '\\';
-            out += ch;
-        } else if (ch == '\n') {
-            out += "\\n";
-        } else if (ch == '\r') {
-            out += "\\r";
-        } else if (ch == '\t') {
-            out += "\\t";
-        } else if (c < 0x20 || c == 0x7f) {
-            char buffer[8];
-            std::snprintf(buffer, sizeof buffer, "\\x%02x", c);
-            out += buffer;
-        } else {
-            out += ch;
-        }
-    }
-    return out + quote;
-}
+std::string python_repr_text(const std::string &s) { return detail::python_repr(s); }
 
 std::string python_repr(const Json &v) {
     if (v.is_string()) return python_repr_text(v.get<std::string>());
@@ -430,92 +406,10 @@ bool port_of(const UrlParts &parts, long &port) {
     return port <= 65535;
 }
 
-// ipaddress.IPv4Address's text: four decimal octets of up to three digits, no leading zeros, each at most 255.
-bool ipv4(const std::string &text, unsigned char out[4]) {
-    size_t at = 0;
-    for (int part = 0; part < 4; ++part) {
-        if (part && (at >= text.size() || text[at++] != '.')) return false;
-        const size_t start = at;
-        while (at < text.size() && ascii_digit(text[at])) ++at;
-        if (at == start || at - start > 3 || (at - start > 1 && text[start] == '0')) return false;
-        const int value = std::stoi(text.substr(start, at - start));
-        if (value > 255) return false;
-        out[part] = static_cast<unsigned char>(value);
-    }
-    return at == text.size();
-}
-
-// ipaddress.IPv6Address's text (_ip_int_from_string, with a scope after '%') and its sixteen bytes.
-bool ipv6(std::string text, unsigned char out[16]) {
-    const size_t percent = text.find('%');
-    if (percent != kNone) {
-        if (percent + 1 >= text.size() || text.find('%', percent + 1) != kNone) return false;
-        text.resize(percent);
-    }
-    std::vector<std::string> parts;
-    for (size_t at = 0;;) {
-        const size_t colon = text.find(':', at);
-        parts.push_back(text.substr(at, colon == kNone ? kNone : colon - at));
-        if (colon == kNone) break;
-        at = colon + 1;
-    }
-    if (text.empty() || parts.size() < 3) return false;
-    std::vector<unsigned> tail_v4;
-    if (parts.back().find('.') != kNone) {
-        unsigned char v4[4];
-        if (!ipv4(parts.back(), v4)) return false;
-        parts.pop_back();
-        char buffer[16];
-        std::snprintf(buffer, sizeof buffer, "%x", static_cast<unsigned>(v4[0] << 8 | v4[1]));
-        parts.push_back(buffer);
-        std::snprintf(buffer, sizeof buffer, "%x", static_cast<unsigned>(v4[2] << 8 | v4[3]));
-        parts.push_back(buffer);
-    }
-    if (parts.size() > 9) return false;
-    size_t skip = 0;
-    bool skipped = false;
-    for (size_t i = 1; i + 1 < parts.size(); ++i)
-        if (parts[i].empty()) {
-            if (skipped) return false;
-            skipped = true;
-            skip = i;
-        }
-    size_t high = parts.size(), low = 0;
-    if (skipped) {
-        high = skip;
-        low = parts.size() - skip - 1;
-        if (parts.front().empty() && --high) return false;
-        if (parts.back().empty() && --low) return false;
-        if (high + low > 7) return false;
-    } else if (parts.size() != 8 || parts.front().empty() || parts.back().empty()) {
-        return false;
-    }
-    std::vector<unsigned> groups;
-    const auto hextet = [&](const std::string &part) {
-        if (part.empty() || part.size() > 4 || !std::all_of(part.begin(), part.end(), ascii_hex)) return false;
-        groups.push_back(static_cast<unsigned>(std::stoul(part, nullptr, 16)));
-        return true;
-    };
-    for (size_t i = 0; i < high; ++i)
-        if (!hextet(parts[i])) return false;
-    groups.resize(8 - low, 0);
-    for (size_t i = parts.size() - low; i < parts.size(); ++i)
-        if (!hextet(parts[i])) return false;
-    for (size_t i = 0; i < 8; ++i) {
-        out[2 * i] = static_cast<unsigned char>(groups[i] >> 8);
-        out[2 * i + 1] = static_cast<unsigned char>(groups[i] & 0xff);
-    }
-    return true;
-}
-
-// ipaddress.ip_address(host).is_loopback in Python 3.13: 127.0.0.0/8, ::1, and an IPv4-mapped 127.0.0.0/8.
+// ipaddress.ip_address(host).is_loopback in Python 3.13.
 bool loopback(const std::string &host) {
-    unsigned char v4[4], v6[16];
-    if (ipv4(host, v4)) return v4[0] == 127;
-    if (!ipv6(host, v6)) return false;
-    static const unsigned char one[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
-    static const unsigned char mapped[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
-    return std::memcmp(v6, one, 16) == 0 || (std::memcmp(v6, mapped, 12) == 0 && v6[12] == 127);
+    IpAddress ip;
+    return parse_ip_address(host, ip) && ip_is_loopback(ip);
 }
 
 struct Location {

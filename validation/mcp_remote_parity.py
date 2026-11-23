@@ -714,6 +714,12 @@ def uuid_forms(rng):
         '00000000' * 4,
         'ffffffff' * 4,
         '1' + 'urn:' + hexed[1:],
+        '\u0661' * 32,
+        '\uff11' + hexed[1:],
+        '\u0660x' + hexed[2:],
+        '\x1c' + hexed[1:],
+        '\u3000' + hexed[1:],
+        '\u0660X_' + hexed[3:],
     ]
 
 
