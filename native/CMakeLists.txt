@@ -121,10 +121,13 @@ if(TARGET kerfkite-step)
   if(CMAKE_VERSION VERSION_LESS 3.21)
     message(WARNING "CMake 3.21 or later installs the STEP add-on with its Open CASCADE libraries")
   else()
+    # Open CASCADE's libraries are its TK... toolkits. On Windows CMake matches DLL names in lower case, so the
+    # pattern takes either case. On Apple, CMake wants a destination for frameworks even when there are none;
+    # Open CASCADE is built as plain .dylib files, so that destination is the add-on's folder too.
     install(TARGETS kerfkite-step
-      RUNTIME_DEPENDENCIES PRE_INCLUDE_REGEXES "TK[A-Za-z0-9]+" PRE_EXCLUDE_REGEXES ".*"
+      RUNTIME_DEPENDENCIES PRE_INCLUDE_REGEXES "[Tt][Kk][A-Za-z0-9]+" PRE_EXCLUDE_REGEXES ".*"
         DIRECTORIES ${OpenCASCADE_BINARY_DIR} ${OpenCASCADE_LIBRARY_DIR}
-      RUNTIME DESTINATION step LIBRARY DESTINATION step)
+      RUNTIME DESTINATION step LIBRARY DESTINATION step FRAMEWORK DESTINATION step)
   endif()
 endif()
 add_executable(kerfkite_machine_selftest tests/machine_selftest.cpp)
