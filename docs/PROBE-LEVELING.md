@@ -7,7 +7,7 @@ It applies to router jobs on Grbl-family controllers (Grbl 1.1, grblHAL, FluidNC
 ## What you need
 
 - A probe circuit on the controller's probe input. For a circuit board the tool itself is the probe: one lead on the cutter or collet, the other on the copper.
-- The compiled KerfKite extension. Levelling is part of the native core and has no Python fallback; the **Probe levelling** panel is hidden when the extension is absent.
+- The workstation server. Levelling is part of the native core; the **Probe levelling** panel is hidden in the editor opened from a file.
 
 Test the probe before relying on it: touch the two leads together and confirm that the controller's status report shows the probe pin (`Pn:P`). A probe that does not trigger drives the tool into the board until the probe depth is reached.
 

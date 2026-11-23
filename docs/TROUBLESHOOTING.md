@@ -21,7 +21,7 @@ Do not include passwords, pairing/upload tokens, certificate private keys or com
 | Symptom | Check and next action |
 | --- | --- |
 | Connection refused at the app URL | Confirm the intended server is running and read its actual host/port from the terminal. A saved browser URL may point to an old development port. |
-| `ModuleNotFoundError` or missing package | Use the project's intended Python environment and reinstall the documented dependencies. `python -m pip` and the app must use the same interpreter. |
+| The launcher says the workstation server is missing | Reinstall the package: `kerfkite-studio` belongs beside the launcher (in `Contents/Resources` on macOS). From a source checkout, build the native programs (`native/README.md`) and start `build/native/kerfkite-studio --static studio/static`. |
 | Port already in use | Identify the existing Studio process or choose another explicit port. Do not terminate an unknown service simply to free the port. |
 | Tools appear missing | Check the left and right tabs. Design/Text/Images/Templates/Projects/Objects are separate from CAM/3D relief/Rotary/Control/Quote. |
 | Tabs are absent or scripts fail | Keep all static files together in filesystem mode. In server mode, save first, restart the updated service and reload. Inspect the first browser-console error for a missing script or stale/mixed build. |
@@ -104,13 +104,7 @@ Text outline depth and filled relief are separate workflows. Select V-carving, r
 
 Reduce grid resolution or increase stepover while preserving the required feature detail. The contact calculation uses conservative cell envelopes, so coarse maps can leave extra material deliberately. Use appropriate resolution and allowance for roughing/finishing review. Smaller tools and more rows can increase contact checks sharply; complexity limits reject work beyond the bounded workload.
 
-The UI identifies **C++ accelerated relief** versus **Python relief**. To check the optional extension in the same environment as the server:
-
-```sh
-python -c "from studio import _relief_native; print(_relief_native.__file__)"
-```
-
-If that import fails, the native extension is not installed in that interpreter. The Python backend remains available. Rebuild using the documented compiler/install process for that platform, then restart the server. A native build is specific to its Python/OS/architecture; copying a macOS binary to a Pi or Windows installation will not work. Native acceleration covers the relief kernel, not every CAM operation or all browser interactions.
+The UI says whether the relief's contact ran on the processor's threads or on a GPU as well. `kerfkite-cam calibrate` measures the contact on the threads and on any usable GPU and reports how a job would be shared between them. A native build is specific to its operating system and architecture; copying a macOS program to a Pi or a Windows installation will not work.
 
 ### Stock preview differs from a real cut
 

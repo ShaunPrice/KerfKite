@@ -26,7 +26,7 @@ Depth is separate from font style. Text creates per-vertex negative-Z contours, 
 
 ## Protocols
 
-`studio/protocols.py` separates supported export dialects from controller transport. GRBL / GRBL-ESP32 retains its output. Marlin router export omits GRBL work-coordinate/modal setup and uses millisecond dwell; the controller must have CNC spindle support configured. Both GRBL and experimental Marlin live adapters have software tests. Physical ports are disabled by default and require `--enable-hardware`; no physical machine was commissioned. Marlin pause stops host scheduling and may not stop already buffered motion. Marlin dynamic-laser output remains unsupported.
+The protocol catalogue (`native/core/src/protocols.cpp`, with the controller transports in `native/server/machine.cpp`) separates supported export dialects from controller transport. GRBL / GRBL-ESP32 retains its output. Marlin router export omits GRBL work-coordinate/modal setup and uses millisecond dwell; the controller must have CNC spindle support configured. Both GRBL and experimental Marlin live adapters have software tests. Physical ports are disabled by default and require `--enable-hardware`; no physical machine was commissioned. Marlin pause stops host scheduling and may not stop already buffered motion. Marlin dynamic-laser output remains unsupported.
 
 Use the [rotary workspace](ROTARY.md) to check the seam, preview cylindrical engraving, export a program or stream to a supported independent rotary controller.
 
@@ -34,7 +34,7 @@ Use the [rotary workspace](ROTARY.md) to check the seam, preview cylindrical eng
 
 Compensated profiles use valid closed contours and nested holes. Pockets use concentric erosion and a stepover no larger than half the cutter diameter. Sampled medial-axis V-carving is conservative and can leave material in broad regions; tool-size/inaccessible-feature warnings still need review. Heightmaps and top-access STL relief use flat/ball cutter-contact envelopes, allowances and step-downs. Undercuts, clamps, holders and out-of-stock geometry are not modeled as certified collision checks.
 
-The optional native C++ relief kernel accelerates contact calculations while Python retains validation and the reference implementation; see [NATIVE.md](NATIVE.md) for measured results. No physical cut or gear mesh is established by numerical tests.
+The relief's contact is computed by the native core on the processor's threads, or with a GPU for large jobs; see [NATIVE.md](NATIVE.md) for how it was compared with the Python reference it replaced and for measured results. No physical cut or gear mesh is established by numerical tests.
 
 ## Multi-object layout
 

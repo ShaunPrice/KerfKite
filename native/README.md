@@ -1,15 +1,25 @@
 # KerfKite native core
 
-A C++17 library and command-line tool that produce KerfKite's machine output without Python. This is the
-first stage of moving the application to C++: the core first, the editors last.
+The C++17 library and the programs that are KerfKite's CAD, CAM and machine control: the workstation server
+`kerfkite-studio`, the hosted HTTPS editor `kerfkite-web`, the MCP assistant server `kerfkite-mcp`, the
+command-line tool `kerfkite-cam` and the STEP add-on `kerfkite-step`. They need no Python.
 
-The Python package remains the reference until the core reproduces all of it. A part of the Python code is
-removed only when its C++ replacement gives the same output to the byte on every case that can be compared.
+The core was ported from Studio's Python implementation, which stayed as its reference until Studio 0.7 and
+was removed only when the C++ gave the same output to the byte on every case that could be compared. The
+comparison harnesses below (`validation/*_parity.py` and the checks) are kept at the last commit that had the
+reference, and run from a checkout of it against a build of this tree; continuous integration runs them on
+every change ([The Python reference](../docs/DEVELOPER.md#the-python-reference)). To run one yourself:
+
+    git worktree add ../kerfkite-reference REFERENCE    # the commit .github/workflows/native-core.yml names
+    python -m pip install -e "../kerfkite-reference[dev,step]"
+
+and give the harness's path as `../kerfkite-reference/validation/...`. The checks that need no reference,
+`validation/check_pinned_results.py` and the self-tests, run from this tree.
 
 Polygon geometry is the one exception, by the project owner's decision. Offsets, pockets, hatch fills and
-V-carving have a single implementation, this core's own polygon kernel, which Studio's Python calls through
-its compiled extension. They are shown to be right by geometry (invariants, and a comparison with Shapely
-by tolerance), not by matching another library's vertices.
+V-carving have a single implementation, this core's own polygon kernel, which the reference also called
+through its compiled extension. They are shown to be right by geometry (invariants, and a comparison with
+Shapely by tolerance), not by matching another library's vertices.
 
 ## Build
 
@@ -34,11 +44,11 @@ Python and with the library this code replaced.
 
 ## The workstation server
 
-`kerfkite-studio`, built with the rest, is Studio's local workstation server without Python (`server/`):
+`kerfkite-studio`, built with the rest, is Studio's local workstation server (`server/`):
 
     build/native/kerfkite-studio --static studio/static
 
-It serves the editor at `http://127.0.0.1:8765/` with every route of `studio/server.py` over this core, in
+It serves the editor at `http://127.0.0.1:8765/` with every route of the reference's `studio/server.py`, in
 simulator mode unless started with `--enable-hardware`, with its own HTTP server and serial ports and no
 library beyond the C++ standard library and the operating system (Winsock, BCrypt and SetupAPI on Windows).
 The phone pendant's HTTPS is `kerfkite-pendant-tls` (`../packaging/pendant-tls`, Go's standard library), built
@@ -47,15 +57,15 @@ Open CASCADE (LGPL 2.1, as replaceable shared libraries), built beside the serve
 7.6 or later (`-DOpenCASCADE_DIR=<prefix>/lib/cmake/opencascade`; Ubuntu's `libocct-data-exchange-dev` and
 `libocct-modeling-algorithms-dev`, or a build of 7.9.3); without it the server answers that STEP needs Open
 CASCADE. [docs/NATIVE.md](../docs/NATIVE.md#the-workstation-server) says what it reproduces and how it is
-compared with the Flask app:
+compared with the reference's Flask app:
 
-    python validation/server_route_parity.py --server build/native/kerfkite-studio
-    python validation/step_exchange_parity.py --server build/native/kerfkite-studio
+    python ../kerfkite-reference/validation/server_route_parity.py --server build/native/kerfkite-studio
+    python ../kerfkite-reference/validation/step_exchange_parity.py --server build/native/kerfkite-studio
 
 ## The hosted editor
 
-`kerfkite-web`, built with the server, is the hosted HTTPS editor and upload-only machine inbox without Python
-(`studio/web_server.py`; no controller): accounts, sessions, upload tokens, private files and operator-configured
+`kerfkite-web`, built with the server, is the hosted HTTPS editor and upload-only machine inbox (the port of
+the reference's `studio/web_server.py`; no controller): accounts, sessions, upload tokens, private files and operator-configured
 receivers, kept in a folder of the operator's (`--data-dir`). It moves the Python service's `web.sqlite3` to its
 own store the first time it opens such a folder, reading SQLite's file format itself. Its password hashes come
 from the system (CNG, CommonCrypto, or OpenSSL's libcrypto opened when needed) and its HTTPS from the TLS relay:
@@ -64,9 +74,9 @@ from the system (CNG, CommonCrypto, or OpenSSL's libcrypto opened when needed) a
     build/native/kerfkite-web certificate --cert web.pem --key web-key.pem --hosts studio.example
     build/native/kerfkite-web --data-dir web-data serve --public-url https://studio.example:8443 --cert web.pem --key web-key.pem
 
-[docs/NATIVE.md](../docs/NATIVE.md#the-hosted-editor) describes it and its comparison with the Flask app:
+[docs/NATIVE.md](../docs/NATIVE.md#the-hosted-editor) describes it and its comparison with the reference's Flask app:
 
-    python validation/web_route_parity.py --server build/native/kerfkite-web [--tls]
+    python ../kerfkite-reference/validation/web_route_parity.py --server build/native/kerfkite-web [--tls]
 
 ## Use
 
@@ -104,7 +114,7 @@ Studio's CAD scripts draw with; see [The polygon kernel](#the-polygon-kernel).
 
     kerfkite-cam operation request.json
 
-answers the request Studio's Python makes for an offset, a pocket or a fill once it has checked the
+answers the request the server makes for an offset, a pocket or a fill once it has checked the
 settings (`core/include/kerfkite/operation_command.hpp`): closed contours in, tool paths out. Its `helix`
 operation answers where a helix may descend into a pocket: contours and the first point of each pass in, a
 centre and a start angle out. Its `vcarve` operation carves the contours with a V-bit: contours, sampling
@@ -216,35 +226,35 @@ the part that touches and where, or refuses the first line it cannot read.
 
 | Area | State |
 | --- | --- |
-| Number text: fixed-point formatting, `round()`, `repr()` | Done. Shared with the Python extension through `core/include/kerfkite/number_text.hpp`. |
+| Number text: fixed-point formatting, `round()`, `repr()` | Done, in `core/include/kerfkite/number_text.hpp`. |
 | Project validation and its error messages | Done for every setting of a router line job. |
 | Router line jobs, with constant depth or a depth at each vertex | Done. |
 | Laser line jobs: straight and arc leads, power ramps, perforation, holding bridges, raster powers, passes | Done. |
 | Python's `math.dist` and `sum()` arithmetic (`core/include/kerfkite/py_math.hpp`) | Done, to the last bit, as CPython 3.12 and later compute them. |
 | Ordered multi-operation jobs | Done; each operation must itself be ported. |
 | Controller post-processing (Grbl family, Marlin, LinuxCNC, Mach3, Mach4, UCCNC) | Done. The table is read from `studio/static/protocols.json` at build time. |
-| Probe levelling: probing plan, height map, levelled program (`core/src/leveling.cpp`) | Done. New in the core: there is no Python version, and Studio calls this code through its extension. |
+| Probe levelling: probing plan, height map, levelled program (`core/src/leveling.cpp`) | Done. New in the core: there was never a Python version. |
 | Circuit board import: Gerber layers, Excellon drill files, board outline paths, drilling operations (`core/src/gerber.cpp`, `core/src/excellon.cpp`) | Done. New in the core: there is no Python version. |
 | Isolation toolpaths from a copper layer, with the places the cutter cannot reach (`core/src/isolation.cpp`) | Done. New in the core, on the polygon kernel: there is no Python version. |
 | Drilling at point markers and circular hole outlines, in one plunge or in pecks (`core/src/drilling.cpp`) | Done, with the hole list and the drill that Studio's stock preview draws. |
 | Drag-knife paths: the alignment lead-in and the swivel at each corner (`core/src/knife.cpp`) | Done. Points within 0.1 nm of the last point kept are dropped, so every move has a direction, and a path that is then a single point is refused, as in the reference. |
 | Ramp entry on router line jobs and on offset contours (`core/src/router_entry.cpp`) | Done, with or without holding tabs. A helix entry is accepted only on a pocket, so on a line job it is rejected with the reference's message. |
-| Helical entry into pockets (`core/src/router_entry.cpp`, `core/src/pocket_entry.cpp`) | Done. Where each helix goes (clear of the pocket's walls and islands by the cutter's radius, with a clear feed to the pass) is decided on the core's own polygon kernel. This is the only implementation: Studio calls it through its extension (`studio/router_entry.py`), and keeps Shapely only as the fallback where the extension is not installed. |
+| Helical entry into pockets (`core/src/router_entry.cpp`, `core/src/pocket_entry.cpp`) | Done. Where each helix goes (clear of the pocket's walls and islands by the cutter's radius, with a clear feed to the pass) is decided on the core's own polygon kernel. This is the only implementation; the reference called it through its extension (`studio/router_entry.py`) and kept Shapely only as the fallback where the extension was not installed. |
 | Holding tabs on router line jobs (`core/src/tabs.cpp`) | Done: tab count or explicit positions, tabs across the seam, and every rejection. |
 | Shapely's `LineString.is_simple` and `.length`, which both features ask of each contour (`core/src/simple_line.cpp`) | Done by GEOS's own rules, including its double-double orientation test. A contour whose answer depends on rounding inside GEOS gets the exact answer by the core's own rules (declined with the reference's). The work is bounded: a tree over the segments leaves out, a branch at a time, the pairs GEOS's test is certain to pass, so a contour of 100,000 long segments side by side (a comb, a fan, a spiral) takes a tenth of a second where testing every pair took a minute; and past a fixed count of work, about a second, a contour is refused (declined with the reference's rules: `a contour whose self-crossing test needs more comparisons than the core allows`). |
-| Inside and outside offsets (router: tool radius; laser: half the kerf), concentric pockets, hatch and cross-hatch fills (`core/src/operations.cpp`) | Done, on the core's own polygon kernel. This is the only implementation: Studio calls it through its extension (`studio/operations.py`), and keeps Shapely only as the fallback where the extension is not installed. |
+| Inside and outside offsets (router: tool radius; laser: half the kerf), concentric pockets, hatch and cross-hatch fills (`core/src/operations.cpp`) | Done, on the core's own polygon kernel. This is the only implementation; the reference called it through its extension (`studio/operations.py`) and kept Shapely only as the fallback where the extension was not installed. |
 | The core's own polygon kernel (`core/src/polygon/`, `core/include/kerfkite/polygon.hpp`) | Done. See [The polygon kernel](#the-polygon-kernel). |
-| 3D solid modelling (`core/include/kerfkite/solid.hpp`, `core/src/solid/`) | Done as a kernel and a `solid` command. New in the core, and the only implementation of KerfKite's own: Studio's 3D CAD calls it through its extension (`studio/solid_kernel.py`), and keeps a third-party library only as the fallback where the extension is not installed. See `docs/SOLID-KERNEL.md`. |
+| 3D solid modelling (`core/include/kerfkite/solid.hpp`, `core/src/solid/`) | Done as a kernel and a `solid` command. New in the core, and the only implementation of KerfKite's own: The reference's 3D CAD called it through its extension (`studio/solid_kernel.py`) and kept a third-party library only as the fallback where the extension was not installed. See `docs/SOLID-KERNEL.md`. |
 | The Delaunay triangulation and Voronoi diagram of points, and the distance from a point to a region's boundary (`core/src/polygon/voronoi.cpp`, `distance.cpp`) | Done, in the polygon kernel: exact tests in 128 and 256 bits, O(n log n), points on one line and on one circle as ordinary input. |
-| V-carving (`core/src/vcarve.cpp`) | Done, on the kernel's Voronoi diagram: the sampled medial axis of the reference, with its allowance of one sampling interval. This is the only implementation: Studio calls it through its extension (`studio/operations.py`), and keeps Shapely only as the fallback where the extension is not installed. No function of the C library but `sqrt` is behind a carve, so it is the same on every platform. |
+| V-carving (`core/src/vcarve.cpp`) | Done, on the kernel's Voronoi diagram: the sampled medial axis of the reference, with its allowance of one sampling interval. This is the only implementation; the reference called it through its extension (`studio/operations.py`) and kept Shapely only as the fallback where the extension was not installed. No function of the C library but `sqrt` is behind a carve, so it is the same on every platform. |
 | Rotary output for a fourth axis (`core/src/rotary.cpp`): a planar job or a given program wrapped onto a cylinder for LinuxCNC, grblHAL and xPRO V5, on A, B or C, with inverse-time feeds at the surface or cut radius and the fixture's checks | Done, for generated jobs and given G-code. A given program with text that is not ASCII is refused, where the reference read digits and spaces of other scripts and copied them into the program a controller runs. The cut length uses CPython's `hypot` (`pymath::vector_norm`) and the C library's `asinh`, which CPython calls, so it is Python's on each platform. |
-| Studio's CAM on the core | Done. Studio's `generate`, `generate_rotary` and `wrap_job` call the core through the extension (`core_cam` in `studio/_core_native.cpp`) and keep their Python as the reference and the fallback for what the core declines; the job carries everything the Python job has, the paths and depths cut, the holes and drill of a drilling job and the operation count of an ordered one included. See `docs/NATIVE.md`. |
-| Relief finishing (`core/src/relief.cpp`): the settings, height fields as numbers or as RGB image bytes, the flat and ball cutter contact on threads, a GPU or both at once, as a calibration at start decides, the raster paths and their depths | Done, to the bit. Studio's `prepare_relief` calls it through the extension and keeps its Python as the reference and the fallback. STL and artwork height fields are still rasterised in Python. |
-| Stock preview (`core/src/stock.cpp`): the height map a job's segments leave in the stock, for flat, ball, V and drill cutters | Done, to the bit: distances are CPython's `hypot` and minima Python's `min`. Studio's stock preview calls it through the extension; a segment row with text that is not a number is declined. |
-| Manual tool-change plans (`core/src/tool_changes.cpp`): stages for runs of operations with one tool, each a whole job | Done, to the byte, with every refusal. Studio's `plan_tool_changes` and `/api/tool-changes` call it through the extension and keep the Python as the reference and the fallback. A stage of fewer than two program lines, where the reference fails with an IndexError, is declined. |
-| Fixture clearance (`core/src/fixture_collision.cpp`): a posted program's moves swept against fixture boxes, continuously | Done, to the byte: CPython's `hypot`, Python's `min` and `max`, and `round(x, 5)` for the positions. Studio's `check_fixtures` and `/api/fixture-collision` call it through the extension and keep the Python as the reference and the fallback. A program line that is not ASCII is read with the reference's rules for case, spaces and digits. |
+| Studio's CAM on the core | Done. The server's `/api/generate` and `/api/rotary` are the core's jobs, as the reference's `generate`, `generate_rotary` and `wrap_job` were through its extension (`core_cam` in `studio/_core_native.cpp`); the job carries everything the Python job has, the paths and depths cut, the holes and drill of a drilling job and the operation count of an ordered one included. See `docs/NATIVE.md`. |
+| Relief finishing (`core/src/relief.cpp`): the settings, height fields as numbers or as RGB image bytes, the flat and ball cutter contact on threads, a GPU or both at once, as a calibration at start decides, the raster paths and their depths | Done, to the bit. The reference's `prepare_relief` called it through the extension. STL and artwork height fields are rasterised in the core too (below). |
+| Stock preview (`core/src/stock.cpp`): the height map a job's segments leave in the stock, for flat, ball, V and drill cutters | Done, to the bit: distances are CPython's `hypot` and minima Python's `min`. The reference's stock preview called it through the extension; a segment row with text that is not a number is declined with the reference's rules in force. |
+| Manual tool-change plans (`core/src/tool_changes.cpp`): stages for runs of operations with one tool, each a whole job | Done, to the byte, with every refusal. The reference's `plan_tool_changes` and `/api/tool-changes` called it through the extension. A stage of fewer than two program lines, where the reference fails with an IndexError, is declined with the reference's rules in force. |
+| Fixture clearance (`core/src/fixture_collision.cpp`): a posted program's moves swept against fixture boxes, continuously | Done, to the byte: CPython's `hypot`, Python's `min` and `max`, and `round(x, 5)` for the positions. The reference's `check_fixtures` and `/api/fixture-collision` called it through the extension. A program line that is not ASCII is read with the reference's rules for case, spaces and digits. |
 | Artwork reliefs (`core/src/artwork_relief.cpp`): closed contours rasterised raised or recessed on the polygon kernel, then the relief | Done, as the one implementation: the kernel decides each cell exactly on its grid, so a cell whose edge lies within a millionth of a millimetre of the outline may differ from the Shapely reference, which answers without the extension. Refusals are the reference's. |
-| STL height fields for reliefs (`core/src/stl_heightmap.cpp`): binary and ASCII STL read, normalised and rasterised from above | Done, to the bit, with every refusal. Studio's `stl_heightmap` calls it through the extension and keeps its Python as the reference and the fallback. Base64 text of whole groups followed by nothing but `=`, which some Python releases read and others refuse, is declined. |
+| STL height fields for reliefs (`core/src/stl_heightmap.cpp`): binary and ASCII STL read, normalised and rasterised from above | Done, to the bit, with every refusal. The reference's `stl_heightmap` called it through the extension. Base64 text of whole groups followed by nothing but `=`, which some Python releases read and others refuse, is refused. |
 | Importers, sender, pendant, editors | Not yet. |
 
 Every operation of a job (lines, drilling, knife paths, offsets, pockets, fills, V-carving, entries and
@@ -270,7 +280,7 @@ build a solid from a tree of shapes and operations and answer with its measures 
 sections, projection, height map, ray hits or STL. `ctest` runs `kerfkite_solid_selftest`, which checks the
 kernel by invariants that need no reference;
 
-    python validation/solid_kernel_check.py --tool build/native/kerfkite-cam
+    python ../kerfkite-reference/validation/solid_kernel_check.py --tool build/native/kerfkite-cam
 
 compares it with the third-party library Studio used before, which the core needs for that comparison only.
 
@@ -278,15 +288,15 @@ compares it with the third-party library Studio used before, which the core need
 
 times twelve models on the kernel and prints a hash of each result, which must not change when the kernel
 is made faster. Configured with `-DKERFKITE_SOLID_PROFILE=ON` it also prints the time of each phase; that
-option compiles clocks into the kernel and is for measuring only. `validation/benchmark_solid.py` times the
-same kind of model through Studio, on the kernel and on the third-party library. See the Performance
+option compiles clocks into the kernel and is for measuring only. The reference's `validation/benchmark_solid.py`
+timed the same kind of model through the Python, on the kernel and on the third-party library. See the Performance
 section of `docs/SOLID-KERNEL.md`.
 
-Studio's 3D CAD is modelled by this kernel wherever its compiled extension is installed: `setup.py` compiles
-the kernel and `solid_command.cpp` into the extension, and `studio/solid_kernel.py` calls them. The 2D
+Studio's 3D CAD is modelled by this kernel: the server's solid routes call it, as the reference did through
+its compiled extension (`studio/solid_kernel.py`). The 2D
 drawings of Studio's CAD scripts run on the polygon kernel, through the same command `kerfkite-cam polygon`
 answers, which gained the corners a drawing asks for (inscribed arcs, miters, bevels), a convex hull, a
-circle and affine maps. The third-party library remains Studio's fallback without the extension. See `docs/SOLID-KERNEL.md` for
+circle and affine maps. The third-party library was the reference's fallback without the extension. See `docs/SOLID-KERNEL.md` for
 the representation, the rounding rule, the limits, the measurements, how Studio uses the kernel and what is
 ready for 3D engraving and multi-axis work.
 
@@ -337,10 +347,10 @@ distance to the wall - interval)` allows, the distance coming from `BoundaryDist
 the bit's half angle from the kernel's series. Pieces that share an end are joined into longer paths, and
 the paths are ordered so that each starts near where the last ended. At every point the cut is an interval
 short of the nearest wall, and in the middle of every move at least half an interval, which the self-test
-measures with a distance function of its own and `tests/test_vcarve.py` with Shapely.
+measures with a distance function of its own and the reference's `tests/test_vcarve.py` with Shapely.
 
     ctest --test-dir build/native -R polygon
-    python validation/polygon_kernel_check.py --cli build/native/kerfkite-cam
+    python ../kerfkite-reference/validation/polygon_kernel_check.py --cli build/native/kerfkite-cam
 
 The first runs the kernel's self-test, with the compiler's 128-bit integer and with the kernel's own. The
 second compares the kernel with Shapely by tolerance over generated cases; its `cam` group runs
@@ -349,7 +359,7 @@ the tool paths, and checks that this tool and the extension answer alike to the 
 
 ## How it is checked
 
-    python validation/native_core_parity.py --cli build/native/kerfkite-cam
+    python ../kerfkite-reference/validation/native_core_parity.py --cli build/native/kerfkite-cam
 
 compares the core with the Python reference in the same run:
 
@@ -390,7 +400,7 @@ the checks of the settings and their order, the order of cutting, leads, tabs, r
 contours, laser power, post-processing and the totals. The place of a helix in a pocket is shared in the
 same way (`core/src/pocket_entry.cpp`); the helix built there, its feed to the pass and the limits on it
 are compared. That every helix keeps the cutter clear of the walls is checked on its own, by distance from
-the contours as drawn: in the self-test with code of its own, and in `tests/test_router_entry.py` with
+the contours as drawn: in the self-test with code of its own, and in the reference's `tests/test_router_entry.py` with
 Shapely as the measure. The paths and depths of a V-carve are shared in the same way
 (`core/src/vcarve.cpp`); the levels, the program and the totals built on them are compared, and that the
 bit never cuts outside the outline is checked on its own, in the self-test and with Shapely in
@@ -399,18 +409,22 @@ Without the extension the reference would fall back to Shapely, whose vertices d
 stops; `--without-polygon-operations` runs it with those jobs left out, and says so in its result.
 `validation/polygon_kernel_check.py` is the check of the geometry itself.
 
-`.github/workflows/native-core.yml` runs the build, the self-test and this comparison on macOS (Apple
-silicon and Intel), Windows, and Linux (x86-64 and ARM64).
+`.github/workflows/native-core.yml` runs the build, the self-test, `validation/check_pinned_results.py`, the
+acceptance fixture and this comparison (from the reference commit) on macOS (Apple silicon and Intel), Windows,
+and Linux (x86-64 and ARM64).
 `.github/workflows/native-sanitizers.yml` builds the core a second time with Clang on Linux (x86-64 and
 ARM64), and builds it under the address and undefined-behaviour sanitizers with GCC and Clang on Linux
 (x86-64 and ARM64) and Apple Clang on both kinds of Mac, running the self-tests each time. (GCC on ARM64 runs
 without the check for stack frames used after return, which takes hours there; the other five jobs keep it.) The recorded
 digests are part of those tests, so every one of these compilers has to give the same results.
 
-## Adding a part
+## Changing a part
 
-1. Port the Python branch into `core/src/`, keeping the order of its checks so that an invalid project fails
+1. Change the core in `core/src/`, keeping the order of its checks, so that an invalid project still fails
    with the same message.
-2. Replace the `NotPorted` it used to throw.
-3. Add projects that reach the branch to `generated_cases` in `validation/native_core_parity.py`.
-4. Run the comparison. It must report no differences.
+2. Add cases that reach the change to the core's self-test (`tests/`). Where a result is pinned in
+   `validation/check_pinned_results.py`, change the pinned value only after checking the new result by an
+   independent measure, and say in the pull request why it changed.
+3. Run `ctest`, `validation/check_pinned_results.py` and `scripts/simulate_studio.py`.
+4. Run the reference's comparisons from its checkout. A difference from the reference is expected only where
+   the change is meant to make one: name each such difference in the pull request.

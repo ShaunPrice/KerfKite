@@ -21,6 +21,7 @@ import random
 import subprocess
 import tempfile
 import unittest
+from importlib.util import find_spec
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -305,13 +306,14 @@ class VoronoiDiagrams(unittest.TestCase):
                 )
                 continue
             hull = [edge for edge in edges if (edge[2] is None) != (edge[3] is None)]
-            for a, b, left, right in hull:
+            for a, b, left, _right in hull:
                 turns = [side(at[a], at[b], point) for point in at]
                 self.assertTrue(all(t >= 0 for t in turns) if left is not None else all(t <= 0 for t in turns))
             # With h points on the hull a complete triangulation has 2n - 2 - h triangles and 3n - 3 - h edges.
             self.assertEqual((len(triangles), len(edges)), (2 * n - 2 - len(hull), 3 * n - 3 - len(hull)))
             self.assertFalse([edge for edge in edges if edge[2] is None and edge[3] is None])
 
+    @unittest.skipUnless(find_spec('shapely'), 'Shapely, the oracle of this test, is not installed')
     def test_voronoi_edges_are_those_shapely_finds(self):
         from shapely.geometry import MultiPoint, box
         from shapely.ops import voronoi_diagram
@@ -373,6 +375,7 @@ class VoronoiDiagrams(unittest.TestCase):
         self.assertTrue(all([2e-6, 2e-6] in edge['ends'] for edge in answers[3]['ok']['edges']))
         self.assertIn('beyond the range', answers[4]['error'])
 
+    @unittest.skipUnless(find_spec('shapely'), 'Shapely, the oracle of this test, is not installed')
     def test_the_distance_to_a_boundary_is_shapelys(self):
         from shapely.geometry import Point, Polygon
 

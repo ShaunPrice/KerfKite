@@ -17,7 +17,7 @@ Straight lines, rectangles, closed paths and cubic Béziers retain their transfo
 
 The review lists omitted text, images, shades, dashed strokes, hidden content, masked forms and unsupported areas of clipping. Paint that crosses a clipping boundary is omitted in full. Convert labels and dashes to paths, apply clips and resolve overlapping fill outlines in the drawing program before re-export. Password-protected PDFs require an unencrypted export. For scanned artwork, import the image using the image engraving or camera tracing tools.
 
-The workstation and authenticated hosted editor read PDFs with Studio's native core where the compiled extension is installed, and with the installed Python library otherwise; both give the same draft. Files the core does not read as they stand (damaged files that pypdf repairs, encrypted files, pages with inline images) are read by the Python library. For offline browser editing, save the converted Studio project and reopen it in the browser editor. [pypdf](https://github.com/py-pdf/pypdf)
+The workstation and the authenticated hosted editor read PDFs with Studio's native core. It reads the files producers write, makes the repairs PDF readers commonly make to damaged ones and skips inline images; it refuses encrypted files, and what it cannot read, with a request for a simplified, unencrypted vector PDF. For offline browser editing, save the converted Studio project and reopen it in the browser editor.
 
 ## DXF contours
 
@@ -47,7 +47,7 @@ The first pen makes a 10 × 10 mm square starting at X 10, Y 10. The second make
 
 Imported artwork fits Studio's portable project limits of 3000 paths, 100000 vertices and coordinates within ±2000 mm. Circular toolpaths target 0.025 mm chord error. DXF curves are flattened to the same 0.025 mm target. Convert very large drawings to the relevant work region and relocate distant survey or building coordinates before import.
 
-G-code, HP-GL and LinuxCNC INI files are read by Studio's native core where the compiled extension is installed, and give the same artwork, presets, warnings and messages as the Python reader to the last digit. DXF drawings are read by the core's own DXF reader, which divides curves into equal chords within 0.025 mm of the true curve and draws rational, low-degree and closed splines exactly. Programs whose text is not plain ASCII, and DXF splines given only by fit points, are read by the Python reader. See [Foreign drawings](NATIVE.md#foreign-drawings).
+G-code, HP-GL and LinuxCNC INI files are read by Studio's native core, which gives the same artwork, presets, warnings and messages, to the last digit, as the Python reader it replaced. DXF drawings are read by the core's own DXF reader, which divides curves into equal chords within 0.025 mm of the true curve and draws rational, low-degree and closed splines exactly. Program text that is not plain ASCII is read with Python's rules for case, spaces and digits, as the Python reader read it, and DXF splines given only by fit points are interpolated as that reader interpolated them. See [Foreign drawings](NATIVE.md#foreign-drawings).
 
 ## LinuxCNC workspace reference
 

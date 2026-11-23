@@ -4,7 +4,7 @@ KerfKite makes a printed circuit board from the files a board design program exp
 
 **None of this has yet been run on a physical machine.** It has been run on the simulator. The board files it has been tested with are fixtures written by hand in the style of common design programs' output (`tests/pcb/`), not exports from those programs. Check an imported board's size, hole positions and warnings against the design, rehearse on the simulator, and cut a scrap board first.
 
-The first part of this document is the guide to making a board in Studio. The rest is the reference: the commands, the Python functions, what is read from each format and what is declined.
+The first part of this document is the guide to making a board in Studio. The rest is the reference: the commands, the route, what is read from each format and what is declined.
 
 ## Making a board in Studio
 
@@ -14,7 +14,7 @@ The first part of this document is the guide to making a board in Studio. The re
 - An engraving tool. A V-bit is usual: 20° to 60° with a tip of about 0.1 mm. Its width of cut depends on its depth, which is why the board is levelled.
 - Drills for each hole diameter, and an end mill to cut the board out.
 - A Grbl-family controller with a probe input, for levelling. Without one the board can still be imported, previewed and exported.
-- The compiled KerfKite extension. Board import is part of the native core and has no Python fallback; the **Circuit board** panel is hidden when the extension is absent, and in the editor opened from a file. The hosted editor has the panel too: it can import, preview and export, but has no machine.
+- The workstation server or the hosted editor. Board import is part of the native core; the **Circuit board** panel is hidden in the editor opened from a file. The hosted editor has the panel too: it can import, preview and export, but has no machine.
 
 ### Import
 
@@ -116,7 +116,7 @@ A two-sided board is turned over to cut its underside, and the two sides have to
 
 Gerber files draw every layer as seen from the top of the board, the bottom layer included, which is why the underside has to be mirrored and the top does not. Do not mirror the files in the design program as well.
 
-What has to be treated alike: the outline, both copper layers and the drill file of one board take the **same offset**, and whatever is cut face down takes the **same mirror line**. From Python and the command line this is the caller's to do (`offset` and `mirror_x`); the panel does it.
+What has to be treated alike: the outline, both copper layers and the drill file of one board take the **same offset**, and whatever is cut face down takes the **same mirror line**. From the command line and the route this is the caller's to do (`offset` and `mirror_x`); the panel does it.
 
 ### Clipping to the outline
 
@@ -137,7 +137,7 @@ With **Cut the isolation off at the board outline**, contours and parts of conto
 
 ## Reference
 
-The importers and the isolation are written once, in the native core (`native/core/src/gerber.cpp`, `excellon.cpp`, `isolation.cpp`), and have no Python version. The isolation is built on KerfKite's own [polygon kernel](POLYGON-KERNEL.md). From Python they need the compiled KerfKite extension. Studio reaches them through one design route, `POST /api/pcb-import` (`studio/pcb_api.py`), which the local and the hosted service both register; it has no access to the controller.
+The importers and the isolation are written once, in the native core (`native/core/src/gerber.cpp`, `excellon.cpp`, `isolation.cpp`), and never had a Python version. The isolation is built on KerfKite's own [polygon kernel](POLYGON-KERNEL.md). Studio reaches them through one design route, `POST /api/pcb-import` (`native/server/design_routes.cpp`), which the workstation server and the hosted editor both serve; it has no access to the controller.
 
 ## Commands
 
@@ -151,22 +151,6 @@ The importers and the isolation are written once, in the native core (`native/co
     kerfkite-cam excellon-drills board.drl --offset [-95,115]
 
 The file is the input (`-` reads standard input) and the answer is JSON on standard output. Each `--option value` pair is a field of the request described below. A field that is not known is refused, so that a misspelt option is not passed over. A file that is refused exits with status 2 and the reason on standard error; status 1 is a file that cannot be opened or a usage error.
-
-From Python:
-
-    from studio import pcb_import
-    from studio.cam import generate
-
-    outline = pcb_import.outline_paths(pcb_import.read('board-Edge_Cuts.gbr'))
-    offset = pcb_import.placement([outline['bounds']], margin=5)      # one offset for every layer
-    outline = pcb_import.outline_paths(pcb_import.read('board-Edge_Cuts.gbr'), offset=offset)
-    width = pcb_import.v_bit_width(0.1, 30, 0.1)                      # tip, angle, depth: 0.15359 mm
-    copper = pcb_import.isolation(pcb_import.read('board-F_Cu.gbr'), width, offset=offset)
-    job = generate({**settings, 'depth': 0.1, 'step': 0.1, 'operations': copper['operations']})
-    drills = pcb_import.drill_operations(pcb_import.read('board.drl'), offset=offset)
-    for operation in drills['operations']:
-        job = generate({**settings, **operation})                     # one job for each drill diameter
-    layer = pcb_import.gerber(pcb_import.read('board-F_Cu.gbr'))      # any layer as the objects it draws
 
 Every length in an answer is in millimetres, rounded to the nanometre, whatever the units of the file.
 
@@ -513,7 +497,7 @@ A Studio project holds 3,000 paths and 100,000 points in all, which is the limit
 
 ### The same on every platform
 
-The polygon kernel works in whole nanometres with exact integer arithmetic, and the isolation calls no function of the platform's mathematics library: the vertices of a regular polygon aperture come from the kernel's own series for sine and cosine. One isolation job is pinned in `validation/check_installed_cam.py` and one in the core's self-test, so that a platform giving different bytes fails its build. The Gerber importer itself uses the platform's library in two places, flattening arcs and rotating macro primitives, and rounds what it computes to the nanometre; a difference there would need a result within a few parts in 10¹⁰ of half a nanometre. The pinned jobs have no arcs and no rotated macros, so they do not depend on it.
+The polygon kernel works in whole nanometres with exact integer arithmetic, and the isolation calls no function of the platform's mathematics library: the vertices of a regular polygon aperture come from the kernel's own series for sine and cosine. One isolation job is pinned in `validation/check_pinned_results.py` and one in the core's self-test, so that a platform giving different bytes fails its build. The Gerber importer itself uses the platform's library in two places, flattening arcs and rotating macro primitives, and rounds what it computes to the nanometre; a difference there would need a result within a few parts in 10¹⁰ of half a nanometre. The pinned jobs have no arcs and no rotated macros, so they do not depend on it.
 
 ## Studio's route
 
@@ -523,10 +507,10 @@ The answer has `side`, `offset`, `mirror_x`, `bounds`, `copper` (the isolation a
 
 ## How it is checked
 
-`tests/test_pcb_import.py` reads small Gerber and Excellon files written by hand for the purpose (`tests/pcb/`), and compares the answers with coordinates, arcs, macro shapes and areas worked out separately in the test. It covers each feature above, each refusal, the limits, and several hundred randomly damaged copies of the fixtures, every one of which has to be read, isolated or refused with a reason. `native/tests/selftest.cpp` repeats a short form of the checks without Python.
+The Python reference's tests, kept at the reference commit ([The Python reference](DEVELOPER.md#the-python-reference)), checked the core through its extension. `tests/test_pcb_import.py` read small Gerber and Excellon files written by hand for the purpose (`tests/pcb/`), and compares the answers with coordinates, arcs, macro shapes and areas worked out separately in the test. It covers each feature above, each refusal, the limits, and several hundred randomly damaged copies of the fixtures, every one of which has to be read, isolated or refused with a reason. `native/tests/selftest.cpp` repeats a short form of the checks, and the reference's route comparison sends the route these boards with their members changed.
 
-`tests/test_pcb_isolation.py` checks the isolation against Shapely as an independent oracle. The copper image is rebuilt in the test from the importer's list of objects, shape by shape, and compared with the core's: neither may reach beyond the other by more than the arc tolerance. Every contour is then measured against the copper: every point and every mid-edge point within the corner allowance of its pass's distance, and no part of any contour nearer. Which islands the first contour separates is worked out from the contours alone and has to be exactly the grouping the reported places give; every reported gap has to be the distance Shapely measures; and every pair of islands that the oracle finds clearly nearer than the tool has to be reported. The fixtures are pads and tracks at known spacings, a ground pour with clearances, thermal reliefs by spokes and by a thermal macro, clear cut-outs, a region with a cut-in, a step-and-repeat panel and a small two-sided board, with offset, mirror, clip, direction and order each checked for what it states.
+`tests/test_pcb_isolation.py` checked the isolation against Shapely as an independent oracle. The copper image is rebuilt in the test from the importer's list of objects, shape by shape, and compared with the core's: neither may reach beyond the other by more than the arc tolerance. Every contour is then measured against the copper: every point and every mid-edge point within the corner allowance of its pass's distance, and no part of any contour nearer. Which islands the first contour separates is worked out from the contours alone and has to be exactly the grouping the reported places give; every reported gap has to be the distance Shapely measures; and every pair of islands that the oracle finds clearly nearer than the tool has to be reported. The fixtures are pads and tracks at known spacings, a ground pour with clearances, thermal reliefs by spokes and by a thermal macro, clear cut-outs, a region with a cut-in, a step-and-repeat panel and a small two-sided board, with offset, mirror, clip, direction and order each checked for what it states.
 
-`tests/test_pcb_api.py` checks the route: placement, the underside's mirror line, the warnings of each file, every refusal as a JSON `400`, the hosted service, and that an import calls no method of the controller. `tests/js/pcb-board.test.cjs` checks the panel's own logic. `validation/pcb_workflow.py` drives the editor in a browser against the simulator: it imports the fixture board, reads the warnings and the marks, corrects the drill format, adds the board, previews the isolation at its depth, probes and runs it levelled, drills a diameter as its own stage, exports the tool stages and registers the underside.
+`tests/test_pcb_api.py` checked the route: placement, the underside's mirror line, the warnings of each file, every refusal as a JSON `400`, the hosted service, and that an import calls no method of the controller. `tests/js/pcb-board.test.cjs` checks the panel's own logic. `validation/pcb_workflow.py` drives the editor in a browser against the simulator: it imports the fixture board, reads the warnings and the marks, corrects the drill format, adds the board, previews the isolation at its depth, probes and runs it levelled, drills a diameter as its own stage, exports the tool stages and registers the underside.
 
 The importers have been run on the project's own fixtures and on files written to follow the formats that KiCad, Altium, EasyEDA and Eagle export. They have not yet been run on a large collection of boards from those programs, and no board has been cut on a machine. Check an imported board's bounds, hole counts and warnings against the design before cutting.
