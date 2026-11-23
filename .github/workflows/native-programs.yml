@@ -73,6 +73,12 @@ jobs:
           cd packaging/pendant-tls
           CGO_ENABLED=0 GO111MODULE=off GOARCH=${{ matrix.goarch }} go build -trimpath -buildvcs=false \
             -o "$GITHUB_WORKSPACE/dist/${{ matrix.target }}/kerfkite-pendant-tls" .
+      - name: Check that the installed STEP add-on loads its Open CASCADE libraries from its own folder
+        shell: bash
+        run: |
+          answer=$(printf '{"version":1}' | "dist/${{ matrix.target }}/step/kerfkite-step")
+          echo "$answer"
+          test "$answer" = '{"open_cascade":"7.9.3"}'
       - name: Add Open CASCADE's notices and the record of its build
         shell: bash
         run: |
