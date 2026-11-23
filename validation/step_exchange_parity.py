@@ -13,8 +13,9 @@ requests, and their answers must agree:
   message. Two documents are compared by reading both with the reference's Open CASCADE: the same faces, solids
   and closed-solid flag, the exact volume and area within 1e-9 of the shape's size, and the extent of a fine
   tessellation within three of its chord tolerances (Open CASCADE's optimal bounds of a trimmed spline face depend on
-  where its outline starts, and can be millimetres beyond the face). The extent includes the shape's tolerances, so
-  documents from two releases may also differ by those. The documents' text is also compared, without
+  where its outline starts, and can be millimetres beyond the face; the extent is that of the tessellation's nodes,
+  without the deflection and tolerance Open CASCADE's bounding box adds). Documents from two releases may also
+  differ by the shapes' tolerances. The documents' text is also compared, without
   the time of writing and the serial number Open CASCADE gives the product (counted, not required: the outline of a
   trimmed face can start at another point).
 * Import (/api/solid-cad/step/import) and STL (/api/solid-cad/exchange-stl) of documents written, and of damaged
@@ -48,10 +49,13 @@ import sys
 from pathlib import Path
 
 import OCP
-from OCP.Bnd import Bnd_Box
-from OCP.BRepBndLib import BRepBndLib
+from OCP.BRep import BRep_Tool
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
 from OCP.ShapeAnalysis import ShapeAnalysis_ShapeTolerance
+from OCP.TopAbs import TopAbs_FACE
+from OCP.TopExp import TopExp_Explorer
+from OCP.TopLoc import TopLoc_Location
+from OCP.TopoDS import TopoDS
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -88,6 +92,28 @@ def add_on_release(server):
     return json.loads(answer.stdout)['open_cascade']
 
 
+def mesh_extent(shape):
+    """The extent of a shape's tessellation: its nodes alone. Open CASCADE's bounding box adds to each face the
+    deflection its mesher recorded and its tolerance, and the deflection depends on how a document describes the
+    face: two descriptions of one surface, meshed alike, can differ there by tenths of a millimetre."""
+    low, high = [math.inf] * 3, [-math.inf] * 3
+    faces = TopExp_Explorer(shape, TopAbs_FACE)
+    while faces.More():
+        location = TopLoc_Location()
+        triangulation = BRep_Tool.Triangulation_s(TopoDS.Face_s(faces.Current()), location)
+        if triangulation is not None:
+            transform = location.Transformation()
+            for i in range(1, triangulation.NbNodes() + 1):
+                point = triangulation.Node(i).Transformed(transform)
+                for axis, value in enumerate((point.X(), point.Y(), point.Z())):
+                    low[axis] = min(low[axis], value)
+                    high[axis] = max(high[axis], value)
+        faces.Next()
+    if math.inf in low:
+        raise ValueError('the shape has no tessellated face')
+    return low + high
+
+
 def measures(raw):
     """What the reference's Open CASCADE reads from a document: its counts, exact area and volume, and the extent
     of a fine tessellation. (The optimal bounds the import reports are not used here: on a trimmed spline face they
@@ -97,14 +123,13 @@ def measures(raw):
         shape = cad_exchange._read_shape(raw)
         size = size_of(mesh['bounds'])
         BRepMesh_IncrementalMesh(shape, max(1e-4, size * 1e-4), False, 0.05, False)
-        box = Bnd_Box()
-        BRepBndLib.Add_s(shape, box, True)
+        extent = mesh_extent(shape)
     except Exception as exc:  # noqa: BLE001 - any failure to read is the measure
         return {'error': str(exc)}
     out = {k: mesh[k] for k in ('faces', 'solids', 'solidOnly', 'volume', 'area', 'bounds')}
-    out['extent'] = list(box.Get())
-    # Open CASCADE places a shape only to within its tolerances, which the extent includes. Another release can set
-    # them otherwise: the 3D curves it fits to a trimmed face's outline, say.
+    out['extent'] = extent
+    # Open CASCADE places a shape only to within its tolerances, which another release can set otherwise: the 3D
+    # curves it fits to a trimmed face's outline, say.
     out['tolerance'] = ShapeAnalysis_ShapeTolerance().Tolerance(shape, 1)
     return out
 
