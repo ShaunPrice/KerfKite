@@ -3,8 +3,6 @@
 import argparse
 import os
 import plistlib
-import re
-import zipfile
 import shutil
 import subprocess
 import tempfile
@@ -20,30 +18,6 @@ ICON = ROOT / "studio/static/app-icon.png"
 
 def run(*cmd, **kwargs):
     subprocess.run(cmd, check=True, **kwargs)
-
-
-def release_wheel(source, target):
-    """Select the CPython wheel for the runtime installed by the launcher."""
-    target_platforms = {
-        "mac-arm64": r"macosx_\d+_\d+_(arm64|universal2)",
-        "mac-amd64": r"macosx_\d+_\d+_(x86_64|universal2)",
-        "linux-arm64": r"(linux|manylinux(?:\d+|_\d+_\d+))_aarch64",
-        "linux-amd64": r"(linux|manylinux(?:\d+|_\d+_\d+))_x86_64",
-        "windows-amd64": r"win_amd64",
-    }
-    candidates = source.glob("kerfkite_studio-*.whl") if source.is_dir() else [source]
-    matches = []
-    for wheel in candidates:
-        tags = re.fullmatch(r"kerfkite_studio-[^-]+-cp312-cp312-([^.]+(?:\.[^.]+)*)\.whl", wheel.name)
-        if tags and any(re.fullmatch(target_platforms[target], tag) for tag in tags[1].split(".")):
-            matches.append(wheel)
-    if len(matches) != 1:
-        raise ValueError(f"Expected one native CPython 3.12 wheel for {target} in {source}, found {len(matches)}")
-    with zipfile.ZipFile(matches[0]) as archive:
-        suffix = ".pyd" if target == "windows-amd64" else ".so"
-        if not any(n.startswith("studio/_relief_native.") and n.endswith(suffix) for n in archive.namelist()):
-            raise ValueError(f"Wheel for {target} is missing the native CAM extension")
-    return matches[0]
 
 
 NATIVE_PROGRAMS = ("kerfkite-studio", "kerfkite-pendant-tls")
@@ -78,16 +52,10 @@ def copy_native(folder, dest, step=True):
     shutil.copy2(ROOT / "studio/builtin_templates.kkart", dest)
 
 
-def payload(dest, wheel, goos, arch, native=None):
-    """The launcher and what it starts: the Python service (a wheel and its locked libraries) or, with native, the
-    workstation server without Python."""
+def payload(dest, native, goos, arch):
+    """The launcher and what it starts: the workstation server and its programs."""
     dest.mkdir(parents=True)
-    if native is None:
-        shutil.copy(wheel, dest)
-        shutil.copy(HERE / "requirements.lock", dest)
-        shutil.copy(HERE / "step.lock", dest)
-    else:
-        copy_native(native, dest, step=goos != "windows")
+    copy_native(native, dest, step=goos != "windows")
     shutil.copy(ROOT / "LICENSE", dest)
     goroot = Path(subprocess.check_output(["go", "env", "GOROOT"], text=True).strip())
     notices = dest / "runtime-notices"
@@ -118,11 +86,11 @@ def payload(dest, wheel, goos, arch, native=None):
     return exe
 
 
-def mac(work, out, wheel, arch, version, native=None):
+def mac(work, out, native, arch, version):
     stage = work / "image"
     contents = stage / "KerfKite Studio.app/Contents"
     res = contents / "Resources"
-    exe = payload(res, wheel, "darwin", arch, native)
+    exe = payload(res, native, "darwin", arch)
     (contents / "MacOS").mkdir()
     exe.rename(contents / "MacOS/KerfKite")
     helper = contents / "MacOS/KerfKiteNative"
@@ -162,10 +130,10 @@ def mac(work, out, wheel, arch, version, native=None):
     )
 
 
-def linux(work, out, wheel, arch, version, native=None):
+def linux(work, out, native, arch, version):
     pkg = work / "package"
     dest = pkg / "opt/kerfkite"
-    payload(dest, wheel, "linux", arch, native)
+    payload(dest, native, "linux", arch)
     # The GTK window, in C: it needs the GTK 3 headers to build, and finds WebKitGTK when it starts.
     window = work / "window"
     run("cmake", "-S", HERE / "linux", "-B", window, "-DCMAKE_BUILD_TYPE=Release")
@@ -207,9 +175,9 @@ def linux(work, out, wheel, arch, version, native=None):
     )
 
 
-def windows(work, out, wheel, version, native=None):
-    payload(work / "payload", wheel, "windows", "amd64", native)
-    if native is not None and (native / "step").is_dir():
+def windows(work, out, native, version):
+    payload(work / "payload", native, "windows", "amd64")
+    if (native / "step").is_dir():
         # STEP import and export is a component the person chooses in Setup.
         shutil.copytree(native / "step", work / "step")
     run(sys.executable, HERE / "windows/build.py", work / "payload")
@@ -236,46 +204,33 @@ def windows(work, out, wheel, version, native=None):
 
 
 def studio_version():
-    text = (ROOT / "studio/__init__.py").read_text(encoding="utf-8")
-    return re.search(r'__version__ = "([^"]+)"', text)[1]
+    return (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "wheels",
+        "programs",
         type=Path,
-        help="Directory of platform wheels, or one matching native wheel; with --native, the native programs instead",
+        help="Folder of the native programs, one folder per target as native-programs.yml uploads them",
     )
     parser.add_argument("output", type=Path)
     parser.add_argument(
         "targets", nargs="+", choices=["mac-arm64", "mac-amd64", "linux-arm64", "linux-amd64", "windows-amd64"]
     )
-    parser.add_argument(
-        "--native",
-        action="store_true",
-        help="Package the workstation server without Python: WHEELS is then a folder of native programs per target",
-    )
     args = parser.parse_args()
     try:
-        if args.native:
-            builds = {target: native_build(args.wheels.resolve(), target) for target in args.targets}
-            wheels = {target: None for target in args.targets}
-        else:
-            wheels = {target: release_wheel(args.wheels.resolve(), target) for target in args.targets}
-            builds = {target: None for target in args.targets}
+        builds = {target: native_build(args.programs.resolve(), target) for target in args.targets}
     except ValueError as exc:
         parser.error(str(exc))
-    if not args.native and len({wheel.name.split("-")[1] for wheel in wheels.values()}) != 1:
-        parser.error("All desktop targets must use the same Studio version")
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=True)
-    for target, wheel in wheels.items():
-        version = studio_version() if args.native else wheel.name.split("-")[1]
+    version = studio_version()
+    for target, native in builds.items():
         with tempfile.TemporaryDirectory(dir=out.parent) as tmp:
             work = Path(tmp)
             platform, arch = target.split("-")
             if platform == "windows":
-                windows(work, out, wheel, version, builds[target])
+                windows(work, out, native, version)
             else:
-                {"mac": mac, "linux": linux}[platform](work, out, wheel, arch, version, builds[target])
+                {"mac": mac, "linux": linux}[platform](work, out, native, arch, version)

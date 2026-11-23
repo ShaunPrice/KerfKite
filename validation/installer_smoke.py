@@ -1,8 +1,7 @@
 """Exercise a freshly installed desktop launcher without connecting any machine.
 
-A package of the workstation server without Python (packaging/desktop/build.py --native) is recognised by its
-kerfkite-studio: it must start without setting up a Python runtime, and with --step its STEP add-on must write and
-read a part.
+The package's workstation server (kerfkite-studio) must start without setting anything up or downloading it, and
+with --step its STEP add-on must write and read a part.
 """
 
 import argparse
@@ -140,13 +139,6 @@ def exercise_native(exe, scratch):
             exe.with_name("KerfKiteNativeSmoke.exe").unlink(missing_ok=True)
 
 
-def native_package(exe):
-    """Whether the package runs the workstation server without Python: kerfkite-studio beside the launcher, or in
-    the Mac app's Resources."""
-    name = "kerfkite-studio.exe" if os.name == "nt" else "kerfkite-studio"
-    return (exe.parent / name).is_file() or (exe.parent.parent / "Resources" / name).is_file()
-
-
 def check_step(post):
     """STEP through the package's Open CASCADE add-on: a part written and read back."""
     plate = {
@@ -171,9 +163,9 @@ def check_step(post):
 
 def check(exe, data, offline, step, native=False, target=None):
     env = {**os.environ, "KERFKITE_DATA_DIR": str(data)}
-    without_python = native_package(exe)
-    if offline:
-        env["UV_OFFLINE"] = "1"
+    name = "kerfkite-studio.exe" if os.name == "nt" else "kerfkite-studio"
+    # kerfkite-studio beside the launcher, or in the Mac app's Resources.
+    assert (exe.parent / name).is_file() or (exe.parent.parent / "Resources" / name).is_file(), "no workstation server"
     places = data / "shortcut-check"
     if sys.platform.startswith("linux"):
         # Keep the menu entry and desktop shortcut out of the runner's own folders.
@@ -182,12 +174,9 @@ def check(exe, data, offline, step, native=False, target=None):
     proc = subprocess.Popen([exe], env=env)
     try:
         page = page_when(proc, "Choose your workshop")
-        if without_python:
-            # STEP comes with the package or not at all; the launcher says which.
-            fields = {}
-            assert ("STEP import and export is installed." in page) == step, "the package's STEP add-on"
-        else:
-            fields = {"step": "yes"} if step else {}
+        # STEP comes with the package or not at all; the launcher says which.
+        fields = {}
+        assert ("STEP import and export is installed." in page) == step, "the package's STEP add-on"
         asked = 'name="shortcuts" value="offered"' in page
         if asked and sys.platform.startswith("linux"):
             fields.update(shortcuts="offered", menu="yes", icon="yes")
@@ -250,32 +239,10 @@ def check(exe, data, offline, step, native=False, target=None):
         assert len(loops) == 1
         x, y = zip(*loops[0])
         assert abs(max(x) - min(x) - 29) < 0.01 and abs(max(y) - min(y) - 21) < 0.01
-        if without_python:
-            # Nothing was set up: no Python runtime, and nothing downloaded.
-            assert not list(data.glob("runtime-*")), "a package without Python made a Python runtime"
-            if step:
-                check_step(post)
-        else:
-            runtime_dir = f"runtime-{target}-*" if target else "runtime-*"
-            interpreter = "Scripts/python.exe" if os.name == "nt" else "bin/python"
-            [python] = data.glob(f"{runtime_dir}/{interpreter}")
-            if target:
-                machine = subprocess.check_output(
-                    [python, "-I", "-c", "import platform; print(platform.machine())"], text=True
-                ).strip()
-                assert machine == {"darwin-arm64": "arm64", "darwin-amd64": "x86_64"}[target], machine
-            subprocess.run([python, "-I", Path(__file__).with_name("check_installed_cam.py")], check=True)
-            if step:
-                subprocess.run(
-                    [
-                        python,
-                        "-I",
-                        "-c",
-                        "from pypdf import PdfReader; from OCP.STEPControl import STEPControl_Writer;"
-                        " STEPControl_Writer()",
-                    ],
-                    check=True,
-                )
+        # Nothing was set up: no runtime, and nothing downloaded.
+        assert not list(data.glob("runtime-*")), "the launcher made a Python runtime"
+        if step:
+            check_step(post)
         if native and not offline:
             with install_directory() as scratch:
                 exercise_native(exe, scratch)
@@ -284,7 +251,7 @@ def check(exe, data, offline, step, native=False, target=None):
         wait_for_studio_exit()
     finally:
         if proc.poll() is None:
-            # Let the launcher stop its Python child even when a native GUI check fails.
+            # Let the launcher stop the server even when a native GUI check fails.
             try:
                 submit(read(LAUNCH).decode(), "quit")
                 proc.wait(timeout=12)

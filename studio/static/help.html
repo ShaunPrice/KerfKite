@@ -3,7 +3,7 @@
 <p><a href="screen-desktop-workspace.png"><img src="screen-desktop-workspace.png" alt="KerfKite’s desktop editor showing wattle, banksia and scarlet gum tags on a shared sheet, with separate layers for the outlines, engraving and lettering" /></a></p>
 <p>Three botanical tags share a sheet. The <strong>Layers</strong> tab separates engraving, lettering and cut outlines.</p>
 <h2>Install KerfKite</h2>
-<p>Choose the installer for the computer where you want to design. The download links below follow the <a href="https://github.com/ShaunPrice/KerfKite/releases/latest">latest public release</a>. First launch needs an internet connection to set up the desktop tools. Choose <strong>Native desktop → Start workshop</strong> to open the simulator in its own application window. Leave <strong>Open directly next time</strong> selected to start there on later launches.</p>
+<p>Choose the installer for the computer where you want to design. The download links below follow the <a href="https://github.com/ShaunPrice/KerfKite/releases/latest">latest public release</a>. From Studio 0.7 the packages carry everything they need, so the first launch works offline; earlier releases set up their desktop tools online on first launch. Choose <strong>Native desktop → Start workshop</strong> to open the simulator in its own application window. Leave <strong>Open directly next time</strong> selected to start there on later launches.</p>
 <table>
 <thead>
 <tr>
@@ -951,26 +951,26 @@ bash scripts/ci-local.sh --list
 </ul>
 <h3>First launch</h3>
 <ol>
-<li>The desktop launcher opens a setup tab in your default browser. Keep the computer online while it downloads the private Python runtime and the design libraries. A first install can take several minutes on a Pi. The launcher shows the current stage.</li>
+<li>The desktop launcher opens a setup tab in your default browser. From Studio 0.7 everything Studio needs is in the package, so the first launch downloads nothing and works offline. Earlier releases downloaded a private Python runtime and the design libraries on first launch, which needed an internet connection.</li>
 <li>The first time, <strong>Shortcuts</strong> offers a KerfKite Studio shortcut on the desktop on macOS and Linux, and on the portable Linux edition an entry in the applications menu. Both are ticked; untick what you do not want. On macOS, the system may ask once whether KerfKite Studio may use the Desktop folder. To add one later, choose <strong>Add a desktop shortcut</strong> or <strong>Add to the applications menu</strong> in the launcher once the workshop is ready.</li>
-<li>Leave <strong>Native desktop</strong> selected and choose <strong>Start workshop</strong>. The application window opens when the simulator is ready. To use a browser instead, select <strong>Web browser</strong> during startup, then choose <strong>Open in browser</strong>. In <strong>Projects → Try a sample</strong>, load the badge and generate a preview. The simulator works offline on subsequent launches. The portable desktop packages use the Python relief engine. Select <strong>Add STEP import and export</strong> before starting a workshop to download the optional exchange libraries. For a commissioned machine, expand <strong>Physical machine access</strong> and enable controller ports for that session. Studio still requires a separate connection. Native C++ acceleration, HTTPS serving and MCP are available through the source installation below.</li>
+<li>Leave <strong>Native desktop</strong> selected and choose <strong>Start workshop</strong>. The application window opens when the simulator is ready. To use a browser instead, select <strong>Web browser</strong> during startup, then choose <strong>Open in browser</strong>. In <strong>Projects → Try a sample</strong>, load the badge and generate a preview. The setup page says whether STEP import and export is installed: the macOS and Linux packages carry it, and on Windows it is a component you choose in Setup. For a commissioned machine, expand <strong>Physical machine access</strong> and enable controller ports for that session. Studio still requires a separate connection. The HTTPS editor and the MCP assistant server are installed beside Studio (see below).</li>
 <li>Save your document and close the desktop window, then use <strong>Quit KerfKite</strong> in the launcher tab to shut down the local simulator. Reopening the application shortcut brings back that tab. Download important projects as portable files.</li>
 </ol>
-<p>When <strong>Open directly next time</strong> is selected, the next launch opens the native simulator window directly. Closing that window shows the launcher. Choose <strong>Show setup next launch</strong> there to change STEP or controller options on the next start. Controller access always requires an explicit choice in setup.</p>
+<p>When <strong>Open directly next time</strong> is selected, the next launch opens the native simulator window directly. Closing that window shows the launcher. Choose <strong>Show setup next launch</strong> there to change the controller options on the next start. Controller access always requires an explicit choice in setup.</p>
 <h3>Desktop window requirements</h3>
 <p>Windows Setup checks for a 64-bit Intel/AMD Windows 10 or 11 client before installation. The Windows launcher also checks the host before opening the workshop.</p>
 <p>The Windows window uses .NET Framework 4.8 and the Microsoft Edge WebView2 Evergreen Runtime. Windows 11 includes WebView2. If the window reports that the runtime is missing, install the x64 Evergreen Runtime and reopen the window. <a href="https://developer.microsoft.com/en-us/microsoft-edge/webview2/">Microsoft WebView2 Runtime</a></p>
 <p>The macOS window uses AppKit and the system WebKit. Keep macOS and Safari updated. On Linux the Debian package installs GTK 3 and WebKitGTK. For a tar archive, install your distribution's GTK 3 and WebKitGTK 4.1 or 4.0 (on Debian and Ubuntu, <code>libgtk-3-0</code> and <code>libwebkit2gtk-4.1-0</code>). Run it from a graphical session. You can always select <strong>Open in browser</strong> from the launcher.</p>
 <p><a href="#desktop">Drawing and saving in the desktop window</a></p>
 <h3>Updates, setup problems and removal</h3>
-<p>Quit KerfKite, download the newer package and install it over the previous version. On macOS choose <strong>Replace</strong>. Studio keeps the same local browser address across launches so a browser profile can reopen its saved projects. Each desktop user has a separate runtime.</p>
-<p>If setup fails, check the internet connection and available space, then choose <strong>Retry</strong>. Setup needs access to GitHub, Python runtime downloads and the Python Package Index. For a port conflict, quit any other KerfKite launcher or Studio server using port 18764 or 18765. If the browser did not open, visit <code>http://127.0.0.1:18764/</code> on the same computer. The setup page shows the location of <code>setup.log</code> when an error occurs.</p>
-<p>Uninstall through <strong>Installed apps</strong> on Windows, which also removes the Start menu entry and the desktop shortcut. On macOS move the app to Trash and delete the KerfKite Studio shortcut from the desktop. On Linux remove the package in your software manager and delete <code>kerfkite-studio.desktop</code> from the desktop. For the portable Linux edition remove its extracted folder, the desktop shortcut and <code>~/.local/share/applications/org.kerfkite.Studio.Portable.desktop</code>. To reclaim downloaded runtimes after quitting, remove only the KerfKite runtime folder for your account:</p>
+<p>Quit KerfKite, download the newer package and install it over the previous version. On macOS choose <strong>Replace</strong>. Studio keeps the same local browser address across launches so a browser profile can reopen its saved projects.</p>
+<p>If Studio does not start, choose <strong>Retry</strong>. For a port conflict, quit any other KerfKite launcher or Studio server using port 18764 or 18765. If the browser did not open, visit <code>http://127.0.0.1:18764/</code> on the same computer. The setup page shows the location of <code>setup.log</code> when an error occurs.</p>
+<p>Uninstall through <strong>Installed apps</strong> on Windows, which also removes the Start menu entry and the desktop shortcut. On macOS move the app to Trash and delete the KerfKite Studio shortcut from the desktop. On Linux remove the package in your software manager and delete <code>kerfkite-studio.desktop</code> from the desktop. For the portable Linux edition remove its extracted folder, the desktop shortcut and <code>~/.local/share/applications/org.kerfkite.Studio.Portable.desktop</code>. The launcher keeps its log and settings in a folder of your account. Earlier packages also installed a private Python runtime there; to reclaim that space after quitting, remove its <code>runtime-…</code> folders, or the whole folder to reset the launcher:</p>
 <table>
 <thead>
 <tr>
 <th>Platform</th>
-<th>Runtime folder</th>
+<th>Launcher folder</th>
 </tr>
 </thead>
 <tbody>
@@ -989,44 +989,34 @@ bash scripts/ci-local.sh --list
 </tbody>
 </table>
 <h2>Source installation</h2>
-<p>Use 64-bit Python 3.12 where possible. The source setup below supports optional services and an explicitly enabled hardware controller.</p>
+<p>The source build makes the same programs the packages carry: the workstation server <code>kerfkite-studio</code>, the HTTPS editor <code>kerfkite-web</code>, the MCP assistant server <code>kerfkite-mcp</code>, <code>kerfkite-cam</code>, and, where their tools are installed, the TLS relay <code>kerfkite-pendant-tls</code> (Go) and the STEP add-on <code>kerfkite-step</code> (Open CASCADE 7.6 or later). It needs CMake 3.16 or newer and a C++17 compiler, and downloads nothing. It supports the optional services and an explicitly enabled hardware controller.</p>
 <p>See <a href="#platforms">Platforms</a> for installation targets and measured CAD/CAM acceptance on macOS, Windows, Linux and Raspberry Pi.</p>
 <h2>1. Obtain the source</h2>
-<p>Clone the public repository with <code>git clone https://github.com/ShaunPrice/KerfKite.git</code> or download its source archive. Open a terminal in the directory containing <code>pyproject.toml</code>, <code>start.sh</code> and <code>studio/</code>. Keep the complete tree together. Do not copy a macOS <code>.venv</code> or compiled extension to a Pi or Windows computer; each host needs its own installation.</p>
+<p>Clone the public repository with <code>git clone https://github.com/ShaunPrice/KerfKite.git</code> or download its source archive. Open a terminal in the directory containing <code>VERSION</code>, <code>start.sh</code> and <code>native/</code>. Keep the complete tree together. Do not copy a build from one computer to another; each host builds its own.</p>
 <h2>2. Install on Raspberry Pi OS or Debian/Ubuntu Linux</h2>
-<p>Use a 64-bit operating system. On the Pi, install the Python virtual environment package and optional C++ build tools:</p>
+<p>Use a 64-bit operating system. Install the build tools, and Go for HTTPS pairing and hosted transfers:</p>
 <pre><code class="language-sh">sudo apt update
-sudo apt install python3 python3-venv python3-dev build-essential
-python3 --version
-sh scripts/install.sh --web --mcp
+sudo apt install build-essential cmake golang
+sh scripts/install.sh
 sh start.sh --port 8765
 </code></pre>
-<p>If the OS Python is older than 3.10, use a supported newer OS/Python installation. <code>CNC_PYTHON</code> can choose an already installed interpreter:</p>
-<pre><code class="language-sh">CNC_PYTHON=python3.12 sh scripts/install.sh --web --mcp
-</code></pre>
-<p>The <code>--web</code> installer option adds HTTPS services; <code>--mcp</code> adds the assistant workshop MCP server. Omit either option if you do not need it. Open <strong>http://127.0.0.1:8765</strong> on the Pi's desktop browser. This local editor listener deliberately binds to loopback.</p>
+<p>For STEP import and export, also install <code>libocct-data-exchange-dev</code> and <code>libocct-modeling-algorithms-dev</code> before building. <code>scripts/install.sh</code> builds into <code>build/native</code> and runs the self-tests. Open <strong>http://127.0.0.1:8765</strong> on the Pi's desktop browser. This local editor listener deliberately binds to loopback.</p>
 <h2>3. Install on macOS</h2>
-<p>Install 64-bit Python 3.12 first. The old system Python is unsuitable. For the optional C++ relief engine, install Apple's command line tools and complete any displayed installation dialog:</p>
+<p>Install Apple's command line tools and complete any displayed installation dialog, then CMake (for example with Homebrew, <code>brew install cmake go</code>):</p>
 <pre><code class="language-sh">xcode-select --install
 </code></pre>
 <p>Then, from the project directory:</p>
-<pre><code class="language-sh">python3 --version
-sh scripts/install.sh --web --mcp
+<pre><code class="language-sh">sh scripts/install.sh
 sh start.sh --port 8765
 </code></pre>
-<p>Open <strong>http://127.0.0.1:8765</strong>. If <code>python3</code> points to an older interpreter, set <code>CNC_PYTHON</code> to your Python 3.12 executable when installing. Metal is not required; no custom Metal compute backend is implemented.</p>
+<p>Open <strong>http://127.0.0.1:8765</strong>. For STEP import and export, build Open CASCADE first as <code>native/README.md</code> describes. Metal is not required; no custom Metal compute backend is implemented.</p>
 <h2>4. Install on Windows 11 x86-64</h2>
-<p>Install 64-bit Python 3.12. The optional C++ extension needs Microsoft Visual C++ Build Tools with the C++ workload and Windows SDK. Without those tools, installation can use the Python relief fallback.</p>
-<p>The following manual commands work without changing PowerShell script execution policy. Run from the project directory:</p>
-<pre><code class="language-powershell">py -3.12 -m venv .venv
-.venv\Scripts\python.exe -m pip install &quot;.[web,mcp]&quot;
+<p>Install Visual Studio 2022 (or its Build Tools) with the <strong>Desktop development with C++</strong> workload, which includes CMake, and optionally Go. From a Developer PowerShell for Visual Studio, in the project directory:</p>
+<pre><code class="language-powershell">cmake -S native -B build\native -A x64
+cmake --build build\native --config Release --parallel
 .\start.bat --port 8765
 </code></pre>
-<p>Alternatively, after reviewing the supplied script and where local execution policy permits:</p>
-<pre><code class="language-powershell">.\scripts\install.ps1 -Web -Mcp -Python &quot;C:\Path\To\Python312\python.exe&quot;
-.\start.bat --port 8765
-</code></pre>
-<p>Open <strong>http://127.0.0.1:8765</strong>. The PowerShell installer has not been executed on Windows in this project; use the manual commands if your execution policy blocks scripts. Do not change a managed organization's execution policy merely to run this installer.</p>
+<p>Alternatively, after reviewing the supplied script and where local execution policy permits, <code>.\scripts\install.ps1</code> runs the same build and the self-tests. Open <strong>http://127.0.0.1:8765</strong>. Do not change a managed organization's execution policy merely to run this installer.</p>
 <h2>5. First simulator session</h2>
 <ol>
 <li>Leave the CNC disconnected. Launch the local service using one of the commands above.</li>
@@ -1036,16 +1026,11 @@ sh start.sh --port 8765
 <li>Save a named browser project and download a portable <code>.cncstudio.json</code> backup. Browser-local storage does not synchronize automatically to other computers.</li>
 </ol>
 <p>The default server permits simulator connections only. Physical serial ports require an explicit restart with <code>--enable-hardware</code>, machine commissioning and verified machine/tool settings. Installing the software does not commission a machine. The supplied machine profile belongs to the project's reference machine; users of other machines must configure their own travel, heads and tools.</p>
-<h2>Optional native C++ relief engine</h2>
-<p>The installer tries to compile the extension if a suitable compiler and Python development headers exist. The extension is optional; the Python implementation remains available. Check which engine was installed:</p>
-<pre><code class="language-sh">.venv/bin/python -c &quot;from studio.relief import _relief_native; print('C++' if _relief_native is not None else 'Python fallback')&quot;
-</code></pre>
-<p>On Windows substitute <code>.venv\Scripts\python.exe</code> for <code>.venv/bin/python</code>. After adding compiler tools, rerun the installer to rebuild for this host. The engine accelerates relief contact calculations; it does not change physical controller speed. See the validation reports for measured Pi workloads and their limits.</p>
 <h2>Offline file editor</h2>
-<p>Open <code>studio/static/index.html</code> directly from the filesystem. Keep its vendor, font, icon and sibling script files together. There is no login in this mode. Drawing, templates, portable projects and supported contour CAM work locally; advanced server-dependent geometry and relief calculations require the Python service. The UI should report unsupported operations instead of treating them as completed calculations.</p>
+<p>Open <code>studio/static/index.html</code> directly from the filesystem. Keep its vendor, font, icon and sibling script files together. There is no login in this mode. Drawing, templates, portable projects and supported contour CAM work locally; advanced server-dependent geometry and relief calculations require the workstation server. The UI should report unsupported operations instead of treating them as completed calculations.</p>
 <p>Use portable project files to move between the file editor and the server editor. Browser storage permissions differ for <code>file://</code>; if the project library is unavailable, use Download project. Uploading from this editor still requires an authenticated HTTPS receiver and an explicitly configured file-upload receiver option.</p>
 <h2>HTTPS editor and Pi upload inbox</h2>
-<p>The service is <code>kerfkite-web</code>, in the program folder beside <code>kerfkite-studio</code> with its TLS relay <code>kerfkite-pendant-tls</code>; it needs no Python. Releases that still carry the Python service run <code>.venv/bin/python -m studio.web_server</code> (with the <code>web</code> extra) in its place, with the same commands and options. Replace <code>YOUR_USERNAME</code>, hostnames and addresses with real values.</p>
+<p>The service is <code>kerfkite-web</code>, in the program folder beside <code>kerfkite-studio</code> with its TLS relay <code>kerfkite-pendant-tls</code> (in <code>build/native</code> for a source build). Replace <code>YOUR_USERNAME</code>, hostnames and addresses with real values.</p>
 <p>Create a user. The password is prompted for twice; no default password exists:</p>
 <pre><code class="language-sh">kerfkite-web --data-dir web-data create-user YOUR_USERNAME
 </code></pre>
@@ -1065,32 +1050,32 @@ kerfkite-web --data-dir web-data serve --public-url https://your-pi.local:8443 -
 <p>For internet hosting use a real DNS name, publicly trusted certificate and deliberate firewall access to the HTTPS listener. The service expects direct TLS or TCP passthrough, or with <code>--behind-proxy</code> a TLS terminator on the same host that sends the PROXY protocol line; it does not trust HTTP reverse-proxy forwarded headers. A <code>web-data</code> folder of the Python service is moved to the new store the first time <code>kerfkite-web</code> opens it (<a href="#web">WEB.md</a>). Automatic certificate renewal, system services and public deployment are not configured by the installer. See <a href="#web">WEB.md</a> for session limits, quotas and upload details.</p>
 <h2>Phone monitor and controls</h2>
 <p>In the desktop installer, choose <strong>Start workshop → Open Studio → Control → Phone pendant → Enable phone pairing</strong>. Enter the server address reachable from the phone. Follow the <a href="#phone-connections">Android connection guide</a> to pair over Wi-Fi, USB tethering or Bluetooth tethering.</p>
-<p>From the command line, <code>sh start.sh --monitor</code> with the <code>web</code> extra installed serves an encrypted monitor whose certificate is identified in the pairing link; add <code>--monitor-plaintext</code> for Pocket 0.4.1 and earlier. To serve a certificate of your own instead, supply one valid for the server hostname used on the phone:</p>
+<p>From the command line, <code>sh start.sh --monitor</code> with the TLS relay built serves an encrypted monitor whose certificate is identified in the pairing link; add <code>--monitor-plaintext</code> for Pocket 0.4.1 and earlier. To serve a certificate of your own instead, supply one valid for the server hostname used on the phone:</p>
 <pre><code class="language-sh">sh start.sh --monitor --monitor-port 8766 --monitor-cert server.pem --monitor-key server-key.pem
 </code></pre>
-<p>The console displays a fresh pairing URL containing a random token. Replace its <code>&lt;PI-LAN-IP&gt;</code> placeholder with the certificate's matching host/IP, then open it on the phone. Treat this URL as a credential; do not include it in screenshots or repository files. Restarting revokes it. This example remains simulator-only. Without the <code>web</code> extra the monitor falls back to HTTP on the LAN and the console says so.</p>
+<p>The console displays a fresh pairing URL containing a random token. Replace its <code>&lt;PI-LAN-IP&gt;</code> placeholder with the certificate's matching host/IP, then open it on the phone. Treat this URL as a credential; do not include it in screenshots or repository files. Restarting revokes it. This example remains simulator-only. Without the TLS relay the monitor falls back to HTTP on the LAN and the console says so.</p>
 <p>Monitor control is distinct from the upload inbox. Releasing a software pendant or sending feed hold is not a physical emergency stop, and accepted/buffered motion can continue depending on firmware.</p>
 <h2>MCP assistant workshop</h2>
-<p>Install with <code>--mcp</code>, then configure your MCP client to launch the absolute path to <code>.venv/bin/python</code> (Windows: <code>.venv\Scripts\python.exe</code>) with arguments <code>-m</code>, <code>studio.mcp_server</code> and the project directory as its working directory. The MCP installer option installs the workshop browser unless an existing Chromium executable is configured. The <a href="#mcp">assistant setup guide</a> covers Claude, ChatGPT, optional HTTP hosting and access to the workshop. No MCP setup automatically connects or moves a machine.</p>
+<p>Configure your MCP client to launch the absolute path to <code>kerfkite-mcp</code> (in the program folder, or <code>build/native</code> for a source build) with <code>--output-dir</code> and a private folder. Its workshop opens an installed Google Chrome, Chromium or Microsoft Edge. The <a href="#mcp">assistant setup guide</a> covers Claude, ChatGPT, optional HTTP hosting and access to the workshop. No MCP setup automatically connects or moves a machine.</p>
 <h2>Updating, stopping and removing</h2>
-<p>Stop the foreground service with Ctrl+C. Before updating, download unsaved projects and back up <code>web-data</code>, exported template libraries and configuration. Install new source into the same project, rerun the installer, restart the service and refresh the browser after saving its work. Native extensions must be rebuilt for a different OS, CPU architecture or incompatible Python version.</p>
-<p>Removing <code>.venv</code> removes that installation's Python dependencies. Removing source does not delete browser IndexedDB projects; browser site-data controls manage those separately. Keep or remove <code>web-data</code> deliberately according to whether its accounts/files are still needed. Do not delete the only copy of project files when uninstalling.</p>
+<p>Stop the foreground service with Ctrl+C. Before updating, download unsaved projects and back up <code>web-data</code>, exported template libraries and configuration. Update the source in the same project, rerun the build, restart the service and refresh the browser after saving its work. A build is made for one OS and CPU architecture.</p>
+<p>Removing <code>build</code> removes the programs a source build made. Removing source does not delete browser IndexedDB projects; browser site-data controls manage those separately. Keep or remove <code>web-data</code> deliberately according to whether its accounts/files are still needed. Do not delete the only copy of project files when uninstalling.</p>
 <h2>Reopening a project in an older Studio version</h2>
 <p>Version 0.6.1 upgrades the browser project library the first time it opens. Before downgrading, open each design and revision you want to keep and choose <strong>Download project</strong>. Older releases can open the downloaded project files. The upgraded browser library requires version 0.6.1 or later.</p>
 </section><section id="installer-builds"><h1>Building KerfKite installers</h1>
-<p>The desktop launcher contains only Go standard-library code. Each package carries a platform-matched Studio wheel with the C++ relief and stock simulators and locked requirements. The launcher fetches the platform’s uv archive from the pinned upstream release, verifies its SHA-256, and uses it to install a private CPython 3.12 runtime. All application wheels are hash-checked. Python, geometry libraries and optional STEP binaries are installed on the user’s machine.</p>
+<p>The desktop launcher contains only Go standard-library code. Each package carries the workstation server <code>kerfkite-studio</code> (see <a href="#native">The workstation server</a>) with the editor's files, the HTTPS editor <code>kerfkite-web</code>, the MCP assistant server <code>kerfkite-mcp</code> with the template collection, <code>kerfkite-cam</code>, the phone pendant's TLS relay and STEP exchange as the Open CASCADE add-on <code>kerfkite-step</code> with the Open CASCADE 7.9.3 libraries and their notices (LGPL 2.1, as separate files that can be replaced). The launcher finds <code>kerfkite-studio</code> beside itself (in <code>Contents/Resources</code> on macOS) and starts it with the editor's files from <code>static/</code>, in simulation unless the operator enables the controller ports for the session. A package needs no Python and downloads nothing when it first starts. Windows Setup offers STEP as a component of its own, which a reinstall without it removes; the macOS and Linux packages carry it. The launcher's setup page says whether STEP is installed.</p>
 <p>The installers are how every part of the product, and each third-party component kept inside it, reaches a user. <a href="#supply-chain">What the installers install</a> lists each part, what has to be put in place for it, and the rule that a component and its installation land in the same change.</p>
 <h2>Release workstation</h2>
-<p>Use macOS with Go, Python 3.12, Pillow, uv, dpkg-deb, Apple command line tools and NSIS (makensis). Alternatively the Windows packaging step accepts a local Docker image named kerfkite-installer-nsis containing Debian’s NSIS package. All paths below are relative to the checkout root.</p>
+<p>Use macOS with Go, Python 3.12 with Pillow (for the packaging script), dpkg-deb, Apple command line tools and NSIS (makensis). Alternatively the Windows packaging step accepts a local Docker image named kerfkite-installer-nsis containing Debian's NSIS package. All paths below are relative to the checkout root.</p>
 <ol>
 <li>
-<p>Set <code>__version__</code> in <code>studio/__init__.py</code> for a new Studio release and check its download links. Refresh dependency locks when dependencies change. For a new Android build, update its version separately. Rebuild the bundled help with <code>python scripts/build_help.py</code>. To refresh the locks, run <code>uv pip compile pyproject.toml --universal --python-version 3.12 --only-binary :all: --generate-hashes --no-header --no-annotate -o packaging/desktop/requirements.lock</code> and repeat with <code>--extra step -c packaging/desktop/requirements.lock -o packaging/desktop/step.lock</code>.</p>
+<p>Set the version in <code>VERSION</code> for a new Studio release and check its download links. For a new Android build, update its version separately. Rebuild the bundled help with <code>python scripts/build_help.py</code>.</p>
 </li>
 <li>
-<p>Build one CPython 3.12 wheel per desktop target. Run the manual <strong>Build desktop CAM wheels</strong> workflow to build and exercise all five target wheels. Download its artifacts to one directory, for example with <code>gh run download RUN_ID --pattern '*-wheel' --dir dist/wheels --merge</code>. To build one wheel locally on its target, run <code>KERFKITE_REQUIRE_NATIVE=1 python -m build --wheel --outdir dist/wheels</code> with a C++ compiler installed. On Windows PowerShell set <code>$env:KERFKITE_REQUIRE_NATIVE='1'</code> first. For Linux releases use the workflow's manylinux build and repair steps. For the browser-only installer also build a portable wheel with <code>KERFKITE_PORTABLE_WHEEL=1 uv build --wheel --out-dir dist/browser</code>.</p>
+<p>Run the manual <strong>Build the desktop programs without Python</strong> workflow (<code>native-programs.yml</code>). For each desktop target it builds Open CASCADE 7.9.3 from the pinned source with <code>native/step/open-cascade.cmake</code> (kept in the cache afterwards), builds and tests the programs (Linux on manylinux_2_28, for glibc 2.28 and later), and uploads a folder of them, made by <code>cmake --install</code>. Download the folders with <code>gh run download RUN_ID --pattern 'native-*' --dir dist/native</code>.</p>
 </li>
 <li>
-<p>Run <code>python packaging/desktop/build.py dist/wheels dist/installers mac-arm64 mac-amd64 linux-arm64 linux-amd64 windows-amd64</code>. Each desktop installer embeds its target's compiled wheel. A missing, ambiguous or portable-only wheel stops packaging. The launcher's private runtime installs that local wheel. The macOS application has an ad-hoc signature and Windows Setup uses per-user installation.</p>
+<p>Run <code>python packaging/desktop/build.py dist/native dist/installers mac-arm64 mac-amd64 linux-arm64 linux-amd64 windows-amd64</code>. A target whose folder lacks the server or the relay stops packaging. The macOS application has an ad-hoc signature and Windows Setup uses per-user installation.</p>
 <p>Every package puts KerfKite Studio where a new user looks for it. Windows Setup always adds it to Start, and its components page offers a desktop shortcut, ticked; the uninstaller removes both, and a reinstall without the shortcut removes an old one. The Debian package installs <code>org.kerfkite.Studio.desktop</code> in the applications menu. The DMG carries an Applications link to drag the app onto. The launcher does the rest on the first <strong>Choose your workshop</strong> page: a desktop shortcut on macOS and Linux, and for the portable Linux archive a menu entry pointing at wherever it was extracted, using the <code>kerfkite-studio.png</code> the archive carries. It marks the entries it writes with <code>X-KerfKite-Launcher=shortcut</code>, repoints them when the folder moves and leaves every other file alone. Opened from the disk image or its translocated copy, the Mac launcher asks the user to drag the app to Applications first.</p>
 </li>
 <li>
@@ -1100,30 +1085,21 @@ kerfkite-web --data-dir web-data serve --public-url https://your-pi.local:8443 -
 <p>For each release file, publish its SHA-256 as a line of <code>SHA256SUMS.txt</code>. Upload the packages and checksums to a release for the corresponding source commit. In <strong>Actions → Check desktop release installers</strong>, run the workflow against that tag. On Linux and macOS it installs the release, tests the window, generates a simulated toolpath, exercises STEP and relaunches offline. The hosted Windows Server runner checks that Setup rejects that operating system before installing any files. Run the graphical acceptance test on a Windows 10 or 11 x64 client.</p>
 </li>
 </ol>
-<p>For local smoke testing, run <code>python validation/installer_smoke.py &quot;/path/to/installed/KerfKite&quot; --step</code> with ports 18764 and 18765 free. The test uses a temporary application-data directory. The shortcut opens the setup tab. On Linux it also asks for both shortcuts, in temporary XDG data and desktop folders, and checks that the desktop entry starts the installed launcher and that only a portable copy writes its own menu entry. <code>go test</code> in <code>packaging/desktop</code> covers the shortcut rules on every platform, including folder names that need quoting. Starting a workshop opens the selected native interface. Platform-specific Gatekeeper, SmartScreen and desktop shell prompts need a graphical desktop to check.</p>
-<p>On Apple Silicon with Rosetta, add <code>--also-intel &quot;/path/to/Intel.app/Contents/MacOS/KerfKite&quot;</code> to the Apple Silicon smoke command to exercise both installers with the same data directory. Each architecture has its own private Python runtime and setup tool.</p>
-<p>The Debian package version combines the wheel version with the packaging revision, normally <code>-1</code>. The package declares <code>libgl1</code> so OpenCascade STEP loads on minimal Debian installations. A portable Linux archive expects the desktop to provide <code>libGL.so.1</code> for STEP. The full application uses an architecture-specific wheel.</p>
+<p>For local smoke testing, run <code>python validation/installer_smoke.py &quot;/path/to/installed/KerfKite&quot; --step</code> with ports 18764 and 18765 free. The test uses a temporary application-data directory, checks that the launcher set nothing up and downloaded nothing, and writes and reads a STEP part through the add-on. The shortcut opens the setup tab. On Linux it also asks for both shortcuts, in temporary XDG data and desktop folders, and checks that the desktop entry starts the installed launcher and that only a portable copy writes its own menu entry. <code>go test</code> in <code>packaging/desktop</code> covers the shortcut rules on every platform, including folder names that need quoting. Starting a workshop opens the selected native interface. Platform-specific Gatekeeper, SmartScreen and desktop shell prompts need a graphical desktop to check.</p>
+<p>On Apple Silicon with Rosetta, add <code>--also-intel &quot;/path/to/Intel.app/Contents/MacOS/KerfKite&quot;</code> to the Apple Silicon smoke command to exercise both installers with the same data directory.</p>
+<p>The Debian package version combines the Studio version with the packaging revision, normally <code>-1</code>. The package declares <code>libgl1</code> so Open CASCADE loads on minimal Debian installations. A portable Linux archive expects the desktop to provide <code>libGL.so.1</code> for STEP.</p>
 <p>Build the assistant skill with <code>python scripts/package_skill.py dist/installers/kerfkite-workshop-skill.zip</code>.
 Include the ZIP in <code>SHA256SUMS.txt</code>. Extracting it produces the <code>kerfkite-workshop</code> folder with its instructions, interface metadata and MIT license.</p>
-<h2>Packages without Python</h2>
-<p>The workstation server without Python (<code>kerfkite-studio</code>, see <a href="#native">The workstation server</a>) can be packaged in place of the wheel. Such a package needs no Python runtime and downloads nothing when it first starts: the launcher finds <code>kerfkite-studio</code> beside itself (in <code>Contents/Resources</code> on macOS) and starts it with the editor's files from <code>static/</code>, in simulation unless the operator enables the controller ports for the session. The package carries the phone pendant's TLS relay and <code>kerfkite-cam</code>, and STEP exchange as the Open CASCADE add-on <code>kerfkite-step</code> with the Open CASCADE 7.9.3 libraries and their notices (LGPL 2.1, as separate files that can be replaced). Windows Setup offers STEP as a component of its own, which a reinstall without it removes; the macOS and Linux packages carry it. The launcher's setup page says whether STEP is installed instead of offering to download it.</p>
-<ol>
-<li>Run the manual <strong>Build the desktop programs without Python</strong> workflow (<code>native-programs.yml</code>). For each desktop target it builds Open CASCADE 7.9.3 from the pinned source with <code>native/step/open-cascade.cmake</code> (kept in the cache afterwards), builds and tests the programs (Linux on manylinux_2_28, for glibc 2.28 and later), and uploads a folder of them, made by <code>cmake --install</code>. Download the folders with <code>gh run download RUN_ID --pattern 'native-*' --dir dist/native</code>.</li>
-<li>Run <code>python packaging/desktop/build.py --native dist/native dist/installers mac-arm64 mac-amd64 linux-arm64 linux-amd64 windows-amd64</code>. The version is <code>__version__</code> in <code>studio/__init__.py</code>. Everything else is as for the wheel packages above.</li>
-<li><code>python validation/installer_smoke.py &quot;/path/to/installed/KerfKite&quot; --step</code> recognises such a package: it checks that no Python runtime was made and writes and reads a STEP part through the add-on.</li>
-</ol>
-<p>Not yet run: the workflow on GitHub's runners and the macOS and Windows packages; the Linux x86-64 portable archive and Debian package were built in a development container, and the portable archive passed the smoke test with STEP.</p>
 <h2>Native windows</h2>
 <p>The release builder compiles AppKit with the macOS SDK for both architectures and signs the helper before signing the application bundle. The Linux window is a C program (<code>linux/</code>) on GTK 3 that finds WebKitGTK 4.1, or else 4.0, when it starts, so one build runs with either; building it needs a C compiler, CMake, pkg-config and the GTK 3 headers (<code>libgtk-3-dev</code> on Debian and Ubuntu). Linux packages carry it and declare GTK 3 and WebKitGTK, and no Python. For the widest reach, build them on the oldest distribution you support: the window then needs no newer C library than it. Building Windows requires the .NET SDK with Roslyn. The Windows build script verifies pinned NuGet packages before compiling, bundles the WebView2 managed assemblies and x64 loader, and includes their Microsoft licence and notices. The runtime is supplied separately by Microsoft. Set <code>KERFKITE_NATIVE_BUILD_CACHE</code> to reuse verified downloads.</p>
 <p>From a signed-in desktop on a Windows 10 or 11 x64 client with Python, 7-Zip and the .NET SDK, run <code>validation/windows_client_smoke.ps1 -Installer &lt;setup.exe&gt; -Sha256 &lt;release-digest&gt;</code>. It checks the installer and both executables, exercises the extracted release in a temporary simulator, tests the native controls, and relaunches offline. The check leaves Start menu shortcuts and the installed application directory alone.</p>
 <p>The window sources and platform smoke checks are in <code>packaging/desktop/{macos,windows,linux}/</code>. The shared document adapter lives in <code>studio/static/desktop-workspace.js</code>. Its asynchronous open uses the regular project validator, including simulation of saved machining settings. Export checks that the preview still matches the current design. Run <code>validation/simulate_solid_workspace.py</code> for the shared editor regression checks.</p>
 <h2>Browser-only SBC packages</h2>
-<p>Build the portable wheel from the release checkout as described above. From that checkout, use Python 3.12 and dpkg-deb to package the wheel matching the project version.</p>
-<pre><code class="language-sh">studio_version=$(python -c 'from studio import __version__; print(__version__)')
-python packaging/desktop/build_browser.py &quot;dist/browser/kerfkite_studio-${studio_version}-py3-none-any.whl&quot; dist/sbc
+<p>From the release checkout, use Python 3.12 and dpkg-deb to package the editor's files:</p>
+<pre><code class="language-sh">python packaging/desktop/build_browser.py dist/sbc
 </code></pre>
-<p>The portable wheel supplies the static editor and all vendor notices. The output is an architecture-independent Debian package with a desktop menu entry, and a portable ZIP with the same editor. Publish both under the release tag with <code>SBC-SHA256SUMS.txt</code>. Run <strong>Check SBC release packages</strong> in Actions against the tag to verify the downloads and exercise both installation paths.</p>
-<p>To package the interactive materials guide as one offline HTML file, run <code>python scripts/build_materials_guide.py dist/KerfKite-Materials-Guide.html</code>. Include that file in the release and its checksum in <code>SHA256SUMS.txt</code>. The wheel and browser packages already carry the guide as linked static assets.</p>
+<p>The package carries the static editor from <code>studio/static</code> with all its vendor notices, at the version in <code>VERSION</code>. The output is an architecture-independent Debian package with a desktop menu entry, and a portable ZIP with the same editor. Publish both under the release tag with <code>SBC-SHA256SUMS.txt</code>. Run <strong>Check SBC release packages</strong> in Actions against the tag to verify the downloads and exercise both installation paths.</p>
+<p>To package the interactive materials guide as one offline HTML file, run <code>python scripts/build_materials_guide.py dist/KerfKite-Materials-Guide.html</code>. Include that file in the release and its checksum in <code>SHA256SUMS.txt</code>. The desktop and browser packages already carry the guide as linked static assets.</p>
 <p>Build the stock-art SVG archive from the same source tree with <code>python scripts/export_stock_art.py dist/KerfKite-Stock-Artwork.zip</code>. Its offline index links to each individual design.</p>
 </section><section id="labels"><h1>Engraved lettering and production labels</h1>
 <h2>Single-line text</h2>
@@ -1261,7 +1237,7 @@ python packaging/desktop/build_browser.py &quot;dist/browser/kerfkite_studio-${s
 </table>
 <h2>Desktop installers</h2>
 <p>KerfKite’s native desktop window code uses the project’s MIT licence. AppKit and WebKit come from macOS. The Linux window links the distribution's GTK 3 and loads its WebKitGTK when it starts; the package ships neither. Windows Setup redistributes Microsoft WebView2 SDK assemblies and the x64 loader from the pinned SDK NuGet package. The installer places the original Microsoft licence and third-party notices beside those files. The Microsoft Evergreen WebView2 Runtime is installed separately and has its own terms. The .NET Framework reference assemblies from the build are excluded from the installer. <a href="https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.4314.35">Microsoft WebView2 SDK</a></p>
-<p>The desktop packages include the first-party platform Studio wheel containing its C++ CAM module, its bundled vendor notices, a hash-pinned dependency list and a Go launcher. The launcher ships Go notices under <code>runtime-notices</code>. The C++ workstation server (<code>native/server</code>) is first-party code on the C++ standard library and the operating system; its phone pendant TLS relay (<code>packaging/pendant-tls</code>) is first-party Go on the Go standard library alone, under the same Go notices. First launch downloads the pinned Astral uv executable after checking the release digest. uv installs a private Python runtime and the listed third-party wheels on the user’s computer. Each downloaded distribution retains its upstream terms. The Android release APK uses a dedicated project signing certificate. <a href="https://github.com/astral-sh/uv/blob/0.13.1/LICENSE-MIT">uv licence</a> · <a href="https://go.dev/LICENSE">Go licence</a></p>
+<p>The desktop packages contain first-party programs, the editor's files with their bundled vendor notices, and a Go launcher. The launcher ships Go notices under <code>runtime-notices</code>. The C++ programs (<code>native/</code>: the workstation server, the HTTPS editor, the MCP assistant server and <code>kerfkite-cam</code>) are first-party code on the C++ standard library and the operating system; the phone pendant TLS relay (<code>packaging/pendant-tls</code>) is first-party Go on the Go standard library alone, under the same Go notices. The STEP add-on (<code>kerfkite-step</code>) is first-party code linked to Open CASCADE's shared libraries, which the package carries as separate files with their notices (below). Nothing is downloaded or installed on first launch, and no Python runtime or third-party Python package is part of a package. The Android release APK uses a dedicated project signing certificate. <a href="https://go.dev/LICENSE">Go licence</a></p>
 <h2>Assets included in the frontend</h2>
 <p>The bundled minified opentype.js matched the upstream 2.0.0 npm distribution byte for byte. That distribution embeds tiny-inflate 1.0.3. The accompanying vendor directory now includes the MIT notices for opentype.js and tiny-inflate and the zlib notice for the tinf decoder from which tiny-inflate was ported. <a href="https://www.npmjs.com/package/opentype.js/v/2.0.0">opentype.js release</a> · <a href="https://www.npmjs.com/package/tiny-inflate/v/1.0.3">tiny-inflate release</a> · <a href="https://github.com/jibsen/tinf/blob/master/LICENSE">tinf licence</a></p>
 <p>All three TTF payloads decoded from <code>studio/static/vendor/fonts.js</code> matched their respective upstream variable fonts byte for byte. Each retains its copyright notice and SIL Open Font License 1.1. The Lora notice reserves the name Lora. Keep these texts when moving the offline editor. Observe the OFL rules for modified fonts and reserved names. Ordinary designs made using the glyphs may use the designer's chosen licence. <a href="https://github.com/google/fonts/tree/main/ofl/lora">Lora</a> · <a href="https://github.com/google/fonts/tree/main/ofl/montserrat">Montserrat</a> · <a href="https://github.com/google/fonts/tree/main/ofl/cormorantgaramond">Cormorant Garamond</a> · <a href="https://openfontlicense.org/ofl-faq/">OFL FAQ</a></p>
@@ -3205,7 +3181,7 @@ layer = pcb_import.gerber(pcb_import.read('board-F_Cu.gbr'))      # any layer as
 <p>The Apple silicon and Intel macOS runners and both Linux architectures passed native window, project and simulation checks. The SBC workflow exercised the desktop package on Ubuntu 22.04 and 26.04 userlands and tested the browser packages offline. The 0.5.1 runs used simulation. <a href="https://github.com/ShaunPrice/KerfKite/actions/runs/44410337833">Desktop installer checks</a> · <a href="https://github.com/ShaunPrice/KerfKite/actions/runs/44410344003">SBC package checks</a></p>
 <p><strong>Earlier public source release (18 November).</strong> All 11 CAD/CAM harness groups passed on macOS ARM64, Windows 11 Pro x86-64 and a physical Raspberry Pi 5 ARM64. The Windows and Pi hosts installed the public source in isolated environments. Each run exercised the STEP runtime and native C++ relief kernels, with 151 Python and 114 JavaScript tests. See the <a href="#release-review">release review</a> for the browser checks and the limits of physical verification. Earlier measurements below identify their own host and workload.</p>
 <h2>Platform support</h2>
-<p>The desktop installers provide AppKit on macOS, Windows Forms and WebView2 on Windows, and GTK 3 with WebKitGTK on Linux. Each native window embeds the shared editor and connects to a local Python service. The browser interface remains available from the launcher. The service provides solid modelling, CAM and simulation. The Android edition provides native 2D design, portable project and SVG exchange, and a CNC pendant paired with the Studio server.</p>
+<p>The desktop installers provide AppKit on macOS, Windows Forms and WebView2 on Windows, and GTK 3 with WebKitGTK on Linux. Each native window embeds the shared editor and connects to the local workstation server, <code>kerfkite-studio</code>, which the package carries; no Python is installed. The browser interface remains available from the launcher. The server provides solid modelling, CAM and simulation. The Android edition provides native 2D design, portable project and SVG exchange, and a CNC pendant paired with the Studio server.</p>
 <table>
 <thead>
 <tr>
@@ -3216,31 +3192,31 @@ layer = pcb_import.gerber(pcb_import.read('board-F_Cu.gbr'))      # any layer as
 <tbody>
 <tr>
 <td>macOS, Apple Silicon</td>
-<td>Install 64-bit Python 3.12 and run the macOS installer below. The CAD and machining harness and Chrome editing workflows passed on macOS ARM64.</td>
+<td>Build with the commands below (Apple command line tools and CMake). The CAD and machining harness and Chrome editing workflows passed on macOS ARM64.</td>
 </tr>
 <tr>
 <td>macOS, Intel</td>
-<td>For a source installation, use x86-64 Python. The published Intel desktop package passed on a hosted Intel macOS runner.</td>
+<td>A source build on the Intel Mac makes x86-64 programs. The published Intel desktop package passed on a hosted Intel macOS runner.</td>
 </tr>
 <tr>
 <td>Windows 11, x86-64</td>
-<td>Install 64-bit Python 3.12 and use the PowerShell installer. Package installation and all four core CAD and machining scenarios passed on an x64 Windows build 26300 machine.</td>
+<td>Build with Visual Studio 2022's C++ tools and the PowerShell script. Package installation and all four core CAD and machining scenarios passed on an x64 Windows build 26300 machine.</td>
 </tr>
 <tr>
 <td>Windows 10, x86-64</td>
-<td>Use 64-bit Python 3.12 and the same PowerShell installer. A Windows 10 runtime and UI test is pending.</td>
+<td>Use the same build tools and PowerShell script. A Windows 10 runtime and UI test is pending.</td>
 </tr>
 <tr>
 <td>Linux, x86-64</td>
-<td>Use 64-bit Python 3.11 or 3.12 on a recent glibc distribution. Installation and all four core scenarios passed on Ubuntu 24.04 x86-64 under WSL.</td>
+<td>Build on a recent glibc distribution with a C++17 compiler and CMake. Installation and all four core scenarios passed on Ubuntu 24.04 x86-64 under WSL.</td>
 </tr>
 <tr>
 <td>Linux, ARM64</td>
-<td>Use a 64-bit OS and Python environment. The four core scenarios passed on Debian ARM64 on a physical Raspberry Pi 5.</td>
+<td>Use a 64-bit OS. The four core scenarios passed on Debian ARM64 on a physical Raspberry Pi 5.</td>
 </tr>
 <tr>
 <td>Raspberry Pi 4B or 5, 4 GB or 8 GB</td>
-<td>Use 64-bit Raspberry Pi OS with a supported Python. On a Pi 5 with 8 GB, the server fixture passed under a 1.5 GiB memory ceiling and a two-core CPU quota in 5.49 s. Peak Python process RSS was 54,048 KiB. The Chromium browser and server also passed all nine CAD workflow groups together under a 2 GiB ceiling and two-core quota on that Pi 5, including sketch drag, project reopening, STL and router relief transfer. Pi 4 and whole-browser use on a physical 4 GB board still need measurement.</td>
+<td>Use 64-bit Raspberry Pi OS. On a Pi 5 with 8 GB, the server fixture passed under a 1.5 GiB memory ceiling and a two-core CPU quota in 5.49 s. Peak Python process RSS was 54,048 KiB. The Chromium browser and server also passed all nine CAD workflow groups together under a 2 GiB ceiling and two-core quota on that Pi 5, including sketch drag, project reopening, STL and router relief transfer. Pi 4 and whole-browser use on a physical 4 GB board still need measurement.</td>
 </tr>
 <tr>
 <td>Android 8.0 (API 26) or later, minimum supported RAM 2 GB</td>
@@ -3254,10 +3230,10 @@ layer = pcb_import.gerber(pcb_import.read('board-F_Cu.gbr'))      # any layer as
 sh start.sh --port 8765
 </code></pre>
 <p>On Windows 10/11 in PowerShell:</p>
-<pre><code class="language-powershell">.\scripts\install.ps1 -Python C:\Python312\python.exe
+<pre><code class="language-powershell">.\scripts\install.ps1
 .\start.bat --port 8765
 </code></pre>
-<p>Set the executable path to the installed 64-bit Python. Open the printed localhost address. Add HTTPS/web or MCP extras as described in <a href="#install">Install</a>. The geometry kernel and browser renderer use CPU resources. Custom Metal rendering and 32-bit x86/ARM builds have no acceptance evidence.</p>
+<p>Run it from a Developer PowerShell for Visual Studio 2022. Open the printed localhost address. The HTTPS editor and the MCP assistant server are built with the workstation server; see <a href="#install">Install</a>. The geometry kernel and browser renderer use CPU resources. Custom Metal rendering and 32-bit x86/ARM builds have no acceptance evidence.</p>
 <h2>Raspberry Pi sizing</h2>
 <p>Start on a 4 GB board with a single editor tab. Use a small solid, transfer a silhouette and preview a contour first. For relief work, start with a coarse stepover and measure a small region before increasing the sampling density. Large meshes, raster jobs and many open browser tabs can dominate memory. Run the same fixture on the target board with the following command:</p>
 <pre><code class="language-sh">.venv/bin/python scripts/simulate_studio.py --json pi-result.json
@@ -6370,14 +6346,9 @@ solid_kernel.solid_backend()   # 'kernel' with the extension, 'manifold' without
 <td>Keep: it is the language's own library, with no other packages.</td>
 </tr>
 <tr>
-<td>uv, downloaded by pinned SHA-256 for each platform</td>
+<td>uv, and the locked Python packages it installed</td>
 <td>Installing the Python environment on first run</td>
-<td>Goes when Python goes. Until then it stays pinned by hash.</td>
-</tr>
-<tr>
-<td>The locked Python packages, each pinned by hash (<code>packaging/desktop/requirements.lock</code>)</td>
-<td>The installed environment</td>
-<td>As for each package above.</td>
+<td><strong>Removed</strong>: the packages carry the native programs and install no Python.</td>
 </tr>
 </tbody>
 </table>
@@ -6472,24 +6443,14 @@ solid_kernel.solid_backend()   # 'kernel' with the extension, 'manifold' without
 </thead>
 <tbody>
 <tr>
-<td>Studio and its Python environment</td>
-<td>The launcher, the locked Python packages, and the compiled extension for the platform. Probe levelling and circuit-board import live in that extension, so they arrive with it.</td>
-<td>Installed today; the installer check exercises it.</td>
-</tr>
-<tr>
-<td>Studio without Python</td>
-<td>The launcher, <code>kerfkite-studio</code>, the pendant's relay, <code>kerfkite-cam</code> and the editor's files; nothing is downloaded on the first start.</td>
-<td>Packaging is ready (<code>build.py --native</code>, the <strong>Build the desktop programs without Python</strong> workflow); the releases do not use it yet.</td>
+<td>Studio</td>
+<td>The launcher, <code>kerfkite-studio</code> with the editor's files, <code>kerfkite-web</code>, <code>kerfkite-mcp</code> with the template collection, <code>kerfkite-cam</code> and the pendant's relay; nothing is downloaded on the first start. Probe levelling and circuit-board import live in the core, so they arrive with the programs.</td>
+<td>Packaging is ready (<code>build.py</code>, the <strong>Build the desktop programs without Python</strong> workflow); <strong>not in a release yet</strong>. The installer check starts the installed launcher and exercises the server.</td>
 </tr>
 <tr>
 <td>The in-house kernels (2D polygons, 3D solids, JSON)</td>
-<td>Nothing separate: they are compiled into the core and the extension.</td>
-<td>All three arrive with the extension and are in use. The installed-wheel check runs offsets, a pocket and a fill through the polygon kernel and compares the programs with a recorded digest; it models a part and a drawing through the solid and polygon kernels, by Studio's own entry points, and compares every vertex, triangle and outline with a recorded digest.</td>
-</tr>
-<tr>
-<td><code>kerfkite-cam</code>, the command-line tool</td>
-<td>The program for the platform.</td>
-<td><strong>Not installed yet.</strong> GEOS is out of it and it carries no third-party code; adding it to the installers is what remains.</td>
+<td>Nothing separate: they are compiled into the programs.</td>
+<td>In use. The self-tests, which run on every platform the programs are built for, include a digest of generated solids that must be the same everywhere.</td>
 </tr>
 <tr>
 <td>The editor of the C++ application</td>
@@ -6498,13 +6459,13 @@ solid_kernel.solid_backend()   # 'kernel' with the extension, 'manifold' without
 </tr>
 <tr>
 <td>STEP add-on</td>
-<td>Open Cascade and its wrapper, as a component the user chooses, with its notice and licence text.</td>
-<td>Installed today as an option of the Python service (the installer check has a STEP run). For the C++ server, <code>kerfkite-step</code> and the Open Cascade 7.9.3 libraries with their notices: a Setup component on Windows, carried by the macOS and Linux packages; packaging is ready, <strong>not in a release yet</strong>.</td>
+<td><code>kerfkite-step</code> and the Open Cascade 7.9.3 libraries with their notices, as separate files: a Setup component on Windows, carried by the macOS and Linux packages.</td>
+<td>Packaging is ready, <strong>not in a release yet</strong>; the installer check writes and reads a part through it.</td>
 </tr>
 <tr>
 <td>Encrypted links</td>
-<td>The cryptography library for the platform.</td>
-<td>Installed today.</td>
+<td>Nothing separate: the system's cryptography and the Go relay.</td>
+<td>In use.</td>
 </tr>
 <tr>
 <td>KerfKite Pocket</td>

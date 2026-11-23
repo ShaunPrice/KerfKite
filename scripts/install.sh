@@ -1,27 +1,21 @@
 #!/bin/sh
-# Installs into this checkout's .venv. Does not configure services or hardware.
+# Builds Studio's programs from this checkout into build/native and runs their self-tests.
+# Does not configure services or hardware. Needs CMake 3.16 or newer and a C++17 compiler; with Go installed it
+# also builds the TLS relay (HTTPS pairing, hosted transfers), and with Open CASCADE's development files the STEP
+# add-on.
 set -eu
 cd "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-cnc_python=${CNC_PYTHON:-python3}
-cnc_extras=''
-cnc_assistant=false
-for cnc_option in "$@"; do
-  case "$cnc_option" in
-    --web) cnc_extras="${cnc_extras:+$cnc_extras,}web" ;;
-    --mcp) cnc_assistant=true; cnc_extras="${cnc_extras:+$cnc_extras,}mcp" ;;
-    --help) echo 'Usage: sh scripts/install.sh [--web] [--mcp]'; echo 'Set CNC_PYTHON to the Python 3.10+ executable if needed.'; exit 0 ;;
-    *) echo "Unknown option: $cnc_option" >&2; exit 2 ;;
+for option in "$@"; do
+  case "$option" in
+    --web|--mcp) ;;  # the hosted editor and the assistant server are always built
+    --help) echo 'Usage: sh scripts/install.sh'; echo 'Needs CMake 3.16+ and a C++17 compiler; Go adds the TLS relay.'; exit 0 ;;
+    *) echo "Unknown option: $option" >&2; exit 2 ;;
   esac
 done
-"$cnc_python" -c 'import sys; sys.exit("Python 3.10 or newer is required") if sys.version_info < (3,10) else None'
-if [ ! -x .venv/bin/python ]; then "$cnc_python" -m venv .venv; fi
-.venv/bin/python -c 'import sys; sys.exit("Existing .venv requires Python 3.10 or newer") if sys.version_info < (3,10) else None'
-cnc_package='.'
-if [ -n "$cnc_extras" ]; then cnc_package=".[$cnc_extras]"; fi
-.venv/bin/python -m pip install "$cnc_package"
-if [ "$cnc_assistant" = true ] && [ -z "${KERFKITE_MCP_CHROMIUM:-}" ]; then
-  .venv/bin/python -m playwright install chromium
-fi
-.venv/bin/python -c 'from studio.relief import _relief_native; print("Relief engine:", "C++ available" if _relief_native is not None else "Python fallback (optional C++ compiler not available)")'
-echo 'Installed. Start simulator: sh start.sh --port 8765'
+command -v cmake >/dev/null 2>&1 || { echo 'CMake 3.16 or newer is required.' >&2; exit 1; }
+jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)
+cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release
+cmake --build build/native --parallel "$jobs"
+ctest --test-dir build/native --output-on-failure
+echo 'Built. Start the simulator: sh start.sh --port 8765'
 echo 'Then open http://127.0.0.1:8765'

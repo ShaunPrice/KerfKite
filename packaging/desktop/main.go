@@ -5,12 +5,10 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	_ "embed"
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -31,7 +29,7 @@ const studioURL = "http://127.0.0.1:18765/"
 
 var form = template.Must(template.New("launcher").Parse(page))
 
-type options struct{ hardware, step, desktop, remember bool }
+type options struct{ hardware, desktop, remember bool }
 
 type state struct {
 	choices  chan options
@@ -128,109 +126,21 @@ func choose(ctx context.Context, s *state, automatic bool, showSetup func()) (op
 
 func runStudio(ctx context.Context, s *state, payload, data string, output *os.File, showSetup func()) error {
 	preference := filepath.Join(data, "native-simulation")
-	// The workstation server without Python, when the package carries it: nothing to set up or download.
-	if server := nativeServer(payload); server != "" {
-		_, prefErr := os.Stat(preference)
-		choice, err := choose(ctx, s, prefErr == nil, showSetup)
-		if err != nil {
-			return err
-		}
-		s.set("Opening the workshop", "Starting Studio on this computer.")
-		return serve(s, exec.CommandContext(ctx, server, nativeArguments(payload, choice.hardware)...), choice, preference, payload, data, output)
-	}
-	// A release gets its own environment. An interrupted setup retries on the next launch.
-	wheel, err := filepath.Glob(filepath.Join(payload, "kerfkite_studio-*.whl"))
-	if err != nil || len(wheel) != 1 {
+	// The workstation server is carried by the package: nothing to set up or download.
+	server := nativeServer(payload)
+	if server == "" {
 		return fmt.Errorf("the application files are incomplete. Reinstall KerfKite")
 	}
-	hash := sha256.New()
-	lock := filepath.Join(payload, "requirements.lock")
-	for _, name := range []string{wheel[0], lock, filepath.Join(payload, "step.lock")} {
-		f, e := os.Open(name)
-		if e != nil {
-			return e
-		}
-		_, e = io.Copy(hash, f)
-		f.Close()
-		if e != nil {
-			return e
-		}
-	}
-	env := filepath.Join(data, fmt.Sprintf("runtime-%s-%x", runtimePlatform, hash.Sum(nil)[:8]))
-	python := filepath.Join(env, "bin", "python")
-	var uv string
-	if runtime.GOOS == "windows" {
-		python = filepath.Join(env, "Scripts", "python.exe")
-	}
-	invoke := func(args ...string) error {
-		cmd := exec.CommandContext(ctx, uv, args...)
-		configure(cmd)
-		cmd.Dir = data
-		cmd.Env = append(os.Environ(), "UV_PYTHON_INSTALL_DIR="+filepath.Join(data, "python", runtimePlatform), "UV_CACHE_DIR="+filepath.Join(data, "cache"), "UV_NO_CONFIG=1", "UV_NO_PROGRESS=1", "UV_PYTHON_PREFERENCE=only-managed", "UV_PYTHON_INSTALL_BIN=0")
-		cmd.Stdout, cmd.Stderr = output, output
-		return cmd.Run()
-	}
-	marker := filepath.Join(env, ".installed")
 	_, prefErr := os.Stat(preference)
-	automatic := prefErr == nil
-
-	if _, err = os.Stat(marker); os.IsNotExist(err) {
-		automatic = false
-		showSetup()
-		s.set("Downloading the setup tools", "The first launch needs an internet connection.")
-		uv, err = setupTool(ctx, data)
-		if err != nil {
-			return err
-		}
-		s.set("Preparing Python", "The first launch downloads a private Python runtime. Keep this window open.")
-		if err = invoke("venv", "--allow-existing", "--python", "3.12", env); err != nil {
-			return fmt.Errorf("Python setup failed: %w", err)
-		}
-		s.set("Installing the design tools", "Downloading the geometry and machining libraries. This can take several minutes.")
-		if err = invoke("pip", "install", "--python", python, "--require-hashes", "--only-binary", ":all:", "-r", lock); err != nil {
-			return fmt.Errorf("library setup failed: %w", err)
-		}
-		if err = invoke("pip", "install", "--python", python, "--no-deps", wheel[0]); err != nil {
-			return fmt.Errorf("Studio setup failed: %w", err)
-		}
-		if err = os.WriteFile(marker, []byte("ready\n"), 0600); err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
-	}
-	choice, err := choose(ctx, s, automatic, showSetup)
+	choice, err := choose(ctx, s, prefErr == nil, showSetup)
 	if err != nil {
 		return err
 	}
-	if choice.step {
-		stepMarker := filepath.Join(env, ".step-installed")
-		if _, e := os.Stat(stepMarker); os.IsNotExist(e) {
-			s.set("Adding STEP exchange", "Downloading the optional CAD exchange libraries.")
-			uv, err = setupTool(ctx, data)
-			if err != nil {
-				return err
-			}
-			if err = invoke("pip", "install", "--python", python, "--require-hashes", "--only-binary", ":all:", "-r", filepath.Join(payload, "step.lock")); err != nil {
-				return fmt.Errorf("STEP setup failed. Retry without STEP to open the workshop: %w", err)
-			}
-			if err = os.WriteFile(stepMarker, []byte("ready\n"), 0600); err != nil {
-				return err
-			}
-		} else if e != nil {
-			return e
-		}
-	}
 	s.set("Opening the workshop", "Starting Studio on this computer.")
-	args := []string{"-I", "-m", "studio.desktop_server"}
-	if choice.hardware {
-		args = append(args, "--enable-hardware")
-	}
-	return serve(s, exec.CommandContext(ctx, python, args...), choice, preference, payload, data, output)
+	return serve(s, exec.CommandContext(ctx, server, nativeArguments(payload, choice.hardware)...), choice, preference, payload, data, output)
 }
 
-// serve runs the workstation server, Python's or the native one, until it stops: the workshop is ready when it
-// prints KERFKITE_READY.
+// serve runs the workstation server until it stops: the workshop is ready when it prints KERFKITE_READY.
 func serve(s *state, cmd *exec.Cmd, choice options, preference, payload, data string, output *os.File) error {
 	s.Lock()
 	automatic := s.automatic
@@ -413,7 +323,7 @@ func main() {
 				launched := st.phase == "Choose your workshop"
 				if launched {
 					st.phase = "Opening the workshop"
-					st.choices <- options{hardware: r.FormValue("hardware") == "yes", step: r.FormValue("step") == "yes", desktop: r.FormValue("interface") == "native", remember: r.FormValue("remember") == "yes"}
+					st.choices <- options{hardware: r.FormValue("hardware") == "yes", desktop: r.FormValue("interface") == "native", remember: r.FormValue("remember") == "yes"}
 				}
 				st.Unlock()
 				if launched && r.FormValue("shortcuts") == "offered" {
@@ -476,7 +386,7 @@ func main() {
 		shortcuts, first := spots.offers(), !exists(offered)
 		st.Lock()
 		defer st.Unlock()
-		form.Execute(w, map[string]any{"Phase": st.phase, "Detail": st.detail, "Active": st.active, "Choose": st.phase == "Choose your workshop", "Ready": st.phase == "Your workshop is ready", "Token": token, "Studio": studioURL, "Log": logfile, "Offers": shortcuts, "First": first, "Note": st.note, "Native": nativeServer(payload) != "", "Step": stepInstalled(payload)})
+		form.Execute(w, map[string]any{"Phase": st.phase, "Detail": st.detail, "Active": st.active, "Choose": st.phase == "Choose your workshop", "Ready": st.phase == "Your workshop is ready", "Token": token, "Studio": studioURL, "Log": logfile, "Offers": shortcuts, "First": first, "Note": st.note, "Step": stepInstalled(payload)})
 	})
 	srv := &http.Server{ReadHeaderTimeout: 5 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Host != address {
