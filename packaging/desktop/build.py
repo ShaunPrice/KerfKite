@@ -140,12 +140,14 @@ def linux(work, out, native, arch, version):
     pkg = work / "package"
     dest = pkg / "opt/kerfkite"
     payload(dest, native, "linux", arch)
-    # The GTK window, in C: it needs the GTK 3 headers to build, and finds WebKitGTK when it starts.
-    window = work / "window"
-    run("cmake", "-S", HERE / "linux", "-B", window, "-DCMAKE_BUILD_TYPE=Release")
-    run("cmake", "--build", window, "--target", "kerfkite-native")
+    # The GTK window, in C; it finds WebKitGTK when it starts. native-programs.yml builds it with the programs, for
+    # the same C library; a folder without it has it built here, which needs the GTK 3 headers.
     helper = dest / "kerfkite-native"
-    shutil.copyfile(window / "kerfkite-native", helper)
+    if not helper.is_file():
+        window = work / "window"
+        run("cmake", "-S", HERE / "linux", "-B", window, "-DCMAKE_BUILD_TYPE=Release")
+        run("cmake", "--build", window, "--target", "kerfkite-native")
+        shutil.copyfile(window / "kerfkite-native", helper)
     helper.chmod(0o755)
     # The launcher points the menu entry and desktop shortcut of a portable copy at this icon.
     with Image.open(ICON) as im:

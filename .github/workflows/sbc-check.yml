@@ -1,13 +1,20 @@
 name: Check SBC release packages
+# The desktop package on older and newer Ubuntu userlands and the browser-only packages offline: from a published
+# release (tag), or, before anything is published, from the release-VERSION artifact of a native-programs.yml run.
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: KerfKite release containing the desktop and browser installers
-        required: true
+        description: KerfKite release containing the desktop and browser installers (ignored when a run is given)
+        required: false
         default: v0.6.1
+      run:
+        description: Or the ID of a native-programs.yml run whose release files to verify before publishing
+        required: false
+        default: ""
 permissions:
   contents: read
+  actions: read
 jobs:
   installers:
     strategy:
@@ -19,18 +26,38 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     steps:
+      - name: Find the source the packages were built from
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ inputs.run }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [ -n "$RUN" ]; then
+            echo "ref=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN" --jq .head_sha)" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=$TAG" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ steps.source.outputs.ref }}
       - name: Verify installer downloads
         env:
           GH_TOKEN: ${{ github.token }}
+          RUN: ${{ inputs.run }}
           TAG: ${{ inputs.tag }}
           ARCH: ${{ matrix.arch }}
         run: |
           mkdir packages
           cd packages
-          gh release download "$TAG" -p "KerfKite-Linux-$ARCH.deb" -p 'KerfKite-Browser-Editor*' -p '*SHA256SUMS.txt'
+          if [ -n "$RUN" ]; then
+            gh run download "$RUN" --repo "$GITHUB_REPOSITORY" --pattern 'release-*' --dir "$RUNNER_TEMP/release"
+            for name in "KerfKite-Linux-$ARCH.deb" KerfKite-Browser-Editor-all.deb KerfKite-Browser-Editor.zip SHA256SUMS.txt SBC-SHA256SUMS.txt; do
+              cp "$RUNNER_TEMP"/release/release-*/"$name" .
+            done
+          else
+            gh release download "$TAG" -p "KerfKite-Linux-$ARCH.deb" -p 'KerfKite-Browser-Editor*' -p '*SHA256SUMS.txt'
+          fi
           sha256sum --check --ignore-missing SHA256SUMS.txt
           sha256sum --check SBC-SHA256SUMS.txt
       - name: Exercise Studio on the Ubuntu 22.04 and 26.04 userlands

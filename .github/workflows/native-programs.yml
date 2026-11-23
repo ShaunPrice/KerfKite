@@ -1,13 +1,25 @@
-name: Build the desktop programs without Python
-# The workstation server, the phone pendant's TLS relay, kerfkite-cam and the STEP add-on with Open CASCADE 7.9.3
-# for each desktop target, as the folders packaging/desktop/build.py --native packages. Run on request, before a
-# release; Open CASCADE is built from its pinned source once per target and kept in the cache.
-on: workflow_dispatch
+name: Build the desktop programs and installers
+# For each desktop target: the workstation server, the HTTPS editor, the MCP assistant server, kerfkite-cam, the
+# phone pendant's TLS relay and the STEP add-on with Open CASCADE 7.9.3, as the folders packaging/desktop/build.py
+# packages; then each target's installer, made from its folder; then every file of a release with its checksums,
+# as one artifact. Run on request, before a release. Open CASCADE is built from its pinned source once per target
+# and kept in the cache.
+on:
+  workflow_dispatch:
+    inputs:
+      pocket:
+        description: Release whose signed Pocket APK the release carries
+        required: true
+        default: v0.6.1
 permissions:
   contents: read
 env:
   OCCT_TAG: V7_9_3
   OCCT_COMMIT: a016080bf6738d6aeae020badee4e888ad1540a5
+  # The Pocket release certificate (CN=KerfKite Pocket Release). An APK signed with any other cannot upgrade the
+  # installed app, so it stops the release.
+  POCKET_CERTIFICATE: ab6c76d565e4c66f0dca55288ca499f9b22a57b073477d6620676f12415e10df
+  PILLOW: pillow==12.3.0
 jobs:
   programs:
     strategy:
@@ -52,6 +64,21 @@ jobs:
           libraries=$(dirname "$(find "$RUNNER_TEMP/occt" \( -name TKernel.dll -o -name 'libTKernel*.dylib' \) | head -1)")
           PATH="$libraries:$PATH" ctest --test-dir build/native -C Release --output-on-failure
           cmake --install build/native --config Release --prefix "dist/${{ matrix.target }}"
+      - name: Build the Linux window on manylinux_2_28 (glibc 2.28)
+        if: runner.os == 'Linux'
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          # The GTK window links GTK 3 (3.22 or later) and finds WebKitGTK when it starts. Built on the programs'
+          # C library, it runs wherever they do.
+          docker run --rm -v "$PWD:/src" -w /src "quay.io/pypa/manylinux_2_28_$ARCH" bash -ec '
+            dnf install -y -q gtk3-devel pkgconf-pkg-config
+            /opt/python/cp312-cp312/bin/python -m pip install --quiet "cmake==3.31.6"
+            export PATH=/opt/python/cp312-cp312/bin:$PATH
+            cmake -S packaging/desktop/linux -B build/window -DCMAKE_BUILD_TYPE=Release
+            cmake --build build/window --target kerfkite-native --parallel 4
+          '
+          sudo chown -R "$(id -u):$(id -g)" build
       - name: Build, test and install the programs on manylinux_2_28 (glibc 2.28)
         if: runner.os == 'Linux'
         env:
@@ -69,10 +96,18 @@ jobs:
           '
           sudo chown -R "$(id -u):$(id -g)" build dist "$RUNNER_TEMP/occt"
           mv dist/native "dist/${{ matrix.target }}"
+          install -m 755 build/window/kerfkite-native "dist/${{ matrix.target }}/kerfkite-native"
           # The relay is Go's standard library and nothing else: no C library to match.
           cd packaging/pendant-tls
           CGO_ENABLED=0 GO111MODULE=off GOARCH=${{ matrix.goarch }} go build -trimpath -buildvcs=false \
             -o "$GITHUB_WORKSPACE/dist/${{ matrix.target }}/kerfkite-pendant-tls" .
+      - name: Check that nothing in the Linux folder needs a newer C library than glibc 2.28
+        if: runner.os == 'Linux'
+        run: |
+          newest=$(find "dist/${{ matrix.target }}" -type f -exec sh -c 'head -c 4 "$1" | grep -q ELF && objdump -T "$1"' _ {} \; \
+            | grep -o 'GLIBC_2\.[0-9]*' | sort -uV | tail -1)
+          echo "The newest C library version any file needs: $newest"
+          test "$(printf '%s\n' "$newest" GLIBC_2.28 | sort -V | tail -1)" = GLIBC_2.28
       - name: Check that the installed STEP add-on loads its Open CASCADE libraries from its own folder
         shell: bash
         run: |
@@ -94,4 +129,99 @@ jobs:
         with:
           name: native-${{ matrix.target }}
           path: dist/${{ matrix.target }}
+          if-no-files-found: error
+  installers:
+    # Each target's installer from its folder, as packaging/desktop/build.py makes it on a release workstation: the
+    # macOS window needs the macOS SDK, codesign and hdiutil; Windows Setup is made on Linux with Debian's NSIS and
+    # the Roslyn compiler of the .NET SDK, as the documented NSIS image makes it.
+    needs: programs
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: macos-15, target: mac-arm64}
+          - {runner: macos-15-intel, target: mac-amd64}
+          - {runner: ubuntu-24.04, target: windows-amd64}
+          - {runner: ubuntu-24.04, target: linux-amd64}
+          - {runner: ubuntu-24.04-arm, target: linux-arm64}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: "1.24.7"
+          cache: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-${{ matrix.target }}
+          path: dist/native/${{ matrix.target }}
+      - name: Install NSIS and the .NET SDK
+        if: matrix.target == 'windows-amd64'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q nsis
+          dotnet --list-sdks | grep -q . || sudo apt-get install -y -q dotnet-sdk-8.0
+          makensis -VERSION
+          dotnet --list-sdks
+      - name: Package the installer
+        shell: bash
+        run: |
+          python -m pip install --quiet "$PILLOW"
+          python packaging/desktop/build.py dist/native dist/installers "${{ matrix.target }}"
+          ls -l dist/installers
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installer-${{ matrix.target }}
+          path: dist/installers
+          if-no-files-found: error
+  release:
+    # Every file of a release, with SHA256SUMS.txt and SBC-SHA256SUMS.txt, as docs/INSTALLER-BUILDS.md lists them.
+    needs: installers
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: installer-*
+          path: dist/release
+          merge-multiple: true
+      - name: Build the browser packages, the materials guide, the stock artwork and the assistant skill
+        run: |
+          python -m pip install --quiet "$PILLOW"
+          python packaging/desktop/build_browser.py dist/sbc
+          (cd dist/sbc && sha256sum KerfKite-Browser-Editor-all.deb KerfKite-Browser-Editor.zip > SBC-SHA256SUMS.txt)
+          mv dist/sbc/* dist/release/
+          python scripts/build_materials_guide.py dist/release/KerfKite-Materials-Guide.html
+          python scripts/export_stock_art.py dist/release/KerfKite-Stock-Artwork.zip
+          python scripts/package_skill.py dist/release/kerfkite-workshop-skill.zip
+      - name: Carry the signed Pocket APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          POCKET: ${{ inputs.pocket }}
+        run: |
+          gh release download "$POCKET" --repo "$GITHUB_REPOSITORY" --pattern KerfKite-Pocket-Android.apk --dir dist/release
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$apksigner" verify --verbose --print-certs dist/release/KerfKite-Pocket-Android.apk | tee "$RUNNER_TEMP/pocket.txt"
+          grep -qx Verifies "$RUNNER_TEMP/pocket.txt"
+          # Every signer's certificate, however this apksigner labels its lines, is the release certificate.
+          signers=$(grep 'certificate SHA-256 digest:' "$RUNNER_TEMP/pocket.txt" | awk '{print $NF}' | sort -u)
+          test "$signers" = "$POCKET_CERTIFICATE"
+      - name: Write the checksums
+        id: files
+        run: |
+          cd dist/release
+          LC_ALL=C ls | grep -vx SHA256SUMS.txt | xargs sha256sum > "$RUNNER_TEMP/SHA256SUMS.txt"
+          mv "$RUNNER_TEMP/SHA256SUMS.txt" SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          echo "version=$(cat "$GITHUB_WORKSPACE/VERSION")" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ steps.files.outputs.version }}
+          path: dist/release
           if-no-files-found: error

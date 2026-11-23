@@ -1,13 +1,21 @@
 name: Check desktop release installers
+# Installs and exercises each desktop installer: those of a published release (tag), or, before anything is
+# published, the release-VERSION artifact of a run of native-programs.yml (run), checked against the
+# SHA256SUMS.txt that came with them.
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to verify
-        required: true
+        description: Release tag to verify (ignored when a run is given)
+        required: false
         default: v0.6.1
+      run:
+        description: Or the ID of a native-programs.yml run whose release files to verify before publishing
+        required: false
+        default: ""
 permissions:
   contents: read
+  actions: read
 jobs:
   install:
     strategy:
@@ -24,16 +32,35 @@ jobs:
     env:
       INSTALLER: ${{ matrix.file }}
     steps:
+      - name: Find the source the installers were built from
+        id: source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ inputs.run }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [ -n "$RUN" ]; then
+            echo "ref=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN" --jq .head_sha)" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=$TAG" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ steps.source.outputs.ref }}
       - name: Fetch release package and verify its checksum
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          RUN: ${{ inputs.run }}
           TAG: ${{ inputs.tag }}
         run: |
-          gh release download "$TAG" --pattern "$INSTALLER" --pattern SHA256SUMS.txt
+          if [ -n "$RUN" ]; then
+            gh run download "$RUN" --repo "$GITHUB_REPOSITORY" --pattern 'release-*' --dir "$RUNNER_TEMP/release"
+            cp "$RUNNER_TEMP"/release/release-*/"$INSTALLER" "$RUNNER_TEMP"/release/release-*/SHA256SUMS.txt .
+          else
+            gh release download "$TAG" --pattern "$INSTALLER" --pattern SHA256SUMS.txt
+          fi
           python -c 'import hashlib,os,pathlib; p=pathlib.Path(os.environ["INSTALLER"]); assert hashlib.sha256(p.read_bytes()).hexdigest()+"  "+p.name in pathlib.Path("SHA256SUMS.txt").read_text().splitlines()'
       - name: Verify Windows Server rejection
         if: runner.os == 'Windows'
