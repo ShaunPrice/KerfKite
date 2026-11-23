@@ -19,6 +19,8 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <knownfolders.h>
+#include <shlobj.h>
 #else
 #include <cerrno>
 #include <csignal>
@@ -44,6 +46,39 @@ std::wstring wide(const std::string &text) {
     std::wstring out(static_cast<size_t>(n), L'\0');
     MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), &out[0], n);
     return out;
+}
+
+std::string utf8(const wchar_t *text) {
+    const int n = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+    if (n <= 1) return std::string();
+    std::string out(static_cast<size_t>(n - 1), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, text, -1, &out[0], n, nullptr, nullptr);
+    return out;
+}
+
+// A folder of the system's (Program Files, the user's local application data), whatever the environment says:
+// an MCP client may start the server with few variables.
+std::string known_folder(REFKNOWNFOLDERID id) {
+    PWSTR path = nullptr;
+    std::string out;
+    if (SUCCEEDED(SHGetKnownFolderPath(id, 0, nullptr, &path)) && path) out = utf8(path);
+    CoTaskMemFree(path);
+    return out;
+}
+
+// The program a name is registered as (App Paths), for the user and then for the computer.
+std::string registered_program(const wchar_t *name) {
+    const std::wstring key = std::wstring(L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\") + name;
+    for (HKEY root : {HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE}) {
+        wchar_t buffer[4096];
+        DWORD size = sizeof buffer;
+        if (RegGetValueW(root, key.c_str(), nullptr, RRF_RT_REG_SZ, nullptr, buffer, &size) == ERROR_SUCCESS) {
+            std::string path = utf8(buffer);
+            if (path.size() >= 2 && path.front() == '"' && path.back() == '"') path = path.substr(1, path.size() - 2);
+            if (!path.empty()) return path;
+        }
+    }
+    return std::string();
 }
 
 std::wstring quoted(const std::wstring &argument) {
@@ -413,13 +448,19 @@ std::string find_chromium(const std::string &given) {
         if (*chosen) return chosen;
     std::vector<std::string> candidates;
 #ifdef _WIN32
-    for (const char *base : {"ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"}) {
-        const char *root = std::getenv(base);
-        if (!root) continue;
-        candidates.push_back(std::string(root) + "\\Google\\Chrome\\Application\\chrome.exe");
-        candidates.push_back(std::string(root) + "\\Chromium\\Application\\chrome.exe");
-        candidates.push_back(std::string(root) + "\\Microsoft\\Edge\\Application\\msedge.exe");
+    // The folders the environment names, then the system's own, then where the browsers registered themselves.
+    std::vector<std::string> roots;
+    for (const wchar_t *base : {L"ProgramFiles", L"ProgramFiles(x86)", L"LOCALAPPDATA"})
+        if (const wchar_t *root = _wgetenv(base)) roots.push_back(utf8(root));
+    for (const KNOWNFOLDERID *id : {&FOLDERID_ProgramFiles, &FOLDERID_ProgramFilesX86, &FOLDERID_LocalAppData}) roots.push_back(known_folder(*id));
+    for (const std::string &root : roots) {
+        if (root.empty()) continue;
+        candidates.push_back(root + "\\Google\\Chrome\\Application\\chrome.exe");
+        candidates.push_back(root + "\\Chromium\\Application\\chrome.exe");
+        candidates.push_back(root + "\\Microsoft\\Edge\\Application\\msedge.exe");
     }
+    candidates.push_back(registered_program(L"chrome.exe"));
+    candidates.push_back(registered_program(L"msedge.exe"));
 #elif defined(__APPLE__)
     for (const char *app : {"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Chromium.app/Contents/MacOS/Chromium",
                             "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"})
@@ -441,7 +482,7 @@ std::string find_chromium(const std::string &given) {
     candidates.push_back("/snap/bin/chromium");
 #endif
     for (const std::string &c : candidates)
-        if (file_exists(c)) return c;
+        if (!c.empty() && file_exists(c)) return c;
     return std::string();
 }
 

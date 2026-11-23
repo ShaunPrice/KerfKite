@@ -70,7 +70,8 @@ target_link_libraries(kerfkite_server PUBLIC kerfkite_core)
 # Windows, CommonCrypto (in libSystem) and the Security framework on macOS, and elsewhere OpenSSL's libcrypto,
 # opened when first needed (hence the dynamic loader).
 if(WIN32)
-  target_link_libraries(kerfkite_server PUBLIC ws2_32 bcrypt setupapi)
+  # shell32, ole32, advapi32 and uuid: the folders and registry entries where the workshop looks for a browser.
+  target_link_libraries(kerfkite_server PUBLIC ws2_32 bcrypt setupapi shell32 ole32 advapi32 uuid)
 elseif(APPLE)
   target_link_libraries(kerfkite_server PUBLIC "-framework Security" "-framework CoreFoundation")
 else()
