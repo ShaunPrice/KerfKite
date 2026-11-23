@@ -108,19 +108,23 @@ double number(const Json *value, const std::string &name, double low, double hig
     return detail::number(value, name, low, high, python_number_text(low), python_number_text(high));
 }
 
+void use_step_mesher(const std::shared_ptr<StepExchange> &step) {
+    // cad_exchange.step_manifold's order: the content's checks before Open CASCADE.
+    set_step_mesher([step](const Json &content) {
+        const std::string raw = StepExchange::decode(&content);
+        if (!step->available()) throw ValueError(kNoStep);
+        StepExchange::check(raw);
+        return step->inspect(raw);
+    });
+}
+
 Studio::Studio(Options options, MachineOptions machine)
     : options_(std::move(options)), token_(token_urlsafe(32)), device_(std::move(machine)), jobs_(device_, options_.enable_hardware, 1.8, options_.clock) {
     monitor_ = std::make_unique<PhoneMonitor>(device_, jobs_, options_.static_dir, options_.monitor_port, options_.monitor_plaintext,
                                               options_.enable_hardware, options_.monitor_host, options_.pendant_tls, options_.monitor_cert,
                                               options_.monitor_key);
     step_ = std::make_shared<StepExchange>(options_.step_program);
-    // Solid features of kind step: cad_exchange.step_manifold's order, the content's checks before Open CASCADE.
-    set_step_mesher([step = step_](const Json &content) {
-        const std::string raw = StepExchange::decode(&content);
-        if (!step->available()) throw ValueError(kNoStep);
-        StepExchange::check(raw);
-        return step->inspect(raw);
-    });
+    use_step_mesher(step_);
     add("GET", "/api/session", [this](const http::Request &) {
         json out = json::object();
         out["token"] = token_;
@@ -140,6 +144,7 @@ Studio::Studio(Options options, MachineOptions machine)
         return json_response(out);
     });
     add_design_routes(*this);
+    add_cam_routes(*this, false);
     add_machine_routes(*this);
 }
 

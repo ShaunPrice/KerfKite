@@ -38,7 +38,17 @@ struct Options {
 
 using Route = std::function<http::Response(const http::Request &)>;
 
-class Studio {
+// What the routes shared by Studio's servers need of the server they join: the workstation (Studio) and the
+// hosted editor (WebApp) both answer the design routes, the machine profiles and job generation.
+class RouteTable {
+public:
+    virtual ~RouteTable() = default;
+    virtual void add(const std::string &method, const std::string &path, Route route) = 0;
+    // The Open CASCADE add-on, for STEP exchange.
+    virtual StepExchange &step() = 0;
+};
+
+class Studio : public RouteTable {
 public:
     Studio(Options options, MachineOptions machine = MachineOptions());
     ~Studio();
@@ -52,10 +62,10 @@ public:
     Device &device() { return device_; }
     PhoneJobs &jobs() { return jobs_; }
     PhoneMonitor &monitor() { return *monitor_; }
-    StepExchange &step() { return *step_; }
+    StepExchange &step() override { return *step_; }
     const Options &options() const { return options_; }
 
-    void add(const std::string &method, const std::string &path, Route route);
+    void add(const std::string &method, const std::string &path, Route route) override;
     // A file of the editor, or 404.
     http::Response static_file(const std::string &relative) const;
 
@@ -96,8 +106,14 @@ bool truthy(const Json *value);
 // cam.number(value, name, low, high).
 double number(const Json *value, const std::string &name, double low, double high);
 
-void add_design_routes(Studio &studio);
+// The design routes (studio/design_api.py and what it registers), and the routes every server has: the machine
+// profiles (GET /api/profiles) and job generation (POST /api/generate, the request's JSON as request.get_json()
+// takes it when strict, else payload()'s object).
+void add_design_routes(RouteTable &routes);
+void add_cam_routes(RouteTable &routes, bool strict);
 void add_machine_routes(Studio &studio);
+// Solid features of kind step: tessellated through the add-on, after cad_exchange.step_manifold's checks.
+void use_step_mesher(const std::shared_ptr<StepExchange> &step);
 
 }  // namespace server
 }  // namespace kerfkite

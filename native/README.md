@@ -52,6 +52,22 @@ compared with the Flask app:
     python validation/server_route_parity.py --server build/native/kerfkite-studio
     python validation/step_exchange_parity.py --server build/native/kerfkite-studio
 
+## The hosted editor
+
+`kerfkite-web`, built with the server, is the hosted HTTPS editor and upload-only machine inbox without Python
+(`studio/web_server.py`; no controller): accounts, sessions, upload tokens, private files and operator-configured
+receivers, kept in a folder of the operator's (`--data-dir`). It moves the Python service's `web.sqlite3` to its
+own store the first time it opens such a folder, reading SQLite's file format itself. Its password hashes come
+from the system (CNG, CommonCrypto, or OpenSSL's libcrypto opened when needed) and its HTTPS from the TLS relay:
+
+    build/native/kerfkite-web --data-dir web-data create-user NAME
+    build/native/kerfkite-web certificate --cert web.pem --key web-key.pem --hosts studio.example
+    build/native/kerfkite-web --data-dir web-data serve --public-url https://studio.example:8443 --cert web.pem --key web-key.pem
+
+[docs/NATIVE.md](../docs/NATIVE.md#the-hosted-editor) describes it and its comparison with the Flask app:
+
+    python validation/web_route_parity.py --server build/native/kerfkite-web [--tls]
+
 ## Use
 
     kerfkite-cam generate project.json -o program.nc

@@ -290,6 +290,16 @@ bool is_true(const json *value) { return value && value->is_boolean() && value->
 
 }  // namespace
 
+void add_cam_routes(RouteTable &routes, bool strict) {
+    const std::string profiles = json::parse(kProfiles).dump();
+    routes.add("GET", "/api/profiles", [profiles](const Request &) { return http::Response::json(profiles); });
+    routes.add("POST", "/api/generate", [strict](const Request &request) {
+        const json project = strict ? strict_json(request) : payload(request);
+        // The core writes the job as JSON itself: for a large job that is most of the time of the request.
+        return http::Response::json(to_json(generate(project)).dump());
+    });
+}
+
 void add_machine_routes(Studio &studio) {
     Studio *s = &studio;
     studio.add("GET", "/api/status", [s](const Request &) { return json_response(s->device().status()); });
@@ -297,8 +307,6 @@ void add_machine_routes(Studio &studio) {
         // What the controller reports about its machine. Reading only: nothing is written to it.
         return json_response(describe_machine(s->device().status()));
     });
-    const std::string profiles = json::parse(kProfiles).dump();
-    studio.add("GET", "/api/profiles", [profiles](const Request &) { return http::Response::json(profiles); });
     studio.add("GET", "/api/ports", [s](const Request &) { return json_response(s->device().ports()); });
 
     studio.add("POST", "/api/phone-monitor", [s](const Request &request) {
@@ -434,12 +442,6 @@ void add_machine_routes(Studio &studio) {
         s->forget_level();
         s->device().disconnect();
         return ok();
-    });
-
-    studio.add("POST", "/api/generate", [](const Request &request) {
-        const json project = payload(request);
-        // The core writes the job as JSON itself: for a large job that is most of the time of the request.
-        return http::Response::json(to_json(generate(project)).dump());
     });
 
     studio.add("POST", "/api/run", [s](const Request &request) {

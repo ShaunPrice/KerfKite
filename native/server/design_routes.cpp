@@ -124,7 +124,7 @@ json surface_request(const json &surface, const KeyOrder *order) {
 
 }  // namespace
 
-void add_design_routes(Studio &studio) {
+void add_design_routes(RouteTable &studio) {
     studio.add("POST", "/api/solid-cad", [](const Request &request) {
         const json data = body(request, "Supply a CAD model in the model field");
         const json *model = member(data, "model");
