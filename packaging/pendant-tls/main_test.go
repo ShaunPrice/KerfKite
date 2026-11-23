@@ -385,6 +385,14 @@ func TestMakeCertificate(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(directory, "other.pem")); err == nil {
 		t.Fatal("no key may be written beside a certificate that was there")
 	}
+	// A certificate that cannot be written leaves no private key behind.
+	missing := filepath.Join(directory, "no-such-folder", "web.pem")
+	if err := makeCertificate(missing, filepath.Join(directory, "lone-key.pem"), []string{"x"}, 1, time.Now()); err == nil {
+		t.Fatal("a certificate in a missing folder must fail")
+	}
+	if _, err := os.Stat(filepath.Join(directory, "lone-key.pem")); err == nil {
+		t.Fatal("the key was left without its certificate")
+	}
 }
 
 func TestFetch(t *testing.T) {
@@ -417,6 +425,9 @@ func TestFetch(t *testing.T) {
 		}
 	}))
 	base := "https://" + listener.Addr().String()
+	// A proxy in the environment is not used: one that is not there would fail every request.
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
+	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
 	ask := func(path, ca string) answer {
 		text, _ := json.Marshal(request{Method: "POST", URL: base + path, Headers: map[string]string{"Authorization": "Bearer t"}, Body: "{}", CAFile: ca, Timeout: 5, Limit: 65537})
 		return fetch(strings.NewReader(string(text)))
