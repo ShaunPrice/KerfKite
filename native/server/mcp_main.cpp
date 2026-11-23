@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <string>
 
 #ifndef _WIN32
@@ -18,6 +19,7 @@
 #include "kerfkite/errors.hpp"
 #include "mcp.hpp"
 #include "mcp_tools.hpp"
+#include "remote_tools.hpp"
 #include "static_files.hpp"
 #include "workshop.hpp"
 
@@ -88,7 +90,7 @@ int main(int argc, char **argv) {
         Artifacts artifacts(output);
         const bool remote = transport == "http";
         mcp::Server server("KerfKite Studio", KERFKITE_VERSION, kInstructions);
-        // In the order Studio's Python server registered them, as clients list them.
+        // Clients list the tools in the order of their declarations (mcp_declarations.inc).
         const auto design_call = add_design_tools(server, artifacts, step);
         WorkshopOptions options;
         options.static_dir = static_dir;
@@ -98,6 +100,9 @@ int main(int argc, char **argv) {
         Workshop workshop(artifacts, options);
         add_workshop_tools(server, workshop, design_call);
         add_artifact_tools(server, artifacts);
+        // The paired monitor and the hosted editor account, when the operator configured them.
+        if (std::shared_ptr<const PendantClient> pendant = PendantClient::from_environment(relay)) add_pendant_tools(server, pendant);
+        if (std::shared_ptr<const HostedFiles> hosted = HostedFiles::from_environment(relay)) add_hosted_tools(server, hosted, artifacts);
         add_artwork_tools(server, artifacts, find_catalog(templates, static_dir), remote);
         if (transport == "stdio") {
             std::ios::sync_with_stdio(false);

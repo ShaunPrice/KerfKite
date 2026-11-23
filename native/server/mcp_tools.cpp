@@ -320,7 +320,8 @@ const char *const kGuide =
 }  // namespace
 
 mcp::Tool declared(const std::string &name, std::function<mcp::Result(const Json &, mcp::Exchange &)> run) {
-    for (const Declaration &d : kDeclarations)
+    int position = 0;
+    for (const Declaration &d : kDeclarations) {
         if (name == d.name) {
             mcp::Tool tool;
             tool.name = d.name;
@@ -330,8 +331,11 @@ mcp::Tool declared(const std::string &name, std::function<mcp::Result(const Json
             tool.wrapped = d.wrapped;
             tool.annotations = d.annotations;
             tool.run = std::move(run);
+            tool.position = position;  // as Studio's Python server registered them, which clients list
             return tool;
         }
+        ++position;
+    }
     throw std::logic_error("No declaration for the tool " + name);
 }
 

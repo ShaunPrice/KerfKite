@@ -43,6 +43,11 @@ void validate_destination(const Json &entry);
 // program. ValueError when the answer cannot be verified.
 Json send_to_receiver(const Json &entry, const Upload &upload, const std::string &relay);
 
+// One request made by KerfKite's TLS relay (kerfkite-pendant-tls -fetch): the request on its standard input, so
+// that no token or password is on a command line, and its answer ({"status", "headers", "body" (base64)} or
+// {"error"}). std::runtime_error when the relay cannot be run or gives no answer within the time.
+Json relay_fetch(const std::string &relay, const Json &request, double seconds);
+
 }  // namespace server
 }  // namespace kerfkite
 

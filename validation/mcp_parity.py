@@ -316,7 +316,9 @@ async def main():
                     for t in (await client.list_tools_mcp()).tools
                 ]
                 theirs = without_meta(native.ask('tools/list', {}))['tools']
-                # Without a browser here, the C++ server's list is the reference's tools it has built so far.
+                # The same tools in the same order, as clients list them (with no pendant or hosted editor configured).
+                order = [t['name'] for t in listed], [t['name'] for t in theirs]
+                tally.record('the tools and their order', None if order[0] == order[1] else f'{order[0]} != {order[1]}')
                 names = {t['name'] for t in theirs}
                 for tool in theirs:
                     mine = next((t for t in listed if t['name'] == tool['name']), None)

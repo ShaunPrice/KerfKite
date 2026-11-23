@@ -274,7 +274,10 @@ void Server::add(Tool tool) {
     if (!tool.output_schema.empty()) Json::parse(tool.output_schema);  // a mistake in a declaration fails at once
     if (!tool.annotations.empty()) Json::parse(tool.annotations);
     entry.tool = std::move(tool);
-    tools_.push_back(std::move(entry));
+    auto at = tools_.end();
+    if (entry.tool.position >= 0)
+        at = std::find_if(tools_.begin(), tools_.end(), [&](const Entry &e) { return e.tool.position < 0 || e.tool.position > entry.tool.position; });
+    tools_.insert(at, std::move(entry));
 }
 
 void Server::add(Resource resource) { resources_.push_back(std::move(resource)); }
@@ -464,6 +467,9 @@ public:
 }  // namespace
 
 void serve_stdio(Server &server, std::istream &in, std::ostream &out) {
+    // Reading must not flush the output (std::cin is tied to std::cout): the tools' threads write it under a lock,
+    // and a flush from this thread at the same moment could send a line twice.
+    in.tie(nullptr);
     StdioExchange exchange(server, out);
     std::vector<std::thread> calls;
     std::string line;

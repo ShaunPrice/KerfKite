@@ -41,6 +41,7 @@ struct Tool {
     bool wrapped = false;       // the value is sent as {"result": value}
     std::string annotations;
     std::function<Result(const Json &arguments, Exchange &exchange)> run;
+    int position = -1;  // where tools/list puts it among the tools with one; the rest follow in the order added
 };
 
 struct Resource {
