@@ -1845,8 +1845,10 @@ struct Workshop::Engine {
         driver = browser.get();
         setup = std::thread([this] { set_up(); });
         try {
-            // The user agent without "Headless", as Playwright reports it.
-            user_agent = text_of(member(browser->call("Browser.getVersion", Json::object(), std::string(), 15), "userAgent"));
+            // The user agent without "Headless", as Playwright reports it. The first answer waits as long as
+            // Playwright's launch did, 30 seconds: a browser's first start with a new profile on a busy Windows
+            // machine has taken more than 15.
+            user_agent = text_of(member(browser->call("Browser.getVersion", Json::object(), std::string(), 30), "userAgent"));
             const size_t headless = user_agent.find("HeadlessChrome/");
             if (headless != std::string::npos) user_agent.replace(headless, 15, "Chrome/");
             Json auto_attach = Json::object();
