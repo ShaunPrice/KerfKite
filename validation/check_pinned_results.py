@@ -2,12 +2,16 @@
 
     python validation/check_pinned_results.py [KERFKITE_CAM]
 
-The core computes in whole nanometres with exact arithmetic wherever a decision is made, and calls no function of
-the platform's mathematics library on the way to these results but sqrt, which IEEE 754 rounds correctly; the
-sines, cosines and tangents are its own series. A platform that gives different bytes fails here. The program is
-kerfkite-cam: the path given, KERFKITE_CAM, or the build in build/native. Each check names what it pins; the values
-are those the Python reference's installed extension gave before the Python was removed, where a check pinned them
-then, and the core's own answers, compared then with the reference, where it compared them.
+The core computes in whole nanometres with exact arithmetic wherever a decision is made. On the way to these
+results it calls no function of the platform's mathematics library but sqrt, which IEEE 754 rounds correctly, and
+the stock preview's tangent; the sines and cosines are its own series. That tangent, of half a V cutter's angle,
+is the platform's, as it was the reference's. Its fixture's angle is chosen so that the exact tangent lies within
+a thousandth of a unit in the last place of a double, so every library accurate to better than one unit returns
+that double. A platform that gives different bytes fails here. Every check runs, and each failure is reported.
+
+The program is kerfkite-cam: the path given, KERFKITE_CAM, or the build in build/native. Each check names what it
+pins. The values are those the Python reference's installed extension gave before the Python was removed, where a
+check pinned them then. Elsewhere they are the core's own answers, compared then with the reference.
 """
 
 import base64
@@ -26,6 +30,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from native_servers import program  # noqa: E402 - beside this file
 
 CAM = program('kerfkite-cam', sys.argv[1] if len(sys.argv) > 1 else None, 'KERFKITE_CAM')
+# Each result is printed as it is checked, so a run that is stopped shows how far it got.
+sys.stdout.reconfigure(line_buffering=True)
+# No command here takes more than a few seconds; one that takes this long has stopped.
+LIMIT = float(os.environ.get('KERFKITE_CHECK_SECONDS', '300'))
 
 
 def cam(command, request=None, *arguments, env=None, text=None):
@@ -33,13 +41,17 @@ def cam(command, request=None, *arguments, env=None, text=None):
     with tempfile.TemporaryDirectory() as folder:
         source = Path(folder) / 'request.json'
         source.write_text(request if isinstance(request, str) else json.dumps(request), encoding='utf-8')
-        done = subprocess.run(  # noqa: S603 - the program under test, with a fixed argument list
-            [CAM, command, str(source), *arguments],
-            capture_output=True,
-            text=True,
-            env=None if env is None else {**os.environ, **env},
-            check=False,
-        )
+        try:
+            done = subprocess.run(  # noqa: S603 - the program under test, with a fixed argument list
+                [CAM, command, str(source), *arguments],
+                capture_output=True,
+                text=True,
+                env=None if env is None else {**os.environ, **env},
+                check=False,
+                timeout=LIMIT,
+            )
+        except subprocess.TimeoutExpired:
+            raise AssertionError(f'kerfkite-cam {command} {env or ""} did not finish in {LIMIT:g} s') from None
     if done.returncode:
         raise AssertionError(f'kerfkite-cam {command} exited {done.returncode}: {done.stderr.strip()[:400]}')
     return done.stdout if text else json.loads(done.stdout)
@@ -58,13 +70,21 @@ def floats(value):
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else value
 
 
+FAILED = []
+
+
 def check(name, actual, expected):
     if actual != expected:
-        raise SystemExit(f'FAIL {name}: {actual!r} != {expected!r}')
-    print('PASS', name)
+        FAILED.append(name)
+        print(f'FAIL {name}: {actual!r} != {expected!r}')
+    else:
+        print('PASS', name)
 
 
-# The stock preview: a flat, ball, V and drill cutter along sloping moves, every height pinned.
+# The stock preview: a flat, ball, V and drill cutter along sloping moves, every height pinned. The V and drill
+# cutters slope with the platform's tangent of half their angle. For the default 60 degrees, the exact tangent
+# lies 0.39 of a unit in the last place from the nearest double, and macOS's library rounds it the other way. For
+# 91 degrees it lies 0.0006 of a unit from 1.0176073929721252. The Python reference gives the same heights.
 rng = random.Random(86)  # noqa: S311 - a fixed fixture
 moves = [
     [
@@ -78,9 +98,10 @@ moves = [
     ]
     for _ in range(80)
 ]
-stock = {'width': 8, 'height': 8, 'stock_thickness': 2, 'tool_diameter': 1, 'resolution': 32, 'segments': moves}
+stock = {'width': 8, 'height': 8, 'stock_thickness': 2, 'tool_diameter': 1, 'resolution': 32, 'v_angle': 91}
+stock['segments'] = moves
 heights = [cam('stock', {**stock, 'tool_shape': cutter})['heights'] for cutter in ('flat', 'ball', 'v', 'drill')]
-check('stock preview of four cutters', digest(json.dumps(floats(heights))), '91b78efa01d73a8c')
+check('stock preview of four cutters', digest(json.dumps(floats(heights))), 'f06b84d45a459ae8')
 
 # Rotary wrapping: a router and a laser job onto a cylinder, generated by the core and wrapped from given lines.
 options = dict(diameter=10, wrap_axis='X', postprocessor='xpro-v5', output_axis='A', direction=1, angle_offset=0,
@@ -363,6 +384,13 @@ relief = cam('relief', RELIEF)
 check('relief paths and depths', relief_summary(relief), (61, 24400, '55a418fdfe4d9ccb'))
 check('relief on one thread', relief_summary(cam('relief', RELIEF, env={'KERFKITE_THREADS': '1'})),
       (61, 24400, '55a418fdfe4d9ccb'))  # fmt: skip
-forced = cam('relief', RELIEF, env={'KERFKITE_GPU': 'on'})
-check(f'relief with the GPU asked for (it ran on the {forced.get("device", "CPU")})', relief_summary(forced),
-      (61, 24400, '55a418fdfe4d9ccb'))  # fmt: skip
+try:
+    forced = cam('relief', RELIEF, env={'KERFKITE_GPU': 'on'})
+except AssertionError as failure:
+    check('relief with the GPU asked for', str(failure), 'an answer')
+else:
+    check(f'relief with the GPU asked for (it ran on the {forced.get("device", "CPU")})', relief_summary(forced),
+          (61, 24400, '55a418fdfe4d9ccb'))  # fmt: skip
+
+if FAILED:
+    raise SystemExit(f'{len(FAILED)} of the pinned results differ: {", ".join(FAILED)}')
