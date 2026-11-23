@@ -30,6 +30,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from native_servers import program  # noqa: E402 - beside this file
 
 CAM = program('kerfkite-cam', sys.argv[1] if len(sys.argv) > 1 else None, 'KERFKITE_CAM')
+# Each result is printed as it is checked, so a run that is stopped shows how far it got.
+sys.stdout.reconfigure(line_buffering=True)
+# No command here takes more than a few seconds; one that takes this long has stopped.
+LIMIT = float(os.environ.get('KERFKITE_CHECK_SECONDS', '300'))
 
 
 def cam(command, request=None, *arguments, env=None, text=None):
@@ -37,13 +41,17 @@ def cam(command, request=None, *arguments, env=None, text=None):
     with tempfile.TemporaryDirectory() as folder:
         source = Path(folder) / 'request.json'
         source.write_text(request if isinstance(request, str) else json.dumps(request), encoding='utf-8')
-        done = subprocess.run(  # noqa: S603 - the program under test, with a fixed argument list
-            [CAM, command, str(source), *arguments],
-            capture_output=True,
-            text=True,
-            env=None if env is None else {**os.environ, **env},
-            check=False,
-        )
+        try:
+            done = subprocess.run(  # noqa: S603 - the program under test, with a fixed argument list
+                [CAM, command, str(source), *arguments],
+                capture_output=True,
+                text=True,
+                env=None if env is None else {**os.environ, **env},
+                check=False,
+                timeout=LIMIT,
+            )
+        except subprocess.TimeoutExpired:
+            raise AssertionError(f'kerfkite-cam {command} {env or ""} did not finish in {LIMIT:g} s') from None
     if done.returncode:
         raise AssertionError(f'kerfkite-cam {command} exited {done.returncode}: {done.stderr.strip()[:400]}')
     return done.stdout if text else json.loads(done.stdout)
@@ -376,9 +384,13 @@ relief = cam('relief', RELIEF)
 check('relief paths and depths', relief_summary(relief), (61, 24400, '55a418fdfe4d9ccb'))
 check('relief on one thread', relief_summary(cam('relief', RELIEF, env={'KERFKITE_THREADS': '1'})),
       (61, 24400, '55a418fdfe4d9ccb'))  # fmt: skip
-forced = cam('relief', RELIEF, env={'KERFKITE_GPU': 'on'})
-check(f'relief with the GPU asked for (it ran on the {forced.get("device", "CPU")})', relief_summary(forced),
-      (61, 24400, '55a418fdfe4d9ccb'))  # fmt: skip
+try:
+    forced = cam('relief', RELIEF, env={'KERFKITE_GPU': 'on'})
+except AssertionError as failure:
+    check('relief with the GPU asked for', str(failure), 'an answer')
+else:
+    check(f'relief with the GPU asked for (it ran on the {forced.get("device", "CPU")})', relief_summary(forced),
+          (61, 24400, '55a418fdfe4d9ccb'))  # fmt: skip
 
 if FAILED:
     raise SystemExit(f'{len(FAILED)} of the pinned results differ: {", ".join(FAILED)}')

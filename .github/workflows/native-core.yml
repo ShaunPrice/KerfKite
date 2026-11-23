@@ -29,6 +29,9 @@ jobs:
       matrix:
         runner: [macos-15, macos-15-intel, windows-2022, ubuntu-24.04, ubuntu-24.04-arm]
     runs-on: ${{ matrix.runner }}
+    # The slowest runner, the Intel Mac, takes about 70 minutes; a job still running after two hours has stopped
+    # and would hold one of the few macOS runners for the six hours GitHub allows.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check out the Python reference
