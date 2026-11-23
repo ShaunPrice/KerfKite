@@ -197,7 +197,23 @@ def compare_call(tally, label, ref, got, ref_files, got_files):
 def cases(rng, n, templates):
     names = ['Rose', '  spaced  ', '', ' ', 'x' * 80, 'x' * 81, 'tab\tname', 'café <b>&"\'', 5, None]
     categories = ['Flowers', 'Botanical vines', '', 'Nope'] + [t['category'] for t in templates[:3]]
-    queries = ['', 'rose', 'ROSE', 'vine', 'zzzz', 'leaf', 'Flowers', 'o']
+    # str.casefold() decides a match: ligatures, the long s, the sharp s, the Kelvin sign and accented capitals.
+    queries = [
+        '',
+        'rose',
+        'ROSE',
+        'vine',
+        'zzzz',
+        'leaf',
+        'Flowers',
+        'o',
+        '\ufb02ower',
+        'ROſE',
+        'MONTGOLFIÈRE',
+        'ẞ',
+        '\u212aite',
+        'Ｒｏｓｅ',
+    ]
 
     def path(k=3):
         return [[round(rng.uniform(0, 300), 3), round(rng.uniform(0, 300), 3)] for _ in range(k)]
@@ -253,7 +269,9 @@ def cases(rng, n, templates):
                 project['mode'] = rng.choice(['laser', 'knife', 'router'])
             args = {'project': project if rng.random() < 0.95 else [1, 2]}
         elif tool == 'design_actions':
-            args = {'query': rng.choice(['', 'solid', 'STL', 'import', 'nothing', 'model'])}
+            args = {
+                'query': rng.choice(['', 'solid', 'STL', 'import', 'nothing', 'model', 'ſolid', 'İMPORT', 'ＳＴＬ'])
+            }
         elif tool == 'design_call':
             action = rng.choice(
                 [

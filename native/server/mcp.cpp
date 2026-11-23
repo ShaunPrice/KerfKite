@@ -541,10 +541,12 @@ std::string Server::answer(const Json &message, Exchange &exchange, bool statefu
                 client_confirms_ = !absent(member(*capabilities, "elicitation"));
                 initialized_ = true;
             }
-            return reply(id, "{\"protocolVersion\":" + text(version) +
-                                 ",\"capabilities\":{\"experimental\":{},\"logging\":{},\"prompts\":{\"listChanged\":true},\"resources\":{\"subscribe\":false,"
-                                 "\"listChanged\":true},\"tools\":{\"listChanged\":true},\"extensions\":{\"io.modelcontextprotocol/ui\":{}}},\"serverInfo\":{\"name\":" +
-                                 text(name_) + ",\"version\":" + text(version_) + "},\"instructions\":" + text(instructions_) + "}");
+            // FastMCP's capabilities: prompts and resources are announced as changing only over HTTP.
+            const std::string changing = stateful ? "false" : "true";
+            return reply(id, "{\"protocolVersion\":" + text(version) + ",\"capabilities\":{\"experimental\":{},\"logging\":{},\"prompts\":{\"listChanged\":" + changing +
+                                 "},\"resources\":{\"subscribe\":false,\"listChanged\":" + changing +
+                                 "},\"tools\":{\"listChanged\":true},\"extensions\":{\"io.modelcontextprotocol/ui\":{}}},\"serverInfo\":{\"name\":" + text(name_) +
+                                 ",\"version\":" + text(version_) + "},\"instructions\":" + text(instructions_) + "}");
         }
         if (method == "ping" || method == "logging/setLevel") return reply(id, "{}");
         if (method == "tools/list") {
@@ -661,19 +663,21 @@ public:
         return pending->action;
     }
 
-    // A response from the client to one of the server's requests.
-    void answered(const Json &message) {
+    // A response from the client to one of the server's requests: false when it answers none (the SDK reports that
+    // as an exception from its stream).
+    bool answered(const Json &message) {
         const Json *id = member(message, "id");
-        if (!id || !id->is_string()) return;
+        if (!id || !id->is_string()) return false;
         std::lock_guard<std::mutex> hold(lock_);
         const auto found = waiting_.find(id->get<std::string>());
-        if (found == waiting_.end()) return;
+        if (found == waiting_.end()) return false;
         const Json *result = member(message, "result");
         const Json *action = result ? member(*result, "action") : nullptr;
         found->second->ok = action && action->is_string();
         if (found->second->ok) found->second->action = action->get<std::string>();
         found->second->done = true;
         changed_.notify_all();
+        return true;
     }
 
     // Input has ended: whoever waits for an answer gets none.
@@ -712,13 +716,14 @@ void serve_stdio(Server &server, std::istream &in, std::ostream &out) {
         // SDK's server reports an exception from its stream.
         Json message = Json::parse(line, nullptr, false);
         const Kind kind = message.is_discarded() ? Kind::invalid : classify(message);
+        const char *const exception = "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/message\",\"params\":{\"level\":\"error\","
+                                      "\"logger\":\"mcp.server.exception_handler\",\"data\":\"Internal Server Error\"}}";
         if (kind == Kind::invalid) {
-            exchange.write("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/message\",\"params\":{\"level\":\"error\",\"logger\":\"mcp.server.exception_handler\","
-                           "\"data\":\"Internal Server Error\"}}");
+            exchange.write(exception);
             continue;
         }
         if (kind == Kind::response || kind == Kind::error) {
-            exchange.answered(message);
+            if (!exchange.answered(message)) exchange.write(exception);  // an answer to no request of the server's
             continue;
         }
         if (kind == Kind::notification) {

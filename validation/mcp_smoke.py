@@ -1,4 +1,8 @@
-"""Launch the actual stdio server and exercise tools through the MCP SDK."""
+"""Launch the actual stdio server and exercise tools through the MCP SDK.
+
+    python validation/mcp_smoke.py [PROGRAM]
+
+With PROGRAM (kerfkite-mcp) that server is tested; without it, the Python server (studio.mcp_server)."""
 
 import asyncio
 import os
@@ -18,9 +22,10 @@ def payload(result):
 
 
 async def main():
+    program = sys.argv[1] if len(sys.argv) > 1 else None
     with tempfile.TemporaryDirectory() as output:
         params = StdioServerParameters(
-            command=sys.executable,
+            command=program or sys.executable,
             env={
                 k: v
                 for k, v in os.environ.items()
@@ -37,7 +42,7 @@ async def main():
                     'PLAYWRIGHT_BROWSERS_PATH',
                 )
             },
-            args=['-m', 'studio.mcp_server', '--output-dir', output],
+            args=['--output-dir', output] if program else ['-m', 'studio.mcp_server', '--output-dir', output],
             cwd=str(Path(__file__).resolve().parents[1]),
         )
         async with stdio_client(params) as (read, write):

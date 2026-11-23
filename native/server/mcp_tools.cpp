@@ -31,6 +31,7 @@
 #include "kerfkite/number_text.hpp"
 #include "os_random.hpp"
 #include "os_crypto.hpp"
+#include "python_text.hpp"
 #include "step_exchange.hpp"
 #include "studio.hpp"
 
@@ -383,8 +384,8 @@ void add_artwork_tools(mcp::Server &server, const Artifacts &artifacts, const st
     auto catalog = std::make_shared<Catalog>(catalog_path);
     const Artifacts *store = &artifacts;
     server.add(declared("list_templates", [catalog](const Json &a, mcp::Exchange &) {
-        // TemplateCatalog.search: the name and category hold the query, without regard to case.
-        const std::string query = ascii_lower(a.at("query").get<std::string>()), category = a.at("category").get<std::string>();
+        // TemplateCatalog.search: the name and category hold the query, both casefolded.
+        const std::string query = kerfkite::detail::python_casefold(a.at("query").get<std::string>()), category = a.at("category").get<std::string>();
         const long long limit = std::max<long long>(1, std::min<long long>(100, a.at("limit").get<long long>()));
         Json out = Json::array();
         for (const Json &entry : catalog->entries()) {
@@ -392,7 +393,7 @@ void add_artwork_tools(mcp::Server &server, const Artifacts &artifacts, const st
             const Json &meta = entry[2];
             const std::string name = meta.at("name").get<std::string>(), group = meta.at("category").get<std::string>();
             if (!category.empty() && group != category) continue;
-            if (ascii_lower(name + " " + group).find(query) == std::string::npos) continue;
+            if (kerfkite::detail::python_casefold(name + " " + group).find(query) == std::string::npos) continue;
             Json item = Json::object();
             item["id"] = meta.at("id");
             item["name"] = name;
@@ -594,8 +595,8 @@ const std::map<std::string, std::string> kFields = {
     {"import-bundle", "content (base64 ZIP), index? to select an entry"},
 };
 
-// str.casefold for the action names and their inputs, which are ASCII.
-std::string folded(const std::string &text) { return ascii_lower(text); }
+// str.casefold, for the query and the action names and their inputs.
+std::string folded(const std::string &text) { return kerfkite::detail::python_casefold(text); }
 
 }  // namespace
 

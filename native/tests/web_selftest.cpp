@@ -1,8 +1,8 @@
-// Checks of the C++ hosted editor (kerfkite-web), run by ctest: the system's hashes against werkzeug's, the SQLite
-// reader and the move of the Python store (a synthetic web.sqlite3 the Python wrote, from
-// validation/web_store_fixture.py), the store's accounts, sessions, limits, tokens and files, the uploads' and
-// receivers' checks, every route of the app through its request checks, the PROXY protocol line of the HTTP
-// server, and, with the TLS relay, a file sent to a receiver.
+// Checks of the C++ hosted editor (kerfkite-web), run by ctest: the system's hashes against werkzeug's and its RSA
+// signatures (the assistant server's RS256 tokens), the SQLite reader and the move of the Python store (a synthetic
+// web.sqlite3 the Python wrote, from validation/web_store_fixture.py), the store's accounts, sessions, limits,
+// tokens and files, the uploads' and receivers' checks, every route of the app through its request checks, the
+// PROXY protocol line of the HTTP server, and, with the TLS relay, a file sent to a receiver.
 //
 //     kerfkite_web_selftest STATIC_DIR FIXTURE_DIR [TLS_RELAY|-]
 //
@@ -96,6 +96,52 @@ struct Folder {
     }
     std::string str() const { return path.u8string(); }
 };
+
+// RS256 signatures, as the assistant server's tokens are checked: synthetic keys made for this test, with signatures
+// of one message by their private halves (since discarded).
+std::string unhex(const std::string &digits) {
+    std::string out;
+    for (size_t i = 0; i + 1 < digits.size(); i += 2) out += static_cast<char>(std::stoi(digits.substr(i, 2), nullptr, 16));
+    return out;
+}
+
+void signatures() {
+    struct Vector {
+        const char *modulus, *exponent, *signature;
+    };
+    const Vector vectors[] = {
+        {// 2048 bits
+         "9c58eb566d62669259d1d8a09776c184e51246bd13e50441b73e6790123c524b10c2a436edbaf22ecfab7efc6e12ef986aff3392eb5b405e5ac8aa457312f74a"
+         "58a22e671f9be2158b2118587cf687ee7f02a9fff8fafdf9b7b560daad41ecf67b09bea4ec9f2c199b5289ac0e58902ab96a8564e16587ff5a6d28a21f7b5d51"
+         "0c40ee0d225db482cfe103e02a2df88fccb17ec77b9b97a2ca1d5b81c4f5cfb27e63d218d603acee4d9c7cd238a5326282708294b03f0268f048f01a5177f07f"
+         "3e41fbde52fc441908931843c742040d925eb3c38418974720e7555e7bcd8c5d3478f9b15da28483b25745e131a0de401e3cd6f9a77c1d9fbc6ba2c5e1d03163",
+         "010001",
+         "7b8e8f0ce91e38b598d36bbf3728508dd7a0aa0a7567190ebba14cfe59e43488e9266111330eeee0dc6187251dc11ac080f89dd64bb8c1a0f3f9045f437c5600"
+         "e2647c6c17e5b26946ed595ede531acdf250c88d9f4a3bd4750f4db7d7191896248926e94a1bb98f40ef1ce110bc6ec9255ea9023ee6f0a3d90f95143a819c24"
+         "d5ea5473d21361eda03ad53dcd57135c1805c51c01b7e833e25f3dd9346d7e8e4cc19b0cedb03738778169147d3c7ab3c0b0912fba27c755fb5624b8e155aa0f"
+         "89b26f028b16694fd7424a529fbec343ee608e615588fbb8004401039776b2075e2a06f31c31b2fcc7a27327cf41187b5f2d32214c87620f2e5137642be439d9"},
+        {// 1024 bits
+         "c8063c11a236d0388705eaa4eb789e5cdc08e508fc92e2a98345d7482123f1a5d86077b8b0b08e1212b5e93300b1ea9a15554e5e60a4cd552b258f807971dcc4"
+         "80fa7e4aefc2ae463eb59d7bfff697d253c4c3fc1bd97a1eae8898726930b95de5d4331b6302c320ad2771cc63ea1a503b3fcb14b7592dde382b537e4ce079a3",
+         "03",
+         "3ed14a6e2f9644d787d52a4c2a36cc0a2bc9e43c7cc0bfc94b4d4ea787346a174dbecfaff78ff73f55d4077bfed6de0851dd7df7fcd55c17be5533c5a379818d"
+         "ee3bdbfee816afdd8e3215ee4958af3f86a0f67371783ffcda9f8a199b6605102543373ccd58649ff1b92ab3dd6e54551c9d05dc6451121eac163ca53b2df70a"},
+    };
+    const std::string message = "KerfKite workshop token";
+    for (const Vector &v : vectors) {
+        const std::string n = unhex(v.modulus), e = unhex(v.exponent), s = unhex(v.signature);
+        CHECK(rsa_sha256_verify(n, e, message, s));
+        CHECK(!rsa_sha256_verify(n, e, message + ".", s));
+        std::string bent = s;
+        bent[bent.size() / 2] = static_cast<char>(bent[bent.size() / 2] ^ 1);
+        CHECK(!rsa_sha256_verify(n, e, message, bent));
+        CHECK(!rsa_sha256_verify(n, e, message, s.substr(1)));  // shorter than the modulus
+        CHECK(!rsa_sha256_verify(n, e, message, std::string(1, '\0') + s));  // longer
+        CHECK(!rsa_sha256_verify(n, unhex("010003"), message, s));  // another exponent
+    }
+    // The two keys' signatures do not cross.
+    CHECK(!rsa_sha256_verify(unhex(vectors[0].modulus), unhex(vectors[0].exponent), message, unhex(vectors[1].signature)));
+}
 
 bool have_scrypt() {
     std::string out;
@@ -661,6 +707,7 @@ int main(int argc, char **argv) {
 #endif
     std::printf("hashes: %s\n", crypto_source().c_str());
     hashes();
+    signatures();
     sqlite_reading();
     moved_store();
     accounts();
