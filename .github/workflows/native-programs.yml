@@ -208,8 +208,10 @@ jobs:
           gh release download "$POCKET" --repo "$GITHUB_REPOSITORY" --pattern KerfKite-Pocket-Android.apk --dir dist/release
           apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
           "$apksigner" verify --verbose --print-certs dist/release/KerfKite-Pocket-Android.apk | tee "$RUNNER_TEMP/pocket.txt"
-          grep -q "Signer #1 certificate SHA-256 digest: $POCKET_CERTIFICATE" "$RUNNER_TEMP/pocket.txt"
-          test "$(grep -c '^Signer #' "$RUNNER_TEMP/pocket.txt")" -ge 1
+          grep -qx Verifies "$RUNNER_TEMP/pocket.txt"
+          # Every signer's certificate, however this apksigner labels its lines, is the release certificate.
+          signers=$(grep 'certificate SHA-256 digest:' "$RUNNER_TEMP/pocket.txt" | awk '{print $NF}' | sort -u)
+          test "$signers" = "$POCKET_CERTIFICATE"
       - name: Write the checksums
         id: files
         run: |
