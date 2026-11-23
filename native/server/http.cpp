@@ -227,12 +227,16 @@ Response Response::error(int status, const std::string &message) {
 const char *reason(int status) {
     switch (status) {
         case 200: return "OK";
+        case 202: return "Accepted";
         case 204: return "No Content";
+        case 302: return "Found";
         case 304: return "Not Modified";
         case 400: return "Bad Request";
+        case 401: return "Unauthorized";
         case 403: return "Forbidden";
         case 404: return "Not Found";
         case 405: return "Method Not Allowed";
+        case 406: return "Not Acceptable";
         case 408: return "Request Timeout";
         case 411: return "Length Required";
         case 413: return "Content Too Large";
