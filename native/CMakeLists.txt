@@ -121,9 +121,9 @@ if(TARGET kerfkite-step)
   if(CMAKE_VERSION VERSION_LESS 3.21)
     message(WARNING "CMake 3.21 or later installs the STEP add-on with its Open CASCADE libraries")
   else()
-    # Open CASCADE's libraries are its TK... toolkits; on Windows CMake matches DLL names in lower case, hence the
-    # pattern in either case. On Apple, CMake asks where frameworks would go even when none is found: none is
-    # (Open CASCADE is built as plain .dylib files), so the destination is the add-on's folder like the rest.
+    # Open CASCADE's libraries are its TK... toolkits. On Windows CMake matches DLL names in lower case, so the
+    # pattern takes either case. On Apple, CMake wants a destination for frameworks even when there are none;
+    # Open CASCADE is built as plain .dylib files, so that destination is the add-on's folder too.
     install(TARGETS kerfkite-step
       RUNTIME_DEPENDENCIES PRE_INCLUDE_REGEXES "[Tt][Kk][A-Za-z0-9]+" PRE_EXCLUDE_REGEXES ".*"
         DIRECTORIES ${OpenCASCADE_BINARY_DIR} ${OpenCASCADE_LIBRARY_DIR}

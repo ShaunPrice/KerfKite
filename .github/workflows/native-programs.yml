@@ -76,9 +76,11 @@ jobs:
       - name: Check that the installed STEP add-on loads its Open CASCADE libraries from its own folder
         shell: bash
         run: |
-          answer=$(printf '{"version":1}' | "dist/${{ matrix.target }}/step/kerfkite-step")
+          # The add-on's documented version request; its answer names the Open CASCADE it loaded, which must be
+          # the pinned release (V7_9_3 is 7.9.3).
+          answer=$(printf '{"version":true}' | "dist/${{ matrix.target }}/step/kerfkite-step")
           echo "$answer"
-          test "$answer" = '{"open_cascade":"7.9.3"}'
+          test "$(printf '%s' "$answer" | jq -j .open_cascade | tr -d '\r')" = "$(printf '%s' "${OCCT_TAG#V}" | tr _ .)"
       - name: Add Open CASCADE's notices and the record of its build
         shell: bash
         run: |
