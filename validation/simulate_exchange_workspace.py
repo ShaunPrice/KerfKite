@@ -1,10 +1,33 @@
-"""Browser acceptance for surface edits, STEP exchange and CAM transfers."""
+"""Browser acceptance for surface edits, STEP exchange and CAM transfers.
 
+STEP documents are read and written by the workstation server the page came from, through its STEP routes (the
+Open CASCADE add-on), with the editor's session token.
+"""
+
+import base64
+import json
 from pathlib import Path
 
 from playwright.sync_api import expect
 
-from studio.cad_exchange import inspect_step, write_step
+
+def call(page, route, payload):
+    """A route of the page's workstation server, as the editor calls it."""
+    origin = page.url[: page.url.index('/', page.url.index('//') + 2) + 1]
+    token = page.request.get(origin + 'api/session').json()['token']
+    headers = {'Content-Type': 'application/json', 'X-Studio-Token': token}
+    response = page.request.post(origin + route, data=json.dumps(payload), headers=headers)
+    assert response.ok, (route, response.status, response.text()[:300])
+    return response
+
+
+def inspect_step(page, content):
+    """What the server's STEP import makes of a document: its solids and faces."""
+    return call(page, 'api/solid-cad/step/import', {'content': base64.b64encode(content).decode()}).json()
+
+
+def write_step(page, model):
+    return call(page, 'api/solid-cad/step/export', {'model': model}).body()
 
 
 def run(page):
@@ -23,7 +46,7 @@ def run(page):
     with page.expect_download() as saved:
         loc('#exchange-export').click()
     sheet = Path(saved.value.path()).read_bytes()
-    assert inspect_step(sheet)['solids'] == 0
+    assert inspect_step(page, sheet)['solids'] == 0
     loc('#exchange-lesson-keep').click()
     expect(loc('#exchange-lesson')).to_be_hidden()
     assert page.evaluate('window.projectExtras.cadExchange.surface.poles[1][1][2]') == 12
@@ -58,7 +81,7 @@ def run(page):
     expect(loc('#outline-heading')).to_be_hidden()
     with page.expect_download() as sewed:
         loc('#exchange-export').click()
-    exact = inspect_step(Path(sewed.value.path()).read_bytes())
+    exact = inspect_step(page, Path(sewed.value.path()).read_bytes())
     assert exact['faces'] == 2 and exact['solids'] == 0
     loc('#exchange-relief').click()
     expect(loc('#reliefFile')).to_have_value(r'C:\fakepath\geometry.stl')
@@ -85,7 +108,7 @@ def run(page):
     page.get_by_role('tab', name='Projects', exact=True).click()
     loc('#projectNew').click()
     open_exchange()
-    raw = write_step(model={'version': 1, 'features': [{'id': 'plate', 'kind': 'box', 'size': [40, 20, 5]}]})
+    raw = write_step(page, {'version': 1, 'features': [{'id': 'plate', 'kind': 'box', 'size': [40, 20, 5]}]})
     loc('#exchange-file').set_input_files({'name': 'plate.stp', 'mimeType': 'model/step', 'buffer': raw})
     expect(loc('#exchange-status')).to_contain_text('plate.stp')
     loc('#exchange-add').click()
