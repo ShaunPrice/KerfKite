@@ -143,10 +143,21 @@ public:
                 throw ValueError("Cannot check line " + std::to_string(number) + ": " + reason);
             };
             if (!raw.is_string()) reject("invalid line");
-            const std::string &text = raw.get_ref<const std::string &>();
-            for (const unsigned char c : text)
-                if (c >= 0x80) throw NotPorted("G-code text that is not ASCII");
-            if (text.size() > 256) reject("invalid line");
+            const std::string &given = raw.get_ref<const std::string &>();
+            const bool ascii = std::all_of(given.begin(), given.end(), [](char c) { return static_cast<unsigned char>(c) < 0x80; });
+            // A line that is not ASCII is read in its ASCII rendering after str.upper() (python_text.hpp), and a
+            // message quotes its words as the reference does, from the upper-cased line.
+            std::vector<std::string> shown;
+            std::string rendered;
+            if (!ascii) {
+                if (detail::code_points(given).size() > 256) reject("invalid line");
+                const std::string upper = detail::python_upper(given);
+                shown = detail::python_split(upper);
+                rendered = detail::python_ascii(upper, false);
+            } else if (given.size() > 256) {
+                reject("invalid line");
+            }
+            const std::string &text = ascii ? given : rendered;
             std::vector<std::string> words;
             for (size_t i = 0; i < text.size();) {
                 while (i < text.size() && ascii_space(static_cast<unsigned char>(text[i]))) ++i;
@@ -181,7 +192,7 @@ public:
                                   : op == "G4" ? "P"
                                   : op == "M3" || op == "M4" ? "S"
                                                              : nullptr;
-            if (!allowed) reject("unsupported instruction " + op);
+            if (!allowed) reject("unsupported instruction " + (ascii ? op : shown[0]));
             bool has[26] = {};
             double values[26] = {};
             for (size_t k = 1; k < words.size(); ++k) {
@@ -189,7 +200,7 @@ public:
                 std::string digits;
                 if (!word_value(words[k], letter, digits) || std::string(allowed).find(letter) == std::string::npos ||
                     has[letter - 'A'])
-                    reject("unsupported or duplicate word " + words[k]);
+                    reject("unsupported or duplicate word " + (ascii ? words[k] : shown[k]));
                 double value = 0;
                 detail::float_from_text(digits, value);
                 if (!std::isfinite(value) || std::fabs(value) > 1000000) reject("value outside supported range");

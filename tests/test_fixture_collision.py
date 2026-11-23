@@ -165,11 +165,19 @@ class NativeFixtureTests(unittest.TestCase):
             len(check_fixtures(many, backend='native')['events']), len(check_fixtures(many, backend='python')['events'])
         )
 
-    def test_text_that_is_not_ascii_goes_to_the_reference(self):
-        payload = setup(['G21', 'G90', 'G0 X\u0661'])
-        with self.assertRaises(NotImplementedError):
-            check_fixtures(payload, backend='native')
-        self.assertEqual(answer(payload, 'auto'), answer(payload, 'python'))
+    def test_text_that_is_not_ascii_is_read_as_the_reference_reads_it(self):
+        # Digits and spaces of other scripts, letters str.upper() makes ASCII or longer, and words named upper-cased.
+        for line in (
+            'G0 X\u0661',
+            'g0\u00a0x5',
+            'M3 \u017f1000',
+            'G0 X1 \u00df',
+            '\uff270 X1',
+            'G0 X1 ' + '\u00e9' * 260,
+        ):
+            with self.subTest(line=line):
+                payload = setup(['G21', 'G90', line])
+                self.assertEqual(answer(payload, 'native'), answer(payload, 'python'))
 
     def test_route_sends_the_core_text(self):
         from studio.server import create_app

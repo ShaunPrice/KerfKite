@@ -112,13 +112,19 @@ class NativeProgramImportTests(unittest.TestCase):
             with self.subTest(payload=payload):
                 self.same(payload)
 
-    def test_text_that_is_not_ascii_is_answered_by_the_reference(self):
-        payload = {'name': 'part.nc', 'text': 'G21 (Ä)\nG0 X0 Y0\nG1 X3 Y4 F100'}
-        self.assertIsNone(import_json(payload))
-        with self.assertRaises(NotImplementedError):
-            import_program(payload, backend='native')
-        self.assertTrue(outcome(payload, 'auto').startswith('{'))
-        self.assertEqual(outcome(payload, 'auto'), outcome(payload, 'python'))
+    def test_text_that_is_not_ascii_is_read_as_the_reference_reads_it(self):
+        drawings = [
+            {'name': 'part.nc', 'text': 'G21 (Ä)\nG0 X0 Y0\nG1 X3 Y4 F100'},
+            {'name': 'part.nc', 'text': 'G21\u2028G0 X0 Y0\r\u2028G1 X\u0663 Y4\u00a0F100\nG1 X1 Q1'},
+            {'name': 'cutter.plt', 'text': 'IN;SP1;PD400,0;\u00c4B1;'},
+            {'name': 'machine.ini', 'text': '#\u0130NCLUDE other.ini\n[TRAJ]\nLINEAR_UNITS=mm'},
+            {'name': 'machine.ini', 'text': '[TRAJ]\nLINEAR_UNITS=mm # für\n[ax\u0131s_x]\nMIN_LIMIT=-\u0661\nMAX_LIMIT=300\n'
+             '[AXIS_Y]\nMIN_LIMIT=0\nMAX_LIMIT=200'},
+        ]  # fmt: skip
+        for payload in drawings:
+            with self.subTest(text=payload['text']):
+                self.assertIsNotNone(outcome(payload, 'native'))
+                self.assertEqual(outcome(payload, 'native'), outcome(payload, 'python'))
 
     def test_dxf_drawings_are_read_by_the_core_to_the_tolerance(self):
         doc = ezdxf.new(units=units.MM)

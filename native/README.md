@@ -32,6 +32,26 @@ in text that is read, text must be UTF-8, and a number beyond the range of a dou
 `tests/json_selftest.cpp` checks all of this under CTest; `docs/NATIVE.md` gives the comparisons made with
 Python and with the library this code replaced.
 
+## The workstation server
+
+`kerfkite-studio`, built with the rest, is Studio's local workstation server without Python (`server/`):
+
+    build/native/kerfkite-studio --static studio/static
+
+It serves the editor at `http://127.0.0.1:8765/` with every route of `studio/server.py` over this core, in
+simulator mode unless started with `--enable-hardware`, with its own HTTP server and serial ports and no
+library beyond the C++ standard library and the operating system (Winsock, BCrypt and SetupAPI on Windows).
+The phone pendant's HTTPS is `kerfkite-pendant-tls` (`../packaging/pendant-tls`, Go's standard library), built
+beside the server when Go is installed. STEP exchange is `kerfkite-step` (`step/`), the one program linked to
+Open CASCADE (LGPL 2.1, as replaceable shared libraries), built beside the server when CMake finds Open CASCADE
+7.6 or later (`-DOpenCASCADE_DIR=<prefix>/lib/cmake/opencascade`; Ubuntu's `libocct-data-exchange-dev` and
+`libocct-modeling-algorithms-dev`, or a build of 7.9.3); without it the server answers that STEP needs Open
+CASCADE. [docs/NATIVE.md](../docs/NATIVE.md#the-workstation-server) says what it reproduces and how it is
+compared with the Flask app:
+
+    python validation/server_route_parity.py --server build/native/kerfkite-studio
+    python validation/step_exchange_parity.py --server build/native/kerfkite-studio
+
 ## Use
 
     kerfkite-cam generate project.json -o program.nc
@@ -116,7 +136,9 @@ extrusions and revolutions, lofts and scripted features, patterns and runs of Bo
 solid kernel, with the mesh, measures and silhouette. `solid-cad-section` (`{"model", "z"}`) gives the
 material at a height, and `sketch-solve` (`{"feature", "parameters", "order"}`, the parameters' names in
 the order Studio evaluates them, which decides which of two circular definitions is reported) a sketch's
-vertices with its constraints solved. STEP features are still Python's.
+vertices with its constraints solved. STEP features need the server's STEP add-on, which tessellates them;
+`kerfkite-cam` declines them. `step-part` and `step-faces` give the exact steps and faces of a part and of a
+surface that the add-on builds in Open CASCADE for STEP export.
 
     kerfkite-cam assembly-solve request.json
 
@@ -136,7 +158,7 @@ and column.
 reads posted G-code, an HP-GL plot, a LinuxCNC INI file or an ASCII DXF drawing (`{"name", "text", "unit"}`)
 as Studio's **Import** does (`core/src/program_import.cpp`, the port of `studio/program_import.py`, and the
 core's own DXF reader, `core/src/dxf.cpp`): the artwork, layers, presets, devices and warnings, or the
-reference's message. Program text that is not ASCII, and DXF splines given only by fit points, are declined.
+reference's message, for text that is not ASCII too. DXF splines given only by fit points are declined.
 
     kerfkite-cam pdf-import request.json
 
@@ -198,12 +220,12 @@ the part that touches and where, or refuses the first line it cannot read.
 | 3D solid modelling (`core/include/kerfkite/solid.hpp`, `core/src/solid/`) | Done as a kernel and a `solid` command. New in the core, and the only implementation of KerfKite's own: Studio's 3D CAD calls it through its extension (`studio/solid_kernel.py`), and keeps a third-party library only as the fallback where the extension is not installed. See `docs/SOLID-KERNEL.md`. |
 | The Delaunay triangulation and Voronoi diagram of points, and the distance from a point to a region's boundary (`core/src/polygon/voronoi.cpp`, `distance.cpp`) | Done, in the polygon kernel: exact tests in 128 and 256 bits, O(n log n), points on one line and on one circle as ordinary input. |
 | V-carving (`core/src/vcarve.cpp`) | Done, on the kernel's Voronoi diagram: the sampled medial axis of the reference, with its allowance of one sampling interval. This is the only implementation: Studio calls it through its extension (`studio/operations.py`), and keeps Shapely only as the fallback where the extension is not installed. No function of the C library but `sqrt` is behind a carve, so it is the same on every platform. |
-| Rotary output for a fourth axis (`core/src/rotary.cpp`): a planar job or a given program wrapped onto a cylinder for LinuxCNC, grblHAL and xPRO V5, on A, B or C, with inverse-time feeds at the surface or cut radius and the fixture's checks | Done, for generated jobs and given G-code. A given program with text that is not ASCII is declined. The cut length uses CPython's `hypot` (`pymath::vector_norm`) and the C library's `asinh`, which CPython calls, so it is Python's on each platform. |
+| Rotary output for a fourth axis (`core/src/rotary.cpp`): a planar job or a given program wrapped onto a cylinder for LinuxCNC, grblHAL and xPRO V5, on A, B or C, with inverse-time feeds at the surface or cut radius and the fixture's checks | Done, for generated jobs and given G-code. A given program with text that is not ASCII is refused, where the reference read digits and spaces of other scripts and copied them into the program a controller runs. The cut length uses CPython's `hypot` (`pymath::vector_norm`) and the C library's `asinh`, which CPython calls, so it is Python's on each platform. |
 | Studio's CAM on the core | Done. Studio's `generate`, `generate_rotary` and `wrap_job` call the core through the extension (`core_cam` in `studio/_core_native.cpp`) and keep their Python as the reference and the fallback for what the core declines; the job carries everything the Python job has, the paths and depths cut, the holes and drill of a drilling job and the operation count of an ordered one included. See `docs/NATIVE.md`. |
 | Relief finishing (`core/src/relief.cpp`): the settings, height fields as numbers or as RGB image bytes, the flat and ball cutter contact on threads, a GPU or both at once, as a calibration at start decides, the raster paths and their depths | Done, to the bit. Studio's `prepare_relief` calls it through the extension and keeps its Python as the reference and the fallback. STL and artwork height fields are still rasterised in Python. |
 | Stock preview (`core/src/stock.cpp`): the height map a job's segments leave in the stock, for flat, ball, V and drill cutters | Done, to the bit: distances are CPython's `hypot` and minima Python's `min`. Studio's stock preview calls it through the extension; a segment row with text that is not a number is declined. |
 | Manual tool-change plans (`core/src/tool_changes.cpp`): stages for runs of operations with one tool, each a whole job | Done, to the byte, with every refusal. Studio's `plan_tool_changes` and `/api/tool-changes` call it through the extension and keep the Python as the reference and the fallback. A stage of fewer than two program lines, where the reference fails with an IndexError, is declined. |
-| Fixture clearance (`core/src/fixture_collision.cpp`): a posted program's moves swept against fixture boxes, continuously | Done, to the byte: CPython's `hypot`, Python's `min` and `max`, and `round(x, 5)` for the positions. Studio's `check_fixtures` and `/api/fixture-collision` call it through the extension and keep the Python as the reference and the fallback. A program line that is not ASCII, which the reference reads with Unicode's rules, is declined. |
+| Fixture clearance (`core/src/fixture_collision.cpp`): a posted program's moves swept against fixture boxes, continuously | Done, to the byte: CPython's `hypot`, Python's `min` and `max`, and `round(x, 5)` for the positions. Studio's `check_fixtures` and `/api/fixture-collision` call it through the extension and keep the Python as the reference and the fallback. A program line that is not ASCII is read with the reference's rules for case, spaces and digits. |
 | Artwork reliefs (`core/src/artwork_relief.cpp`): closed contours rasterised raised or recessed on the polygon kernel, then the relief | Done, as the one implementation: the kernel decides each cell exactly on its grid, so a cell whose edge lies within a millionth of a millimetre of the outline may differ from the Shapely reference, which answers without the extension. Refusals are the reference's. |
 | STL height fields for reliefs (`core/src/stl_heightmap.cpp`): binary and ASCII STL read, normalised and rasterised from above | Done, to the bit, with every refusal. Studio's `stl_heightmap` calls it through the extension and keeps its Python as the reference and the fallback. Base64 text of whole groups followed by nothing but `=`, which some Python releases read and others refuse, is declined. |
 | Importers, sender, pendant, editors | Not yet. |

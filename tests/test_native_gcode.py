@@ -450,11 +450,11 @@ class RotaryParityTests(unittest.TestCase):
                     except ValueError as error:
                         outcomes.append(('error', str(error)))
                 self.assertEqual(outcomes[0], outcomes[1])
-        # Text that is not ASCII is the reference's alone: Python splits words on any Unicode space.
+        # A rotary source is ASCII: the reference read digits and spaces of other scripts there and copied them into
+        # the program a controller runs.
         foreign = dict(planar, lines=planar['lines'][:12] + ['G1 X10\u00a0Y20 F900'] + planar['lines'][12:])
-        with self.assertRaises(NotImplementedError):
+        with self.assertRaisesRegex(ValueError, 'Rotary source G-code must be ASCII text'):
             wrap_job(foreign, options, backend='native')
-        self.assertEqual(exact(wrap_job(foreign, options)), exact(wrap_job(foreign, options, backend='python')))
 
 
 if __name__ == '__main__':

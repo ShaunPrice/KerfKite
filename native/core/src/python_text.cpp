@@ -1,21 +1,101 @@
-// Python's view of text outside the core's JSON: str.isprintable(), strict UTF-8 decoding and UTF-8 encoding.
-// See python_text.hpp.
+// Python's view of text: str.isprintable(), the decimal digits, \w, str.upper() and str.splitlines(), strict
+// UTF-8 decoding and UTF-8 encoding. See python_text.hpp.
 #include "python_text.hpp"
+
+#include <algorithm>
 
 #include "unicode_tables.hpp"
 
 namespace kerfkite {
 namespace detail {
 
-bool python_printable(uint32_t c) {
-    const size_t count = sizeof(kNotPrintable) / sizeof(kNotPrintable[0]);
+namespace {
+
+// Whether c lies in one of the sorted, separate runs.
+bool in_runs(const uint32_t (*runs)[2], size_t count, uint32_t c) {
     size_t low = 0, high = count;
     while (low < high) {
         const size_t middle = (low + high) / 2;
-        if (kNotPrintable[middle][1] < c) low = middle + 1;
+        if (runs[middle][1] < c) low = middle + 1;
         else high = middle;
     }
-    return !(low < count && kNotPrintable[low][0] <= c);
+    return low < count && runs[low][0] <= c;
+}
+
+}  // namespace
+
+int python_decimal(uint32_t c) {
+    const uint32_t *runs = kDecimalDigitRuns;
+    const size_t count = sizeof(kDecimalDigitRuns) / sizeof(kDecimalDigitRuns[0]);
+    const uint32_t *after = std::upper_bound(runs, runs + count, c);
+    if (after == runs || c - *(after - 1) >= 10) return -1;
+    return static_cast<int>(c - *(after - 1));
+}
+
+bool python_word(uint32_t c) { return in_runs(kWordRuns, sizeof(kWordRuns) / sizeof(kWordRuns[0]), c); }
+
+void python_upper(uint32_t c, std::vector<uint32_t> &out) {
+    if (c >= 'a' && c <= 'z') {
+        out.push_back(c - 'a' + 'A');
+        return;
+    }
+    if (c < 0x80) {
+        out.push_back(c);
+        return;
+    }
+    const size_t count = sizeof(kUpper) / sizeof(kUpper[0]);
+    const auto *found = std::lower_bound(kUpper, kUpper + count, c, [](const uint32_t (&row)[4], uint32_t code) {
+        return row[0] < code;
+    });
+    if (found == kUpper + count || (*found)[0] != c) {
+        out.push_back(c);
+        return;
+    }
+    for (size_t k = 1; k < 4 && (*found)[k]; ++k) out.push_back((*found)[k]);
+}
+
+std::string python_upper(const std::string &text) {
+    std::string out;
+    out.reserve(text.size());
+    std::vector<uint32_t> mapped;
+    for (const CodePoint &point : code_points(text)) {
+        mapped.clear();
+        python_upper(point.code, mapped);
+        for (const uint32_t c : mapped) append_utf8(out, c);
+    }
+    return out;
+}
+
+std::vector<std::string> python_splitlines(const std::string &text) {
+    std::vector<std::string> lines;
+    const std::vector<CodePoint> points = code_points(text);
+    size_t start = 0;  // the line's first byte
+    for (size_t i = 0; i < points.size(); ++i) {
+        if (!python_line_break(points[i].code)) continue;
+        lines.push_back(text.substr(start, points[i].begin - start));
+        if (points[i].code == '\r' && i + 1 < points.size() && points[i + 1].code == '\n') ++i;
+        start = points[i].end;
+    }
+    if (start < text.size()) lines.push_back(text.substr(start));
+    return lines;
+}
+
+std::string python_ascii(const std::string &text, bool lines) {
+    std::string out;
+    out.reserve(text.size());
+    for (const CodePoint &point : code_points(text)) {
+        const uint32_t c = point.code;
+        if (c < 0x80) out.push_back(static_cast<char>(c));
+        else if (python_line_break(c)) out.push_back(lines ? '\x0b' : ' ');
+        else if (python_space(c)) out.push_back(' ');
+        else if (python_decimal(c) >= 0) out.push_back(static_cast<char>('0' + python_decimal(c)));
+        else out.push_back('\x01');
+    }
+    return out;
+}
+
+bool python_printable(uint32_t c) {
+    return !in_runs(kNotPrintable, sizeof(kNotPrintable) / sizeof(kNotPrintable[0]), c);
 }
 
 bool python_utf8(const unsigned char *data, size_t size, std::vector<uint32_t> &out) {

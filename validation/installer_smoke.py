@@ -1,8 +1,15 @@
-"""Exercise a freshly installed desktop launcher without connecting any machine."""
+"""Exercise a freshly installed desktop launcher without connecting any machine.
+
+A package of the workstation server without Python (packaging/desktop/build.py --native) is recognised by its
+kerfkite-studio: it must start without setting up a Python runtime, and with --step its STEP add-on must write and
+read a part.
+"""
 
 import argparse
+import base64
 from contextlib import contextmanager
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -97,9 +104,12 @@ def exercise_native(exe, scratch):
     env = os.environ.copy()
     if sys.platform.startswith("linux"):
         host = exe.with_name("kerfkite-native")
-        assert os.access(host, os.X_OK)
-        env["KERFKITE_NATIVE_HOST"] = str(host)
-        command = ["/usr/bin/python3", str(sources / "linux/smoke.py"), STUDIO]
+        # The installed window finds WebKitGTK; the smoke runner, built from the same sources, drives it.
+        subprocess.run([host, "--check"], check=True, timeout=60)
+        build = scratch / "window"
+        subprocess.run(["cmake", "-S", sources / "linux", "-B", build, "-DCMAKE_BUILD_TYPE=Release"], check=True)
+        subprocess.run(["cmake", "--build", build, "--target", "kerfkite-native-smoke"], check=True)
+        command = [build / "kerfkite-native-smoke", STUDIO]
     elif sys.platform == "darwin":
         host = exe.with_name("KerfKiteNative")
         subprocess.run(["codesign", "--verify", "--strict", host], check=True)
@@ -130,8 +140,38 @@ def exercise_native(exe, scratch):
             exe.with_name("KerfKiteNativeSmoke.exe").unlink(missing_ok=True)
 
 
+def native_package(exe):
+    """Whether the package runs the workstation server without Python: kerfkite-studio beside the launcher, or in
+    the Mac app's Resources."""
+    name = "kerfkite-studio.exe" if os.name == "nt" else "kerfkite-studio"
+    return (exe.parent / name).is_file() or (exe.parent.parent / "Resources" / name).is_file()
+
+
+def check_step(post):
+    """STEP through the package's Open CASCADE add-on: a part written and read back."""
+    plate = {
+        "version": 1,
+        "features": [
+            {"id": "base", "kind": "box", "size": [40, 30, 6]},
+            {"id": "bore", "kind": "cylinder", "op": "cut", "radius": 4, "height": 8, "origin": [20, 15, -1]},
+        ],
+    }
+    request = Request(
+        STUDIO + "api/solid-cad/step/export",
+        data=json.dumps({"model": plate}).encode(),
+        headers=post.headers,
+    )
+    with urlopen(request, timeout=60) as response:
+        document = response.read()
+    assert document.startswith(b"ISO-10303-21;"), document[:40]
+    shape = post("api/solid-cad/step/import", {"content": base64.b64encode(document).decode()})
+    assert shape["solids"] == 1 and shape["faces"] == 7 and shape["solidOnly"] is True
+    assert abs(shape["volume"] - (40 * 30 * 6 - math.pi * 16 * 6)) < 1e-6 * shape["volume"]
+
+
 def check(exe, data, offline, step, native=False, target=None):
     env = {**os.environ, "KERFKITE_DATA_DIR": str(data)}
+    without_python = native_package(exe)
     if offline:
         env["UV_OFFLINE"] = "1"
     places = data / "shortcut-check"
@@ -142,7 +182,12 @@ def check(exe, data, offline, step, native=False, target=None):
     proc = subprocess.Popen([exe], env=env)
     try:
         page = page_when(proc, "Choose your workshop")
-        fields = {"step": "yes"} if step else {}
+        if without_python:
+            # STEP comes with the package or not at all; the launcher says which.
+            fields = {}
+            assert ("STEP import and export is installed." in page) == step, "the package's STEP add-on"
+        else:
+            fields = {"step": "yes"} if step else {}
         asked = 'name="shortcuts" value="offered"' in page
         if asked and sys.platform.startswith("linux"):
             fields.update(shortcuts="offered", menu="yes", icon="yes")
@@ -162,6 +207,8 @@ def check(exe, data, offline, step, native=False, target=None):
 
         def post(path, payload):
             return json.loads(read(STUDIO + path, data=json.dumps(payload).encode(), headers=headers))
+
+        post.headers = headers
 
         sketch = post(
             "api/cad-script",
@@ -203,25 +250,32 @@ def check(exe, data, offline, step, native=False, target=None):
         assert len(loops) == 1
         x, y = zip(*loops[0])
         assert abs(max(x) - min(x) - 29) < 0.01 and abs(max(y) - min(y) - 21) < 0.01
-        runtime_dir = f"runtime-{target}-*" if target else "runtime-*"
-        interpreter = "Scripts/python.exe" if os.name == "nt" else "bin/python"
-        [python] = data.glob(f"{runtime_dir}/{interpreter}")
-        if target:
-            machine = subprocess.check_output(
-                [python, "-I", "-c", "import platform; print(platform.machine())"], text=True
-            ).strip()
-            assert machine == {"darwin-arm64": "arm64", "darwin-amd64": "x86_64"}[target], machine
-        subprocess.run([python, "-I", Path(__file__).with_name("check_installed_cam.py")], check=True)
-        if step:
-            subprocess.run(
-                [
-                    python,
-                    "-I",
-                    "-c",
-                    "from pypdf import PdfReader; from OCP.STEPControl import STEPControl_Writer; STEPControl_Writer()",
-                ],
-                check=True,
-            )
+        if without_python:
+            # Nothing was set up: no Python runtime, and nothing downloaded.
+            assert not list(data.glob("runtime-*")), "a package without Python made a Python runtime"
+            if step:
+                check_step(post)
+        else:
+            runtime_dir = f"runtime-{target}-*" if target else "runtime-*"
+            interpreter = "Scripts/python.exe" if os.name == "nt" else "bin/python"
+            [python] = data.glob(f"{runtime_dir}/{interpreter}")
+            if target:
+                machine = subprocess.check_output(
+                    [python, "-I", "-c", "import platform; print(platform.machine())"], text=True
+                ).strip()
+                assert machine == {"darwin-arm64": "arm64", "darwin-amd64": "x86_64"}[target], machine
+            subprocess.run([python, "-I", Path(__file__).with_name("check_installed_cam.py")], check=True)
+            if step:
+                subprocess.run(
+                    [
+                        python,
+                        "-I",
+                        "-c",
+                        "from pypdf import PdfReader; from OCP.STEPControl import STEPControl_Writer;"
+                        " STEPControl_Writer()",
+                    ],
+                    check=True,
+                )
         if native and not offline:
             with install_directory() as scratch:
                 exercise_native(exe, scratch)

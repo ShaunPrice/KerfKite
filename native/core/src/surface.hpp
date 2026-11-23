@@ -28,6 +28,10 @@ std::unique_ptr<Parameters> parameters(const Json *definitions, const Json *orde
 // order of the surface's parameters, orders that of each patch's.
 Json mesh(const Json &request);
 
+// "step-faces": the same request -> the faces cad_exchange._surface_shape makes for STEP export, for Open CASCADE
+// to build (kerfkite/solid_cad.hpp).
+Json step_faces(const Json &request);
+
 }  // namespace surface
 }  // namespace kerfkite
 

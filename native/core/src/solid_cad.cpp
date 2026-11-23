@@ -917,11 +917,19 @@ SolvedSketch solve_sketch(const json &feature, Dimensions &dimensions) {
                      "). Check conflicting dimensions or choose another starting geometry");
 }
 
-// sketch_profile.profile_geometry: the sampled outline of the solved sketch.
-std::vector<P2> profile_outline(const json &feature, Dimensions &dimensions) {
+// profile_geometry's corners and the controls of each outgoing cubic edge (empty for a straight one), which
+// sketch_profile.step_profile_face builds the exact STEP edges from.
+struct ProfileEdges {
+    std::vector<Corner> corners;
+    std::vector<std::vector<P2>> controls;
+};
+
+// sketch_profile.profile_geometry: the sampled outline of the solved sketch, or of the points given as solved.
+std::vector<P2> profile_outline(const json &feature, Dimensions &dimensions, const std::vector<P2> *solved = nullptr,
+                                ProfileEdges *edges = nullptr) {
     const json *raw = get(feature, "points");
     if (!raw || !raw->is_array() || raw->size() < 3 || raw->size() > 256) throw ValueError("A sketch needs 3–256 vertices");
-    std::vector<P2> points = solve_sketch(feature, dimensions).points;
+    std::vector<P2> points = solved ? *solved : solve_sketch(feature, dimensions).points;
     const size_t given = points.size();
     std::vector<double> radii;
     const json *fillets = get(feature, "fillets");
@@ -996,6 +1004,10 @@ std::vector<P2> profile_outline(const json &feature, Dimensions &dimensions) {
         for (const P2 &point : outline)
             if (point[0] < 0) throw ValueError("Revolve profile radii must be zero or greater");
     }
+    if (edges) {
+        edges->corners = corners;
+        edges->controls = controls;
+    }
     return outline;
 }
 
@@ -1028,10 +1040,16 @@ struct Section {
         return {x, y, z, a, b};
     }
 
-    std::array<double, 3> point(int quadrant, double angle) const {
+    std::array<double, 3> point(int quadrant, double angle, double weight = 1.0) const {
         const std::array<double, 5> k = coefficients(quadrant);
-        const double px = k[0] + k[3] * pytrig::cosine(angle) / 1.0;
-        return {px, k[1] + k[4] * pytrig::sine(angle) / 1.0, k[2]};
+        const double px = k[0] + k[3] * pytrig::cosine(angle) / weight;
+        return {px, k[1] + k[4] * pytrig::sine(angle) / weight, k[2]};
+    }
+
+    // poles(quadrant): the three poles of the quadrant's rational quadratic arc (or side).
+    std::array<std::array<double, 3>, 3> poles(int quadrant) const {
+        const double angle = (quadrant - 1.5) * pytrig::PI / 2;
+        return {point(quadrant, angle), point(quadrant, angle + pytrig::PI / 4, std::sqrt(0.5)), point(quadrant, angle + pytrig::PI / 2)};
     }
 };
 
@@ -1131,10 +1149,39 @@ Shape loft(const json &feature, Dimensions &dimensions) {
 
 const json *field(const json &object, const char *key) { return get(object, key); }
 
+StepMesher &step_mesher() {
+    static StepMesher mesher;
+    return mesher;
+}
+
+// cad_exchange.step_manifold: the STEP content tessellated by Open CASCADE, as a closed solid. The kernel's
+// welded mesh stands for manifold3d's Mesh64.merge().
+Shape step_solid(const json &feature) {
+    static const json none;
+    const json *content = field(feature, "content");
+    const json mesh = step_mesher()(content ? *content : none);
+    const json *only = field(mesh, "solidOnly");
+    if (!only || !only->is_boolean() || !only->get<bool>()) throw ValueError("Select STEP geometry containing only closed solids");
+    json node = json::object();
+    node["vertices"] = mesh.at("vertices");
+    node["triangles"] = mesh.at("triangles");
+    node["weld"] = true;
+    Shape shape;
+    try {
+        shape = ask(json{{"mesh", node}}, {});
+    } catch (const ValueError &) {
+        throw ValueError("Tessellated STEP geometry could not form a manifold solid");
+    }
+    if (shape.info.at("empty").get<bool>()) throw ValueError("Tessellated STEP geometry could not form a manifold solid");
+    return shape;
+}
+
 Shape primitive(const json &feature, Dimensions &dimensions, scad::Budget &budget) {
     const json *kind = field(feature, "kind");
     Shape shape;
-    if (is_text(kind, "script")) {
+    if (is_text(kind, "step")) {
+        shape = step_solid(feature);
+    } else if (is_text(kind, "script")) {
         static const json no_overrides = json::object();
         const json *overrides = feature.contains("scriptParameters") ? field(feature, "scriptParameters") : &no_overrides;
         scad::Built built = scad::build_script(field(feature, "source"), dimensions.script_parameters(overrides), budget);
@@ -1307,8 +1354,8 @@ Built build(const json *model, const json *order) {
     const json *version = field(*model, "version");
     if (!version || !version->is_number_integer() || version->get<long long>() != 1) throw ValueError("Expected a version 1 solid model");
     const json *features = field(*model, "features");
-    // STEP features are the Python's for now.
-    if (features && features->is_array())
+    // STEP features need Open CASCADE: the server's translator when it has one, and otherwise the Python's.
+    if (features && features->is_array() && !step_mesher())
         for (const json &feature : *features)
             if (feature.is_object() && is_text(field(feature, "kind"), "step")) throw NotPorted("solid features of kind step");
     static const json no_parameters = json::object();
@@ -1398,6 +1445,155 @@ json rebuild(const json *model, const json *order) {
     return result;
 }
 
+// ---- STEP: cad_exchange._part_shape's steps, for the Open CASCADE add-on --------------------------------
+
+json xyz(const std::array<double, 3> &p) { return json::array({p[0], p[1], p[2]}); }
+
+// sketch_profile.step_profile_face's edges: each corner's incoming line or cubic, then its fillet arc through the
+// arc's midpoint, in the XY plane for an extrusion and the XZ plane for a revolution.
+json profile_edges(const json &feature, Dimensions &dimensions) {
+    ProfileEdges edges;
+    profile_outline(feature, dimensions, nullptr, &edges);
+    const bool revolve = is_text(get(feature, "kind"), "revolve");
+    const auto at = [revolve](const P2 &p) { return revolve ? json::array({p[0], 0.0, p[1]}) : json::array({p[0], p[1], 0.0}); };
+    const std::vector<Corner> &corners = edges.corners;
+    const size_t n = corners.size();
+    json out = json::array();
+    for (size_t i = 0; i < n; ++i) {
+        const Corner &corner = corners[i];
+        const size_t before = wrapped(static_cast<long long>(i) - 1, n);
+        const Corner &previous = corners[before];
+        const std::vector<P2> &controls = edges.controls[before];
+        if (!controls.empty()) {
+            json poles = json::array({at(previous.end)});
+            for (const P2 &control : controls) poles.push_back(at(control));
+            poles.push_back(at(corner.start));
+            out.push_back(json{{"bezier", poles}});
+        } else if (distance(previous.end, corner.start) > 1e-10) {
+            out.push_back(json{{"line", json::array({at(previous.end), at(corner.start)})}});
+        }
+        if (corner.radius != 0) out.push_back(json{{"arc", json::array({at(corner.start), at(corner.at(0.5)), at(corner.end)})}});
+    }
+    return out;
+}
+
+json step_shape(const json &feature, Dimensions &d) {
+    const json *kind = field(feature, "kind");
+    json shape = json::object();
+    if (is_text(kind, "box")) {
+        shape["box"] = numbers(d.vector(field(feature, "size"), 3));
+    } else if (is_text(kind, "sphere")) {
+        shape["sphere"] = d.positive(field(feature, "radius"));
+    } else if (is_text(kind, "cylinder")) {
+        const double r = d.positive(field(feature, "radius")), h = d.positive(field(feature, "height"));
+        const json *given_top = field(feature, "topRadius");
+        const double top = given_top ? d.evaluate(given_top) : d.evaluate_number(r);
+        if (std::fabs(top - r) < 1e-10) shape["cylinder"] = json::array({r, h});
+        else shape["cone"] = json::array({r, top, h});
+    } else if (is_text(kind, "loft")) {
+        const std::array<Section, 2> sections = loft_sections(feature, d);
+        json sides = json::array();
+        for (int side = 0; side < 4; ++side) {
+            json rows = json::array();
+            for (const Section &section : sections) {
+                json row = json::array();
+                for (const std::array<double, 3> &pole : section.poles(side)) row.push_back(xyz(pole));
+                rows.push_back(row);
+            }
+            sides.push_back(rows);
+        }
+        json loft = json::object();
+        loft["sides"] = sides;
+        loft["weights"] = json::array({1.0, std::sqrt(0.5), 1.0});
+        shape["loft"] = loft;
+    } else if (is_text(kind, "extrude") || is_text(kind, "revolve")) {
+        json profile = json::object();
+        profile["edges"] = profile_edges(feature, d);
+        if (is_text(kind, "extrude")) {
+            profile["height"] = d.positive(field(feature, "height"));
+            shape["prism"] = profile;
+        } else {
+            const json *given_angle = field(feature, "angle");
+            profile["degrees"] = given_angle ? d.evaluate(given_angle) : d.evaluate_number(360);
+            shape["revol"] = profile;
+        }
+    } else if (is_text(kind, "step")) {
+        const json *content = field(feature, "content");
+        shape["step"] = content ? *content : json();
+    } else if (is_text(kind, "script")) {
+        shape["error"] = "Script surfaces are tessellated. Export this part as STL, or suppress scripted features for exact STEP exchange.";
+    } else {
+        shape["error"] = "This feature has no STEP translation";
+    }
+    return shape;
+}
+
+// The model rebuilt first, as _part_shape rebuilds it, so that its errors come first; then each enabled feature's
+// shape, its turns about X, Y and Z, its move, the copies of its pattern and its operation. A feature with no STEP
+// translation ends the steps with its error, where the reference raises it.
+json step_part(const json &request) {
+    if (!request.is_object()) throw ValueError("Supply a CAD model in the model field");
+    const json *model = field(request, "model");
+    Built built = build(model, field(request, "order"));
+    Dimensions &d = *built.dimensions;
+    static const json zero = json::array({0, 0, 0});
+    json steps = json::array();
+    for (const json &feature : model->at("features")) {
+        const json *enabled = field(feature, "enabled");
+        if (enabled && !enabled->get<bool>()) continue;
+        json step = json::object();
+        step["shape"] = step_shape(feature, d);
+        if (step["shape"].contains("error")) {
+            steps.push_back(step);
+            break;
+        }
+        const json *rotation_given = field(feature, "rotation");
+        const std::vector<double> rotation = d.vector(rotation_given ? rotation_given : &zero, 3);
+        json turns = json::array();
+        for (int axis = 0; axis < 3; ++axis)
+            if (rotation[static_cast<size_t>(axis)] != 0) {
+                json turn = json::object();
+                turn["axis"] = json::array({axis == 0 ? 1.0 : 0.0, axis == 1 ? 1.0 : 0.0, axis == 2 ? 1.0 : 0.0});
+                turn["degrees"] = rotation[static_cast<size_t>(axis)];
+                turn["center"] = json::array({0.0, 0.0, 0.0});
+                turns.push_back(turn);
+            }
+        step["turns"] = turns;
+        const json *origin_given = field(feature, "origin");
+        step["move"] = numbers(d.vector(origin_given ? origin_given : &zero, 3));
+        const json *pattern = field(feature, "pattern");
+        json copies = json::array();
+        if (pattern && pattern->is_object() && pattern->size() > 0) {
+            const long long count = static_cast<long long>(d.evaluate(field(*pattern, "count")));
+            const bool linear = is_text(field(*pattern, "kind"), "linear");
+            for (long long i = 1; i < count; ++i) {
+                json copy = json::object();
+                if (linear) {
+                    std::vector<double> move = d.vector(field(*pattern, "step"), 3);
+                    for (double &v : move) v *= static_cast<double>(i);
+                    copy["move"] = numbers(move);
+                } else {
+                    static const json origin = json::array({0, 0, 0});
+                    const json *centre_given = field(*pattern, "center");
+                    json turn = json::object();
+                    turn["axis"] = json::array({0.0, 0.0, 1.0});
+                    turn["degrees"] = d.evaluate(field(*pattern, "angle")) * static_cast<double>(i);
+                    turn["center"] = numbers(d.vector(centre_given ? centre_given : &origin, 3));
+                    copy["turn"] = turn;
+                }
+                copies.push_back(copy);
+            }
+        }
+        step["copies"] = copies;
+        const json *op = field(feature, "op");
+        step["op"] = op ? *op : json("add");
+        steps.push_back(step);
+    }
+    json out = json::object();
+    out["features"] = steps;
+    return out;
+}
+
 json section(const json &request) {
     Built built = build(field(request, "model"), field(request, "order"));
     const json *z = field(request, "z");
@@ -1430,6 +1626,84 @@ json sketch_solve(const json &request) {
     result["dof"] = solved.dof;
     result["redundant"] = solved.redundant;
     result["iterations"] = solved.iterations;
+    return result;
+}
+
+json point_list(const std::vector<P2> &points) {
+    json out = json::array();
+    for (const P2 &point : points) out.push_back(json::array({point[0], point[1]}));
+    return out;
+}
+
+// The /api/solid-cad/sketch-points route (design_api.resolve_sketch_points): the solved vertices of a sketch
+// being edited, its sampled outline and the handles of its cubic edges. Unless the sketch is being validated,
+// a step that fails is reported in place of its answer (constraint_error, issue) and the edit goes on.
+json sketch_points(const json &request) {
+    const char *const supply = "Supply sketch points and parameters";
+    const json *payload = request.is_object() ? field(request, "sketch") : nullptr;
+    if (!payload || !payload->is_object()) throw ValueError(supply);
+    const json *raw = get(*payload, "points");
+    if (!raw || !raw->is_array()) throw ValueError(supply);
+    if (raw->size() > 256) throw ValueError("A sketch supports up to 256 vertices");
+    static const json none = json::object();
+    const json *parameters = payload->contains("parameters") ? get(*payload, "parameters") : &none;
+    Dimensions dimensions(parameters, parameter_order(parameters, field(request, "order")));
+    const json *validate_field = get(*payload, "validate");
+    bool validate = false;
+    if (validate_field && !validate_field->is_null()) {
+        if (validate_field->is_boolean()) validate = validate_field->get<bool>();
+        else if (validate_field->is_number()) validate = validate_field->get<double>() != 0;
+        else if (validate_field->is_string()) validate = !validate_field->get_ref<const std::string &>().empty();
+        else validate = !validate_field->empty();  // an array or an object
+    }
+    json result = json::object();
+    result["constraint_error"] = json();
+    result["diagnostics"] = json();
+    std::vector<P2> points;
+    try {
+        const SolvedSketch solved = solve_sketch(*payload, dimensions);
+        points = solved.points;
+        json diagnostics = json::object();
+        diagnostics["dof"] = solved.dof;
+        diagnostics["redundant"] = solved.redundant;
+        diagnostics["iterations"] = solved.iterations;
+        result["diagnostics"] = std::move(diagnostics);
+    } catch (const ValueError &error) {
+        if (validate) throw;
+        for (const json &point : *raw) {
+            const std::vector<double> xy = dimensions.vector(&point, 2);
+            points.push_back({xy[0], xy[1]});
+        }
+        result["constraint_error"] = error.what();
+    }
+    result["outline"] = json();
+    result["issue"] = json();
+    result["handles"] = json();
+    if (validate || payload->contains("fillets") || payload->contains("curves")) {
+        try {
+            result["outline"] = point_list(profile_outline(*payload, dimensions, &points));
+        } catch (const ValueError &error) {
+            if (validate) throw;
+            result["issue"] = error.what();
+        }
+    }
+    if (payload->contains("curves")) {
+        try {
+            const json &curves = payload->at("curves");
+            if (!curves.is_array() || curves.size() != points.size()) throw ValueError("Supply one curve entry per outgoing sketch edge");
+            std::vector<const json *> entries;
+            for (const json &curve : curves) entries.push_back(&curve);
+            json handles = json::array();
+            for (const std::vector<P2> &pair : resolve_curves(entries, points, dimensions))
+                handles.push_back(pair.empty() ? json() : point_list(pair));
+            result["handles"] = std::move(handles);
+        } catch (const ValueError &error) {
+            if (validate) throw;
+            result["issue"] = error.what();
+        }
+    }
+    result["points"] = point_list(points);
+    result["parameters"] = dimensions.values();
     return result;
 }
 
@@ -1487,16 +1761,22 @@ std::unique_ptr<Parameters> parameters(const Json *definitions, const Json *orde
 
 solid_requests::Shape solid_cad_build(const Json *model, const Json *order) { return build(model, order).solid; }
 
+void set_step_mesher(StepMesher mesher) { step_mesher() = std::move(mesher); }
+
 bool solid_cad_command(const std::string &command) {
     return command == "solid-cad" || command == "solid-cad-section" || command == "cad-script" || command == "sketch-solve" ||
-           command == "assembly-solve" || command == "solid-cad-surface";
+           command == "sketch-points" || command == "assembly-solve" || command == "solid-cad-surface" || command == "step-part" ||
+           command == "step-faces";
 }
 
 Json solid_cad_call(const std::string &command, const Json &request) {
     if (command == "cad-script") return script_preview(request);
     if (command == "sketch-solve") return sketch_solve(request);
+    if (command == "sketch-points") return sketch_points(request);
     if (command == "assembly-solve") return assembly_solve(request);
     if (command == "solid-cad-surface") return surface::mesh(request);
+    if (command == "step-faces") return surface::step_faces(request);
+    if (command == "step-part") return step_part(request);
     if (!request.is_object()) throw ValueError("Supply a CAD model in the model field");
     if (command == "solid-cad-section") return section(request);
     return rebuild(field(request, "model"), field(request, "order"));

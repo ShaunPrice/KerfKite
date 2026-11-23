@@ -70,9 +70,29 @@ SectionEnd
 Section "Desktop shortcut" SecDesktop
   CreateShortcut "$DESKTOP\KerfKite Studio.lnk" "$INSTDIR\KerfKite.exe" "" "$INSTDIR\app.ico"
 SectionEnd
+; The workstation server without Python can carry STEP exchange: its Open CASCADE add-on and libraries (LGPL 2.1),
+; a component of its own. A reinstall without it removes it.
+!if /FileExists "step\kerfkite-step.exe"
+Section "STEP import and export (Open CASCADE)" SecStep
+  SetOutPath "$INSTDIR"
+  File /r "step\*"
+SectionEnd
+Section "-Remove STEP when not chosen"
+  SectionGetFlags ${SecStep} $0
+  IntOp $0 $0 & ${SF_SELECTED}
+  StrCmp $0 ${SF_SELECTED} keep
+  Delete "$INSTDIR\kerfkite-step.exe"
+  Delete "$INSTDIR\TK*.dll"
+  RMDir /r "$INSTDIR\open-cascade"
+  keep:
+SectionEnd
+!endif
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${SecStudio} "The workshop for your account, with KerfKite Studio in the Start menu."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "A KerfKite Studio icon on your desktop. Double-click it to start the workshop."
+!if /FileExists "step\kerfkite-step.exe"
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecStep} "Read and write STEP files of parts and surfaces, with Open CASCADE Technology (LGPL 2.1), kept as separate files."
+!endif
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 Section "Uninstall"
   Delete "$SMPROGRAMS\KerfKite Studio.lnk"
@@ -88,6 +108,13 @@ Section "Uninstall"
   Delete "$INSTDIR\requirements.lock"
   Delete "$INSTDIR\step.lock"
   Delete "$INSTDIR\kerfkite_studio-*.whl"
+  Delete "$INSTDIR\kerfkite-studio.exe"
+  Delete "$INSTDIR\kerfkite-pendant-tls.exe"
+  Delete "$INSTDIR\kerfkite-cam.exe"
+  Delete "$INSTDIR\kerfkite-step.exe"
+  Delete "$INSTDIR\TK*.dll"
+  RMDir /r "$INSTDIR\static"
+  RMDir /r "$INSTDIR\open-cascade"
   Delete "$INSTDIR\LICENSE"
   RMDir /r "$INSTDIR\runtime-notices"
   Delete "$INSTDIR\Uninstall.exe"
