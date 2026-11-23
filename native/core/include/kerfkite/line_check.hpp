@@ -19,8 +19,10 @@ enum class LineMethod {
 
 struct LineCheck {
     bool simple = false;
-    // The core would decline a job with this contour, for this reason: its answer depends on rounding
-    // inside GEOS, or the test would take more work than line_check_budget().
+    // With the reference's rules in force (kerfkite/cam.hpp), the core would decline a job with this contour, for
+    // this reason: its answer depends on rounding inside GEOS, or the test would take more work than
+    // line_check_budget(). By the core's own rules a contour is never declined: the exact answer is given, and a
+    // contour that needs too much work is refused (ValueError).
     bool declined = false;
     std::string reason;
     // The work done, in units of about equal time. Counted, not timed: the same on every machine.
@@ -36,8 +38,8 @@ LineCheck check_line(const std::vector<std::array<double, 2>> &path, LineMethod 
 std::uint64_t line_check_budget();
 
 // geos::algorithm::Orientation::index(p1, p2, q), as Shapely's predicates take it: 1 when q is to the left of
-// p1 -> p2, -1 to the right, 0 on the line. Throws NotPorted where GEOS's double-double arithmetic would give
-// another sign than the exact one.
+// p1 -> p2, -1 to the right, 0 on the line. Where GEOS's double-double arithmetic would give another sign than the
+// exact one, the exact sign (by the core's own rules) or NotPorted (by the reference's).
 int geos_orientation(const std::array<double, 2> &p1, const std::array<double, 2> &p2, const std::array<double, 2> &q);
 
 }  // namespace kerfkite

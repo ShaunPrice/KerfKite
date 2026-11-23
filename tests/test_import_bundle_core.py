@@ -5,6 +5,7 @@ import io
 import json
 import random
 import struct
+import sys
 import unittest
 import warnings
 import zipfile
@@ -35,6 +36,14 @@ def outcome(given, backend):
 
 def encoded(blob):
     return base64.b64encode(blob).decode('ascii')
+
+
+def zip64_locator(given):
+    """Whether a request's archive holds a ZIP64 locator signature."""
+    try:
+        return b'PK\x06\x07' in base64.b64decode(given['content'], validate=True)
+    except (TypeError, KeyError, ValueError):
+        return False
 
 
 def written(items):
@@ -111,32 +120,70 @@ class BundleCoreTests(unittest.TestCase):
             for given in ({'content': encoded(blob)}, {'content': encoded(blob), 'index': 0}):
                 self.same(given)
 
-    def test_what_versions_read_differently_is_declined(self):
+    def test_what_zipfile_cannot_open_is_refused(self):
+        """Where zipfile stops with something other than its read errors, the core refuses the bundle as unreadable."""
         rng = random.Random(4)
         member = {'name': b'one.lbdev', 'data': b'{}'}
-        for m in (
-            dict(member, version=64),
-            dict(member, extra=b'\x01\x00\x08\x00' + bytes(8)),
-            dict(member, extra=b'\x75\x70\x05\x00\x01abcd'),
-        ):
-            given = {'content': encoded(bundle_archive([m], rng))}
-            self.assertIsNone(outcome(given, 'native'), m)
-        blob = bundle_archive([member], rng)
-        zip64 = blob[:-22] + b'PK\x06\x07' + bytes(16) + blob[-22:]
-        self.assertIsNone(outcome({'content': encoded(zip64)}, 'native'))
-        # A member that inflates past what is read declines, and Python answers it.
-        bomb = bundle_archive([{'name': b'big.lbdev', 'data': bytes(4_100_000), 'size': 100}], rng)
-        given = {'content': encoded(bomb), 'index': 0}
-        self.assertIsNone(outcome(given, 'native'))
-        self.assertEqual(outcome(given, 'auto'), outcome(given, 'python'))
+        unreadable = 'ValueError: Cannot read the bundle or selected text member'
+        newer = {'content': encoded(bundle_archive([dict(member, version=64)], rng))}
+        self.assertEqual(outcome(newer, 'native'), unreadable)
+        with self.assertRaises(NotImplementedError):
+            inspect_bundle(newer, backend='python')
+        patched = {'content': encoded(bundle_archive([dict(member, flags=0x20)], rng)), 'index': 0}
+        self.assertEqual(outcome(patched, 'native'), unreadable)
+        # A directory offset past the directory puts the member's header before the data: zipfile cannot seek there.
+        blob = bytearray(bundle_archive([member], rng))
+        struct.pack_into('<L', blob, len(blob) - 6, struct.unpack_from('<L', blob, len(blob) - 6)[0] + 100)
+        before = {'content': encoded(bytes(blob)), 'index': 0}
+        self.assertEqual(outcome(before, 'native'), unreadable)
+        self.assertTrue(outcome(before, 'python').startswith('ValueError: negative seek value'))
+
+    def test_zip64_unicode_paths_shared_headers_and_long_data_are_read(self):
+        rng = random.Random(5)
+        member = {'name': b'dev/one.lbdev', 'data': b'{"a": 1}'}
+        archives = [
+            bundle_archive([dict(member, zip64=('size', 'csize', 'offset'))], rng, zip64={}),
+            bundle_archive([dict(member, zip64=('offset',))], rng, zip64={'classic': True}),
+            bundle_archive([dict(member, extra=b'\x01\x00\x08\x00' + bytes(8))], rng),
+            bundle_archive([dict(member, unicode_path='dév/ünï.lbdev'.encode())], rng),
+            bundle_archive([dict(member, unicode_path='dév/ünï.lbdev'.encode(), unicode_crc=1)], rng),
+            bundle_archive([dict(member, extra=b'\x75\x70\x05\x00\x01abcd')], rng),
+            # DEFLATE data past what a member may hold, read as far as zlib is asked to read it.
+            bundle_archive([{'name': b'big.lbdev', 'data': bytes(4_100_000), 'size': 100}], rng),
+        ]
+        listed = []
+        for blob in archives:
+            listing = json.loads(self.same({'content': encoded(blob)}))
+            listed.append([f['name'] for f in listing['files']])
+            for index in range(len(listing['files'])):
+                self.same({'content': encoded(blob), 'index': index})
+        self.assertEqual(listed[3], ['ünï.lbdev'])
+        self.assertEqual(listed[4], ['one.lbdev'])
+        # Two entries at one header both read it, as Python 3.12.10 and later read them with a warning (some
+        # earlier patch releases refuse them).
+        shared = encoded(bundle_archive([member, dict(member, offset=0)], rng))
+        listing = json.loads(outcome({'content': shared}, 'native'))
+        self.assertEqual([f['name'] for f in listing['files']], ['one.lbdev', 'one.lbdev'])
+        for index in (0, 1):
+            self.assertEqual(json.loads(outcome({'content': shared, 'index': index}, 'native'))['text'], '{"a": 1}')
 
     def test_generated_requests_match(self):
         answered = 0
         for given in bundle_import_cases(400, 9):
             core = outcome(given, 'native')
-            if core is not None:
-                answered += 1
-                self.assertEqual(core, outcome(given, 'python'), str(given)[:200])
+            if core is None:
+                continue  # an index beyond JSON's integers, which does not reach the core unchanged
+            answered += 1
+            reference = outcome(given, 'python')
+            if reference is None or reference.startswith('ValueError: negative seek value'):
+                # zipfile stopped with something other than a read error; the core refuses the bundle.
+                self.assertEqual(core, 'ValueError: Cannot read the bundle or selected text member', str(given)[:200])
+            elif sys.version_info < (3, 13) and zip64_locator(given):
+                continue  # Python before 3.13 reads ZIP64 end records by other rules; the core reads as 3.13 does
+            elif sys.version_info < (3, 12, 10) and core == 'ValueError: Bundle encoding is invalid':
+                continue  # padding after the last whole group, which Python 3.12.10 and later refuse as the core does
+            else:
+                self.assertEqual(core, reference, str(given)[:200])
         self.assertGreater(answered, 300)
 
     def test_route_sends_the_core_text(self):

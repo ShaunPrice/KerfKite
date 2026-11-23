@@ -8,9 +8,10 @@
 // revolutions, lofts and CAD scripts (scad.cpp), placed by rotation and origin, repeated by linear and polar
 // patterns, and combined in runs of additions, cuts and intersections; named parameters and their
 // expressions; the mesh, measures and silhouette of rebuild(); horizontal sections; and the /api/cad-script
-// preview; and sketch constraints, by the core's own solver (below). Models with STEP features are declined
-// (NotPorted), as are dimension expressions outside numbers, names, + - * /, unary signs, parentheses and the
-// sketch crossing functions, which the reference reads with Python's own parser.
+// preview; and sketch constraints, by the core's own solver (below). STEP features are meshed by the server's
+// STEP add-on and refused where there is none. Dimension expressions outside numbers, names, + - * /, unary
+// signs, parentheses and the sketch crossing functions, which the reference reads with Python's own parser,
+// are refused by the core's own rule (declined with the reference's rules in force, see kerfkite/cam.hpp).
 #include "kerfkite/solid_cad.hpp"
 
 #include <algorithm>
@@ -89,7 +90,19 @@ bool digit(char c) { return c >= '0' && c <= '9'; }
 bool word_start(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_'; }
 bool word_char(char c) { return word_start(c) || digit(c); }
 
-[[noreturn]] void decline() { throw NotPorted("a dimension expression the native core does not read the way Python's parser does"); }
+// Text outside the grammar read here, which Python reads by rules the core does not follow (other operators,
+// literals and kinds of node, its tokenizer's ways with numbers run into names). With the reference's rules in
+// force it is declined; the core's own rule refuses it, with the reference's message for a construct the
+// evaluator does not take (unsupported) or for text that does not parse (invalid).
+const char *const kOutsideGrammar = "a dimension expression the native core does not read the way Python's parser does";
+[[noreturn]] void unsupported() {
+    own_rule(kOutsideGrammar);
+    throw ValueError(kSyntaxSubset);
+}
+[[noreturn]] void invalid() {
+    own_rule(kOutsideGrammar);
+    throw ValueError("Invalid dimension expression");
+}
 
 // Digits with single underscores between them, from text[i]; the end, or i when there are none.
 size_t digit_part(const std::string &text, size_t i) {
@@ -124,19 +137,19 @@ std::vector<Token> tokens_of(const std::string &text) {
                 size_t k = j + 1;
                 if (k < text.size() && (text[k] == '+' || text[k] == '-')) ++k;
                 const size_t end = digit_part(text, k);
-                if (end == k) decline();
+                if (end == k) invalid();  // an exponent without digits
                 real = true;
                 j = end;
             }
             // A number run into a name, a further point or an underscore is read by Python's tokenizer in ways
             // that changed between releases.
-            if (j < text.size() && (word_char(text[j]) || text[j] == '.')) decline();
+            if (j < text.size() && (word_char(text[j]) || text[j] == '.')) invalid();
             std::string literal;
             for (size_t k = i; k < j; ++k)
                 if (text[k] != '_') literal += text[k];
             if (!real) {
                 // Decimal integers may not have leading zeros unless they are all zeros.
-                if (literal.size() > 1 && literal[0] == '0' && literal.find_first_not_of('0') != std::string::npos) decline();
+                if (literal.size() > 1 && literal[0] == '0' && literal.find_first_not_of('0') != std::string::npos) invalid();
             }
             tokens.push_back({Token::Number, (real ? "r" : "i") + literal});
             i = j;
@@ -155,12 +168,12 @@ std::vector<Token> tokens_of(const std::string &text) {
             continue;
         }
         if (c == '*' || c == '/') {
-            if (i + 1 < text.size() && text[i + 1] == c) decline();  // ** and //
+            if (i + 1 < text.size() && text[i + 1] == c) unsupported();  // ** and //
             tokens.push_back({Token::Symbol, std::string(1, c)});
             ++i;
             continue;
         }
-        decline();
+        unsupported();  // another character
     }
     tokens.push_back({Token::End, ""});
     return tokens;
@@ -183,7 +196,7 @@ public:
 
     int parse() {
         const int root = sum();
-        if (peek().kind != Token::End) decline();
+        if (peek().kind != Token::End) invalid();
         return root;
     }
 
@@ -250,7 +263,7 @@ private:
             Node node;
             if (token.text[0] == 'r') {
                 double value = 0;
-                if (!float_from_text(token.text.substr(1), value)) decline();
+                if (!float_from_text(token.text.substr(1), value)) invalid();
                 node.value = value;
                 node.usable = std::isfinite(value) && -kMaxValue <= value && value <= kMaxValue;
             } else {
@@ -268,7 +281,7 @@ private:
             if (token.text == "True" || token.text == "False" || token.text == "None") {
                 node.usable = false;  // a constant _number refuses
             } else {
-                if (keywords().count(token.text)) decline();
+                if (keywords().count(token.text)) unsupported();
                 node.kind = Node::Name;
                 node.name = token.text;
                 name = true;
@@ -276,17 +289,18 @@ private:
             result = add(node);
         } else if (symbol("(")) {
             ++at_;
-            if (symbol(")")) decline();  // an empty tuple
+            if (symbol(")")) unsupported();  // an empty tuple
             result = sum();
-            if (!symbol(")")) decline();  // a tuple, or no closing parenthesis
+            if (symbol(",")) unsupported();  // a tuple
+            if (!symbol(")")) invalid();  // no closing parenthesis
             ++at_;
             name = nodes[result].kind == Node::Name;
         } else {
-            decline();
+            invalid();  // an operand missing
         }
         if (symbol("(")) {
             // A call: only of a name, with plain arguments.
-            if (!name) decline();
+            if (!name) unsupported();  // a call of something other than a name
             ++at_;
             Node call;
             call.kind = Node::Call;
@@ -295,14 +309,14 @@ private:
                 while (true) {
                     call.children.push_back(sum());
                     if (symbol(")")) break;
-                    if (!symbol(",")) decline();
+                    if (!symbol(",")) invalid();
                     ++at_;
-                    if (symbol(")")) decline();  // a trailing comma
+                    if (symbol(")")) break;  // a trailing comma, as Python allows
                 }
             }
             ++at_;
             result = add(call);
-            if (symbol("(")) decline();  // a call of a call
+            if (symbol("(")) unsupported();  // a call of a call
         }
         return result;
     }
@@ -997,7 +1011,8 @@ std::vector<P2> profile_outline(const json &feature, Dimensions &dimensions, con
     ring.push_back(outline.front());
     const bool valid = line_is_simple(ring);
     const double area = std::fabs(ring_area(std::vector<P2>(ring.begin(), ring.end())));
-    if (valid && std::fabs(area - 1e-8) <= 1e-14) throw NotPorted("a sketch whose area is within rounding of the limit");
+    // Within rounding of the limit GEOS's area and this one may fall either side; the core's own answer is its area.
+    if (valid && std::fabs(area - 1e-8) <= 1e-14) own_rule("a sketch whose area is within rounding of the limit");
     if (!valid || area <= 1e-8) throw ValueError("Sketch must enclose an area without crossing itself");
     if (revolve) {
         for (const P2 &point : points)
@@ -1355,10 +1370,14 @@ Built build(const json *model, const json *order) {
     const json *version = field(*model, "version");
     if (!version || !version->is_number_integer() || version->get<long long>() != 1) throw ValueError("Expected a version 1 solid model");
     const json *features = field(*model, "features");
-    // STEP features need Open CASCADE: the server's translator when it has one, and otherwise the Python's.
+    // STEP features need Open CASCADE: the server's translator (which says so when it is not installed), or with the
+    // reference's rules the Python's; anything else that rebuilds a model (kerfkite-cam) refuses them.
     if (features && features->is_array() && !step_mesher())
         for (const json &feature : *features)
-            if (feature.is_object() && is_text(field(feature, "kind"), "step")) throw NotPorted("solid features of kind step");
+            if (feature.is_object() && is_text(field(feature, "kind"), "step")) {
+                own_rule("solid features of kind step");
+                throw ValueError("Solid features of kind step need Open CASCADE, which only the KerfKite Studio server's STEP add-on provides");
+            }
     static const json no_parameters = json::object();
     const json *parameters = model->contains("parameters") ? field(*model, "parameters") : &no_parameters;
     Built built;

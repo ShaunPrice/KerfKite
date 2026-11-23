@@ -415,7 +415,8 @@ bool inside(const Loop &loop, const UV &q) {
 }
 
 // Polygon(loops[0], loops[1:]).is_valid for loops that do not touch: each ring simple, the holes inside the shell
-// and outside one another. Loops that touch are declined.
+// and outside one another. Where loops touch, Shapely's rules (a touch at a point allowed unless the touches cut the
+// inside in two) are the reference's; the core's own rule refuses such an outline, as it refuses loops that cross.
 bool valid_outline(const std::vector<Loop> &loops) {
     for (const Loop &loop : loops) {
         std::vector<std::array<double, 2>> closed(loop.begin(), loop.end());
@@ -430,7 +431,10 @@ bool valid_outline(const std::vector<Loop> &loops) {
                 for (size_t j = 0; j < loops[b].size(); ++j) {
                     const int how = meet(loops[a][i], loops[a][(i + 1) % loops[a].size()], loops[b][j], loops[b][(j + 1) % loops[b].size()]);
                     if (how == 2) return false;
-                    if (how == 1) throw NotPorted("A surface outline whose loops touch is tessellated by Studio's Python surface reader");
+                    if (how == 1) {
+                        own_rule("A surface outline whose loops touch is tessellated by Studio's Python surface reader");
+                        return false;
+                    }
                 }
     for (size_t h = 1; h < loops.size(); ++h) {
         if (!inside(loops[0], loops[h][0])) return false;

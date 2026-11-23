@@ -41,7 +41,7 @@
 //   kerfkite-cam operation REQUEST.json      an offset, pocket or fill: see kerfkite/operation_command.hpp
 //   kerfkite-cam solid REQUEST.json          a solid built from primitives and Boolean operations: measures, mesh, sections
 //   kerfkite-cam solid-batch REQUESTS.jsonl  the same, one request a line, each answered {"ok": ...} or {"error": message}
-//   kerfkite-cam batch CASES.jsonl
+//   kerfkite-cam batch [--own] CASES.jsonl
 //   kerfkite-cam numbers
 //   kerfkite-cam arithmetic
 //   kerfkite-cam simple
@@ -55,7 +55,9 @@
 // lines wrapped onto the cylinder; {"relief": data} and {"stock": data}, a relief and a stock preview;
 // {"tool_changes": project}, a plan of stages for manual tool changes; {"fixtures": payload}, the fixture
 // clearance check; {"stl": data}, an STL height field) and
-// answers each with {"ok": answer}, {"error": message} or {"declined": feature}. numbers reads
+// answers each with {"ok": answer}, {"error": message} or {"declined": feature}. It keeps to the reference's
+// rules: where the core would answer by a rule of its own, it declines. With --own it answers by its own rules,
+// as the server and the other commands do, and each answer so given names them ("own": [case, ...]). numbers reads
 // "HEXFLOAT DECIMALS" lines and writes the fixed-point text, round() and repr() of each value. arithmetic
 // answers "dist" and "sum" requests with the core's versions of Python's math.dist and sum(). simple reads a
 // line of "METHOD X1 Y1 X2 Y2 ..." for each path (METHOD usual, tree or pairs; coordinates as hexadecimal
@@ -94,7 +96,7 @@ int usage() {
                  "       kerfkite-cam gerber|gerber-outline|gerber-isolation|excellon|excellon-drills FILE [--option VALUE ...]\n"
                  "       kerfkite-cam polygon REQUEST.json | polygon-batch CASES.jsonl\n"
                  "       kerfkite-cam operation REQUEST.json\n"
-                 "       kerfkite-cam batch CASES.jsonl\n"
+                 "       kerfkite-cam batch [--own] CASES.jsonl\n"
                  "       kerfkite-cam numbers < VALUES\n";
     return 1;
 }
@@ -214,7 +216,10 @@ int board(const std::string &command, int argc, char **argv) {
     }
 }
 
-int batch(const std::string &path) {
+// Cases for the parity comparison, one a line. The reference's rules are in force unless own is set: then a case
+// the core answers by a rule of its own is answered so, and its answer names the rules ("own").
+int batch(const std::string &path, bool own) {
+    kerfkite::set_reference_rules(!own);
     std::ifstream cases(path, std::ios::binary);
     if (!cases) {
         std::cerr << "kerfkite-cam: cannot read " << path << "\n";
@@ -224,6 +229,7 @@ int batch(const std::string &path) {
     while (std::getline(cases, line)) {
         if (line.empty()) continue;
         json answer;
+        kerfkite::take_own_rules();
         try {
             const json request = json::parse(line);
             json job;
@@ -268,6 +274,12 @@ int batch(const std::string &path) {
             answer = json{{"declined", error.what()}};
         } catch (const std::exception &error) {
             answer = json{{"invalid", error.what()}};
+        }
+        const std::vector<std::string> rules = kerfkite::take_own_rules();
+        if (!rules.empty()) {
+            json named = json::array();
+            for (const std::string &rule : rules) named.push_back(rule);
+            answer["own"] = named;
         }
         std::cout << answer.dump() << "\n";
     }
@@ -374,7 +386,8 @@ int main(int argc, char **argv) {
     if (argc < 2) return usage();
     const std::string command = argv[1];
     if (command == "generate") return generate(argc, argv);
-    if (command == "batch" && argc == 3) return batch(argv[2]);
+    if (command == "batch" && argc == 3) return batch(argv[2], false);
+    if (command == "batch" && argc == 4 && std::string(argv[2]) == "--own") return batch(argv[3], true);
     if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "polygon" || command == "operation" ||
          command == "solid" || command == "rotary" || command == "rotary-wrap" || command == "relief" || command == "stock" ||
          command == "tool-changes" || command == "fixture-collision" || command == "stl-heightmap" ||

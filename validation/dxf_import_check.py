@@ -8,7 +8,8 @@ For each generated drawing, written by ezdxf, both readers are asked; the drawin
 with bulges in their own coordinate systems, 3D polylines, circles, arcs, ellipses and splines (polynomial
 and rational), block references with base points, scales, rotations, mirroring, arrays and nesting, XCLIP
 windows (some unsupported), layers with colour numbers, true colours, off and frozen, units, entities the
-readers skip, and drawings beyond the limits. The criteria:
+readers skip, and drawings beyond the limits. Splines are given by control points or by fit points, with end
+tangents or without. The criteria:
 
 * the same refusal, or both read the drawing;
 * the same layers with the same colours and visibility, the same objects with the same names and layers,
@@ -127,16 +128,24 @@ def drawing(rng, index):
             if depth == 0:
                 attribs['layer'] = f'Spline{len(exact_splines)}'
                 exact_splines.append(attribs['layer'])
-                roll = rng.random()
-                if roll < 0.3:
-                    weights = [rng.uniform(0.3, 2) for _ in control]
-                    space.add_rational_spline(control, weights, degree=degree, dxfattribs=attribs)
-                elif roll < 0.6:
-                    space.add_spline(dxfattribs=attribs).set_closed([(x, y, 0) for x, y in control], degree=degree)
-                else:
-                    space.add_open_spline(control, degree=degree, dxfattribs=attribs)
-            else:
+            roll = rng.random()
+            if roll < 0.25 and depth == 0:
+                weights = [rng.uniform(0.3, 2) for _ in control]
+                space.add_rational_spline(control, weights, degree=degree, dxfattribs=attribs)
+            elif roll < 0.5 and depth == 0:
+                space.add_spline(dxfattribs=attribs).set_closed([(x, y, 0) for x, y in control], degree=degree)
+            elif roll < 0.75:
                 space.add_open_spline(control, degree=degree, dxfattribs=attribs)
+            else:
+                # Fit points only, which CAD programs interpolate, with end tangents or without; now and then a
+                # point given twice, which the reference cannot interpolate and the core passes through once.
+                fit = [(*p(), 0) for _ in range(rng.randint(2, 9))]
+                if rng.random() < 0.1:
+                    fit.insert(1, fit[0])
+                spline = space.add_spline(fit_points=fit, dxfattribs=attribs)
+                if rng.random() < 0.4:
+                    spline.dxf.start_tangent = (*p(), 0)
+                    spline.dxf.end_tangent = (*p(), 0)
         elif roll < 0.84:
             pick([lambda: space.add_text('Label', dxfattribs=attribs), lambda: space.add_point(p(), dxfattribs=attribs),
                   lambda: space.add_solid([p(), p(), p()], dxfattribs=attribs), lambda: space.add_mtext('Note', dxfattribs=attribs)])()  # fmt: skip

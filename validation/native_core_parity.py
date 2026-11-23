@@ -44,7 +44,10 @@ Eight comparisons, all against values computed by Python in this run:
    graphics states, optional content, text and images, page trees, boxes, units and rotations, every filter,
    cross-reference tables and streams, and damaged operators, documents and payloads. And
    studio.import_bundle's inspect_bundle for LightBurn bundles (bundle_import_cases): ZIP archives listed and
-   read member by member, sound, unusual and damaged.
+   read member by member, sound, unusual and damaged, ZIP64 records and fields and Info-ZIP Unicode paths
+   included. The core reads archives as Python 3.13's zipfile does; with an earlier Python, an archive with a
+   ZIP64 locator whose answer differs is counted as defined by the core, as is a member header before the start
+   of the data, which the core reads as damage where zipfile raises "negative seek value".
 
 For each job the native core must either reproduce the reference exactly (program lines, preview segments,
 length, time, bounds and warnings, and for a rotary job its rotary setup; or the same error message) or
@@ -1524,6 +1527,24 @@ def rotary_cases(count, seed):
 # lowercase words, blank and oversized lines, unusual numbers and separators, and commands it does not take.
 # The core's refusal of a rotary source that is not ASCII (native/core/src/rotary.cpp).
 NOT_ASCII_ROTARY = 'Rotary source G-code must be ASCII text'
+BUNDLE_UNREADABLE = 'Cannot read the bundle or selected text member'
+
+
+def bundle_defined(subject, expect, got):
+    """Whether a bundle answer that differs from the reference is the core's own: a member header before the start
+    of the data (zipfile's ValueError from the seek) read as damage, and, with a Python before 3.13, an archive
+    with a ZIP64 locator, which those read with other rules."""
+    if not isinstance(subject, dict) or not isinstance(subject.get('content'), str):
+        return False
+    if got.get('error') == BUNDLE_UNREADABLE and str(expect.get('error', '')).startswith('negative seek value'):
+        return True
+    if sys.version_info >= (3, 13):
+        return False
+    try:
+        return b'PK\x06\x07' in base64.b64decode(subject['content'], validate=True)
+    except ValueError:
+        return False
+
 
 ODD_LINES = [
     # Text that is not ASCII: the core refuses it in a rotary source, which the reference copied into the program.
@@ -3096,10 +3117,17 @@ def pdf_import_cases(count, seed):
         yield payload
 
 
-def bundle_archive(members, rng, *, comment=b'', comment_field=None, prefix=b'', absolute=False, tail=b''):
+def bundle_archive(
+    members, rng, *, comment=b'', comment_field=None, prefix=b'', absolute=False, tail=b'', zip64=None
+):  # fmt: skip
     """A ZIP archive written field by field, so that any field can be what a damaged or unusual archive holds.
     Each member is a dict: name (bytes), data, and optionally method, level, flags, local_flags, crc, size,
-    csize, version, external, extra, local_name, local_extra, comment and offset."""
+    csize, version, external, extra, local_name, local_extra, comment and offset; zip64, the directory fields
+    (size, csize, offset) moved into a ZIP64 extra field, with zip64_cut bytes cut from its end; and
+    unicode_path, the name an Info-ZIP Unicode path field gives, with unicode_version and unicode_crc. zip64, a
+    dict, writes a ZIP64 end record and its locator: extensible (data after the record), classic (the end
+    record keeps its own fields rather than the largest values), locator_offset (in place of the record's), and
+    disks (the locator's count)."""
     import zlib
 
     blob = bytearray(prefix)
@@ -3122,15 +3150,42 @@ def bundle_archive(members, rng, *, comment=b'', comment_field=None, prefix=b'',
         )  # fmt: skip
         blob += local_name + local_extra + packed
         extra, note = m.get('extra', b''), m.get('comment', b'')
+        offset = m.get('offset', offset)
+        moved = m.get('zip64', ())
+        if moved:
+            values = [v for field, v in (('size', size), ('csize', csize), ('offset', offset)) if field in moved]
+            field = struct.pack('<%dQ' % len(values), *values)
+            field = field[: len(field) - m.get('zip64_cut', 0)]
+            extra += struct.pack('<2H', 1, len(field)) + field
+            size = 0xFFFFFFFF if 'size' in moved else size
+            csize = 0xFFFFFFFF if 'csize' in moved else csize
+            offset = 0xFFFFFFFF if 'offset' in moved else offset
+        if 'unicode_path' in m:
+            field = struct.pack('<BL', m.get('unicode_version', 1), m.get('unicode_crc', zlib.crc32(name)))
+            field += m['unicode_path']
+            extra += struct.pack('<2H', 0x7075, len(field)) + field
         directory += struct.pack(
             '<4s4B4HL2L5H2L', b'PK\x01\x02', 20, 3, m.get('version', 20), 0, flags, method, 0, 0x21, crc, csize,
-            size, len(name), len(extra), len(note), 0, 0, m.get('external', 0o100644 << 16), m.get('offset', offset),
+            size, len(name), len(extra), len(note), 0, 0, m.get('external', 0o100644 << 16), offset,
         )  # fmt: skip
         directory += name + extra + note
     start = len(blob) - base
     blob += directory
+    entries, size_cd, offset_cd = len(members), len(directory), start
+    if zip64 is not None:
+        record_at = len(blob) - base
+        extensible = zip64.get('extensible', b'')
+        blob += struct.pack(
+            '<4sQ2H2L4Q', b'PK\x06\x06', 44 + len(extensible), 45, 45, 0, 0, entries, entries, size_cd, offset_cd
+        )  # fmt: skip
+        blob += extensible
+        blob += struct.pack(
+            '<4sLQL', b'PK\x06\x07', 0, zip64.get('locator_offset', record_at), zip64.get('disks', 1)
+        )  # fmt: skip
+        if not zip64.get('classic'):
+            entries, size_cd, offset_cd = 0xFFFF, 0xFFFFFFFF, 0xFFFFFFFF
     blob += struct.pack(
-        '<4s4H2LH', b'PK\x05\x06', 0, 0, len(members), len(members), len(directory), start,
+        '<4s4H2LH', b'PK\x05\x06', 0, 0, entries, entries, size_cd, offset_cd,
         len(comment) if comment_field is None else comment_field,
     )  # fmt: skip
     return bytes(blob + comment + tail)
@@ -3240,6 +3295,21 @@ def bundle_import_cases(count, seed):
         elif roll < 0.385:
             m['data'], m['method'] = bytes(rng.randint(4_000_001, 4_200_000)), 8
             m['size'] = pick([100, 4_000_000, len(m['data'])])
+        elif roll < 0.43:
+            m['zip64'] = pick([('size', 'csize', 'offset'), ('size', 'csize'), ('offset',), ('csize',), ('size',)])
+            if rng.random() < 0.15:
+                m['zip64_cut'] = rng.randint(1, 8)
+        elif roll < 0.48:
+            path = pick(
+                ['réglages/été.lbdev', 'Laser.clb', '中/x.lbset', 'nul\x00cut.clb', 'back\\slash.lbrn', '', 'a.txt']
+            )
+            m['unicode_path'] = path.encode() if rng.random() < 0.9 else b'\xff\xfe.clb'
+            if rng.random() < 0.15:
+                m['unicode_version'] = pick([0, 2])
+            if rng.random() < 0.15:
+                m['unicode_crc'] = rng.randrange(1 << 32)
+            if rng.random() < 0.1:
+                m['unicode_path'] = b''
         return m
 
     def damaged(blob):
@@ -3312,9 +3382,22 @@ def bundle_import_cases(count, seed):
                 members[0]['offset'] = 2**32 - 10
             prefix = pick([b'', b'', b'', b'MZ stub ' * rng.randint(1, 8)])
             comment = pick([b'', b'', b'LightBurn bundle', b'PK\x05\x06xx', bytes(rng.randint(0, 80))])
+            zip64 = None
+            if rng.random() < 0.1:
+                zip64 = {}
+                roll = rng.random()
+                if roll < 0.15:
+                    zip64['extensible'] = bytes(rng.randint(1, 24))
+                elif roll < 0.25:
+                    zip64['classic'] = True
+                elif roll < 0.32:
+                    zip64['locator_offset'] = rng.randrange(1 << rng.choice([8, 16, 64]))
+                elif roll < 0.36:
+                    zip64['disks'] = pick([0, 2])
             blob = bundle_archive(
                 members, rng, comment=comment, prefix=prefix, absolute=rng.random() < 0.5,
                 comment_field=pick([None, None, None, 0, 200]), tail=pick([b'', b'', b'junk', b'\x00\x00']),
+                zip64=zip64,
             )  # fmt: skip
             if rng.random() < 0.02:
                 blob = blob[:-22] + b'PK\x06\x07' + bytes(16) + blob[-22:]
@@ -3497,6 +3580,30 @@ def main():
         tally = collections.Counter()
         declined = collections.Counter()
         failures = []
+        own_rules = collections.Counter()
+        own_faults = []
+
+        def answer_own(lines):
+            """Put the cases the core declined with the reference's rules to it again with its own: each must be
+            answered, as a program or a refusal, never declined or failed inside."""
+            if not lines:
+                return
+            cases.write_text(''.join(line + '\n' for line in lines), encoding='utf-8')
+            answers = subprocess.run(
+                [str(args.cli), 'batch', '--own', str(cases)],
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                check=True,
+            ).stdout.split('\n')[:-1]
+            assert len(answers) == len(lines), 'The native core did not answer every case by its own rules.'
+            for line, answer in zip(lines, answers, strict=True):
+                got = json.loads(answer)
+                if 'ok' in got or 'error' in got:
+                    for rule in got.get('own', ['(none named)']):
+                        own_rules[rule] += 1
+                else:
+                    own_faults.append((json.loads(line), got))
 
         def compare(lines):
             """Put a set of cases to the native core and count how each was answered."""
@@ -3506,6 +3613,7 @@ def main():
                 [str(args.cli), 'batch', str(cases)], capture_output=True, text=True, encoding='utf-8', check=True
             ).stdout.split('\n')[:-1]
             assert len(answers) == len(lines), 'The native core did not answer every case.'
+            by_own_rules = []
             for (line, origin), answer in zip(lines.items(), answers, strict=True):
                 case, got = json.loads(line), json.loads(answer)
                 expect = case['expect']
@@ -3523,6 +3631,7 @@ def main():
                 elif 'declined' in got:
                     tally[origin, 'declined'] += 1
                     declined[got['declined']] += 1
+                    by_own_rules.append(line)
                 elif got.get('error') == NOT_ASCII_ROTARY and not json.dumps(subject, ensure_ascii=False).isascii():
                     # Defined by the core: a rotary source is ASCII. The reference read digits and spaces of
                     # other scripts there and copied them into the program a controller runs.
@@ -3534,8 +3643,11 @@ def main():
                         failures.append((subject, expect, got))
                 elif strict_equal(expect, got):
                     tally[origin, 'program' if 'ok' in got else 'rejection'] += 1
+                elif origin == 'bundle-import' and bundle_defined(subject, expect, got):
+                    tally[origin, 'defined'] += 1
                 else:
                     failures.append((subject, expect, got))
+            answer_own(by_own_rules)
 
         compare(lines)
         # A helix into a pocket is a long program, and so is a V-carve, so these are compared a few hundred at
@@ -3583,7 +3695,17 @@ def main():
             + (f', {tally[origin, "left out"]} with polygon operations NOT COMPARED' if not shared else '')
         )
     if declined:
-        print('Not ported yet: ' + ', '.join(f'{name} ({n})' for name, n in declined.most_common()))
+        print(
+            'Declined with the reference\'s rules: ' + ', '.join(f'{name} ({n})' for name, n in declined.most_common())
+        )
+    if own_rules:
+        print('Answered by the core\'s own rules: ' + ', '.join(f'{name} ({n})' for name, n in own_rules.most_common()))
+    for case, got in own_faults[:5]:
+        print(
+            'NOT ANSWERED by the core\'s own rules\n  case', json.dumps(case)[:300], '\n  native', json.dumps(got)[:300]
+        )
+    if own_faults:
+        raise SystemExit(f'{len(own_faults)} declined cases were not answered by the core\'s own rules.')
     if failures:
         for project, expect, got in failures[:5]:
             brief = lambda value: json.dumps(value)[:300]
