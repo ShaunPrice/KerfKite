@@ -134,7 +134,11 @@ func makeCertificate(certFile, keyFile string, hosts []string, days int, now tim
 	if err := write(keyFile, 0o600, &pem.Block{Type: "PRIVATE KEY", Bytes: encoded}); err != nil {
 		return err
 	}
-	return write(certFile, 0o644, &pem.Block{Type: "CERTIFICATE", Bytes: der})
+	if err := write(certFile, 0o644, &pem.Block{Type: "CERTIFICATE", Bytes: der}); err != nil {
+		os.Remove(keyFile) // no private key is left without its certificate
+		return err
+	}
+	return nil
 }
 
 // proxyLine is the PROXY protocol's version 1 line for a connection (haproxy.org's proxy-protocol.txt, 2.1).
@@ -271,6 +275,8 @@ func fetch(in io.Reader) answer {
 		timeout = 15 * time.Second
 	}
 	client := &http.Client{
+		// A Transport whose Proxy is nil uses no proxy (only DefaultTransport reads HTTPS_PROXY and the like): the
+		// token and the file go to the receiver and nowhere else.
 		Transport: &http.Transport{Proxy: nil, TLSClientConfig: config, DisableCompression: true, DisableKeepAlives: true},
 		Timeout:   timeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error {
