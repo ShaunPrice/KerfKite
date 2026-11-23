@@ -6,7 +6,7 @@ For a desktop assistant on the workshop computer, the [local stdio setup](MCP.md
 
 ## Prepare the host
 
-Install the MCP extras and the browser needed by the workshop tools, following the [MCP installation guide](MCP.md). Use a dedicated DNS hostname you control with a publicly trusted TLS certificate. The examples below use reserved domains. Supply your own addresses and operator identifier when configuring your service environment.
+Install KerfKite Studio on the host and check `kerfkite-mcp --help`, following the [MCP installation guide](MCP.md). The workshop tools also need Google Chrome, Chromium or Microsoft Edge. Run the service under an ordinary account, not as root. Keep `kerfkite-pendant-tls` beside `kerfkite-mcp`, as the packages install it: it fetches the issuer's signing keys over HTTPS. Use a dedicated DNS hostname you control with a publicly trusted TLS certificate. The examples below use reserved domains. Supply your own addresses and operator identifier when configuring your service environment.
 
 1. Register the **complete** public MCP URL as an API resource with your OAuth provider. Its audience must match `https://workshop.example.org/mcp`, including the path and any non-default port. Assign the API scope `kerfkite:workshop` to the operator.
 2. Configure the authorization-code flow with S256 PKCE. The issuer must publish OAuth or OpenID discovery metadata and an HTTPS JWKS URL. Configure RS256-signed JWT access tokens with `iss`, `aud`, an expiry `exp`, the operator's stable `sub` claim and the required scope. Use the subject and issuer from the access token the provider issues for this resource. The provider must honour the MCP client's requested `resource` when issuing the token.
@@ -20,17 +20,17 @@ Install the MCP extras and the browser needed by the workshop tools, following t
 | `KERFKITE_MCP_JWKS_URL` | `https://identity.example.org/realms/workshop/keys` | Public HTTPS signing key set from the issuer's discovery metadata. |
 | `KERFKITE_MCP_SUBJECT` | `operator-id-from-your-provider` | Exact allowed `sub`. Use the provider's stable subject identifier. |
 
-The host needs outbound HTTPS access to the configured key set. Its clock must be accurate to evaluate the token expiry and any `nbf` claim. KerfKite uses the configured external provider for login and has no built-in remote password.
+The host needs outbound HTTPS access to the configured key set. The server connects to it directly, without a proxy, and only when every address of its host name is public. Its clock must be accurate to evaluate the token expiry and any `nbf` claim. KerfKite uses the configured external provider for login and has no built-in remote password.
 
 ## Serve the HTTPS endpoint
 
-Start KerfKite on the same host as the reverse proxy. This example assumes the Python environment is active.
+Start KerfKite on the same host as the reverse proxy. This example uses the Debian package's program.
 
 ```sh
-cnc-studio-mcp --transport http --port 8766 --output-dir /srv/kerfkite/operator/artifacts
+/opt/kerfkite/kerfkite-mcp --transport http --port 8766 --output-dir /srv/kerfkite/operator/artifacts
 ```
 
-The service listens on `127.0.0.1`. Configure the TLS reverse proxy to forward the MCP path and the protected resource metadata path, preserving the public Host header and Authorization header. Disable proxy response buffering for the MCP stream. The following Caddy site uses its automatic HTTPS support for a hostname with working public DNS. [Caddy reverse proxy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy) · [Caddy automatic HTTPS](https://caddyserver.com/docs/automatic-https)
+The service listens on `127.0.0.1` and reports its local endpoint and the public URL it serves. Configure the TLS reverse proxy to forward the MCP path and the protected resource metadata path, preserving the public Host header and Authorization header. Disable proxy response buffering for the MCP stream. The following Caddy site uses its automatic HTTPS support for a hostname with working public DNS. [Caddy reverse proxy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy) · [Caddy automatic HTTPS](https://caddyserver.com/docs/automatic-https)
 
 ```caddyfile
 workshop.example.org {
@@ -74,4 +74,4 @@ The first request returns HTTP 200 and metadata describing the resource URL, con
 | Unexpected Host or Origin response | Preserve the configured public Host in the proxy. A browser request with an Origin header must come from the allowed origin. |
 | Tools work locally but the remote model operation fails | Check the hosted service account's browser installation and write permissions on its output directory. |
 
-For a local protocol check after installing the MCP extras, run `python -m unittest discover -s tests -p test_mcp_transport.py` from the checkout. The tests verify discovery, sign-in challenges, rejection of unauthorized requests, authenticated initialization, tool listing and an authorized tool call. [MCP authorization specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization) · [FastMCP remote OAuth](https://gofastmcp.com/docs/servers/auth/remote-oauth)
+From a source checkout on Linux, `validation/mcp_http_parity.py` compares this transport with the reference implementation, using signing keys and key servers made for the run. It covers discovery, sign-in challenges, rejected requests and tokens, authenticated initialization, tool listing and authorized tool calls. [Native notes](NATIVE.md#the-assistant-server) [MCP authorization specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization) · [FastMCP remote OAuth](https://gofastmcp.com/docs/servers/auth/remote-oauth)

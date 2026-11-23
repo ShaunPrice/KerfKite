@@ -343,15 +343,7 @@ Json send_to_receiver(const Json &entry, const Upload &upload, const std::string
     request["limit"] = static_cast<long long>(kMaxAnswer + 1);
     Json answer;
     try {
-        // The token travels on the relay's standard input, never on its command line.
-        ChildProcess fetch(relay, {"-fetch"});
-        const bool sent = fetch.write(request.dump() + "\n");
-        fetch.close_input();
-        std::string line;
-        if (!sent || !fetch.readline(line, 25.0)) throw ValueError(kUnverified);
-        answer = Json::parse(line);
-    } catch (const ValueError &) {
-        throw;
+        answer = relay_fetch(relay, request, 25.0);
     } catch (const std::exception &) {
         throw ValueError(kUnverified);
     }
@@ -388,6 +380,15 @@ Json send_to_receiver(const Json &entry, const Upload &upload, const std::string
     out["bytes"] = static_cast<long long>(upload.content.size());
     out["status"] = "stored_for_review";
     return out;
+}
+
+Json relay_fetch(const std::string &relay, const Json &request, double seconds) {
+    ChildProcess fetch(relay, {"-fetch"});
+    const bool sent = fetch.write(request.dump() + "\n");
+    fetch.close_input();
+    std::string line;
+    if (!sent || !fetch.readline(line, seconds)) throw std::runtime_error("the TLS relay gave no answer");
+    return Json::parse(line);
 }
 
 }  // namespace server

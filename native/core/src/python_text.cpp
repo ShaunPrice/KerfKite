@@ -87,6 +87,34 @@ void python_upper(uint32_t c, std::vector<uint32_t> &out) {
     for (size_t k = 1; k < 4 && (*found)[k]; ++k) out.push_back((*found)[k]);
 }
 
+void python_casefold(uint32_t c, std::vector<uint32_t> &out) {
+    if (c < 0x80) {
+        out.push_back(c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c);
+        return;
+    }
+    const size_t count = sizeof(kCaseFold) / sizeof(kCaseFold[0]);
+    const auto *found = std::lower_bound(kCaseFold, kCaseFold + count, c, [](const uint32_t (&row)[4], uint32_t code) {
+        return row[0] < code;
+    });
+    if (found == kCaseFold + count || (*found)[0] != c) {
+        out.push_back(c);
+        return;
+    }
+    for (size_t k = 1; k < 4 && (*found)[k]; ++k) out.push_back((*found)[k]);
+}
+
+std::string python_casefold(const std::string &text) {
+    std::string out;
+    out.reserve(text.size());
+    std::vector<uint32_t> mapped;
+    for (const CodePoint &point : code_points(text)) {
+        mapped.clear();
+        python_casefold(point.code, mapped);
+        for (const uint32_t c : mapped) append_utf8(out, c);
+    }
+    return out;
+}
+
 std::string python_upper(const std::string &text) {
     std::string out;
     out.reserve(text.size());

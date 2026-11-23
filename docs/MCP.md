@@ -4,15 +4,15 @@ The KerfKite MCP server gives an assistant its own Studio editor, CAD/CAM calcul
 
 ## Install the local server
 
-Use Python 3.12 from the [source installation guide](INSTALL.md). In a source checkout with its virtual environment active, run the following commands. The interactive workshop uses Playwright Chromium. The template and calculation tools can run without opening a browser.
+The MCP server, `kerfkite-mcp`, is installed with KerfKite Studio beside the workstation server. It needs no Python.
 
-```sh
-python -m pip install -e '.[mcp]'
-python -m playwright install chromium
-python -m studio.mcp_server --help
-```
+| System | Program |
+| --- | --- |
+| Windows | `%LOCALAPPDATA%\Programs\KerfKite Studio\kerfkite-mcp.exe` |
+| macOS | `/Applications/KerfKite Studio.app/Contents/Resources/kerfkite-mcp` |
+| Linux | `/opt/kerfkite/kerfkite-mcp` from the Debian package, or `kerfkite/kerfkite-mcp` in the extracted archive |
 
-For STEP operations use `python -m pip install -e '.[mcp,step]'` on a platform with compatible Open CASCADE wheels. On Windows use PowerShell for the commands shown. In `cmd.exe`, put double quotes around `.[mcp]`. An existing compatible Chromium installation can be selected using the `KERFKITE_MCP_CHROMIUM` environment variable and its executable path.
+Run it with `--help` to check the installation. The template and calculation tools run without a browser. The interactive workshop opens its editor in an installed Google Chrome, Chromium or Microsoft Edge. Select another Chromium build with `--chromium` or the `KERFKITE_MCP_CHROMIUM` environment variable and its executable path. The browser keeps its sandbox, so on Linux run the server under an ordinary account, not as root. STEP operations use the STEP add-on when it was installed with Studio. To build the programs from source, follow `native/README.md` in the source tree.
 
 Create a private working directory for each assistant workspace. The MCP process stores generated files and the workshop's browser storage in the directory chosen with `--output-dir`. Use one running server per output directory. Each user's normal Studio session keeps its own documents and browser storage. Download a project from Studio to hand it to the assistant. Export the edited result and reopen it in Studio to continue there. Add `--show-workshop` when launching the local MCP server if you want to see its separate editor window.
 
@@ -23,10 +23,10 @@ The release asset is **`kerfkite-workshop-skill.zip`**. Its top-level directory 
 ### Claude Code on the workshop computer
 
 1. Copy the extracted `kerfkite-workshop` folder into `.claude/skills/` in your project, or into `~/.claude/skills/` for personal use across projects. The resulting file should be `…/.claude/skills/kerfkite-workshop/SKILL.md`. [Claude Code skills](https://code.claude.com/docs/en/skills)
-2. From that project directory, register the server using absolute paths. In the example below replace the interpreter and output paths with your own. On Windows select the environment's `Scripts\python.exe`. [Claude Code MCP setup](https://code.claude.com/docs/en/mcp)
+2. From that project directory, register the server using absolute paths. In the example below replace the program and output paths with your own. The table above lists the program's path for each system. [Claude Code MCP setup](https://code.claude.com/docs/en/mcp)
 
 ```sh
-claude mcp add --transport stdio --scope local kerfkite -- "/absolute/path/to/.venv/bin/python" -m studio.mcp_server --output-dir "/absolute/path/to/workshop-files"
+claude mcp add --transport stdio --scope local kerfkite -- "/opt/kerfkite/kerfkite-mcp" --output-dir "/absolute/path/to/workshop-files"
 ```
 
 3. In Claude Code open `/mcp`, check `kerfkite`, then invoke `/kerfkite-workshop`. Ask it to call `workshop_state` and list the starter macros. Verify that actual tool calls return a project and macro names. A registered server name alone only confirms the configuration entry.
@@ -37,8 +37,8 @@ Other stdio clients can launch the same server using this configuration shape. M
 {
   "mcpServers": {
     "kerfkite": {
-      "command": "/absolute/path/to/.venv/bin/python",
-      "args": ["-m", "studio.mcp_server", "--output-dir", "/absolute/path/to/workshop-files"]
+      "command": "/opt/kerfkite/kerfkite-mcp",
+      "args": ["--output-dir", "/absolute/path/to/workshop-files"]
     }
   }
 }
@@ -114,11 +114,11 @@ A configured connection adds `pendant_status`, `pendant_job`, `pendant_jog` and 
 | Symptom | Check |
 | --- | --- |
 | The skill loads but there are no tools | Connect the MCP server in the same client and workspace. Verify tool discovery, then call `workshop_state`. |
-| Template search works but opening the workshop fails | Run `python -m playwright install chromium` inside the MCP server environment. For an installed browser set `KERFKITE_MCP_CHROMIUM` to an executable accessible to the server account. |
+| Template search works but opening the workshop fails | Install Google Chrome, Chromium or Microsoft Edge, or set `KERFKITE_MCP_CHROMIUM` to a browser executable the server account can run. On Linux the server must not run as root. |
 | A control is hidden or stale | Open its tab/dialog, search by label again and inspect the fresh reference. Use `workshop_state` to read any dismissed prompt. |
 | A remote file link points to a server path | Request the generated artifact by its basename with `workshop_read_file`, or collect the file directly from the operator's output directory. |
 | A hosted client gets an authentication error | Check the configured issuer, audience, operator subject, scope, TLS certificate and registered client redirect. [Hosted MCP configuration](MCP-HOSTING.md) |
 | The GUI shows an empty project after reconnecting | Reopen a saved project in the assistant workshop or upload the operator's project. Keep an exported project for handoff or recovery. |
 | Pendant controls are absent or rejected | Check operator pairing, the approved monitor's certificate, workstation arm state, request epoch and client elicitation support. The simulation workflow works without pairing. |
 
-For protocol testing from a source checkout run `python validation/mcp_smoke.py` in the activated MCP environment with the repository root on the Python path. The smoke test starts a temporary stdio server and calls it using the MCP client SDK. The standalone editor simulation runs with `python validation/simulate_solid_workspace.py`. A passing local protocol test, a successfully authenticated cloud chat and a physical machine test are separate checks. Record each client connection and actual tool response before reporting that it works in a given deployment. [Developer handoff](DEVELOPER.md)
+For protocol testing from a source checkout, install the MCP client SDK (`python -m pip install mcp`) and run `python validation/mcp_smoke.py /opt/kerfkite/kerfkite-mcp` with the path of your program. The smoke test starts a temporary stdio server and calls its tools using the SDK's client. The standalone editor simulation runs with `python validation/simulate_solid_workspace.py`. A passing local protocol test, a successfully authenticated cloud chat and a physical machine test are separate checks. Record each client connection and actual tool response before reporting that it works in a given deployment. [Developer handoff](DEVELOPER.md)

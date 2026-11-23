@@ -61,15 +61,20 @@ target_link_libraries(kerfkite-cam PRIVATE kerfkite_core)
 set(KERFKITE_SERVER_SOURCES server/child_process.cpp server/design_extra.cpp server/design_routes.cpp server/device.cpp server/http.cpp
   server/key_order.cpp server/machine.cpp server/machine_routes.cpp server/machine_setup.cpp server/os_crypto.cpp server/os_random.cpp
   server/phone_jobs.cpp server/phone_monitor.cpp server/protocols.cpp server/serial_port.cpp server/sqlite_reader.cpp
-  server/static_files.cpp server/step_exchange.cpp server/studio.cpp server/web_app.cpp server/web_store.cpp server/web_transfer.cpp)
+  server/static_files.cpp server/step_exchange.cpp server/studio.cpp server/web_app.cpp server/web_store.cpp server/web_transfer.cpp
+  server/browser.cpp server/mcp.cpp server/mcp_tools.cpp server/remote_tools.cpp server/ip_address.cpp server/oauth.cpp server/mcp_http.cpp server/workshop.cpp)
 add_library(kerfkite_server STATIC ${KERFKITE_SERVER_SOURCES})
 target_include_directories(kerfkite_server PUBLIC server PRIVATE core/src ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(kerfkite_server PUBLIC kerfkite_core)
-# The hosted editor's hashes come from the system: CNG (bcrypt.dll) on Windows, CommonCrypto (in libSystem) on
-# macOS, and elsewhere OpenSSL's libcrypto, opened when first needed (hence the dynamic loader).
+# The hosted editor's hashes and the assistant server's token signatures come from the system: CNG (bcrypt.dll) on
+# Windows, CommonCrypto (in libSystem) and the Security framework on macOS, and elsewhere OpenSSL's libcrypto,
+# opened when first needed (hence the dynamic loader).
 if(WIN32)
-  target_link_libraries(kerfkite_server PUBLIC ws2_32 bcrypt setupapi)
-elseif(NOT APPLE)
+  # shell32, ole32, advapi32 and uuid: the folders and registry entries where the workshop looks for a browser.
+  target_link_libraries(kerfkite_server PUBLIC ws2_32 bcrypt setupapi shell32 ole32 advapi32 uuid)
+elseif(APPLE)
+  target_link_libraries(kerfkite_server PUBLIC "-framework Security" "-framework CoreFoundation")
+else()
   target_link_libraries(kerfkite_server PUBLIC ${CMAKE_DL_LIBS})
 endif()
 add_executable(kerfkite-studio server/main.cpp)
@@ -79,6 +84,15 @@ target_link_libraries(kerfkite-studio PRIVATE kerfkite_server)
 add_executable(kerfkite-web server/web_main.cpp)
 target_include_directories(kerfkite-web PRIVATE core/src ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(kerfkite-web PRIVATE kerfkite_server)
+# The assistant server (studio/mcp_server.py without Python): the Model Context Protocol over standard input and
+# output or HTTP. It reports Studio's version, read from the Python package until there is none.
+file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/../studio/__init__.py KERFKITE_VERSION_LINE REGEX "^__version__ = ")
+string(REGEX REPLACE "^__version__ = [\"']([^\"']+)[\"'].*$" "\\1" KERFKITE_VERSION "${KERFKITE_VERSION_LINE}")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../studio/__init__.py)
+add_executable(kerfkite-mcp server/mcp_main.cpp)
+target_include_directories(kerfkite-mcp PRIVATE core/src ${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_compile_definitions(kerfkite-mcp PRIVATE KERFKITE_VERSION="${KERFKITE_VERSION}")
+target_link_libraries(kerfkite-mcp PRIVATE kerfkite_server)
 # The phone pendant's TLS relay (../packaging/pendant-tls) is Go's standard library and nothing else: built
 # beside kerfkite-studio when Go is installed, without fetching anything. Without it pairing is HTTP only.
 find_program(KERFKITE_GO go)
@@ -121,7 +135,7 @@ endif()
 # The programs without Python as a package takes them: cmake --install <build> --prefix <folder> puts the server,
 # the pendant's relay and kerfkite-cam in the folder, and the STEP add-on with the Open CASCADE libraries it loads
 # in step/ (packaging/desktop/build.py --native packages such folders).
-install(TARGETS kerfkite-studio kerfkite-web kerfkite-cam RUNTIME DESTINATION .)
+install(TARGETS kerfkite-studio kerfkite-web kerfkite-mcp kerfkite-cam RUNTIME DESTINATION .)
 if(KERFKITE_GO)
   install(PROGRAMS $<TARGET_FILE_DIR:kerfkite-studio>/kerfkite-pendant-tls${CMAKE_EXECUTABLE_SUFFIX} DESTINATION .)
 endif()

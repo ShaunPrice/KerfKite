@@ -7,6 +7,7 @@ Unicode Character Database says in the Python that wrote the table:
 * whether it is a decimal digit (general category Nd), which the pattern \\d matches and float() reads;
 * whether str.isprintable() is true of it, which decides whether repr() shows it or escapes it;
 * what str.upper() makes of it (one to three code points);
+* what str.casefold() makes of it (one to three code points);
 * whether the pattern \\w matches it (str.isalnum() or the underscore).
 
 The table is generated, not written by hand, so that it is exactly the database of one Python release. The
@@ -58,10 +59,21 @@ def main():
             if len(mapped) > 3:
                 raise SystemExit(f'str.upper() of U+{code:04X} is longer than three code points')
             uppers.append([code, *map(ord, mapped), *[0] * (3 - len(mapped))])
-    upper_rows = ',\n'.join(
-        '    ' + ', '.join('{' + ', '.join(f'0x{c:X}' for c in row) + '}' for row in uppers[i : i + 3])
-        for i in range(0, len(uppers), 3)
-    )
+    folds = []
+    for code in range(0x110000):
+        mapped = chr(code).casefold()
+        if mapped != chr(code):
+            if len(mapped) > 3:
+                raise SystemExit(f'str.casefold() of U+{code:04X} is longer than three code points')
+            folds.append([code, *map(ord, mapped), *[0] * (3 - len(mapped))])
+
+    def mapping_rows(mappings):
+        return ',\n'.join(
+            '    ' + ', '.join('{' + ', '.join(f'0x{c:X}' for c in row) + '}' for row in mappings[i : i + 3])
+            for i in range(0, len(mappings), 3)
+        )
+
+    upper_rows, fold_rows = mapping_rows(uppers), mapping_rows(folds)
     starts = ',\n'.join('    ' + ', '.join(f'0x{c:X}' for c in digits[i : i + 8]) for i in range(0, len(digits), 8))
     version = '.'.join(map(str, sys.version_info[:2]))
     OUT.write_text(
@@ -69,8 +81,8 @@ def main():
 // of Python {version}. Do not edit.
 //
 // What the core needs to read text as Python's str methods and re module do and to report a character
-// as repr() does: the decimal digits, the characters str.isprintable() is false of, str.upper() and the
-// characters \\w matches.
+// as repr() does: the decimal digits, the characters str.isprintable() is false of, str.upper(),
+// str.casefold() and the characters \\w matches.
 #ifndef KERFKITE_UNICODE_TABLES_HPP
 #define KERFKITE_UNICODE_TABLES_HPP
 
@@ -95,6 +107,12 @@ static const uint32_t kUpper[][4] = {{
 {upper_rows}
 }};
 
+// str.casefold() of each code point it changes, in order: the code point, then the one to three it
+// becomes (0 after the last).
+static const uint32_t kCaseFold[][4] = {{
+{fold_rows}
+}};
+
 // The runs of code points the pattern \\w matches (str.isalnum(), and the underscore), in order.
 static const uint32_t kWordRuns[][2] = {{
 {rows(word)}
@@ -109,7 +127,7 @@ static const uint32_t kWordRuns[][2] = {{
     )
     print(
         f'{OUT.name}: {len(digits)} runs of digits, {len(hidden)} runs that are not printable,'
-        f' {len(uppers)} upper-case mappings, {len(word)} runs of word characters'
+        f' {len(uppers)} upper-case mappings, {len(folds)} case foldings, {len(word)} runs of word characters'
     )
 
 

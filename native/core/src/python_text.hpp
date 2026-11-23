@@ -77,6 +77,12 @@ bool python_word(uint32_t c);
 // The one to three code points str.upper() makes of one, added to out.
 void python_upper(uint32_t c, std::vector<uint32_t> &out);
 
+// The one to three code points str.casefold() makes of one, added to out.
+void python_casefold(uint32_t c, std::vector<uint32_t> &out);
+
+// str.casefold() of text.
+std::string python_casefold(const std::string &text);
+
 // str.upper() of text.
 std::string python_upper(const std::string &text);
 

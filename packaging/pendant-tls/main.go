@@ -22,6 +22,8 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -238,20 +240,96 @@ func serve(listener net.Listener, upstream string, limit limits) {
 
 // request is what -fetch reads: one HTTP request to make.
 type request struct {
-	Method  string            `json:"method"`
-	URL     string            `json:"url"`
-	Headers map[string]string `json:"headers"`
-	Body    string            `json:"body"`
-	CAFile  string            `json:"ca_file"` // trust only the certificates in this PEM file; the system's when empty
-	Timeout float64           `json:"timeout_seconds"`
-	Limit   int64             `json:"limit"` // the most of the answer's body to read
+	Method    string            `json:"method"`
+	URL       string            `json:"url"`
+	Headers   map[string]string `json:"headers"`
+	Body      string            `json:"body"`
+	CAFile    string            `json:"ca_file"` // trust only the certificates in this PEM file; the system's when empty
+	Timeout   float64           `json:"timeout_seconds"`
+	Limit     int64             `json:"limit"`      // the most of the answer's body to read
+	CheckOnly bool              `json:"check_only"` // only read ca_file: {} when it holds a certificate
+	// For a URL whose host is an address: the name the TLS certificate is checked for (and sent as SNI where it is
+	// one), and the Host header to send, so that an address resolved beforehand is the one connected to.
+	ServerName string `json:"server_name"`
+	Host       string `json:"host"`
 }
 
-// answer is what -fetch prints: the status and body (base64 in JSON), or what went wrong.
+// answer is what -fetch prints: the status, the headers and the body (base64 in JSON), or what went wrong. Its head
+// is also given as lines, as Python's http.client read it (which refused more than 99 header lines, or a line of
+// more than 65536 bytes): the header lines of its longest head, and its longest line with the line's end.
 type answer struct {
-	Status int    `json:"status,omitempty"`
-	Body   []byte `json:"body,omitempty"`
-	Error  string `json:"error,omitempty"`
+	Status      int                 `json:"status,omitempty"`
+	Headers     map[string][]string `json:"headers,omitempty"` // as the receiver sent them, each name in Go's canonical form
+	Body        []byte              `json:"body,omitempty"`
+	HeadLines   int                 `json:"head_lines,omitempty"`
+	LongestLine int                 `json:"longest_line,omitempty"`
+	Head        string              `json:"head,omitempty"`  // the last head's header lines, ends kept, each byte a character
+	Short       bool                `json:"short,omitempty"` // the body ended before its Content-Length
+	Error       string              `json:"error,omitempty"`
+}
+
+// recorder keeps the first bytes a connection reads, which hold the answer's head.
+type recorder struct {
+	net.Conn
+	mu   sync.Mutex
+	read []byte
+}
+
+func (r *recorder) Read(p []byte) (int, error) {
+	n, err := r.Conn.Read(p)
+	r.mu.Lock()
+	if room := 1<<20 - len(r.read); room > 0 && n > 0 {
+		r.read = append(r.read, p[:min(n, room)]...)
+	}
+	r.mu.Unlock()
+	return n, err
+}
+
+func (r *recorder) recorded() []byte {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.read
+}
+
+// headLines reads the heads at the start of an answer as http.client reads them: a status line, header lines up to an
+// empty one (or the end), and after an interim "100 Continue" the head that follows it. It gives the most header
+// lines one head had, the longest line, and the last head's header lines through the empty one, read as ISO 8859-1
+// as http.client reads them.
+func headLines(data []byte) (most, longest int, head string) {
+	for len(data) > 0 {
+		status := true
+		continued := false
+		lines := 0
+		var fields []rune
+		for len(data) > 0 {
+			end := bytes.IndexByte(data, '\n') + 1
+			if end == 0 {
+				end = len(data)
+			}
+			line := data[:end]
+			data = data[end:]
+			longest = max(longest, len(line))
+			if status {
+				words := strings.Fields(string(line))
+				continued = len(words) > 1 && words[1] == "100"
+				status = false
+				continue
+			}
+			for _, b := range line {
+				fields = append(fields, rune(b))
+			}
+			if len(bytes.TrimRight(line, "\r\n")) == 0 {
+				break
+			}
+			lines++
+		}
+		most = max(most, lines)
+		head = string(fields)
+		if !continued {
+			break
+		}
+	}
+	return most, longest, head
 }
 
 // fetch makes the request as urllib did for the hosted editor's receivers: no proxy, no redirects followed, TLS
@@ -270,15 +348,50 @@ func fetch(in io.Reader) answer {
 		}
 		config.RootCAs = pool
 	}
+	if r.CheckOnly {
+		return answer{}
+	}
 	timeout := time.Duration(r.Timeout * float64(time.Second))
 	if timeout <= 0 {
 		timeout = 15 * time.Second
 	}
+	// The one connection the request is made on, recorded for the answer's head.
+	var opened struct {
+		sync.Mutex
+		conn *recorder
+	}
+	keep := func(conn net.Conn, err error) (net.Conn, error) {
+		if err != nil {
+			return nil, err
+		}
+		opened.Lock()
+		defer opened.Unlock()
+		opened.conn = &recorder{Conn: conn}
+		return opened.conn, nil
+	}
+	dialer := &net.Dialer{}
 	client := &http.Client{
 		// A Transport whose Proxy is nil uses no proxy (only DefaultTransport reads HTTPS_PROXY and the like): the
 		// token and the file go to the receiver and nowhere else.
-		Transport: &http.Transport{Proxy: nil, TLSClientConfig: config, DisableCompression: true, DisableKeepAlives: true},
-		Timeout:   timeout,
+		Transport: &http.Transport{
+			Proxy: nil, DisableCompression: true, DisableKeepAlives: true,
+			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+				return keep(dialer.DialContext(ctx, network, address))
+			},
+			DialTLSContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+				host, _, err := net.SplitHostPort(address)
+				if err != nil {
+					return nil, err
+				}
+				verified := config.Clone()
+				verified.ServerName = host
+				if r.ServerName != "" {
+					verified.ServerName = r.ServerName
+				}
+				return keep((&tls.Dialer{NetDialer: dialer, Config: verified}).DialContext(ctx, network, address))
+			},
+		},
+		Timeout: timeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse // a redirect is an answer that cannot be verified, never followed
 		},
@@ -291,6 +404,9 @@ func fetch(in io.Reader) answer {
 		outgoing.Header.Set(name, value)
 	}
 	outgoing.Header.Set("User-Agent", "KerfKite-Studio")
+	if r.Host != "" {
+		outgoing.Host = r.Host
+	}
 	response, err := client.Do(outgoing)
 	if err != nil {
 		return answer{Error: "the receiver did not answer"}
@@ -301,10 +417,18 @@ func fetch(in io.Reader) answer {
 		limit = 65537
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, limit))
-	if err != nil {
+	// An answer cut short of its Content-Length is what arrived, as http.client's read(amount) gives it; one cut
+	// short in its chunks, or by a timeout, did not arrive.
+	if err != nil && !(errors.Is(err, io.ErrUnexpectedEOF) && response.ContentLength >= 0) {
 		return answer{Error: "the answer did not arrive whole"}
 	}
-	return answer{Status: response.StatusCode, Body: body}
+	out := answer{Status: response.StatusCode, Headers: response.Header, Body: body, Short: err != nil}
+	opened.Lock()
+	if opened.conn != nil {
+		out.HeadLines, out.LongestLine, out.Head = headLines(opened.conn.recorded())
+	}
+	opened.Unlock()
+	return out
 }
 
 func run(args []string, stdin io.Reader, stdout io.Writer) error {

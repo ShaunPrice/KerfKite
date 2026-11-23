@@ -20,6 +20,7 @@ namespace http {
 
 struct Request {
     std::string method;   // as sent, e.g. "GET"
+    std::string version;  // as sent, e.g. "HTTP/1.1"
     std::string target;   // as sent: path and query
     std::string path;     // percent-decoded, without the query
     std::string query;    // after '?', not decoded
@@ -37,6 +38,7 @@ struct Response {
     int status = 200;
     std::vector<std::pair<std::string, std::string>> headers;
     std::string body;
+    bool untyped = false;  // no Content-Type of its own (else application/octet-stream for a body without one)
 
     void set(const std::string &name, const std::string &value);
     // A JSON body (already written as text).

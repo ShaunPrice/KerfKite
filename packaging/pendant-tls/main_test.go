@@ -399,7 +399,7 @@ func TestFetch(t *testing.T) {
 	// A receiver with a certificate of its own authority, as kerfkite-web destination --ca-file trusts.
 	directory := t.TempDir()
 	certFile, keyFile := filepath.Join(directory, "receiver.pem"), filepath.Join(directory, "receiver-key.pem")
-	if err := makeCertificate(certFile, keyFile, []string{"127.0.0.1"}, 1, time.Now()); err != nil {
+	if err := makeCertificate(certFile, keyFile, []string{"127.0.0.1", "keys.example"}, 1, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	pair, err := tls.LoadX509KeyPair(certFile, keyFile)
@@ -416,10 +416,22 @@ func TestFetch(t *testing.T) {
 		body, _ := io.ReadAll(r.Body)
 		seen <- r.Method + " " + r.URL.Path + " " + r.Header.Get("Authorization") + " " + string(body)
 		switch r.URL.Path {
+		case "/host":
+			w.Write([]byte(r.Host))
 		case "/moved":
 			http.Redirect(w, r, "/api/receive", http.StatusFound)
 		case "/big":
 			w.Write([]byte(strings.Repeat("x", 70000)))
+		case "/short", "/short-chunked":
+			// The answer stops before its end: 5 of 10 bytes, or within a chunk.
+			connection, buffered, _ := w.(http.Hijacker).Hijack()
+			if r.URL.Path == "/short" {
+				buffered.WriteString("HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nhello")
+			} else {
+				buffered.WriteString("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\na\r\nhello")
+			}
+			buffered.Flush()
+			connection.Close()
 		default:
 			w.Write([]byte(`{"status":"stored_for_review"}`))
 		}
@@ -438,19 +450,53 @@ func TestFetch(t *testing.T) {
 	if got := <-seen; got != "POST /api/receive Bearer t {}" {
 		t.Fatalf("received %q", got)
 	}
-	if a := ask("/moved", certFile); a.Status != http.StatusFound {
-		t.Fatalf("a redirect must be returned, not followed: %+v", a)
+	if a := ask("/moved", certFile); a.Status != http.StatusFound || len(a.Headers["Location"]) != 1 || a.Headers["Location"][0] != "/api/receive" {
+		t.Fatalf("a redirect must be returned with its headers, not followed: %+v", a)
 	}
 	<-seen
 	if a := ask("/big", certFile); a.Status != 200 || len(a.Body) != 65537 {
 		t.Fatalf("the answer must be cut at the limit: %d bytes", len(a.Body))
 	}
 	<-seen
+	if a := ask("/short", certFile); a.Error != "" || a.Status != 200 || string(a.Body) != "hello" || !a.Short || a.HeadLines != 1 || a.LongestLine != 20 {
+		t.Fatalf("an answer cut short of its length is what arrived, with its head's one line: %+v", a)
+	}
+	<-seen
+	if a := ask("/short-chunked", certFile); a.Error == "" {
+		t.Fatalf("an answer cut short in a chunk did not arrive: %+v", a)
+	}
+	<-seen
 	if a := ask("/api/receive", ""); a.Error == "" {
 		t.Fatal("a certificate the system does not trust must be refused")
 	}
+	// An address resolved beforehand: the certificate is checked for the name, which is also the Host header.
+	named := func(name string) answer {
+		text, _ := json.Marshal(request{Method: "GET", URL: base + "/host", CAFile: certFile, Timeout: 5, ServerName: name, Host: name})
+		return fetch(strings.NewReader(string(text)))
+	}
+	if a := named("keys.example"); a.Error != "" || a.Status != 200 || string(a.Body) != "keys.example" || a.Short {
+		t.Fatalf("a request to an address for a name: %+v", a)
+	}
+	<-seen
+	if a := named("other.example"); a.Error == "" {
+		t.Fatalf("a certificate that is not for the name must be refused: %+v", a)
+	}
 	if a := ask("/api/receive", filepath.Join(directory, "missing.pem")); a.Error != "ca_file" {
 		t.Fatalf("a missing CA file: %+v", a)
+	}
+	// check_only reads the CA file and makes no request.
+	check := func(ca string) answer {
+		text, _ := json.Marshal(request{CAFile: ca, CheckOnly: true})
+		return fetch(strings.NewReader(string(text)))
+	}
+	if a := check(certFile); a.Error != "" || a.Status != 0 {
+		t.Fatalf("a CA file with a certificate: %+v", a)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "empty.pem"), []byte("no certificate here\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if a := check(filepath.Join(directory, "empty.pem")); a.Error != "ca_file" {
+		t.Fatalf("a CA file without a certificate: %+v", a)
 	}
 	if a := fetch(strings.NewReader("not json")); a.Error == "" {
 		t.Fatal("a request that is not JSON must be refused")
@@ -463,5 +509,26 @@ func TestFetch(t *testing.T) {
 	var printed answer
 	if err := json.Unmarshal([]byte(out.String()), &printed); err != nil || printed.Status != 200 || !strings.HasSuffix(out.String(), "\n") {
 		t.Fatalf("printed %q", out.String())
+	}
+}
+
+func TestHeadLines(t *testing.T) {
+	if _, _, head := headLines([]byte("HTTP/1.1 100 Continue\r\nX: 1\r\n\r\nHTTP/1.1 302 Found\r\nLocation: / \r\nSet-Cookie: a=\xe9\r\n\r\nbody")); head != "Location: / \r\nSet-Cookie: a=\u00e9\r\n\r\n" {
+		t.Errorf("the last head's lines: %q", head)
+	}
+	for _, c := range []struct {
+		head          string
+		most, longest int
+	}{
+		{"HTTP/1.1 200 OK\r\nA: 1\r\nB: 22\r\n\r\nbody\r\n\r\n", 2, 17},
+		{"HTTP/1.1 200 OK\nA: 1\n\nbody", 1, 16},
+		{"HTTP/1.1 100 Continue\r\nX: 1\r\nY: 2\r\nZ: 3\r\n\r\nHTTP/1.1 200 OK\r\nA: 1\r\n\r\n", 3, 23},
+		{"HTTP/1.1 204 No Content\r\n\r\n", 0, 25},
+		{"HTTP/1.1 200 OK\r\nA: " + strings.Repeat("v", 70000), 1, 70003},
+		{"", 0, 0},
+	} {
+		if most, longest, _ := headLines([]byte(c.head)); most != c.most || longest != c.longest {
+			t.Errorf("%.40q: %d lines, longest %d; want %d and %d", c.head, most, longest, c.most, c.longest)
+		}
 	}
 }
