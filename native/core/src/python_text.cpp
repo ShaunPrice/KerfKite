@@ -3,6 +3,7 @@
 #include "python_text.hpp"
 
 #include <algorithm>
+#include <cstdio>
 
 #include "unicode_tables.hpp"
 
@@ -30,6 +31,38 @@ int python_decimal(uint32_t c) {
     const uint32_t *after = std::upper_bound(runs, runs + count, c);
     if (after == runs || c - *(after - 1) >= 10) return -1;
     return static_cast<int>(c - *(after - 1));
+}
+
+std::string python_repr(const std::string &text) {
+    const bool single = text.find('\'') != std::string::npos, twice = text.find('"') != std::string::npos;
+    const char quote = single && !twice ? '"' : '\'';
+    std::string out(1, quote);
+    char buffer[16];
+    for (const CodePoint &point : code_points(text)) {
+        const uint32_t c = point.code;
+        if (c == static_cast<uint32_t>(quote) || c == '\\') {
+            out += '\\';
+            out += static_cast<char>(c);
+        } else if (c == '\t') {
+            out += "\\t";
+        } else if (c == '\n') {
+            out += "\\n";
+        } else if (c == '\r') {
+            out += "\\r";
+        } else if (c < 0x20 || c == 0x7f) {
+            std::snprintf(buffer, sizeof buffer, "\\x%02x", static_cast<unsigned>(c));
+            out += buffer;
+        } else if (c < 0x7f || python_printable(c)) {
+            append_utf8(out, c);
+        } else {
+            if (c <= 0xff) std::snprintf(buffer, sizeof buffer, "\\x%02x", static_cast<unsigned>(c));
+            else if (c <= 0xffff) std::snprintf(buffer, sizeof buffer, "\\u%04x", static_cast<unsigned>(c));
+            else std::snprintf(buffer, sizeof buffer, "\\U%08x", static_cast<unsigned>(c));
+            out += buffer;
+        }
+    }
+    out += quote;
+    return out;
 }
 
 bool python_word(uint32_t c) { return in_runs(kWordRuns, sizeof(kWordRuns) / sizeof(kWordRuns[0]), c); }

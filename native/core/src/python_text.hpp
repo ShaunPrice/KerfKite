@@ -65,6 +65,9 @@ inline std::vector<std::string> python_split(const std::string &text) {
 // str.isprintable() of one code point, from the Unicode tables of python_text.cpp.
 bool python_printable(uint32_t c);
 
+// repr() of text: in single quotes unless it holds one and no double quote, with the escapes repr() writes.
+std::string python_repr(const std::string &text);
+
 // The value of a decimal digit (general category Nd, what \d matches and float() reads), or -1.
 int python_decimal(uint32_t c);
 

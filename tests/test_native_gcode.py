@@ -278,14 +278,31 @@ class CrossingTests(unittest.TestCase):
                 found = self.outcomes(base(paths=paths))
                 self.assertEqual(found[0], found[1])
 
-    def test_a_case_the_core_does_not_reproduce_is_answered_by_the_reference(self):
-        numbers = base(feed='\uff16\uff10\uff10')  # 600 in full-width digits: the core declines such text
-        with self.assertRaises(NotImplementedError):
-            native.core_cam('generate', numbers)
-        self.assertIsNone(job_json(numbers))
+    def test_digits_of_other_scripts_are_read_as_float_reads_them(self):
+        numbers = base(feed='\uff16\uff10\uff10')  # 600 in full-width digits
+        chosen = {
+            key: os.environ.pop(key)
+            for key in ('KERFKITE_GCODE_BACKEND', 'KERFKITE_POLYGON_BACKEND')
+            if key in os.environ
+        }
+        try:
+            self.assertIsNotNone(job_json(numbers))
+        finally:
+            os.environ.update(chosen)
         found = self.outcomes(numbers)
         self.assertEqual(found[0], found[1])
         self.assertEqual(found[0][0], 'ok')
+
+    def test_a_case_the_core_declines_is_answered_by_the_reference(self):
+        def declined(*_):
+            raise NotImplementedError('a case the core does not reproduce')
+
+        project = base()
+        with patch.object(cam, '_core_cam', declined), patch.object(cam, '_core_cam_text', declined):
+            self.assertIsNone(job_json(project))
+            with self.assertRaises(NotImplementedError):
+                generate(project, backend='native')
+            self.assertEqual(exact(generate(project)), exact(generate(project, backend='python')))
 
     def test_packed_rows_unpack_to_the_same_lists(self):
         job = generate(relief_project(), packed_segments=True, backend='native')

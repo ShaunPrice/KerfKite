@@ -851,6 +851,24 @@ static void reliefs_and_stock() {
     } catch (const ValueError &error) {
         expect(std::string(error.what()) == "Cut exceeds simulated stock thickness", "a cut below the stock is refused");
     }
+    // Text in a row is read by float(), and refused with float()'s message, repr() and all.
+    const auto stock_refusal = [](const char *text) -> std::string {
+        try {
+            simulate_stock(json::parse(text));
+        } catch (const ValueError &error) {
+            return error.what();
+        }
+        return "(nothing thrown)";
+    };
+    expect(stock_refusal(R"({"segments":[[0,0,1,1,"deep"]]})") == "could not convert string to float: 'deep'", "text in a preview row");
+    expect(stock_refusal(R"({"segments":[[0,0,1,1,"it's"]]})") == "could not convert string to float: \"it's\"",
+           "repr() takes double quotes for text with a single quote");
+    expect(stock_refusal(R"({"segments":[[0,0,1,1,"a\tb\u00e9\u200b"]]})") == "could not convert string to float: 'a\\tb\xc3\xa9\\u200b'",
+           "repr() escapes a tab and a character that is not printable");
+    // Padding after whole groups is refused, as Python 3.12.10 and later refuse it.
+    expect(refusal(R"({"heightmap_rgb":"AAAAAAAAAAAAAAAA=","heightmap_size":[2,2],"width":2,"height":2,"depth":1,"tool_diameter":1,
+               "stepover":1})") == "heightmap_rgb must be base64 of columns x rows x 3 bytes",
+           "padding after whole groups");
 }
 
 // Plans for manual tool changes (studio/tool_changes.py): stages for runs of one tool, as the reference gives them.
@@ -1461,9 +1479,11 @@ int main() {
     expect(message<ValueError>(R"({"mode":"plasma"})") == "Choose router, laser or knife", "an unknown head");
     expect(message<ValueError>(R"({"mode":"router","width":100,"height":50,"feed":600,"power":1,
         "paths":[[[0,0],[101,0]]]})") == "X must be between 0 and 100.0", "a point outside the work area");
-    expect(message<NotPorted>("{\"mode\":\"router\",\"width\":100,\"height\":50,\"feed\":\"\xef\xbc\x96\xef\xbc\x90\xef\xbc\x90\",\"power\":1,"
-                              "\"paths\":[[[10,10],[30,10]]]}") == "numbers written in non-ASCII text",
-           "a case that is not reproduced is declined, not guessed");
+    // float() reads digits of any script: fullwidth 600 is 600.
+    const char *fullwidth = "{\"mode\":\"router\",\"width\":100,\"height\":50,\"feed\":\"\xef\xbc\x96\xef\xbc\x90\xef\xbc\x90\",\"power\":1,"
+                            "\"paths\":[[[10,10],[30,10]]]}";
+    const char *ascii = "{\"mode\":\"router\",\"width\":100,\"height\":50,\"feed\":\"600\",\"power\":1,\"paths\":[[[10,10],[30,10]]]}";
+    expect(generate(json::parse(fullwidth)).lines == generate(json::parse(ascii)).lines, "a feed written in fullwidth digits");
 
     // Drilling: a peck at each marker, with the last peck at the full depth.
     const Job drilled = generate(json::parse(R"({"mode":"router","operation":"drill","protocol":"grbl","width":100,

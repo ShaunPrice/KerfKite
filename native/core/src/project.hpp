@@ -3,6 +3,7 @@
 #ifndef KERFKITE_PROJECT_HPP
 #define KERFKITE_PROJECT_HPP
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
@@ -11,6 +12,7 @@
 
 #include "kerfkite/cam.hpp"
 #include "kerfkite/number_text.hpp"
+#include "python_text.hpp"
 
 namespace kerfkite {
 namespace detail {
@@ -33,10 +35,11 @@ inline bool is_text(const json *value, const char *text) {
 // project.get(key, text) == text: an absent key takes the default; a null does not.
 inline bool is_text_or_absent(const json *value, const char *text) { return !value || is_text(value, text); }
 
-// Python's float(str) for ASCII text. False when Python raises ValueError.
-inline bool float_from_text(const std::string &raw, double &out) {
-    for (const unsigned char c : raw)
-        if (c >= 0x80) throw NotPorted("numbers written in non-ASCII text");
+// Python's float(str). False when Python raises ValueError. float() reads a decimal digit of any script as its
+// ASCII digit and any space as a space, and nothing else outside ASCII: python_ascii() writes text so.
+inline bool float_from_text(const std::string &given, double &out) {
+    const bool ascii = std::all_of(given.begin(), given.end(), [](char c) { return static_cast<unsigned char>(c) < 0x80; });
+    const std::string raw = ascii ? given : python_ascii(given, false);
     const auto space = [](char c) { return c == ' ' || (c >= '\t' && c <= '\r') || (c >= 0x1c && c <= 0x1f); };
     size_t begin = 0, end = raw.size();
     while (begin < end && space(raw[begin])) ++begin;

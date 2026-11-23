@@ -124,11 +124,12 @@ class NativeStockTests(unittest.TestCase):
                 simulation.simulate(dict(segments=[[1e308, 0, 1e308, 0, 0]], width=0.1), backend=backend)
         with self.assertRaisesRegex(ValueError, 'Simulation too large'):
             simulation.simulate(dict(segments=[[0, 0, 100, 100, -1]] * 1000, resolution=96), backend='native')
-        # Text that float() cannot read is the reference's to report, with its own message.
-        with self.assertRaises(NotImplementedError):
-            simulation.simulate(dict(segments=[[0, 0, 1, 1, 'deep']]), backend='native')
-        with self.assertRaisesRegex(ValueError, "could not convert string to float: 'deep'"):
-            simulation.simulate(dict(segments=[[0, 0, 1, 1, 'deep']]))
+        # Text that float() cannot read is reported with float()'s own message, repr() and all.
+        for backend in ('python', 'native'):
+            with self.assertRaisesRegex(ValueError, "could not convert string to float: 'deep'"):
+                simulation.simulate(dict(segments=[[0, 0, 1, 1, 'deep']]), backend=backend)
+        with self.assertRaisesRegex(ValueError, 'could not convert string to float: "it\'s"'):
+            simulation.simulate(dict(segments=[[0, 0, 1, 1, "it's"]]), backend='native')
 
     def test_in_process_geometry_reuses_packed_rows(self):
         p = project()

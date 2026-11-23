@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <stdexcept>
 #include <utility>
 
 #include "kerfkite/py_math.hpp"
@@ -101,9 +102,8 @@ void holding_tabs(const json &project, std::vector<Contour> &paths, double &dept
             if (cut == 0) cut = 0.0;
         std::sort(cuts.begin(), cuts.end());
         cuts.erase(std::unique(cuts.begin(), cuts.end()), cuts.end());
-        // The reference indexes from the end of the list for a negative distance; none can arise from a
-        // contour that passed the checks above, so one is declined, not followed.
-        if (cuts.front() < 0) throw NotPorted("holding tabs that start before the contour seam");
+        // No tab interval starts before the seam: the intervals above are cut at it.
+        if (cuts.front() < 0) throw std::logic_error("A holding tab starts before the contour seam");
 
         const auto at = [&](double distance) -> Point {
             if (distance >= length) return points[0];
@@ -112,7 +112,8 @@ void holding_tabs(const json &project, std::vector<Contour> &paths, double &dept
                                                      distances.begin());
             const size_t index = std::min(points.size() - 2, after - 1);
             const double span = distances[index + 1] - distances[index];
-            if (span == 0) throw NotPorted("holding tabs on a contour with a segment of no length");
+            // The checks above leave no segment of 1e-9 mm or less.
+            if (span == 0) throw std::logic_error("A holding-tab contour has a segment of no length");
             const double ratio = (distance - distances[index]) / span;
             return {points[index][0] + (points[index + 1][0] - points[index][0]) * ratio,
                     points[index][1] + (points[index + 1][1] - points[index][1]) * ratio};
@@ -138,7 +139,8 @@ void holding_tabs(const json &project, std::vector<Contour> &paths, double &dept
             path.push_back(at(hi));
             zs.push_back(z);
         }
-        if (zs.empty()) throw NotPorted("holding tabs on a contour with no measurable length");
+        // A contour of 1e-6 mm or more, which the checks above require, has a cut longer than 1e-10 mm.
+        if (zs.empty()) throw std::logic_error("A holding-tab contour has no measurable length");
         if (zs.back() != zs.front()) {
             path.push_back(points[0]);
             zs.push_back(zs.front());
