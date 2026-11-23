@@ -4,11 +4,10 @@ The hosted editor and machine inbox run using the same HTTPS service. Uploaded f
 
 ## HTTPS setup (LAN or internet host)
 
-From the cnc-studio directory, using Python 3.10+:
+The service is `kerfkite-web`, one of KerfKite's native programs: it is in the program folder beside `kerfkite-studio` and needs no Python. Its HTTPS comes from KerfKite's TLS relay, `kerfkite-pendant-tls`, which must be in the same folder. Releases that still carry the Python service run it as `python -m studio.web_server` with the same commands and options; see [Moving from the Python service](#moving-from-the-python-service).
 
 ```sh
-python -m pip install '.[web]'
-python -m studio.web_server --data-dir web-data create-user YOUR_USERNAME
+kerfkite-web --data-dir web-data create-user YOUR_USERNAME
 ```
 
 The command prompts twice for a user-created password of 15–256 characters. Add `--generate-password` to generate a 256-bit random password and display it once. No account or password ships with the app. Do not put passwords into shell command arguments. `reset-password YOUR_USERNAME` uses the same prompt/generator and revokes that account's sessions and upload tokens.
@@ -16,31 +15,37 @@ The command prompts twice for a user-created password of 15–256 characters. Ad
 Use an installed certificate and matching key, or generate a 90-day self-signed certificate:
 
 ```sh
-python -m studio.web_server certificate --cert server.pem --key server-key.pem --hosts your-pi.local 192.0.2.50
-python -m studio.web_server --data-dir web-data serve --public-url https://your-pi.local:8443 --cert server.pem --key server-key.pem --port 8443
+kerfkite-web certificate --cert server.pem --key server-key.pem --hosts your-pi.local 192.0.2.50
+kerfkite-web --data-dir web-data serve --public-url https://your-pi.local:8443 --cert server.pem --key server-key.pem --port 8443
 ```
 
-Replace hostnames/IPs with the actual host. Certificate names and the public URL must match. Trust a self-signed certificate explicitly on each client, or use a certificate from an installed trusted CA. Certificate verification is never disabled by the application. For internet hosting, use a publicly trusted certificate for your domain and configure DNS/firewall access to the HTTPS listener. Serve direct TLS (or TCP passthrough); this build deliberately does not trust forwarded proxy headers. Certificate issuance/renewal, OS services and internet deployment are operator tasks, not automated here. Restart the service after certificate renewal.
+Replace hostnames/IPs with the actual host. Certificate names and the public URL must match. Trust a self-signed certificate explicitly on each client, or use a certificate from an installed trusted CA. Certificate verification is never disabled by the application. For internet hosting, use a publicly trusted certificate for your domain and configure DNS/firewall access to the HTTPS listener. Serve direct TLS (or TCP passthrough). To put the service behind a TLS terminator of your own on the same host (nginx, HAProxy), start it with `serve --public-url URL --behind-proxy --port N` in place of `--cert` and `--key`: it then listens on 127.0.0.1 only, and the terminator must send the PROXY protocol line (version 1) that names each client. Forwarded HTTP headers are never trusted. Certificate issuance/renewal, OS services and internet deployment are operator tasks, not automated here. Restart the service after certificate renewal.
 
-The listener is Cheroot with TLS 1.2 minimum. Sessions use Secure/HttpOnly/SameSite=Strict cookies, CSRF validation, eight-hour absolute expiry and 30-minute idle expiry. Password hashes use scrypt. Login attempts are limited by address/account. Uploaded content is always downloaded as an attachment. Account files are isolated and limited to 200 files / 64 MiB total, 8 MiB per file. Secure the data directory with OS access controls on every platform (POSIX permissions alone do not configure Windows ACLs).
+The listener is KerfKite's TLS relay (Go's `crypto/tls`) with TLS 1.2 minimum; it passes each connection to `kerfkite-web` on the loopback interface. Sessions use Secure/HttpOnly/SameSite=Strict cookies, CSRF validation, eight-hour absolute expiry and 30-minute idle expiry. Password hashes are PBKDF2-HMAC-SHA256 with 600,000 iterations, computed by the operating system's cryptography (CNG on Windows, CommonCrypto on macOS, OpenSSL's libcrypto on Linux). Login attempts are limited by address/account. Uploaded content is always downloaded as an attachment. Account files are isolated and limited to 200 files / 64 MiB total, 8 MiB per file. Secure the data directory with OS access controls on every platform (POSIX permissions alone do not configure Windows ACLs).
 
 ## Configure uploads to the Pi
 
 On the Pi, create an account and issue its upload-only token:
 
 ```sh
-python -m studio.web_server --data-dir web-data issue-token YOUR_USERNAME
+kerfkite-web --data-dir web-data issue-token YOUR_USERNAME
 ```
 
 On the hosted design server, register the receiver. The token is requested through a hidden prompt:
 
 ```sh
-python -m studio.web_server --data-dir web-data destination workshop --url https://your-pi.local:8443 --ca-file server.pem
+kerfkite-web --data-dir web-data destination workshop --url https://your-pi.local:8443 --ca-file server.pem
 ```
 
 Omit `--ca-file` for a certificate already trusted by the OS. Restart the design server to load destination changes. The browser sees destination names, never stored receiver tokens. Uploads verify the returned SHA-256 and byte count. Redirects are not followed. A failed upload may have arrived: inspect the receiver before retrying. Use `revoke-tokens YOUR_USERNAME` on the Pi to invalidate all its upload tokens.
 
 The sender can target an explicitly configured HTTP origin with `--allow-http` for a compatible receiver/proxy, but credentials and contents would be unencrypted. CNC Studio's own receiver is HTTPS-only. The local-file upload UI also requires HTTPS.
+
+## Moving from the Python service
+
+Point `kerfkite-web` at the Python service's data directory (`--data-dir web-data`). The first time it opens a directory that holds the Python's `web.sqlite3` and no store of its own, it moves the accounts, their password hashes, the upload tokens and the stored files into its own store (`web-store.json` and `files/`), and renames the database `web.sqlite3.migrated`. Sessions are not moved: everyone logs in again. Stop the Python service first; a database with an unfinished change in its journal is refused until the Python finishes it. Receivers in `destinations.json` are read as they are.
+
+The Python service hashed passwords with scrypt. On Linux `kerfkite-web` checks those hashes with OpenSSL's scrypt and replaces each with a PBKDF2 hash at the account's next login. Windows and macOS have no scrypt: there, set each moved account's password again with `kerfkite-web --data-dir web-data reset-password YOUR_USERNAME` (which also ends its sessions and revokes its upload tokens; issue new tokens for its receivers). The server prints which account could not be checked when one tries to log in.
 
 ## Local filesystem editor
 

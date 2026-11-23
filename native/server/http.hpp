@@ -63,7 +63,10 @@ public:
 
     int port() const { return port_; }
     // Accepts connections until stop(), each answered on a thread of its own, at most `connections` at once.
-    void serve(const Handler &handler, const Limit &limit, int connections = 64);
+    // With proxied, each connection starts with a PROXY protocol version 1 line (sent by KerfKite's TLS relay,
+    // which accepts the client's connection), whose source address becomes the request's peer; a connection
+    // without one is refused.
+    void serve(const Handler &handler, const Limit &limit, int connections = 64, bool proxied = false);
     // Ends serve() within a tenth of a second. A connection still sending its request is closed; a request
     // already in is answered.
     void stop();

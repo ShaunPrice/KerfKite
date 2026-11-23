@@ -227,12 +227,16 @@ Response Response::error(int status, const std::string &message) {
 const char *reason(int status) {
     switch (status) {
         case 200: return "OK";
+        case 202: return "Accepted";
         case 204: return "No Content";
+        case 302: return "Found";
         case 304: return "Not Modified";
         case 400: return "Bad Request";
+        case 401: return "Unauthorized";
         case 403: return "Forbidden";
         case 404: return "Not Found";
         case 405: return "Method Not Allowed";
+        case 406: return "Not Acceptable";
         case 408: return "Request Timeout";
         case 411: return "Length Required";
         case 413: return "Content Too Large";
@@ -326,7 +330,38 @@ void Server::stop() {
 #endif
 }
 
-void Server::serve(const Handler &handler, const Limit &limit, int connections) {
+// The PROXY protocol's version 1 line (haproxy.org's proxy-protocol.txt, 2.1) at the start of data: true and the
+// client's address when it is whole and well formed (empty for UNKNOWN: the connection's own address stands);
+// throws 400 for anything else once a line is in.
+static bool proxy_line(std::string &data, std::string &address) {
+    const size_t end = data.find("\r\n");
+    if (end == std::string::npos) {
+        if (data.size() > 107) throw 400;
+        return false;
+    }
+    if (end > 105) throw 400;  // 107 bytes with the line end, at most
+    const std::string line = data.substr(0, end);
+    if (line.compare(0, 13, "PROXY UNKNOWN") == 0 && (line.size() == 13 || line[13] == ' ')) {
+        address.clear();
+        data.erase(0, end + 2);
+        return true;
+    }
+    std::vector<std::string> fields;
+    for (size_t at = 0; at <= line.size();) {
+        const size_t space = line.find(' ', at);
+        fields.push_back(line.substr(at, space == std::string::npos ? std::string::npos : space - at));
+        if (space == std::string::npos) break;
+        at = space + 1;
+    }
+    if (fields.size() != 6 || fields[0] != "PROXY" || (fields[1] != "TCP4" && fields[1] != "TCP6")) throw 400;
+    unsigned char probe[16];
+    if (inet_pton(fields[1] == "TCP4" ? AF_INET : AF_INET6, fields[2].c_str(), probe) != 1) throw 400;
+    address = fields[2];
+    data.erase(0, end + 2);
+    return true;
+}
+
+void Server::serve(const Handler &handler, const Limit &limit, int connections, bool proxied) {
     const std::shared_ptr<Connections> state = connections_;
     const Socket listening = static_cast<Socket>(socket_);
     for (;;) {
@@ -353,7 +388,7 @@ void Server::serve(const Handler &handler, const Limit &limit, int connections) 
         }
         char text[INET_ADDRSTRLEN] = {0};
         inet_ntop(AF_INET, &peer.sin_addr, text, sizeof text);
-        std::thread([state, client, address = std::string(text), handler, limit] {
+        std::thread([state, client, address = std::string(text), handler, limit, proxied] {
 #ifdef _WIN32
             DWORD timeout = 30000;
             setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char *>(&timeout), sizeof timeout);
@@ -377,6 +412,12 @@ void Server::serve(const Handler &handler, const Limit &limit, int connections) 
             request.peer = address;
             std::string data;
             try {
+                if (proxied) {
+                    std::string client_address;
+                    while (!proxy_line(data, client_address))
+                        if (!receive(client, data)) throw 0;
+                    if (!client_address.empty()) request.peer = client_address;
+                }
                 size_t end = std::string::npos;
                 while ((end = data.find("\r\n\r\n")) == std::string::npos) {
                     if (data.size() > kMaxHead) throw 431;

@@ -141,12 +141,12 @@ Use portable project files to move between the file editor and the server editor
 
 ## HTTPS editor and Pi upload inbox
 
-Install the `web` extra. These commands use the POSIX virtual environment path; on Windows use `.venv\Scripts\python.exe`. Replace `YOUR_USERNAME`, hostnames and addresses with real values.
+The service is `kerfkite-web`, in the program folder beside `kerfkite-studio` with its TLS relay `kerfkite-pendant-tls`; it needs no Python. Releases that still carry the Python service run `.venv/bin/python -m studio.web_server` (with the `web` extra) in its place, with the same commands and options. Replace `YOUR_USERNAME`, hostnames and addresses with real values.
 
 Create a user. The password is prompted for twice; no default password exists:
 
 ```sh
-.venv/bin/python -m studio.web_server --data-dir web-data create-user YOUR_USERNAME
+kerfkite-web --data-dir web-data create-user YOUR_USERNAME
 ```
 
 To generate a cryptographically random password instead, append `--generate-password` and save the one-time displayed value in a password manager. Do not place passwords in shell arguments.
@@ -154,8 +154,8 @@ To generate a cryptographically random password instead, append `--generate-pass
 Generate a self-signed certificate, or provide an installed certificate and its matching private key:
 
 ```sh
-.venv/bin/python -m studio.web_server certificate --cert server.pem --key server-key.pem --hosts your-pi.local 192.0.2.50
-.venv/bin/python -m studio.web_server --data-dir web-data serve --public-url https://your-pi.local:8443 --cert server.pem --key server-key.pem --port 8443
+kerfkite-web certificate --cert server.pem --key server-key.pem --hosts your-pi.local 192.0.2.50
+kerfkite-web --data-dir web-data serve --public-url https://your-pi.local:8443 --cert server.pem --key server-key.pem --port 8443
 ```
 
 Use the actual hostname/IP in the certificate. Trust the self-signed certificate explicitly on each client, or use a trusted CA certificate. Generated certificates expire after 90 days. Certificate renewal requires a service restart. Private keys and `web-data` contain private operational data; keep them outside shared/public source archives and protect them with OS access controls, including Windows ACLs where applicable.
@@ -163,18 +163,18 @@ Use the actual hostname/IP in the certificate. Trust the self-signed certificate
 The HTTPS service is both a design editor and an upload inbox. **Uploads are stored for review; the HTTPS inbox does not start the CNC.** For a separate hosted design server and Pi receiver, configure each separately with its own data directory and accounts. On the Pi, issue an upload-only token:
 
 ```sh
-.venv/bin/python -m studio.web_server --data-dir web-data issue-token YOUR_USERNAME
+kerfkite-web --data-dir web-data issue-token YOUR_USERNAME
 ```
 
 On the design server, register the Pi receiver; paste its token into the hidden prompt:
 
 ```sh
-.venv/bin/python -m studio.web_server --data-dir web-data destination workshop --url https://your-pi.local:8443 --ca-file server.pem
+kerfkite-web --data-dir web-data destination workshop --url https://your-pi.local:8443 --ca-file server.pem
 ```
 
 Here `server.pem` is the receiver certificate trusted by the sender. Omit `--ca-file` when the receiver's certificate is already trusted by the host. Restart the design service after destination changes. To permit uploads from `file://` editors, add `--allow-file-upload` to the receiver's `serve` command. File uploads still require the token. Do not disable certificate checks to resolve trust errors.
 
-For internet hosting use a real DNS name, publicly trusted certificate and deliberate firewall access to the HTTPS listener. The current service expects direct TLS or TCP passthrough; it does not trust HTTP reverse-proxy forwarded headers. Automatic certificate renewal, system services and public deployment are not configured by the installer. See [WEB.md](WEB.md) for session limits, quotas and upload details.
+For internet hosting use a real DNS name, publicly trusted certificate and deliberate firewall access to the HTTPS listener. The service expects direct TLS or TCP passthrough, or with `--behind-proxy` a TLS terminator on the same host that sends the PROXY protocol line; it does not trust HTTP reverse-proxy forwarded headers. A `web-data` folder of the Python service is moved to the new store the first time `kerfkite-web` opens it ([WEB.md](WEB.md#moving-from-the-python-service)). Automatic certificate renewal, system services and public deployment are not configured by the installer. See [WEB.md](WEB.md) for session limits, quotas and upload details.
 
 ## Phone monitor and controls
 

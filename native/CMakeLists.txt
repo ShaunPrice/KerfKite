@@ -59,18 +59,26 @@ target_link_libraries(kerfkite-cam PRIVATE kerfkite_core)
 # Studio API over the core, KerfKite's own HTTP/1.1 server, the controller's serial link and the phone pendant.
 # The C++ standard library and the operating system only; it fetches nothing.
 set(KERFKITE_SERVER_SOURCES server/child_process.cpp server/design_extra.cpp server/design_routes.cpp server/device.cpp server/http.cpp
-  server/key_order.cpp server/machine.cpp server/machine_routes.cpp server/machine_setup.cpp server/os_random.cpp
-  server/phone_jobs.cpp server/phone_monitor.cpp server/protocols.cpp server/serial_port.cpp server/static_files.cpp
-  server/step_exchange.cpp server/studio.cpp)
+  server/key_order.cpp server/machine.cpp server/machine_routes.cpp server/machine_setup.cpp server/os_crypto.cpp server/os_random.cpp
+  server/phone_jobs.cpp server/phone_monitor.cpp server/protocols.cpp server/serial_port.cpp server/sqlite_reader.cpp
+  server/static_files.cpp server/step_exchange.cpp server/studio.cpp server/web_app.cpp server/web_store.cpp server/web_transfer.cpp)
 add_library(kerfkite_server STATIC ${KERFKITE_SERVER_SOURCES})
 target_include_directories(kerfkite_server PUBLIC server PRIVATE core/src ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(kerfkite_server PUBLIC kerfkite_core)
+# The hosted editor's hashes come from the system: CNG (bcrypt.dll) on Windows, CommonCrypto (in libSystem) on
+# macOS, and elsewhere OpenSSL's libcrypto, opened when first needed (hence the dynamic loader).
 if(WIN32)
   target_link_libraries(kerfkite_server PUBLIC ws2_32 bcrypt setupapi)
+elseif(NOT APPLE)
+  target_link_libraries(kerfkite_server PUBLIC ${CMAKE_DL_LIBS})
 endif()
 add_executable(kerfkite-studio server/main.cpp)
 target_include_directories(kerfkite-studio PRIVATE core/src ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(kerfkite-studio PRIVATE kerfkite_server)
+# The hosted editor and upload-only machine inbox (studio/web_server.py without Python); no controller.
+add_executable(kerfkite-web server/web_main.cpp)
+target_include_directories(kerfkite-web PRIVATE core/src ${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_link_libraries(kerfkite-web PRIVATE kerfkite_server)
 # The phone pendant's TLS relay (../packaging/pendant-tls) is Go's standard library and nothing else: built
 # beside kerfkite-studio when Go is installed, without fetching anything. Without it pairing is HTTP only.
 find_program(KERFKITE_GO go)
@@ -113,7 +121,7 @@ endif()
 # The programs without Python as a package takes them: cmake --install <build> --prefix <folder> puts the server,
 # the pendant's relay and kerfkite-cam in the folder, and the STEP add-on with the Open CASCADE libraries it loads
 # in step/ (packaging/desktop/build.py --native packages such folders).
-install(TARGETS kerfkite-studio kerfkite-cam RUNTIME DESTINATION .)
+install(TARGETS kerfkite-studio kerfkite-web kerfkite-cam RUNTIME DESTINATION .)
 if(KERFKITE_GO)
   install(PROGRAMS $<TARGET_FILE_DIR:kerfkite-studio>/kerfkite-pendant-tls${CMAKE_EXECUTABLE_SUFFIX} DESTINATION .)
 endif()
@@ -168,6 +176,16 @@ if(TARGET kerfkite-step)
   list(APPEND KERFKITE_SERVER_TEST $<TARGET_FILE:kerfkite-step>)
 endif()
 add_test(NAME server COMMAND kerfkite_server_selftest ${KERFKITE_SERVER_TEST})
+# The hosted editor: its store (and the move of the Python's web.sqlite3), its routes, and with the relay, a file
+# sent to a receiver.
+add_executable(kerfkite_web_selftest tests/web_selftest.cpp)
+target_include_directories(kerfkite_web_selftest PRIVATE core/src ${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_link_libraries(kerfkite_web_selftest PRIVATE kerfkite_server)
+set(KERFKITE_WEB_TEST ${CMAKE_CURRENT_SOURCE_DIR}/../studio/static ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/web-store)
+if(KERFKITE_GO)
+  list(APPEND KERFKITE_WEB_TEST $<TARGET_FILE_DIR:kerfkite-studio>/kerfkite-pendant-tls${CMAKE_EXECUTABLE_SUFFIX})
+endif()
+add_test(NAME web COMMAND kerfkite_web_selftest ${KERFKITE_WEB_TEST})
 add_executable(kerfkite_json_selftest tests/json_selftest.cpp)
 target_link_libraries(kerfkite_json_selftest PRIVATE kerfkite_core)
 add_test(NAME json COMMAND kerfkite_json_selftest)

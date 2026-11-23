@@ -11,11 +11,14 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -278,5 +281,187 @@ func TestOperatorCertificate(t *testing.T) {
 	}
 	if reply := get(t, conn); !strings.HasSuffix(reply, "ok") {
 		t.Fatalf("reply %q", reply)
+	}
+}
+
+func TestProxyProtocolLine(t *testing.T) {
+	// The hosted editor learns each client's address from the line the relay sends first.
+	upstream, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer upstream.Close()
+	lines := make(chan string, 1)
+	go func() {
+		conn, err := upstream.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		reader := bufio.NewReader(conn)
+		first, _ := reader.ReadString('\n')
+		reader.ReadString('\n')
+		lines <- first
+		io.WriteString(conn, "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+	}()
+	stdin, closeStdin := io.Pipe()
+	output, stdout := io.Pipe()
+	finished := make(chan error, 1)
+	go func() {
+		finished <- run([]string{"-listen", "127.0.0.1:0", "-upstream", upstream.Addr().String(), "-hosts", "kerfkite-pi", "-proxy-protocol",
+			"-max-connections", "4", "-connection-time", "30s"}, stdin, stdout)
+	}()
+	reader := bufio.NewReader(output)
+	first, _ := reader.ReadString('\n')
+	second, _ := reader.ReadString('\n')
+	go io.Copy(io.Discard, reader)
+	conn, err := pinned("127.0.0.1:"+strings.TrimSpace(strings.TrimPrefix(second, "port ")), strings.TrimSpace(strings.TrimPrefix(first, "fingerprint ")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	local := conn.LocalAddr().(*net.TCPAddr)
+	remote := conn.RemoteAddr().(*net.TCPAddr)
+	if reply := get(t, conn); !strings.HasSuffix(reply, "ok") {
+		t.Fatalf("reply %q", reply)
+	}
+	want := fmt.Sprintf("PROXY TCP4 127.0.0.1 127.0.0.1 %d %d\r\n", local.Port, remote.Port)
+	if line := <-lines; line != want {
+		t.Fatalf("PROXY line %q, want %q", line, want)
+	}
+	closeStdin.Close()
+	if err := <-finished; err != nil {
+		t.Fatal(err)
+	}
+	six := proxyLine(&net.TCPAddr{IP: net.ParseIP("2001:db8::7"), Port: 5000}, &net.TCPAddr{IP: net.ParseIP("192.0.2.1"), Port: 443})
+	if six != "PROXY TCP6 2001:db8::7 ::ffff:192.0.2.1 5000 443\r\n" {
+		t.Fatalf("mixed families %q", six)
+	}
+	for _, args := range [][]string{
+		{"-upstream", "127.0.0.1:80", "-max-connections", "0"},
+		{"-upstream", "127.0.0.1:80", "-connection-time", "2h"},
+	} {
+		if err := run(args, strings.NewReader(""), io.Discard); err == nil {
+			t.Fatalf("%v must be refused", args)
+		}
+	}
+}
+
+func TestMakeCertificate(t *testing.T) {
+	directory := t.TempDir()
+	certFile, keyFile := filepath.Join(directory, "web.pem"), filepath.Join(directory, "web-key.pem")
+	var out strings.Builder
+	if err := run([]string{"-make-cert", "-cert", certFile, "-key", keyFile, "-hosts", "studio.example,192.0.2.9", "-days", "90"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "certificate made\n" {
+		t.Fatalf("printed %q", out.String())
+	}
+	pair, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf, err := x509.ParseCertificate(pair.Certificate[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if leaf.Subject.CommonName != "studio.example" || strings.Join(leaf.DNSNames, ",") != "studio.example" || len(leaf.IPAddresses) != 1 ||
+		leaf.IPAddresses[0].String() != "192.0.2.9" {
+		t.Fatalf("certificate for %v %v %v", leaf.Subject, leaf.DNSNames, leaf.IPAddresses)
+	}
+	if days := leaf.NotAfter.Sub(leaf.NotBefore).Hours() / 24; days < 90 || days > 90.01 {
+		t.Fatalf("valid for %v days", days)
+	}
+	if info, err := os.Stat(keyFile); err != nil || (os.PathSeparator == '/' && info.Mode().Perm() != 0o600) {
+		t.Fatalf("the key must be private: %v %v", info.Mode(), err)
+	}
+	before, _ := os.ReadFile(certFile)
+	if err := run([]string{"-make-cert", "-cert", certFile, "-key", filepath.Join(directory, "other.pem"), "-hosts", "x"}, strings.NewReader(""), io.Discard); err == nil {
+		t.Fatal("an existing certificate must not be replaced")
+	}
+	after, _ := os.ReadFile(certFile)
+	if string(before) != string(after) {
+		t.Fatal("the certificate changed")
+	}
+	if _, err := os.Stat(filepath.Join(directory, "other.pem")); err == nil {
+		t.Fatal("no key may be written beside a certificate that was there")
+	}
+	// A certificate that cannot be written leaves no private key behind.
+	missing := filepath.Join(directory, "no-such-folder", "web.pem")
+	if err := makeCertificate(missing, filepath.Join(directory, "lone-key.pem"), []string{"x"}, 1, time.Now()); err == nil {
+		t.Fatal("a certificate in a missing folder must fail")
+	}
+	if _, err := os.Stat(filepath.Join(directory, "lone-key.pem")); err == nil {
+		t.Fatal("the key was left without its certificate")
+	}
+}
+
+func TestFetch(t *testing.T) {
+	// A receiver with a certificate of its own authority, as kerfkite-web destination --ca-file trusts.
+	directory := t.TempDir()
+	certFile, keyFile := filepath.Join(directory, "receiver.pem"), filepath.Join(directory, "receiver-key.pem")
+	if err := makeCertificate(certFile, keyFile, []string{"127.0.0.1"}, 1, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	pair, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{Certificates: []tls.Certificate{pair}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	seen := make(chan string, 8)
+	go http.Serve(listener, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		seen <- r.Method + " " + r.URL.Path + " " + r.Header.Get("Authorization") + " " + string(body)
+		switch r.URL.Path {
+		case "/moved":
+			http.Redirect(w, r, "/api/receive", http.StatusFound)
+		case "/big":
+			w.Write([]byte(strings.Repeat("x", 70000)))
+		default:
+			w.Write([]byte(`{"status":"stored_for_review"}`))
+		}
+	}))
+	base := "https://" + listener.Addr().String()
+	// A proxy in the environment is not used: one that is not there would fail every request.
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
+	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
+	ask := func(path, ca string) answer {
+		text, _ := json.Marshal(request{Method: "POST", URL: base + path, Headers: map[string]string{"Authorization": "Bearer t"}, Body: "{}", CAFile: ca, Timeout: 5, Limit: 65537})
+		return fetch(strings.NewReader(string(text)))
+	}
+	if a := ask("/api/receive", certFile); a.Error != "" || a.Status != 200 || string(a.Body) != `{"status":"stored_for_review"}` {
+		t.Fatalf("answer %+v", a)
+	}
+	if got := <-seen; got != "POST /api/receive Bearer t {}" {
+		t.Fatalf("received %q", got)
+	}
+	if a := ask("/moved", certFile); a.Status != http.StatusFound {
+		t.Fatalf("a redirect must be returned, not followed: %+v", a)
+	}
+	<-seen
+	if a := ask("/big", certFile); a.Status != 200 || len(a.Body) != 65537 {
+		t.Fatalf("the answer must be cut at the limit: %d bytes", len(a.Body))
+	}
+	<-seen
+	if a := ask("/api/receive", ""); a.Error == "" {
+		t.Fatal("a certificate the system does not trust must be refused")
+	}
+	if a := ask("/api/receive", filepath.Join(directory, "missing.pem")); a.Error != "ca_file" {
+		t.Fatalf("a missing CA file: %+v", a)
+	}
+	if a := fetch(strings.NewReader("not json")); a.Error == "" {
+		t.Fatal("a request that is not JSON must be refused")
+	}
+	var out strings.Builder
+	text, _ := json.Marshal(request{Method: "GET", URL: base + "/x", CAFile: certFile, Timeout: 5})
+	if err := run([]string{"-fetch"}, strings.NewReader(string(text)), &out); err != nil {
+		t.Fatal(err)
+	}
+	var printed answer
+	if err := json.Unmarshal([]byte(out.String()), &printed); err != nil || printed.Status != 200 || !strings.HasSuffix(out.String(), "\n") {
+		t.Fatalf("printed %q", out.String())
 	}
 }
