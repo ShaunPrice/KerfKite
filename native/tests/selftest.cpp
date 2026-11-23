@@ -1365,13 +1365,32 @@ static void program_imports() {
            "the page count and the text skipped");
 }
 
-// A LightBurn bundle written by hand: a stored device file and a text file the reader leaves out.
-static void bundle_imports() {
-    struct Entry {
-        std::string name, data;
-        uint32_t crc;
-    };
-    const Entry entries[] = {{"dev/one.lbdev", "{\"a\":1}", 0x561bacafu}, {"notes.txt", "x", 0x8cdc1683u}};
+// A LightBurn bundle written by hand: stored members, by default a device file and a text file the reader leaves
+// out, with what an unusual archive may hold: ZIP64 fields and end records, an Info-ZIP Unicode path, a newer
+// version, flags, entries that share a header and a directory offset that puts a header before the data.
+struct BundleEntry {
+    std::string name, data;
+    unsigned offset_of = ~0u;  // the header of an earlier entry, for entries that share one
+};
+struct BundleShape {
+    std::vector<BundleEntry> entries = {{"dev/one.lbdev", "{\"a\":1}"}, {"notes.txt", "x"}};
+    bool zip64_fields = false, zip64_end = false;
+    std::string unicode;        // the first member's Info-ZIP Unicode path
+    bool unicode_crc_wrong = false;
+    unsigned version = 20, flags = 0;
+    uint32_t directory_shift = 0;  // added to the end record's directory offset
+};
+
+static uint32_t crc32_of(const std::string &bytes) {
+    uint32_t c = 0xffffffffu;
+    for (const unsigned char b : bytes) {
+        c ^= b;
+        for (int k = 0; k < 8; ++k) c = c & 1 ? 0xedb88320u ^ (c >> 1) : c >> 1;
+    }
+    return ~c;
+}
+
+static std::string bundle_of(const BundleShape &shape) {
     const auto u16 = [](std::string &s, unsigned v) {
         s += static_cast<char>(v & 255);
         s += static_cast<char>((v >> 8) & 255);
@@ -1380,25 +1399,66 @@ static void bundle_imports() {
         u16(s, v & 0xffff);
         u16(s, v >> 16);
     };
+    const auto u64 = [&](std::string &s, uint64_t v) {
+        u32(s, static_cast<uint32_t>(v));
+        u32(s, static_cast<uint32_t>(v >> 32));
+    };
     std::string zip, directory;
-    for (const Entry &e : entries) {
-        const size_t offset = zip.size();
-        zip += "PK\x03\x04";
-        u16(zip, 20), u16(zip, 0), u16(zip, 0), u16(zip, 0), u16(zip, 0x21);
-        u32(zip, e.crc), u32(zip, static_cast<uint32_t>(e.data.size())), u32(zip, static_cast<uint32_t>(e.data.size()));
-        u16(zip, static_cast<unsigned>(e.name.size())), u16(zip, 0);
-        zip += e.name + e.data;
+    std::vector<size_t> offsets;
+    for (size_t i = 0; i < shape.entries.size(); ++i) {
+        const BundleEntry &e = shape.entries[i];
+        const uint32_t crc = crc32_of(e.data), size = static_cast<uint32_t>(e.data.size());
+        size_t offset = zip.size();
+        if (e.offset_of != ~0u) {
+            offset = offsets[e.offset_of];
+        } else {
+            zip += "PK\x03\x04";
+            u16(zip, 20), u16(zip, i == 0 ? shape.flags : 0), u16(zip, 0), u16(zip, 0), u16(zip, 0x21);
+            u32(zip, crc), u32(zip, size), u32(zip, size);
+            u16(zip, static_cast<unsigned>(e.name.size())), u16(zip, 0);
+            zip += e.name + e.data;
+        }
+        offsets.push_back(offset);
+        std::string extra;
+        if (shape.zip64_fields) {
+            u16(extra, 1), u16(extra, 24), u64(extra, size), u64(extra, size), u64(extra, offset);
+        }
+        if (i == 0 && !shape.unicode.empty()) {
+            u16(extra, 0x7075), u16(extra, static_cast<unsigned>(5 + shape.unicode.size()));
+            extra += '\x01';
+            u32(extra, crc32_of(e.name) ^ (shape.unicode_crc_wrong ? 1u : 0u));
+            extra += shape.unicode;
+        }
         directory += "PK\x01\x02";
-        u16(directory, 0x0314), u16(directory, 20), u16(directory, 0), u16(directory, 0), u16(directory, 0), u16(directory, 0x21);
-        u32(directory, e.crc), u32(directory, static_cast<uint32_t>(e.data.size())), u32(directory, static_cast<uint32_t>(e.data.size()));
-        u16(directory, static_cast<unsigned>(e.name.size())), u16(directory, 0), u16(directory, 0), u16(directory, 0), u16(directory, 0);
-        u32(directory, 0100644u << 16), u32(directory, static_cast<uint32_t>(offset));
-        directory += e.name;
+        u16(directory, 0x0314), u16(directory, i == 0 ? shape.version : 20), u16(directory, i == 0 ? shape.flags : 0), u16(directory, 0),
+            u16(directory, 0), u16(directory, 0x21);
+        u32(directory, crc), u32(directory, shape.zip64_fields ? 0xffffffffu : size), u32(directory, shape.zip64_fields ? 0xffffffffu : size);
+        u16(directory, static_cast<unsigned>(e.name.size())), u16(directory, static_cast<unsigned>(extra.size())), u16(directory, 0),
+            u16(directory, 0), u16(directory, 0);
+        u32(directory, 0100644u << 16), u32(directory, shape.zip64_fields ? 0xffffffffu : static_cast<uint32_t>(offset));
+        directory += e.name + extra;
     }
     const size_t start = zip.size();
-    zip += directory + "PK\x05\x06";
-    u16(zip, 0), u16(zip, 0), u16(zip, 2), u16(zip, 2);
-    u32(zip, static_cast<uint32_t>(directory.size())), u32(zip, static_cast<uint32_t>(start)), u16(zip, 0);
+    zip += directory;
+    const uint32_t count = static_cast<uint32_t>(shape.entries.size());
+    if (shape.zip64_end) {
+        const size_t record = zip.size();
+        zip += "PK\x06\x06";
+        u64(zip, 44), u16(zip, 45), u16(zip, 45), u32(zip, 0), u32(zip, 0), u64(zip, count), u64(zip, count);
+        u64(zip, directory.size()), u64(zip, start + shape.directory_shift);
+        zip += "PK\x06\x07";
+        u32(zip, 0), u64(zip, record), u32(zip, 1);
+    }
+    zip += "PK\x05\x06";
+    u16(zip, 0), u16(zip, 0), u16(zip, shape.zip64_end ? 0xffff : count), u16(zip, shape.zip64_end ? 0xffff : count);
+    u32(zip, shape.zip64_end ? 0xffffffffu : static_cast<uint32_t>(directory.size()));
+    u32(zip, shape.zip64_end ? 0xffffffffu : static_cast<uint32_t>(start + shape.directory_shift)), u16(zip, 0);
+    return zip;
+}
+
+static void bundle_imports() {
+    BundleShape shape;
+    std::string zip = bundle_of(shape);
     json request = json::object();
     request["content"] = base64_text(zip);
     const auto refusal = [&]() -> std::string {
@@ -1408,6 +1468,17 @@ static void bundle_imports() {
             return error.what();
         }
         return "";
+    };
+    const auto names = [&]() {
+        request.erase("index");
+        std::string out;
+        const json listed = kerfkite::program_import_call("bundle-import", request);
+        for (const json &file : listed.at("files")) out += file.at("name").get<std::string>() + ";";
+        return out;
+    };
+    const auto text = [&](int index) {
+        request["index"] = index;
+        return kerfkite::program_import_call("bundle-import", request).at("text").get<std::string>();
     };
     const json listing = kerfkite::program_import_call("bundle-import", request);
     expect(listing.at("files").size() == 1 && listing.at("files").at(0).at("name") == json("one.lbdev") &&
@@ -1421,6 +1492,56 @@ static void bundle_imports() {
     request["content"] = base64_text(zip);
     request["index"] = 0;
     expect(refusal() == "Cannot read the bundle or selected text member", "a member whose CRC-32 does not match");
+
+    // ZIP64: the directory's sizes and offsets in extra fields, and its place in a ZIP64 end record.
+    const auto with = [&](const BundleShape &changed) { request["content"] = base64_text(bundle_of(changed)); };
+    BundleShape zip64;
+    zip64.zip64_fields = zip64.zip64_end = true;
+    with(zip64);
+    expect(names() == "one.lbdev;" && text(0) == "{\"a\":1}", "an archive written with ZIP64 records and fields");
+    zip64.directory_shift = 1;
+    with(zip64);
+    request.erase("index");
+    expect(refusal() == "Cannot read the bundle or selected text member", "a ZIP64 record that does not lead to its directory");
+
+    // The Info-ZIP Unicode path names the member when its CRC-32 is the stored name's.
+    BundleShape unicode;
+    unicode.unicode = "dev/\xc3\xbcn\xc3\xaf.lbdev";
+    with(unicode);
+    expect(names() == "\xc3\xbcn\xc3\xaf.lbdev;" && text(0) == "{\"a\":1}", "an Info-ZIP Unicode path names the member");
+    unicode.unicode_crc_wrong = true;
+    with(unicode);
+    expect(names() == "one.lbdev;", "a Unicode path for another name is left aside");
+    unicode.unicode_crc_wrong = false;
+    unicode.unicode = "dev/\xff.lbdev";
+    with(unicode);
+    request.erase("index");
+    expect(refusal() == "Cannot read the bundle or selected text member", "a Unicode path that is not UTF-8");
+
+    // What zipfile cannot open: a newer entry, patched data, a header before the data.
+    BundleShape newer;
+    newer.version = 64;
+    with(newer);
+    request.erase("index");
+    expect(refusal() == "Cannot read the bundle or selected text member", "an entry that needs ZIP 6.4");
+    BundleShape patched;
+    patched.flags = 0x20;
+    with(patched);
+    expect(names() == "one.lbdev;", "a member with patched data is listed");
+    request["index"] = 0;
+    expect(refusal() == "Cannot read the bundle or selected text member", "and not read");
+    BundleShape shifted;
+    shifted.directory_shift = 100;
+    with(shifted);
+    expect(names() == "one.lbdev;", "a directory offset past the directory puts the headers before the data");
+    request["index"] = 0;
+    expect(refusal() == "Cannot read the bundle or selected text member", "where they cannot be read");
+
+    // Two entries at one header both read it.
+    BundleShape shared;
+    shared.entries = {{"dev/one.lbdev", "{\"a\":1}"}, {"dev/one.lbdev", "{\"a\":1}", 0}};
+    with(shared);
+    expect(names() == "one.lbdev;one.lbdev;" && text(0) == "{\"a\":1}" && text(1) == "{\"a\":1}", "entries that share a header");
 }
 
 // A bilinear patch on the reference's 25 by 25 grid, and an outline with a hole cut from it.
