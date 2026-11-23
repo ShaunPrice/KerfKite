@@ -205,9 +205,9 @@ void moved_store() {
         store.add_user("alice", "a new password for alice", true);
         CHECK(store.check_login("alice", "a new password for alice", "192.0.2.1").ok);
     }
-    // A second start finds the store and leaves it.
+    // A second start finds the store and leaves it (where alice's password was set again, so were her tokens).
     WebStore again(folder.str());
-    CHECK(again.token_user(kToken) == "alice" && again.files("bob").size() == 20);
+    CHECK(again.token_user(kToken) == (have_scrypt() ? "alice" : "") && again.files("bob").size() == 20);
 }
 
 void accounts() {
