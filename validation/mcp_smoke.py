@@ -1,8 +1,9 @@
-"""Launch the actual stdio server and exercise tools through the MCP SDK.
+"""Launch the MCP assistant server over stdio and exercise its tools through the MCP SDK.
 
     python validation/mcp_smoke.py [PROGRAM]
 
-With PROGRAM (kerfkite-mcp) that server is tested; without it, the Python server (studio.mcp_server)."""
+PROGRAM is kerfkite-mcp; without it, KERFKITE_MCP or the build in build/native. Requires the MCP Python SDK
+(pip install "mcp>=1.30,<2")."""
 
 import asyncio
 import os
@@ -14,6 +15,9 @@ from pathlib import Path
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from native_servers import program as native_program  # noqa: E402 - beside this file
+
 
 def payload(result):
     if result.isError:
@@ -22,10 +26,10 @@ def payload(result):
 
 
 async def main():
-    program = sys.argv[1] if len(sys.argv) > 1 else None
+    program = native_program('kerfkite-mcp', sys.argv[1] if len(sys.argv) > 1 else None, 'KERFKITE_MCP')
     with tempfile.TemporaryDirectory() as output:
         params = StdioServerParameters(
-            command=program or sys.executable,
+            command=program,
             env={
                 k: v
                 for k, v in os.environ.items()
@@ -42,7 +46,7 @@ async def main():
                     'PLAYWRIGHT_BROWSERS_PATH',
                 )
             },
-            args=['--output-dir', output] if program else ['-m', 'studio.mcp_server', '--output-dir', output],
+            args=['--output-dir', output],
             cwd=str(Path(__file__).resolve().parents[1]),
         )
         async with stdio_client(params) as (read, write):

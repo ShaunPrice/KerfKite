@@ -5,14 +5,42 @@ import html
 import json
 import math
 import re
-import sys
+import struct
+import zlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZipFile, ZIP_DEFLATED
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-from studio.template_catalog import TemplateCatalog
+CATALOGUE = ROOT / "studio" / "builtin_templates.kkart"
+MAGIC = b"KKART\x01\r\n"
+
+
+def catalogue(path=CATALOGUE):
+    """Each template of the packed catalogue (scripts/build_templates.cjs), in order, with its paths: the magic,
+    each template's zlib-compressed paths (a count, then each path's point count and little-endian double pairs),
+    then a JSON index of [offset, length, metadata] records whose byte length ends the file."""
+    data = Path(path).read_bytes()
+    if not data.startswith(MAGIC):
+        raise ValueError("Unsupported artwork catalogue format")
+    (size,) = struct.unpack_from("<I", data, len(data) - 4)
+    start = len(data) - 4 - size
+    if start < len(MAGIC):
+        raise ValueError("Invalid artwork catalogue index")
+    for offset, length, metadata in json.loads(data[start:-4]):
+        packed = zlib.decompress(data[offset : offset + length])
+        (count,) = struct.unpack_from("<I", packed)
+        position, paths = 4, []
+        for _ in range(count):
+            (points,) = struct.unpack_from("<I", packed, position)
+            end = position + 4 + 16 * points
+            if end > len(packed):
+                raise ValueError("Truncated template path")
+            paths.append([list(point) for point in struct.iter_unpack("<dd", packed[position + 4 : end])])
+            position = end
+        if position != len(packed):
+            raise ValueError("Unexpected data after template paths")
+        yield {**metadata, "paths": paths}
 
 
 def svg(template):
@@ -72,4 +100,4 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path)
     args = parser.parse_args()
-    export(args.output, TemplateCatalog())
+    export(args.output, catalogue())

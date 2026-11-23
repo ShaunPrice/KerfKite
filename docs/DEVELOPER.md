@@ -44,7 +44,7 @@ python scripts/build_help.py
 bash scripts/ci-local.sh --list
 ```
 
-Use `--browser PATH` to select an installed Chromium executable. The browser harness starts its own simulator-only service and temporary browser profiles. The JSON report includes each scenario's measurements and skipped checks. `--require-step` makes a missing STEP runtime a failure. The repository also has OS-specific local checks in `scripts/ci-local.sh` and Android build instructions in [Android](ANDROID.md). Write diagnostic reports outside the source tree when they contain local paths.
+Use `--browser PATH` to select an installed Chromium executable. The browser harness starts its own simulator-only service and temporary browser profiles. The JSON report includes each scenario's measurements and skipped checks. `--require-step` makes a missing STEP add-on a failure. The repository also has OS-specific local checks in `scripts/ci-local.sh` and Android build instructions in [Android](ANDROID.md). Write diagnostic reports outside the source tree when they contain local paths.
 
 ## Example change
 

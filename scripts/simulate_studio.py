@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Run the CAD-to-machine acceptance fixture using Studio's local simulator."""
+"""Run the CAD-to-machine acceptance fixture through the workstation server's simulator.
+
+It starts the C++ workstation server, kerfkite-studio (--server, KERFKITE_STUDIO or build/native), on the loopback
+interface in simulation and drives it through the routes the editor uses. The STEP round trip needs the Open CASCADE
+add-on, kerfkite-step, beside the server; --require-step makes its absence a failure.
+"""
 
 import argparse
 from collections import Counter
@@ -15,14 +20,44 @@ import subprocess
 import sys
 import time
 import unittest
+import urllib.error
+import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT))  # for the regression suite's imports
+sys.path.insert(0, str(ROOT / 'validation'))
+
+from native_servers import beside, program, studio  # noqa: E402 - found through the path above
 
 
 def check(condition, message):
     if not condition:
         raise ValueError(message)
+
+
+def loop_area(points):
+    """The signed area of a closed loop of points, positive anticlockwise."""
+    return sum(x0 * y1 - x1 * y0 for (x0, y0, *_), (x1, y1, *_) in zip(points, points[1:] + points[:1])) / 2
+
+
+def encloses(loop, point):
+    """Whether a point lies inside a closed loop, by the crossings of a ray towards +x."""
+    x, y = point[:2]
+    inside = False
+    for (x0, y0, *_), (x1, y1, *_) in zip(loop, loop[1:] + loop[:1]):
+        if (y0 > y) != (y1 > y) and x < x0 + (y - y0) * (x1 - x0) / (y1 - y0):
+            inside = not inside
+    return inside
+
+
+def region_area(profiles):
+    """The area of loops that do not cross, by the even-odd rule: a loop inside an odd number of the others is a
+    hole."""
+    total = 0
+    for index, loop in enumerate(profiles):
+        depth = sum(encloses(other, loop[0]) for number, other in enumerate(profiles) if number != index)
+        total += (-1) ** depth * abs(loop_area(loop))
+    return total
 
 
 def fixture(width):
@@ -88,25 +123,32 @@ def replay(job, project):
 
 
 class StudioFixture:
-    def __init__(self):
-        from studio.device import DeviceController
-        from studio.server import create_app
+    """The workstation server's routes, called as the editor calls them, with its session token."""
 
-        self.device = DeviceController()
-        self.client = create_app(controller=self.device, allow_hardware=False).test_client()
-        session = self.client.get('/api/session').get_json()
+    def __init__(self, server):
+        self.url = server.url
+        session = self.get('session')
         check(session['hardware_enabled'] is False, 'Simulator must use disabled hardware')
-        self.headers = {'X-Studio-Token': session['token']}
+        self.headers = {'Content-Type': 'application/json', 'X-Studio-Token': session['token']}
+
+    def get(self, route):
+        with urllib.request.urlopen(self.url + 'api/' + route, timeout=30) as response:  # noqa: S310 - the loopback server under test
+            return json.loads(response.read())
 
     def request(self, route, data, binary=False):
-        response = self.client.post('/api/' + route, headers=self.headers, json=data)
-        if response.status_code != 200:
-            raise ValueError(f'{route} returned {response.status_code}: {response.get_data(as_text=True)[:300]}')
-        return response.data if binary else response.get_json()
+        address = self.url + 'api/' + route
+        request = urllib.request.Request(address, data=json.dumps(data).encode(), headers=self.headers)  # noqa: S310
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:  # noqa: S310 - as above
+                body = response.read()
+        except urllib.error.HTTPError as error:
+            raise ValueError(f'{route} returned {error.code}: {error.read().decode(errors="replace")[:300]}') from None
+        return body if binary else json.loads(body)
+
+    def status(self):
+        return self.get('status')
 
     def solid(self):
-        from studio.operations import region
-
         for width in (32, 40):
             model = fixture(width)
             rebuilt = self.request('solid-cad', {'model': model})
@@ -114,7 +156,7 @@ class StudioFixture:
             check(math.isclose(rebuilt['volume'], area * 3, abs_tol=0.01), 'Solid volume differs from plate minus slot')
             profiles = rebuilt['profiles']
             check(
-                len(profiles) == 2 and math.isclose(region(profiles).area, area, abs_tol=0.01),
+                len(profiles) == 2 and math.isclose(region_area(profiles), area, abs_tol=0.01),
                 'Projection lost slot or dimensions',
             )
         raw = self.request('solid-cad/stl', {'model': model}, binary=True)
@@ -158,27 +200,25 @@ class StudioFixture:
             result['stock_min_z_mm'] = min(heights)
         self.request('connect', {'port': 'simulator', 'protocol': 'grbl'})
         try:
-            check(self.device.status()['simulated'], 'Transport is not simulated')
+            check(self.status()['simulated'], 'Transport is not simulated')
             self.request('run', {'project': project, 'confirmed': True})
-            self.device.command('hold')
-            progress = self.device.status()['progress']
+            self.request('command', {'action': 'hold'})
+            progress = self.status()['progress']
             time.sleep(0.04)
-            check(
-                self.device.status()['progress'] == progress and self.device.status()['active'],
-                'Hold did not retain job',
-            )
-            self.device.command('resume')
+            state = self.status()
+            check(state['progress'] == progress and state['active'], 'Hold did not retain job')
+            self.request('command', {'action': 'resume'})
             deadline = time.monotonic() + 10 + len(job['lines']) * 0.04
-            while self.device.status()['active'] and time.monotonic() < deadline:
+            while self.status()['active'] and time.monotonic() < deadline:
                 time.sleep(0.02)
-            state = self.device.status()
+            state = self.status()
             check(
                 state['state'] == 'Idle' and state['progress'] == 100 and not state['error'],
                 'Simulator failed to finish',
             )
             result['controller'] = state['state']
         finally:
-            self.device.disconnect()
+            self.request('disconnect', {})
         return result
 
 
@@ -190,7 +230,7 @@ def python_suite():
     return {'tests_run': result.testsRun, 'skipped': [(str(test), why) for test, why in result.skipped]}
 
 
-def js_suite():
+def js_suite(server):
     node = shutil.which('node')
     check(node, 'Node.js is required for --all')
     files = sorted(
@@ -206,7 +246,8 @@ def js_suite():
         capture_output=True,
         text=True,
         timeout=300,
-        env={**os.environ, 'CNC_TEST_PYTHON': sys.executable},
+        # The rotary tests compare the browser's wrapping with the core's, from the kerfkite-cam beside the server.
+        env={**os.environ, 'KERFKITE_CAM': str(Path(server).with_name('kerfkite-cam' + Path(server).suffix))},
     )
     if proc.returncode:
         failures = re.findall(r'^not ok .*?(?=^# Subtest:|^1\.\.|\Z)', proc.stdout, re.M | re.S)
@@ -220,66 +261,25 @@ def js_suite():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--server', help='kerfkite-studio (default: KERFKITE_STUDIO, then build/native)')
     parser.add_argument('--require-step', action='store_true', help='fail if STEP exchange is unavailable')
     parser.add_argument('--all', action='store_true', help='also run the Python and JavaScript regression suites')
     parser.add_argument('--json', type=Path, help='write a machine-readable result file')
     args = parser.parse_args()
-    cases = []
-
-    def run(name, function):
-        try:
-            evidence = function()
-        except Exception as exc:
-            cases.append({'name': name, 'status': 'failed', 'error': str(exc)})
-            print('FAIL', name, exc, file=sys.stderr)
-            return False
-        cases.append({'name': name, 'status': 'passed', 'evidence': evidence})
-        print('PASS', name)
-        return True
-
-    fixture_state = []
-
-    def build():
-        simulation = StudioFixture()
-        fixture_state.append(simulation)
-        return simulation.solid()
-
-    built = run('Rebuild plate, resize and export STL', build)
-    for head in ('router', 'laser', 'knife'):
-        if built:
-            run(head, lambda head=head: fixture_state[0].head(head))
-        else:
-            cases.append({'name': head, 'status': 'skipped', 'reason': 'CAD fixture failed'})
-    import simulate_interchange as extra
-
-    if fixture_state:
-        for name, function in [
-            ('Assembly mate and interference', extra.assembly),
-            ('Parametric surface patch', extra.surface),
-            ('Swept holder and clamp', extra.collision),
-            ('Plotter import to knife program', extra.program_import),
-        ]:
-            run(name, lambda function=function: function(fixture_state[0]))
-        from importlib.util import find_spec
-
-        if find_spec('OCP') is not None or args.require_step:
-            run('STEP surface and solid exchange', lambda: extra.step(fixture_state[0]))
-        else:
-            cases.append(
-                {
-                    'name': 'STEP surface and solid exchange',
-                    'status': 'skipped',
-                    'reason': 'Install .[step] or enforce with --require-step',
-                }
-            )
-    for name, function in [('Python regression suite', python_suite), ('JavaScript regression suite', js_suite)]:
+    server = program('kerfkite-studio', args.server, 'KERFKITE_STUDIO')
+    with studio(server) as running:
+        cases = acceptance(running, beside(server, 'kerfkite-step') or args.require_step)
+    for name, function in [
+        ('Python regression suite', python_suite),
+        ('JavaScript regression suite', lambda: js_suite(server)),
+    ]:
         if args.all:
-            run(name, function)
+            run(cases, name, function)
         else:
             cases.append({'name': name, 'status': 'skipped', 'reason': 'Use --all'})
     report = {
         'format': 'cnc-studio-simulation/1',
-        'transport': 'in-process simulator',
+        'transport': 'workstation server simulator',
         'cases': cases,
         'totals': dict(Counter(case['status'] for case in cases)),
         'outside_simulation': [
@@ -292,6 +292,57 @@ def main():
         args.json.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     print(report['totals'])
     return int(any(case['status'] == 'failed' for case in cases))
+
+
+def run(cases, name, function):
+    try:
+        evidence = function()
+    except Exception as exc:
+        cases.append({'name': name, 'status': 'failed', 'error': str(exc)})
+        print('FAIL', name, exc, file=sys.stderr)
+        return False
+    cases.append({'name': name, 'status': 'passed', 'evidence': evidence})
+    print('PASS', name)
+    return True
+
+
+def acceptance(server, step):
+    """The fixture's cases against a running server; STEP exchange is checked when step is true."""
+    cases = []
+    fixture_state = []
+
+    def build():
+        simulation = StudioFixture(server)
+        fixture_state.append(simulation)
+        return simulation.solid()
+
+    built = run(cases, 'Rebuild plate, resize and export STL', build)
+    for head in ('router', 'laser', 'knife'):
+        if built:
+            run(cases, head, lambda head=head: fixture_state[0].head(head))
+        else:
+            cases.append({'name': head, 'status': 'skipped', 'reason': 'CAD fixture failed'})
+    import simulate_interchange as extra
+
+    if fixture_state:
+        for name, function in [
+            ('Assembly mate and interference', extra.assembly),
+            ('Parametric surface patch', extra.surface),
+            ('Swept holder and clamp', extra.collision),
+            ('Plotter import to knife program', extra.program_import),
+        ]:
+            run(cases, name, lambda function=function: function(fixture_state[0]))
+        if step:
+            run(cases, 'STEP surface and solid exchange', lambda: extra.step(fixture_state[0]))
+        else:
+            cases.append(
+                {
+                    'name': 'STEP surface and solid exchange',
+                    'status': 'skipped',
+                    'reason': 'Build the STEP add-on (kerfkite-step) beside the server, or enforce with --require-step',
+                }
+            )
+    return cases
 
 
 if __name__ == '__main__':

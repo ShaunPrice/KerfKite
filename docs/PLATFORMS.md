@@ -56,7 +56,7 @@ Run it from a Developer PowerShell for Visual Studio 2022. Open the printed loca
 Start on a 4 GB board with a single editor tab. Use a small solid, transfer a silhouette and preview a contour first. For relief work, start with a coarse stepover and measure a small region before increasing the sampling density. Large meshes, raster jobs and many open browser tabs can dominate memory. Run the same fixture on the target board with the following command:
 
 ```sh
-.venv/bin/python scripts/simulate_studio.py --json pi-result.json
+python3 scripts/simulate_studio.py --json pi-result.json
 ```
 
 The report identifies the completed cases. Actual machine travel, cutter and laser calibration, clamping and material response need commissioning on the target machine.

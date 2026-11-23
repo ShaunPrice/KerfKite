@@ -1,41 +1,24 @@
-"""Exercise one signed Pocket, a real browser workstation and the simulated machine together."""
+"""Exercise one signed Pocket, a real browser workstation and the simulated machine together.
+
+The workstation server is kerfkite-studio (--server, KERFKITE_STUDIO or build/native) with its plain HTTP phone
+monitor on the loopback interface. The browser editor and the emulator each reach it through a proxy that records
+what they send and holds a request where a check needs it held.
+"""
 
 import argparse
-from contextlib import contextmanager
-import logging
+import json
 from pathlib import Path
-import secrets
 import re
-import sys
-from threading import Event, Thread
+from threading import Event
 from xml.etree import ElementTree
 import time
 
-from flask import request
 from playwright.sync_api import sync_playwright
-from werkzeug.serving import make_server
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from pocket_app import PACKAGE, component
-from android_pendant_workflow import Phone, wait_until
+from android_pendant_workflow import MONITOR, Phone, wait_until
+from native_servers import Proxy, studio
 from phone_arm_workflow import arm_preview, connect_editor
-from studio.device import DeviceController
-from studio.monitor import create_monitor_app
-from studio.phone_jobs import PhoneJobs
-from studio.server import create_app
-
-
-@contextmanager
-def serve(app):
-    server = make_server("127.0.0.1", 0, app, threaded=True)
-    thread = Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        yield server.server_port
-    finally:
-        server.shutdown()
-        thread.join()
-        server.server_close()
+from pocket_app import PACKAGE, component
 
 
 def touch(phone, point):
@@ -57,14 +40,9 @@ def button_location(phone, label, dialog=False):
     return None
 
 
-def run(phone, apk, chrome):
+def run(phone, apk, chrome, program=None):
     assert phone.run("shell", "getprop", "ro.kernel.qemu") == "1"
     phone.run("install", "-r", str(apk))
-    controller = DeviceController()
-    jobs = PhoneJobs(controller)
-    token = secrets.token_urlsafe(32)
-    desktop = create_app(controller, phone_jobs=jobs)
-    monitor = create_monitor_app(controller, token, jobs)
     delay_confirm, saw_confirm, release_confirm = Event(), Event(), Event()
     delay_jog, saw_jog, release_jog = Event(), Event(), Event()
     legacy, stop_done = Event(), Event()
@@ -73,53 +51,62 @@ def run(phone, apk, chrome):
     confirmations = []
     action_errors = []
 
-    @desktop.before_request
-    def delay_workstation_reply():
-        if delay_confirm.is_set() and request.path == "/api/arm/confirm":
+    def route(seen):
+        return seen.path.split("?")[0]
+
+    def delay_workstation_reply(seen):
+        if delay_confirm.is_set() and route(seen) == "/api/arm/confirm":
             saw_confirm.set()
             release_confirm.wait(6)
 
-    @desktop.after_request
-    def observe_workstation(response):
-        if request.path == "/api/arm/confirm":
-            confirmations.append(response.status_code)
-        return response
+    def observe_workstation(seen, status, body):
+        if route(seen) == "/api/arm/confirm":
+            confirmations.append(status)
 
-    @monitor.before_request
-    def observe_motion():
-        if request.method == "POST":
-            data = request.get_json()
-            requests.append(data.copy())
+    def observe_motion(seen):
+        if seen.method == "POST":
+            data = seen.json()
+            requests.append(data)
             if data["action"] == "jog" and delay_jog.is_set():
                 saw_jog.set()
                 release_jog.wait(6)
 
-    @monitor.after_request
-    def observe_result(response):
-        if request.method == "POST":
-            action = request.get_json()["action"]
-            responses.append((action, response.status_code))
-            if response.status_code != 200:
-                action_errors.append(response.get_json().get("error", ""))
-            if action == "stop" and response.status_code == 200:
+    def observe_result(seen, status, body):
+        if seen.method == "POST":
+            action = seen.json()["action"]
+            responses.append((action, status))
+            if status != 200:
+                action_errors.append(json.loads(body).get("error", ""))
+            if action == "stop" and status == 200:
                 stop_done.set()
-        if legacy.is_set() and request.path == "/api/status":
-            status = response.get_json()
-            status.pop("control_epoch", None)
-            response.set_data(monitor.json.dumps(status))
-        return response
+        if legacy.is_set() and route(seen) == "/api/status":
+            # A receiver from before control generations: the same status without control_epoch.
+            state = json.loads(body)
+            state.pop("control_epoch", None)
+            return json.dumps(state).encode()
+        return None
 
     try:
-        with serve(desktop) as desk_port, serve(monitor) as phone_port, sync_playwright() as pw:
+        with (
+            studio(program, args=MONITOR) as server,
+            Proxy(server.url, before=delay_workstation_reply, after=observe_workstation) as desk,
+            Proxy(server.monitor, before=observe_motion, after=observe_result) as monitor,
+            sync_playwright() as pw,
+        ):
+            status = server.status
+
+            def armed():
+                return server.monitor_status()["armed"]
+
             browser = pw.chromium.launch(executable_path=chrome)
             page = browser.new_page()
-            page.goto(f"http://127.0.0.1:{desk_port}/")
+            page.goto(f"http://127.0.0.1:{desk.port}/")
             connect_editor(page)
             phone.run("shell", "am", "force-stop", PACKAGE)
             phone.run("shell", "am", "start", "-W", "-n", component())
             phone.tap("CNC pendant", button=True)
             phone.tap("Monitor pairing link")
-            phone.run("shell", "input", "text", f"http://10.0.2.2:{phone_port}/#token={token}")
+            phone.run("shell", "input", "text", f"http://10.0.2.2:{monitor.port}/#token={server.token}")
             phone.run("shell", "input", "keyevent", "KEYCODE_BACK")
             phone.tap("Pair", button=True)
             phone.confirm()
@@ -128,8 +115,11 @@ def run(phone, apk, chrome):
             phone.tap("Start", button=True)
             phone.confirm()
             wait_until(lambda: responses == [("start", 200)], "Workstation-confirmed Start failed.")
-            assert confirmations == [200] and not jobs.status()["armed"]
-            wait_until(lambda: not controller.status()["active"], "Simulated job did not finish.")
+            # The proxy records the workstation's confirmation once its answer is back, which can be just after the
+            # phone's answer.
+            wait_until(lambda: confirmations == [200], "The workstation's confirmation was not recorded.")
+            assert not armed()
+            wait_until(lambda: not status()["active"], "Simulated job did not finish.")
             print(
                 "PASS signed Pocket Start with browser-generated preview and live workstation confirmation", flush=True
             )
@@ -165,7 +155,7 @@ def run(phone, apk, chrome):
                 lambda: ("start", 400) in responses and 400 in confirmations,
                 "Overtaken Start/confirmation was accepted.",
             )
-            assert not jobs.status()["armed"] and not controller.status()["active"]
+            assert not armed() and not status()["active"]
             wait_until(lambda: phone.find("Receiver acknowledged stop."), "Late Start replaced the Stop status.")
             print(
                 "PASS same phone cancels pending Start, late browser confirmation rejected, fresh Stop result retained",
@@ -186,7 +176,7 @@ def run(phone, apk, chrome):
             assert stop_done.wait(1.3), "Stop was blocked by the pending jog."
             release_jog.set()
             wait_until(lambda: ("jog", 400) in responses, "Delayed jog passed the Stop boundary.")
-            assert not any("$J=" in entry for entry in controller.status()["log"])
+            assert not any("$J=" in entry for entry in status()["log"])
             wait_until(lambda: phone.find("Receiver acknowledged stop."), "Late jog replaced the Stop status.")
             print("PASS same phone preempts delayed jog and receiver rejects old motion", flush=True)
 
@@ -200,7 +190,7 @@ def run(phone, apk, chrome):
             assert phone.find("Start", button=True) is None and phone.find("Jog X positive", button=True) is None
             phone.tap("Stop", button=True)
             phone.confirm()
-            wait_until(lambda: not jobs.status()["armed"], "Stop failed on legacy status.")
+            wait_until(lambda: not armed(), "Stop failed on legacy status.")
             assert [r["action"] for r in requests] == ["start", "start", "stop", "jog", "stop", "stop"]
             assert len({r["request_id"] for r in requests}) == len(requests)
             assert all(("control_epoch" in r) == (r["action"] != "stop") for r in requests)
@@ -210,7 +200,6 @@ def run(phone, apk, chrome):
     finally:
         release_confirm.set()
         release_jog.set()
-        controller.disconnect()
 
 
 if __name__ == "__main__":
@@ -219,6 +208,6 @@ if __name__ == "__main__":
     parser.add_argument("--serial", required=True)
     parser.add_argument("--apk", type=Path, required=True)
     parser.add_argument("--chrome", help="Installed Chrome executable; defaults to Playwright's Chromium")
+    parser.add_argument("--server", help="kerfkite-studio (default: KERFKITE_STUDIO, then build/native)")
     args = parser.parse_args()
-    logging.getLogger("werkzeug").setLevel(logging.ERROR)
-    run(Phone(args.adb, args.serial), args.apk.resolve(), args.chrome)
+    run(Phone(args.adb, args.serial), args.apk.resolve(), args.chrome, args.server)

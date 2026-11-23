@@ -34,7 +34,7 @@ If pairing times out, open the monitor base URL in the phone browser on the same
 
 ## Emulator acceptance
 
-The native test uses a disposable Android emulator, an authenticated loopback monitor and the simulated GRBL controller. Select `--route lan` to reach Studio through the emulator’s virtual LAN, or `--route reverse` to forward the connection with ADB. Both routes reach a local Studio receiver. From the repository root, with a disposable emulator already booted and platform-tools on PATH, run
+The native test uses a disposable Android emulator and the workstation server, `kerfkite-studio`, with its authenticated phone monitor on the loopback interface and its simulated GRBL controller. The phone reaches the monitor through a proxy in the harness that records each request it sends, and the harness confirms the phone's Start as the open editor that armed the job would. The harness takes the server from `--server PATH`, the `KERFKITE_STUDIO` environment variable or `build/native`. Select `--route lan` to reach Studio through the emulator’s virtual LAN, or `--route reverse` to forward the connection with ADB. Both routes reach a local Studio receiver. From the repository root, with a disposable emulator already booted and platform-tools on PATH, run
 
 ```sh
 python validation/android_pendant_workflow.py --serial emulator-5554 --route lan --apk path/to/KerfKite-Pocket-Android.apk

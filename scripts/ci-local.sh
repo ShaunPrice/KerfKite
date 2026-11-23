@@ -51,8 +51,8 @@
 #     CI_LOCAL_DOCKER  set to 1 to run test:ubuntu-latest in the ubuntu:24.04
 #                      Docker image. The image must already be on this machine:
 #                      it is never pulled. The container gets a copy of the
-#                      working tree, installs Python 3.12 and a compiler with
-#                      apt-get, downloads Node.js 22 from nodejs.org (checked
+#                      working tree, installs Python 3.12, a compiler and CMake
+#                      with apt-get, downloads Node.js 22 from nodejs.org (checked
 #                      against its published SHA-256) and runs the job. The
 #                      image runs at this machine's architecture; GitHub's
 #                      ubuntu-latest was x86-64.
@@ -324,7 +324,7 @@ provision_container() {
   apt-get update -q
   apt-get install -y -q --no-install-recommends -o Dir::Cache::archives=/ci-cache/apt \
     "python$PYTHON_VERSION" "python$PYTHON_VERSION-venv" "python$PYTHON_VERSION-dev" \
-    g++ ca-certificates curl xz-utils
+    g++ cmake make ca-certificates curl xz-utils
   case "$(uname -m)" in
     aarch64 | arm64) arch="arm64" ;;
     x86_64) arch="x64" ;;
@@ -363,7 +363,7 @@ job_test() {
     return
   fi
   if [ "$mode" = "container" ]; then
-    step "container setup: apt-get install python$PYTHON_VERSION and g++, download Node.js $NODE_VERSION" provision_container
+    step "container setup: apt-get install python$PYTHON_VERSION, g++ and CMake, download Node.js $NODE_VERSION" provision_container
   fi
 
   # test.yml, step "actions/checkout@v4"
@@ -393,7 +393,12 @@ job_test() {
   run python -m ruff check studio
   run python -m ruff format --check .
 
-  # Exercise modelling and the sender simulator, then discover both language suites.
+  # The native programs, as scripts/install.sh builds them: the fixture and the MCP check start them from build/native.
+  run cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release
+  run cmake --build build/native --parallel
+  run ctest --test-dir build/native --output-on-failure
+
+  # Exercise modelling and the workstation server's simulator, then discover both language suites.
   run python scripts/simulate_studio.py --all
 
   # test.yml, step: run: node --check studio/static/app.js
@@ -421,7 +426,7 @@ job_test() {
   # test.yml, step: run: node --check studio/static/layers.js
   run node --check studio/static/layers.js
 
-  # test.yml, step: run: python validation/mcp_smoke.py
+  # test.yml, step: run: python validation/mcp_smoke.py (now kerfkite-mcp from build/native)
   run python validation/mcp_smoke.py
 }
 
