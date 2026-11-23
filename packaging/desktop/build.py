@@ -50,6 +50,10 @@ def copy_native(folder, dest, step=True):
             shutil.copytree(item, dest / item.name)
         else:
             shutil.copy2(item, dest)
+    # A workflow's artifacts lose their file modes on the way down, so the programs are made executable again.
+    for program in (*NATIVE_PROGRAMS, "kerfkite-step"):
+        if (dest / program).is_file():
+            (dest / program).chmod(0o755)
     shutil.copytree(ROOT / "studio/static", dest / "static", ignore=shutil.ignore_patterns("__pycache__"))
     shutil.copy2(ROOT / "studio/builtin_templates.kkart", dest)
 
