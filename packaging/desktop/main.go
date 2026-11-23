@@ -106,7 +106,38 @@ func (s *state) openDesktop(payload string, output *os.File) {
 	}()
 }
 
+// choose waits for the workshop choice, or takes native simulation when the person asked for it next time.
+func choose(ctx context.Context, s *state, automatic bool, showSetup func()) (options, error) {
+	var choice options
+	if automatic {
+		choice = options{desktop: true}
+	} else {
+		s.set("Choose your workshop", "Start in simulation to design, preview and test your project.")
+		showSetup()
+		select {
+		case <-ctx.Done():
+			return choice, ctx.Err()
+		case choice = <-s.choices:
+		}
+	}
+	s.Lock()
+	s.automatic = automatic
+	s.Unlock()
+	return choice, nil
+}
+
 func runStudio(ctx context.Context, s *state, payload, data string, output *os.File, showSetup func()) error {
+	preference := filepath.Join(data, "native-simulation")
+	// The workstation server without Python, when the package carries it: nothing to set up or download.
+	if server := nativeServer(payload); server != "" {
+		_, prefErr := os.Stat(preference)
+		choice, err := choose(ctx, s, prefErr == nil, showSetup)
+		if err != nil {
+			return err
+		}
+		s.set("Opening the workshop", "Starting Studio on this computer.")
+		return serve(s, exec.CommandContext(ctx, server, nativeArguments(payload, choice.hardware)...), choice, preference, payload, data, output)
+	}
 	// A release gets its own environment. An interrupted setup retries on the next launch.
 	wheel, err := filepath.Glob(filepath.Join(payload, "kerfkite_studio-*.whl"))
 	if err != nil || len(wheel) != 1 {
@@ -140,7 +171,6 @@ func runStudio(ctx context.Context, s *state, payload, data string, output *os.F
 		return cmd.Run()
 	}
 	marker := filepath.Join(env, ".installed")
-	preference := filepath.Join(data, "native-simulation")
 	_, prefErr := os.Stat(preference)
 	automatic := prefErr == nil
 
@@ -169,21 +199,10 @@ func runStudio(ctx context.Context, s *state, payload, data string, output *os.F
 	} else if err != nil {
 		return err
 	}
-	var choice options
-	if automatic {
-		choice = options{desktop: true}
-	} else {
-		s.set("Choose your workshop", "Start in simulation to design, preview and test your project.")
-		showSetup()
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case choice = <-s.choices:
-		}
+	choice, err := choose(ctx, s, automatic, showSetup)
+	if err != nil {
+		return err
 	}
-	s.Lock()
-	s.automatic = automatic
-	s.Unlock()
 	if choice.step {
 		stepMarker := filepath.Join(env, ".step-installed")
 		if _, e := os.Stat(stepMarker); os.IsNotExist(e) {
@@ -207,7 +226,15 @@ func runStudio(ctx context.Context, s *state, payload, data string, output *os.F
 	if choice.hardware {
 		args = append(args, "--enable-hardware")
 	}
-	cmd := exec.CommandContext(ctx, python, args...)
+	return serve(s, exec.CommandContext(ctx, python, args...), choice, preference, payload, data, output)
+}
+
+// serve runs the workstation server, Python's or the native one, until it stops: the workshop is ready when it
+// prints KERFKITE_READY.
+func serve(s *state, cmd *exec.Cmd, choice options, preference, payload, data string, output *os.File) error {
+	s.Lock()
+	automatic := s.automatic
+	s.Unlock()
 	configure(cmd)
 	cmd.Dir = data
 	cmd.Stderr = output
@@ -449,7 +476,7 @@ func main() {
 		shortcuts, first := spots.offers(), !exists(offered)
 		st.Lock()
 		defer st.Unlock()
-		form.Execute(w, map[string]any{"Phase": st.phase, "Detail": st.detail, "Active": st.active, "Choose": st.phase == "Choose your workshop", "Ready": st.phase == "Your workshop is ready", "Token": token, "Studio": studioURL, "Log": logfile, "Offers": shortcuts, "First": first, "Note": st.note})
+		form.Execute(w, map[string]any{"Phase": st.phase, "Detail": st.detail, "Active": st.active, "Choose": st.phase == "Choose your workshop", "Ready": st.phase == "Your workshop is ready", "Token": token, "Studio": studioURL, "Log": logfile, "Offers": shortcuts, "First": first, "Note": st.note, "Native": nativeServer(payload) != "", "Step": stepInstalled(payload)})
 	})
 	srv := &http.Server{ReadHeaderTimeout: 5 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Host != address {

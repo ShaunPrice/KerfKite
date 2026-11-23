@@ -25,6 +25,16 @@ The Debian package version combines the wheel version with the packaging revisio
 Build the assistant skill with `python scripts/package_skill.py dist/installers/kerfkite-workshop-skill.zip`.
 Include the ZIP in `SHA256SUMS.txt`. Extracting it produces the `kerfkite-workshop` folder with its instructions, interface metadata and MIT license.
 
+## Packages without Python
+
+The workstation server without Python (`kerfkite-studio`, see [The workstation server](NATIVE.md#the-workstation-server)) can be packaged in place of the wheel. Such a package needs no Python runtime and downloads nothing when it first starts: the launcher finds `kerfkite-studio` beside itself (in `Contents/Resources` on macOS) and starts it with the editor's files from `static/`, in simulation unless the operator enables the controller ports for the session. The package carries the phone pendant's TLS relay and `kerfkite-cam`, and STEP exchange as the Open CASCADE add-on `kerfkite-step` with the Open CASCADE 7.9.3 libraries and their notices (LGPL 2.1, as separate files that can be replaced). Windows Setup offers STEP as a component of its own, which a reinstall without it removes; the macOS and Linux packages carry it. The launcher's setup page says whether STEP is installed instead of offering to download it.
+
+1. Run the manual **Build the desktop programs without Python** workflow (`native-programs.yml`). For each desktop target it builds Open CASCADE 7.9.3 from the pinned source with `native/step/open-cascade.cmake` (kept in the cache afterwards), builds and tests the programs (Linux on manylinux_2_28, for glibc 2.28 and later), and uploads a folder of them, made by `cmake --install`. Download the folders with `gh run download RUN_ID --pattern 'native-*' --dir dist/native`.
+2. Run `python packaging/desktop/build.py --native dist/native dist/installers mac-arm64 mac-amd64 linux-arm64 linux-amd64 windows-amd64`. The version is `__version__` in `studio/__init__.py`. Everything else is as for the wheel packages above.
+3. `python validation/installer_smoke.py "/path/to/installed/KerfKite" --step` recognises such a package: it checks that no Python runtime was made and writes and reads a STEP part through the add-on.
+
+The Linux window (`linux/kerfkite-native`) is still a Python GTK script, so the Debian package still declares `python3` and its GTK bindings. Not yet run: the workflow on GitHub's runners and the macOS and Windows packages; the Linux x86-64 portable archive and Debian package were built in a development container, and the portable archive passed the smoke test with STEP.
+
 ## Native windows
 
 The release builder compiles AppKit with the macOS SDK for both architectures and signs the helper before signing the application bundle. Linux packages carry the executable GTK script and declare their GI and WebKitGTK dependencies. Building Windows requires the .NET SDK with Roslyn. The Windows build script verifies pinned NuGet packages before compiling, bundles the WebView2 managed assemblies and x64 loader, and includes their Microsoft licence and notices. The runtime is supplied separately by Microsoft. Set `KERFKITE_NATIVE_BUILD_CACHE` to reuse verified downloads.

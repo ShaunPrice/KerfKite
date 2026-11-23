@@ -1,0 +1,89 @@
+name: Build the desktop programs without Python
+# The workstation server, the phone pendant's TLS relay, kerfkite-cam and the STEP add-on with Open CASCADE 7.9.3
+# for each desktop target, as the folders packaging/desktop/build.py --native packages. Run on request, before a
+# release; Open CASCADE is built from its pinned source once per target and kept in the cache.
+on: workflow_dispatch
+permissions:
+  contents: read
+env:
+  OCCT_TAG: V7_9_3
+  OCCT_COMMIT: a016080bf6738d6aeae020badee4e888ad1540a5
+jobs:
+  programs:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: macos-15, target: mac-arm64, goarch: arm64}
+          - {runner: macos-15-intel, target: mac-amd64, goarch: amd64}
+          - {runner: windows-2022, target: windows-amd64, goarch: amd64}
+          - {runner: ubuntu-24.04, target: linux-amd64, goarch: amd64, arch: x86_64}
+          - {runner: ubuntu-24.04-arm, target: linux-arm64, goarch: arm64, arch: aarch64}
+    runs-on: ${{ matrix.runner }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "12.0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: "1.24.7"
+          cache: false
+      - name: Fetch Open CASCADE's source at the pinned commit
+        shell: bash
+        run: |
+          git clone --quiet --depth 1 --branch "$OCCT_TAG" https://github.com/Open-Cascade-SAS/OCCT.git "$RUNNER_TEMP/occt-src"
+          test "$(git -C "$RUNNER_TEMP/occt-src" rev-parse HEAD)" = "$OCCT_COMMIT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: occt
+        with:
+          path: ${{ runner.temp }}/occt
+          key: open-cascade-${{ env.OCCT_COMMIT }}-${{ matrix.target }}-${{ hashFiles('native/step/open-cascade.cmake') }}
+      - name: Build Open CASCADE
+        if: steps.occt.outputs.cache-hit != 'true' && runner.os != 'Linux'
+        shell: bash
+        run: cmake -DSOURCE="$RUNNER_TEMP/occt-src" -DBUILD="$RUNNER_TEMP/occt-build" -DPREFIX="$RUNNER_TEMP/occt" -P native/step/open-cascade.cmake
+      - name: Build, test and install the programs
+        if: runner.os != 'Linux'
+        shell: bash
+        run: |
+          config=$(dirname "$(find "$RUNNER_TEMP/occt" -name OpenCASCADEConfig.cmake | head -1)")
+          cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release -DOpenCASCADE_DIR="$config"
+          cmake --build build/native --config Release --parallel 4
+          libraries=$(dirname "$(find "$RUNNER_TEMP/occt" \( -name TKernel.dll -o -name 'libTKernel*.dylib' \) | head -1)")
+          PATH="$libraries:$PATH" ctest --test-dir build/native -C Release --output-on-failure
+          cmake --install build/native --config Release --prefix "dist/${{ matrix.target }}"
+      - name: Build, test and install the programs on manylinux_2_28 (glibc 2.28)
+        if: runner.os == 'Linux'
+        env:
+          ARCH: ${{ matrix.arch }}
+          BUILT: ${{ steps.occt.outputs.cache-hit }}
+        run: |
+          docker run --rm -e BUILT -v "$PWD:/src" -v "$RUNNER_TEMP:/work" -w /src "quay.io/pypa/manylinux_2_28_$ARCH" bash -ec '
+            /opt/python/cp312-cp312/bin/python -m pip install --quiet "cmake==3.31.6"
+            export PATH=/opt/python/cp312-cp312/bin:$PATH
+            [ "$BUILT" = true ] || cmake -DSOURCE=/work/occt-src -DBUILD=/work/occt-build -DPREFIX=/work/occt -P native/step/open-cascade.cmake
+            cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release -DOpenCASCADE_DIR=/work/occt/lib/cmake/opencascade
+            cmake --build build/native --parallel 4
+            ctest --test-dir build/native --output-on-failure
+            cmake --install build/native --prefix dist/native
+          '
+          sudo chown -R "$(id -u):$(id -g)" build dist "$RUNNER_TEMP/occt"
+          mv dist/native "dist/${{ matrix.target }}"
+          # The relay is Go's standard library and nothing else: no C library to match.
+          cd packaging/pendant-tls
+          CGO_ENABLED=0 GO111MODULE=off GOARCH=${{ matrix.goarch }} go build -trimpath -buildvcs=false \
+            -o "$GITHUB_WORKSPACE/dist/${{ matrix.target }}/kerfkite-pendant-tls" .
+      - name: Add Open CASCADE's notices and the record of its build
+        shell: bash
+        run: |
+          notes="dist/${{ matrix.target }}/step/open-cascade"
+          mkdir -p "$notes"
+          cp "$RUNNER_TEMP/occt-src/LICENSE_LGPL_21.txt" "$RUNNER_TEMP/occt-src/OCCT_LGPL_EXCEPTION.txt" "$notes/"
+          printf 'Open CASCADE Technology %s (commit %s), unmodified, from https://github.com/Open-Cascade-SAS/OCCT\nBuilt for %s by native/step/open-cascade.cmake in the KerfKite source of commit %s.\n' \
+            "$OCCT_TAG" "$OCCT_COMMIT" "${{ matrix.target }}" "$GITHUB_SHA" > "$notes/BUILD.txt"
+          find "dist/${{ matrix.target }}" -maxdepth 2 -type f | sort
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-${{ matrix.target }}
+          path: dist/${{ matrix.target }}
+          if-no-files-found: error

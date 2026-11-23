@@ -97,12 +97,35 @@ if(OpenCASCADE_FOUND)
   target_include_directories(kerfkite-step PRIVATE core/src ${OpenCASCADE_INCLUDE_DIR})
   target_link_libraries(kerfkite-step PRIVATE kerfkite_core ${KERFKITE_OCCT_STEP} TKBO TKPrim TKMesh TKShHealing TKTopAlgo TKGeomAlgo
     TKBRep TKGeomBase TKG3d TKG2d TKMath TKernel)
-  set_target_properties(kerfkite-step PROPERTIES BUILD_RPATH "${OpenCASCADE_LIBRARY_DIR}" INSTALL_RPATH "$ORIGIN")
+  # Open CASCADE's libraries where they were built (CMake's build path), and once installed beside the add-on,
+  # where a package puts them.
+  if(APPLE)
+    set_target_properties(kerfkite-step PROPERTIES INSTALL_RPATH "@loader_path")
+  else()
+    set_target_properties(kerfkite-step PROPERTIES INSTALL_RPATH "$ORIGIN")
+  endif()
   if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # The search path also for the libraries' own dependencies on one another (DT_RPATH, not DT_RUNPATH).
     target_link_options(kerfkite-step PRIVATE "LINKER:--disable-new-dtags")
   endif()
   message(STATUS "kerfkite-step: STEP exchange with Open CASCADE ${OpenCASCADE_VERSION}")
+endif()
+# The programs without Python as a package takes them: cmake --install <build> --prefix <folder> puts the server,
+# the pendant's relay and kerfkite-cam in the folder, and the STEP add-on with the Open CASCADE libraries it loads
+# in step/ (packaging/desktop/build.py --native packages such folders).
+install(TARGETS kerfkite-studio kerfkite-cam RUNTIME DESTINATION .)
+if(KERFKITE_GO)
+  install(PROGRAMS $<TARGET_FILE_DIR:kerfkite-studio>/kerfkite-pendant-tls${CMAKE_EXECUTABLE_SUFFIX} DESTINATION .)
+endif()
+if(TARGET kerfkite-step)
+  if(CMAKE_VERSION VERSION_LESS 3.21)
+    message(WARNING "CMake 3.21 or later installs the STEP add-on with its Open CASCADE libraries")
+  else()
+    install(TARGETS kerfkite-step
+      RUNTIME_DEPENDENCIES PRE_INCLUDE_REGEXES "TK[A-Za-z0-9]+" PRE_EXCLUDE_REGEXES ".*"
+        DIRECTORIES ${OpenCASCADE_BINARY_DIR} ${OpenCASCADE_LIBRARY_DIR}
+      RUNTIME DESTINATION step LIBRARY DESTINATION step)
+  endif()
 endif()
 add_executable(kerfkite_machine_selftest tests/machine_selftest.cpp)
 target_link_libraries(kerfkite_machine_selftest PRIVATE kerfkite_server)

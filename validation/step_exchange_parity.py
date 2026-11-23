@@ -149,7 +149,10 @@ def post(server, path, payload):
 
 def isolated(server, path, payload):
     """A request to the reference in a child process: its Open CASCADE runs in its process, and a damaged document
-    can end that process (the C++ server's add-on runs apart, and the server refuses the request)."""
+    can end that process (the C++ server's add-on runs apart, and the server refuses the request). Without fork
+    (Windows) the request is made in this process."""
+    if not hasattr(os, 'fork'):
+        return post(server, path, payload)
     read, write = os.pipe()
     pid = os.fork()
     if pid == 0:  # pragma: no cover - the child
