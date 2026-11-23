@@ -2,7 +2,7 @@
 
 KerfKite has its own 3D solid modelling kernel in the native core: `native/core/include/kerfkite/solid.hpp`, implemented in `native/core/src/solid/`. It depends on the C++17 standard library and nothing else. It was written to replace the third-party library behind Studio's 3D CAD (see [Third-party components](SUPPLY-CHAIN.md)) and to carry 3D engraving and, later, multi-axis machining.
 
-**Studio uses it.** Wherever the compiled extension is installed, Studio's 3D CAD (parametric parts, CAD scripts, lofts, STEP tessellations, assemblies) is modelled by this kernel, and the 2D drawings of the script engine by the [polygon kernel](POLYGON-KERNEL.md). The third-party library remains in two roles only: the fallback for an installation without the extension, and the oracle the kernel is tested against. The section [How Studio uses the kernel](#how-studio-uses-the-kernel) describes the switch, what each of Studio's calls became, and what Studio does when the kernel refuses a result. The kernel is also reached from C++ and through the `kerfkite-cam solid` command.
+**Studio uses it.** Studio's 3D CAD (parametric parts, CAD scripts, lofts, STEP tessellations, assemblies) is modelled by this kernel, and the 2D drawings of the script engine by the [polygon kernel](POLYGON-KERNEL.md). The third-party library is no part of Studio; it remains the oracle the kernel is tested against, in `validation/solid_kernel_check.py` at the reference commit ([The Python reference](DEVELOPER.md#the-python-reference)). Until Studio 0.7 the Python reference could still model with the library where its compiled extension was missing. The section [How Studio uses the kernel](#how-studio-uses-the-kernel) describes that switch, what each of the reference's calls became, and what Studio does when the kernel refuses a result. The kernel is also reached from C++ and through the `kerfkite-cam solid` command.
 
 ## What a solid is
 
@@ -195,7 +195,7 @@ Correctness is shown in two independent ways.
 
 **The shorter ways against the full computation** (the same self-test). Each way the kernel has of avoiding exact work (see [Performance](#performance)) is checked against the computation it stands in for: the 256-bit product and the three-word sum against the big integer; the flat tables against the standard ones; a tree over part of the boxes against a scan; a pool that leaves crossings pending against one that computes each at once, over requests with crossings on the grid, repeats and points reached two ways (the same ids, the same intervals once computed, the same answer from every predicate); the turn and the plane side decided in doubles against the exact ones, on triples in one line and points on and beside the plane; a probing arrangement against a counting one on triangles that touch. And whole operations are computed twice, with every shorter way taken and with none (`detail::plain_paths()`), and must give the same vertices, triangles and counts. `--plain N SEED` does that for N generated pairs of solids.
 
-**Comparison with the third-party library as an oracle** (`validation/solid_kernel_check.py`). It builds every solid twice, in the oracle and as a request to the kernel, from the same leaves, and compares volume, bounding box, number of bodies and section areas at three heights. Tolerances follow from the grid: a layer of 4 nm for each operation on the area of the leaves. It also runs Studio's own tests for solids, scripts, assemblies and lofts on a stand-in for the library, so that those tests run on the kernel's primitives and every solid they make is compared.
+**Comparison with the third-party library as an oracle** (`validation/solid_kernel_check.py`, kept at the reference commit because its third part runs the reference's solid tests). It builds every solid twice, in the oracle and as a request to the kernel, from the same leaves, and compares volume, bounding box, number of bodies and section areas at three heights. Tolerances follow from the grid: a layer of 4 nm for each operation on the area of the leaves. It also runs Studio's own tests for solids, scripts, assemblies and lofts on a stand-in for the library, so that those tests run on the kernel's primitives and every solid they make is compared.
 
 The oracle is not always right, and the check does not take its word where the two differ in volume. It follows the difference down to the operation where it starts and tests that operation by a rule that needs neither side: the union or intersection of a solid with itself is that solid, and a hull contains every point of its operands. A case is set aside only when the rule shows the oracle wrong and the kernel right.
 
@@ -226,8 +226,8 @@ The commands, from the repository root with the core built in `build/native`:
     build/native/kerfkite_solid_selftest --digest 700 2026      # the last field must be equal on every compiler and platform
     build/native/kerfkite_solid_selftest --plain 6000 77        # every shorter way against none: "0 differ"
     build/native/kerfkite_solid_bench 5                         # times, and a hash of each model that must not change
-    python validation/benchmark_solid.py                        # the same through Studio, on the kernel and the library
-    python validation/solid_kernel_check.py --tool build/native/kerfkite-cam --trees 5000 --seed 1
+    python ../kerfkite-reference/validation/benchmark_solid.py  # the same through the Python reference, on the kernel and the library
+    python ../kerfkite-reference/validation/solid_kernel_check.py --tool build/native/kerfkite-cam --trees 5000 --seed 1
 
 What these runs do not show: the hash comparison was not made with MSVC, nor on ARM64 or macOS; the differential trees are at most three operations deep, on primitives a few millimetres across; and the sanitizer run covers the generated cases, not the JSON command. The tests in doubles described under [Performance](#performance) were likewise run with GCC and Clang on x86-64 only. They cannot change a result on any platform, because each falls back to the integers when it is not certain; what remains to confirm elsewhere is the digest, as before.
 
@@ -240,7 +240,7 @@ The kernel was made faster in two stages. The first changed no result: every dig
 Two tools, both in the repository:
 
 - `kerfkite_solid_bench [REPEAT] [FILTER]` (`native/tools/solid_bench.cpp`) builds twelve models on the kernel alone and prints the best time of each with a hash of every vertex and triangle of the result. Built with `-DKERFKITE_SOLID_PROFILE=ON` it also prints the time of each phase (clocks in `core/src/solid/timing.hpp`, compiled into no other build).
-- `validation/benchmark_solid.py` rebuilds the same kind of model through Studio's entry points (`studio.solid_cad.rebuild`, `studio.scad_geometry.build_script`) on the kernel and on the third-party library, each in a fresh interpreter. With `--answers` it hashes every answer the kernel gives on the way instead of timing.
+- `validation/benchmark_solid.py`, at the reference commit, rebuilds the same kind of model through the reference's entry points (`studio.solid_cad.rebuild`, `studio.scad_geometry.build_script`) on the kernel and on the third-party library, each in a fresh interpreter. With `--answers` it hashes every answer the kernel gives on the way instead of timing.
 
 All times are from the two-core sandbox this was developed in, GCC 13.3 at `-O3`, one thread. The machine was shared with other builds, and a run could take half as long again from one minute to the next; each figure is the best of several runs (3 to 7 of a model, 18 to 30 of a model under 50 ms).
 
@@ -380,16 +380,11 @@ Where the kernel still spends its time, and what could be done about it:
 
 ### Which code runs
 
-`studio.solid_kernel.solid_backend()` answers `kernel` when the compiled extension is installed and `manifold` when it is not (the portable wheel, or a source checkout that was never built). `KERFKITE_SOLID_BACKEND=manifold` selects the third-party library where the extension is installed; `=kernel` refuses to run without the extension; `auto` is the default. With neither the extension nor the library, modelling fails with a message that names both.
+The programs model with the kernel alone; there is no other code to choose. In the Python reference, `studio.solid_kernel.solid_backend()` answered `kernel` when the compiled extension was installed and `manifold` when it was not (the portable wheel, or a source checkout that was never built), and `KERFKITE_SOLID_BACKEND=manifold` selected the third-party library where the extension was installed.
 
-```python
-from studio import solid_kernel
-solid_kernel.solid_backend()   # 'kernel' with the extension, 'manifold' without it
-```
+`studio/solid_kernel.py` gave the two kernels the part of the library's interface that the reference called, so its modelling code (`solid_cad.py`, `scad_geometry.py`, `solid_loft.py`, the STEP tessellation in `cad_exchange.py`, `assembly.py`) was the same on both; the core's ports of that code (`solid_cad.cpp`, `scad.cpp`, `surface.cpp`, `assembly.cpp`) call the kernel directly. Reading STEP itself is still the optional Open Cascade add-on; the kernel takes its triangles.
 
-`studio/solid_kernel.py` gives the two kernels the part of the library's interface that Studio calls, so the modelling code (`solid_cad.py`, `scad_geometry.py`, `solid_loft.py`, the STEP tessellation in `cad_exchange.py`, `assembly.py`) is the same on both. Nothing in Studio's modelling stays on the library when the kernel is in use, and the library is not imported then. Reading STEP itself is still the optional Open Cascade add-on; the kernel takes its triangles.
-
-| Studio calls | Now runs on | Notes |
+| The reference called | Now runs on | Notes |
 | --- | --- | --- |
 | `Manifold.cube`, `.cylinder`, `.sphere` | `box`, `cylinder`, `sphere` | The sphere is faceted differently; see below. |
 | `Manifold(Mesh64(vertices, triangles))` (lofts, polyhedra) | `from_mesh` | A mesh that is not a closed solid gives a status the callers test, as the library does. |
@@ -410,7 +405,7 @@ solid_kernel.solid_backend()   # 'kernel' with the extension, 'manifold' without
 
 The kernel refuses a result it cannot represent validly on its grid ("the result has features too fine for the 1 nm grid"; see [Rounding](#rounding-and-why-the-result-stays-valid)). Studio then reports an error that names the feature or the script line and says what to do: two faces almost coincide there, usually after a turn, and moving, turning or resizing one shape by a small amount removes the cause.
 
-**Studio never hands the model to the other library**, whether the backend was chosen explicitly or by `auto`. The two facet differently, so a part that silently changed kernel between two rebuilds would change shape, triangle count and section outlines without the user having changed anything. A user who needs the model as it stood can set `KERFKITE_SOLID_BACKEND=manifold` for the whole installation. The refusal was not met in any model of Studio's tests or documents, nor in 5000 random scripts run on both backends (below).
+**Studio never hands the model to another library**, and the Python reference did not either, whether its backend was chosen explicitly or by `auto`. The two facet differently, so a part that silently changed kernel between two rebuilds would change shape, triangle count and section outlines without the user having changed anything. The refusal was not met in any model of Studio's tests or documents, nor in 5000 random scripts run on both backends (below).
 
 ### What differs for a user
 
@@ -439,14 +434,16 @@ Time for one rebuild through Studio, on the two-core sandbox this was developed 
 | A revolved profile with two cuts | 6 ms | 12 ms | 13 ms | 2.1 |
 | A twisted extrusion, bored and trimmed | 5 ms | 13 ms | 13 ms | 2.8 |
 
-### How the switch is tested
+### How the switch was tested
+
+These were the reference's tests and checks, kept at the reference commit; `validation/check_pinned_results.py` and the browser exercise below run from this tree.
+
 
 - `tests/test_solid_backends.py` builds every model of Studio's tests and every program of the scripting guide on both backends, through the same Studio code, and compares them: 22 drawings and 33 solids by volume, surface area, bounds, three sections and the projection; 6 solids with spheres, a twisted extrusion and 2 assemblies by what their faceting leaves comparable. The tolerances are stated at the head of that file and follow from the grid: a 1 nm shift of each surface for each of the two results, so a volume within 2 nm times the surface area. The largest difference found is 0.12 of its tolerance (volume 5.6·10^-5 mm³, surface area 2.9·10^-5 mm², section area 2.5·10^-5 mm², bounds within 1 nm).
 - The same file tests the choice of backend, modelling with the library absent, modelling with the extension absent, and that a refusal is an error and never another backend.
 - Three tests in `tests/test_scad_geometry.py` compared an area or a volume with its exact value to six or seven decimal places. They now allow the rounding of a circle's vertices to the grid: the perimeter of the circles times half a grid diagonal (2.7·10^-5 mm² for the drawing, 4.0·10^-5 and 3.6·10^-5 mm³ for the two solids).
-- `validation/check_installed_cam.py` models a part and a drawing through Studio's entry points with the installed extension and compares every vertex, triangle and outline with a recorded digest (`6c12e0b4dd788bbb`). That is the proof, on every platform a wheel or installer is built for, that the package carries the kernel and that the kernel gives the same bytes there. The digest is the same from GCC 13.3, from Clang 18.1, and with the portable 128-bit integers that a compiler without a 128-bit type (MSVC) uses, all on x86-64 Linux.
+- `validation/check_installed_cam.py` modelled a part and a drawing through Studio's entry points with the installed extension and compared every vertex, triangle and outline with a recorded digest (`6c12e0b4dd788bbb`); `validation/check_pinned_results.py` now models them with `kerfkite-cam` and requires the same digest. That was the proof, on every platform a wheel or installer was built for, that the package carried the kernel and that the kernel gave the same bytes there. The digest is the same from GCC 13.3, from Clang 18.1, and with the portable 128-bit integers that a compiler without a 128-bit type (MSVC) uses, all on x86-64 Linux.
 - `validation/solid_kernel_check.py` runs Studio's four solid test modules on a stand-in that builds every solid in both: 30 tests, all passing, 148 distinct solids compared, 0 failures.
-- `validation/simulate_solid_workspace.py`, the browser exercise of the solid workspace, passes on the kernel.
 - `validation/solid_backend_check.py` builds random CAD scripts through Studio on both backends: drawings (polygons with holes, Boolean operations, offsets with each kind of corner) and solids (every primitive, extrusions, revolutions, polyhedra, transforms, Boolean operations and hulls, nested up to three deep). It is run by hand, not by the test suite. Measured with seeds 1 to 5, 600 drawings and 400 solids each:
 
 | | Drawings | Solids |
@@ -461,7 +458,9 @@ Time for one rebuild through Studio, on the two-core sandbox this was developed 
 
 The two cases set aside are of the kinds already listed under [Testing](#testing). In one the library's result has a fin without thickness: the volumes agree, and the library's surface area and bounds are the larger. In the other the library's hull is not convex and leaves the vertices of its own operands 6.5 mm outside it, while the kernel's hull holds them. One further thing the runs showed is a property of the grid and not a fault: a Boolean operation can leave an edge shorter than a micrometre, rounding its ends to the grid turns it slightly, and a mitred offset of 2.8 mm from that edge then lay 24 nm from the library's. The check allows an offset that much (1.5 nm over the edge's length, times the distance).
 
-    python validation/solid_backend_check.py --drawings 600 --solids 400 --seed 1
+    python ../kerfkite-reference/validation/solid_backend_check.py --drawings 600 --solids 400 --seed 1
+
+`validation/simulate_solid_workspace.py`, the browser exercise of the solid workspace, passes on the kernel through `kerfkite-studio`.
 
 ## Known limitations
 

@@ -9,11 +9,11 @@ or translated from another library.
 
 **It is what the application uses** for inside and outside offsets, pockets, hatch fills and V-carving.
 `native/core/src/operations.cpp` and `native/core/src/vcarve.cpp` build those operations on the kernel;
-`kerfkite-cam` runs that code, and Studio's Python calls the same code through its compiled extension
-(`studio/operations.py`), so the two cut the same paths. GEOS is no longer part of the native build, which
-now contains no third-party code and downloads nothing. Shapely, which carries GEOS, remains in Studio for
-three things: as the fallback for these operations where the extension is not installed, in the modules
-that have not been moved yet, and as the oracle the kernel is tested against.
+the workstation server and `kerfkite-cam` run that code, as Studio's Python reference did through its
+compiled extension (`studio/operations.py`), so they cut the same paths. GEOS is no longer part of the native
+build, which contains no third-party code and downloads nothing. Shapely, which carries GEOS, is no part of
+Studio since the Python was removed in 0.7; it remains the oracle the kernel is tested against, in the
+comparisons kept at the reference commit ([The Python reference](DEVELOPER.md#the-python-reference)).
 [The operations](#the-operations) describes how they are built and how the paths differ from the ones GEOS
 gave, and [V-carving](#v-carving) does the same for the carve.
 
@@ -319,10 +319,11 @@ been compiled or run: the kernel is written to the standard and the portable int
 the first build on each is the test. The continuous build (`.github/workflows/native-core.yml`) runs CTest
 on them, and a different result would fail the digest there.
 
-The operations are pinned in the same way. `validation/check_installed_cam.py`, which every wheel build
-runs on the installed wheel, generates an inside offset, an outside offset, a pocket and a cross-hatch fill
-at 33.3 degrees through the extension and compares the four programs with a recorded digest. `kerfkite-cam`
-built with GCC 13 and with Clang 18 writes the same four programs as the extension does.
+The operations are pinned in the same way. `validation/check_pinned_results.py`, which the continuous build
+runs on every platform, generates an inside offset, an outside offset, a pocket and a cross-hatch fill at
+33.3 degrees with `kerfkite-cam` and compares the four programs with a recorded digest, the one the
+extension's check (`check_installed_cam.py`) recorded on every wheel build. `kerfkite-cam` built with GCC 13
+and with Clang 18 writes the same four programs.
 
 ## How it is tested
 
@@ -363,7 +364,7 @@ the distance to a boundary with Shapely's.
 
 `validation/polygon_kernel_check.py` compares the kernel with Shapely 2.2.0 (GEOS 3.14.1):
 
-    python validation/polygon_kernel_check.py --cli build/native/kerfkite-cam --cases 12000
+    python ../kerfkite-reference/validation/polygon_kernel_check.py --cli build/native/kerfkite-cam --cases 12000
 
 It generates cases on the grid and gives GEOS the grid coordinates themselves, so both see the same input:
 random polygons with holes, nested and overlapping sets, rectangles on a lattice with shared edges and
@@ -505,12 +506,12 @@ V-carving is built on the kernel as well, in its own file: see [V-carving](#v-ca
 
 ### Which code runs
 
-`studio.operations.polygon_backend()` answers `kernel` when the compiled extension is installed and
-`shapely` when it is not (the portable wheel, or a source checkout that was never built). Setting
-`KERFKITE_POLYGON_BACKEND=shapely` selects the Shapely code where the extension is installed; `=kernel`
-refuses to run without it. The two cut the same regions, but **the fallback's vertices are not the
-kernel's**, so a program written by an installation without the extension differs from one written with it
-in the ways listed next. `kerfkite-cam` always uses the kernel.
+The programs always use the kernel. In the Python reference, `studio.operations.polygon_backend()` answered
+`kernel` when the compiled extension was installed and `shapely` when it was not (the portable wheel, or a
+source checkout that was never built), and `KERFKITE_POLYGON_BACKEND=shapely` selected the Shapely code where
+the extension was installed. The two cut the same regions, but **the fallback's vertices are not the
+kernel's**, so a program written by an installation without the extension differed from one written with it
+in the ways listed next.
 
 ### How the tool paths differ from the ones GEOS gave
 
@@ -550,7 +551,7 @@ The `cam` group of `validation/polygon_kernel_check.py` generates jobs (stars wi
 contours, rectangles on a lattice with shared edges; tools from a fifth of a millimetre up, hatch angles
 that are round and that are not) and runs `prepare()` both ways for each:
 
-    python validation/polygon_kernel_check.py --cli build/native/kerfkite-cam --only cam --cases 5000
+    python ../kerfkite-reference/validation/polygon_kernel_check.py --cli build/native/kerfkite-cam --only cam --cases 5000
 
 | Check (run of 21 November 2026, GCC 13, seed 20261121; no failures) | Jobs | Refused by both | Thin |
 | --- | --- | --- | --- |
@@ -602,10 +603,10 @@ both sides used to refuse.
 ## V-carving
 
 `native/core/src/vcarve.cpp` is the one implementation of V-carving. `kerfkite-cam generate` reaches it
-directly; Studio checks the settings in Python, in the order and with the messages they always had, and
-asks the extension for the paths and depths (`"op": "vcarve"` of the `operation` command,
-`studio.operations.kernel_vcarve`). The Shapely code in `studio/operations.py` remains as the fallback for
-an installation without the extension.
+directly; the server checks the settings in the order and with the messages they always had, and asks the
+same code for the paths and depths (`"op": "vcarve"` of the `operation` command, which the reference's
+`studio.operations.kernel_vcarve` called through its extension). The reference's Shapely code in
+`studio/operations.py` was its fallback for an installation without the extension.
 
 ### The method
 
@@ -641,7 +642,7 @@ are each an interval short of the wall therefore stays at least half an interval
 
 Every coordinate of a path is a whole number of nanometres divided by 1e6, and every depth comes from one
 square root, at most two divisions and the series. **No function of the C library is called but `sqrt`**,
-so a V-carve is the same on every platform, and `validation/check_installed_cam.py` pins one.
+so a V-carve is the same on every platform, and `validation/check_pinned_results.py` pins one.
 
 ### Joining and order
 
@@ -704,7 +705,7 @@ cut radius within the tool's.
 * `validation/vcarve_check.py` runs those measurements on the shapes of the parity comparison and prints the
   worst figures.
 
-    python validation/vcarve_check.py --cases 4000
+    python ../kerfkite-reference/validation/vcarve_check.py --cases 4000
 
 The run of 22 November 2026 (GCC 13, Shapely 2.2.0 with GEOS 3.14.1, seed 93) carved 2,287 of the generated
 shapes; the other 757 had nothing to carve or passed a limit. No shape failed.
@@ -737,19 +738,15 @@ shapes and stars, with sampling intervals, bit angles, depths, step-downs and to
 whole ranges and beyond them. The paths and depths are shared by construction; what is compared is the
 checks and their order, the depth levels, the program and the totals.
 
-### What still uses Shapely in Studio
+### Shapely and Studio
 
-These were not changed, and each could move onto the kernel:
-
-| Module | Use of Shapely | What moving it needs |
-| --- | --- | --- |
-| `studio/operations.py`, the fallback | The Shapely code of offsets, pockets, fills and V-carving (`voronoi_diagram` of points sampled along the outline, clipped to the region; distances to the boundary) | Nothing: it goes when the portable wheel carries the extension or is retired. V-carving moved onto the kernel's own Voronoi diagram; see [V-carving](#v-carving). |
-| `studio/router_entry.py` | `LineString` lengths and simplicity of each contour; the placing of a helix only as the fallback | The placing of a helix in a pocket has moved: `native/core/src/pocket_entry.cpp` does it on the kernel (the region, its insets, the nearest point of an inset, the distance to the walls and the line clipper), and Studio calls it through the `operation` command's `helix`. The Shapely code stays for an installation without the extension. The core's own `router_entry.cpp` and `simple_line.cpp` already hold the line parts. |
-| `studio/cam.py` | `LineString(path).is_simple` before tabs and entries | The core's `simple_line.cpp` answers this by GEOS's rules; the kernel's `is_simple` (exact, on the grid) could replace both once the rejections are allowed to follow the grid. |
-| `studio/design_api.py` | `region`, `outlines`, `unary_union` and `box` for Boolean operations between shapes in the editor | `combine()` and `unite_all()` exist; it needs a command that takes two sets of contours and returns outlines. Small. |
-| `studio/solid_text.py`, `studio/cad_exchange.py` | Regions of glyph and profile outlines, orientation, constrained Delaunay triangulation for the faces of solids, clipping to boxes | Regions and orientation exist. Triangulating a polygon with holes is new work (the kernel's sweep could be extended to produce monotone pieces and triangles). |
-| `studio/sketch_profile.py`, `studio/scad_geometry.py` | `Polygon` validity and area, `LinearRing` orientation | `is_simple`, `signed_area`, `orientation`: all exist. Small. |
-| `studio/pdf_import.py`, `studio/program_import.py` | `STRtree` to find nearby paths, `MultiPoint` hulls, `Polygon` and `LineString` construction, containment | A spatial index (the kernel's bucket grid is internal) and a convex hull; containment is `locate()`. Small to medium. |
+Studio no longer uses Shapely. The Python modules that did were ported to the core with the rest of the
+Python and removed in Studio 0.7: the fallback of the operations in `studio/operations.py`, the line checks
+of `router_entry.py` and `cam.py` (now `simple_line.cpp`, by GEOS's rules), the Boolean operations between
+shapes of `design_api.py` (now `/api/geometry` on this kernel), the regions and triangulations of
+`solid_text.py` and `cad_exchange.py`, the validity tests of `sketch_profile.py` and `scad_geometry.py`, and
+the indexes and hulls of `pdf_import.py` and `program_import.py`. Shapely remains the measure in the
+comparisons kept at the reference commit.
 
 ## Sources
 

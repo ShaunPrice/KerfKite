@@ -1,44 +1,27 @@
-name: Build and compare the native core
-# Runs for pull requests that change the core or its comparison, and on request.
+name: Build and check the native programs
+# Runs for pull requests that change the programs or their checks, and on request.
 on:
   workflow_dispatch:
   pull_request:
     paths:
       - native/**
-      - validation/native_core_parity.py
-      - validation/native_core_recorder.py
-      - validation/server_route_parity.py
-      - validation/web_route_parity.py
-      - validation/web_store_fixture.py
-      - validation/check_installed_cam.py
-      - validation/mcp_parity.py
-      - validation/mcp_remote_parity.py
-      - validation/mcp_http_parity.py
-      - validation/mcp_workshop_parity.py
+      - validation/native_servers.py
+      - validation/check_pinned_results.py
       - validation/mcp_smoke.py
       - validation/pendant_tls_pin_check.py
-      - validation/step_exchange_parity.py
+      - scripts/simulate_studio.py
+      - scripts/simulate_interchange.py
       - packaging/pendant-tls/**
       - packaging/desktop/linux/**
       - studio/static/desktop-workspace.js
-      - studio/cad_exchange.py
-      # The workstation server and the hosted editor are compared route by route with the Flask apps.
-      - studio/server.py
-      - studio/design_api.py
-      - studio/web_server.py
-      - studio/web_store.py
-      - studio/web_transfer.py
-      # The assistant server is compared with the Python server and its modules.
-      - studio/mcp_*.py
-      # The reference computes offsets, pockets, fills and V-carves, and places helical pocket entries,
-      # through the extension, which is built from these.
-      - studio/operations.py
-      - studio/router_entry.py
-      - studio/_core_native.cpp
-      - setup.py
       - .github/workflows/native-core.yml
 permissions:
   contents: read
+env:
+  # The last commit with the Python reference: studio/*.py, its tests and the harnesses that compared the native
+  # programs with it while both existed. They run from there, unchanged, against the programs built here, so a
+  # change to the programs is still compared with the behaviour they were ported from.
+  REFERENCE: REFERENCE_COMMIT
 jobs:
   core:
     strategy:
@@ -48,6 +31,11 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out the Python reference
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.REFERENCE }}
+          path: reference
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
@@ -57,46 +45,52 @@ jobs:
           go-version: "1.24.7"
           cache: false
       - name: Install the Python reference with its compiled extension
-        # Offsets, pockets, fills and V-carves are compared through the extension, so it must have been built.
-        # The step extra (OCP) is the reference for STEP exchange.
-        run: python -m pip install -e ".[dev,step]"
+        # The reference computes offsets, pockets, fills and V-carves through its extension, so it must have been
+        # built. The step extra (OCP) is the reference for STEP exchange.
+        run: python -m pip install -e "./reference[dev,step]"
         env:
           KERFKITE_REQUIRE_NATIVE: "1"
       - name: Install Open CASCADE for the STEP add-on
         # Ubuntu's own build (7.6); the releases use 7.9.3, the reference's.
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libocct-data-exchange-dev libocct-modeling-algorithms-dev libtbb-dev
-      - name: Build the native core
+      - name: Build the native programs
         run: |
           cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release
           cmake --build build/native --config Release --parallel 4
-      - name: Self-test without Python
+      - name: Self-test
         run: ctest --test-dir build/native -C Release --output-on-failure
       - name: Test the phone pendant's TLS relay
         shell: bash
         run: cd packaging/pendant-tls && GO111MODULE=off CGO_ENABLED=0 go test -count=1 .
-      - name: Check the pinned results of the installed extension
-        # The operations, part and drawing check_installed_cam.py pins, which the wheel builds checked before.
-        run: python validation/check_installed_cam.py
+      - name: Find the programs
+        # build/native on Linux and macOS, build/native/Release with Visual Studio.
+        shell: bash
+        run: |
+          folder=build/native
+          if [ -d build/native/Release ]; then folder=build/native/Release; fi
+          suffix=""
+          if [ "$RUNNER_OS" = Windows ]; then suffix=.exe; fi
+          {
+            echo "CAM=$folder/kerfkite-cam$suffix"
+            echo "STUDIO=$folder/kerfkite-studio$suffix"
+            echo "WEB=$folder/kerfkite-web$suffix"
+            echo "MCP=$folder/kerfkite-mcp$suffix"
+          } >> "$GITHUB_ENV"
+      - name: Check the pinned results
+        # The core's results on this platform against the values pinned for every platform: polygon operations,
+        # a V-carve, levelling, board isolation, a part and a drawing, a relief, the stock preview and rotary posts.
+        run: python validation/check_pinned_results.py "${{ env.CAM }}"
+      - name: Run the acceptance fixture on the workstation server's simulator
+        run: python scripts/simulate_studio.py --server "${{ env.STUDIO }}"
       - name: Compare with the Python reference
-        shell: bash
-        run: |
-          cli=build/native/kerfkite-cam
-          if [ -f build/native/Release/kerfkite-cam.exe ]; then cli=build/native/Release/kerfkite-cam.exe; fi
-          python validation/native_core_parity.py --cli "$cli"
+        run: python reference/validation/native_core_parity.py --cli "${{ env.CAM }}"
       - name: Compare the workstation server with the Flask reference
-        shell: bash
-        run: |
-          server=build/native/kerfkite-studio
-          if [ -f build/native/Release/kerfkite-studio.exe ]; then server=build/native/Release/kerfkite-studio.exe; fi
-          python validation/server_route_parity.py --server "$server" --mutations 12
+        run: python reference/validation/server_route_parity.py --server "${{ env.STUDIO }}" --mutations 12
       - name: Compare the hosted editor with the Flask reference
-        shell: bash
         run: |
-          web=build/native/kerfkite-web
-          if [ -f build/native/Release/kerfkite-web.exe ]; then web=build/native/Release/kerfkite-web.exe; fi
-          python validation/web_route_parity.py --server "$web" --cases 400
-          python validation/web_route_parity.py --server "$web" --cases 100 --seed 2 --tls
+          python reference/validation/web_route_parity.py --server "${{ env.WEB }}" --cases 400
+          python reference/validation/web_route_parity.py --server "${{ env.WEB }}" --cases 100 --seed 2 --tls
       - name: Compare the assistant server with the Python reference
         # The tools without a browser, the pendant and hosted-editor tools against stand-ins and kerfkite-web, both
         # transports (the HTTP comparison makes network namespaces of its own, which Ubuntu's AppArmor allows an
@@ -104,14 +98,14 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           python -m pip install "fastmcp>=3.4.11,<4" "pydantic>=2.12,<3" "playwright>=1.51,<2"
-          python validation/mcp_parity.py --server build/native/kerfkite-mcp
-          python validation/mcp_remote_parity.py --server build/native/kerfkite-mcp --web build/native/kerfkite-web
+          python reference/validation/mcp_parity.py --server "$MCP"
+          python reference/validation/mcp_remote_parity.py --server "$MCP" --web "$WEB"
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
-          python validation/mcp_http_parity.py --server build/native/kerfkite-mcp
+          python reference/validation/mcp_http_parity.py --server "$MCP"
           # Google Chrome is on the x86-64 runners only.
           chrome=$(command -v google-chrome || true)
           if [ -n "$chrome" ]; then
-            python validation/mcp_workshop_parity.py --server build/native/kerfkite-mcp --chromium "$chrome"
+            python reference/validation/mcp_workshop_parity.py --server "$MCP" --chromium "$chrome"
           else
             echo "No Chrome on this runner: the workshop is not compared here."
           fi
@@ -119,18 +113,15 @@ jobs:
         # The comparisons run on Linux; on macOS and Windows the server's tools, its RS256 checks (in the web
         # self-test) and its workshop in the runner's Chrome are exercised here.
         if: runner.os != 'Linux'
-        shell: bash
         run: |
           python -m pip install "mcp>=1.30,<2"
-          mcp=build/native/kerfkite-mcp
-          if [ -f build/native/Release/kerfkite-mcp.exe ]; then mcp=build/native/Release/kerfkite-mcp.exe; fi
-          python validation/mcp_smoke.py "$mcp"
+          python validation/mcp_smoke.py "${{ env.MCP }}"
       - name: Check Pocket's certificate pinning against the workstation server
         if: runner.os == 'Linux'
-        run: python validation/pendant_tls_pin_check.py --server build/native/kerfkite-studio
+        run: python validation/pendant_tls_pin_check.py --server "$STUDIO"
       - name: Compare STEP exchange with the reference's Open CASCADE
         if: runner.os == 'Linux'
-        run: python validation/step_exchange_parity.py --server build/native/kerfkite-studio --parts 40 --surfaces 40
+        run: python reference/validation/step_exchange_parity.py --server "$STUDIO" --parts 40 --surfaces 40
       - name: Exercise the Linux desktop window against the workstation server
         # The GTK window in C with Ubuntu's WebKitGTK 4.1, driven as a person would under a virtual display.
         if: runner.os == 'Linux'
@@ -139,7 +130,7 @@ jobs:
           cmake -S packaging/desktop/linux -B build/window -DCMAKE_BUILD_TYPE=Release
           cmake --build build/window --parallel 4
           build/window/kerfkite-native --check
-          build/native/kerfkite-studio --port 18765 --static studio/static > studio.log 2>&1 &
+          "$STUDIO" --port 18765 --static studio/static > studio.log 2>&1 &
           server=$!
           for i in $(seq 100); do grep -q KERFKITE_READY studio.log && break; sleep 0.1; done
           dbus-run-session -- xvfb-run -a -s "-screen 0 1600x1000x24" build/window/kerfkite-native-smoke http://127.0.0.1:18765/

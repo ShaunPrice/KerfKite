@@ -68,6 +68,8 @@ async def main():
                 } <= set(names)
                 assert not any(n.startswith('pendant_') for n in names)
                 listing = payload(await session.call_tool('list_templates', {'query': 'flower'}))
+                found = listing.get('result', listing) if isinstance(listing, dict) else listing
+                assert found and all('flower' in (t['name'] + ' ' + t['category']).casefold() for t in found), found
                 template = payload(
                     await session.call_tool(
                         'get_template', {'template_id': 'flower-round-6', 'x': 10, 'y': 10, 'width': 50, 'height': 50}

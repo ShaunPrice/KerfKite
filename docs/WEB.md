@@ -4,7 +4,7 @@ The hosted editor and machine inbox run using the same HTTPS service. Uploaded f
 
 ## HTTPS setup (LAN or internet host)
 
-The service is `kerfkite-web`, one of KerfKite's native programs: it is in the program folder beside `kerfkite-studio` and needs no Python. Its HTTPS comes from KerfKite's TLS relay, `kerfkite-pendant-tls`, which must be in the same folder. Releases that still carry the Python service run it as `python -m studio.web_server` with the same commands and options; see [Moving from the Python service](#moving-from-the-python-service).
+The service is `kerfkite-web`, one of KerfKite's native programs: it is in the program folder beside `kerfkite-studio` and needs no Python. Its HTTPS comes from KerfKite's TLS relay, `kerfkite-pendant-tls`, which must be in the same folder. Studio 0.6.1 and earlier ran the Python service as `python -m studio.web_server` with the same commands and options; to move its accounts and files, see [Moving from the Python service](#moving-from-the-python-service).
 
 ```sh
 kerfkite-web --data-dir web-data create-user YOUR_USERNAME

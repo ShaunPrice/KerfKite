@@ -13,12 +13,11 @@ Lora, Montserrat and Cormorant Garamond — SIL Open Font License 1.1.
 fonts.js embeds the original font files. Keep each family's copyright notice
 and OFL file. Lora is a reserved font name under its accompanying notice.
 
-The optional STEP feature uses Open CASCADE Technology, accessed through
-CadQuery OCP. Open CASCADE Technology 7.9.3 uses LGPL 2.1 with the Open
-CASCADE exception 1.0. OCP wrapper code uses Apache 2.0. Copies of those
-texts are included. Shapely's geometry operations use GEOS under LGPL 2.1.
-The Studio wheel declares these dependencies separately. Bundling third-party
-binaries creates additional distribution obligations described in LICENSING.md.
+The optional STEP add-on, kerfkite-step, links Open CASCADE Technology 7.9.3,
+which uses LGPL 2.1 with the Open CASCADE exception 1.0. Copies of those texts
+are included; the packages carry the Open CASCADE libraries as separate files
+with their notices and build information. Bundling third-party binaries creates
+additional distribution obligations described in LICENSING.md.
 
 qrcodegen.js — QR Code generator, Project Nayuki, MIT. See qrcodegen-LICENSE.txt.
 Source: https://www.nayuki.io/res/qr-code-generator-library/qrcodegen.js

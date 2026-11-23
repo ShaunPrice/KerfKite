@@ -1,6 +1,6 @@
 # KerfKite Studio
 
-KerfKite Studio is an open-source CAD/CAM workbench for interchangeable CNC router, laser and drag-knife heads. Design in a browser, simulate a job, and prepare output for a supported controller. The Python application runs locally or as an authenticated HTTPS editor. KerfKite Pocket on Android includes an offline sketch editor and a CNC pendant paired with the Studio server.
+KerfKite Studio is an open-source CAD/CAM workbench for interchangeable CNC router, laser and drag-knife heads. Design in a browser, simulate a job, and prepare output for a supported controller. Its native programs run on the workstation, in the desktop app or from a source build, or as an authenticated HTTPS editor. KerfKite Pocket on Android includes an offline sketch editor and a CNC pendant paired with the Studio server.
 
 [![KerfKite’s desktop editor showing wattle, banksia and scarlet gum tags on a shared sheet, with separate layers for the outlines, engraving and lettering](studio/static/screen-desktop-workspace.png)](studio/static/screen-desktop-workspace.png)
 

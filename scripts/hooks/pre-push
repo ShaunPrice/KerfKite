@@ -1,8 +1,8 @@
 #!/bin/sh
 # Fast local gate, run by git before every push. Enable once per clone:
 #     git config core.hooksPath scripts/hooks
-# It stands in for hosted CI on push: lint, the Python suite and the JavaScript suite.
-# The full matrix (native build, simulator harness, MCP smoke) stays in scripts/ci-local.sh.
+# It stands in for hosted CI on push: lint, the native self-tests, the Python tool tests and the JavaScript suite.
+# The full matrix (simulator harness, MCP smoke) stays in scripts/ci-local.sh.
 set -eu
 cd "$(git rev-parse --show-toplevel)"
 PY="${CNC_TEST_PYTHON:-}"
@@ -10,15 +10,16 @@ if [ -z "$PY" ]; then
   if [ -x .venv/bin/python ]; then PY=.venv/bin/python; else PY=python3; fi
 fi
 echo "pre-push: ruff"
-"$PY" -m ruff check studio
+"$PY" -m ruff check .
 "$PY" -m ruff format --check .
-echo "pre-push: Python tests"
-if "$PY" -c "import pytest_cov" 2>/dev/null; then
-  # Fails below the floor in pyproject.toml ([tool.coverage.report] fail_under).
-  "$PY" -m pytest -q -p no:cacheprovider tests --cov --cov-report=
+if [ -d build/native ]; then
+  echo "pre-push: native self-tests"
+  ctest --test-dir build/native --output-on-failure >/dev/null
 else
-  "$PY" -m pytest -q -p no:cacheprovider tests
+  echo "pre-push: build/native is not built; the native self-tests and the tests that need kerfkite-cam are skipped"
 fi
+echo "pre-push: Python tests"
+"$PY" -m unittest discover -s tests -q
 echo "pre-push: JavaScript tests"
 for test in tests/js/*.cjs tests/*.cjs; do
   node "$test" >/dev/null || { echo "pre-push: FAILED $test" >&2; exit 1; }

@@ -24,13 +24,7 @@ A strip can contain 16 patches along one axis, with one polygonal UV outer loop 
 
 ## Install STEP exchange
 
-From the Studio checkout, activate its existing virtual environment and run:
-
-```sh
-python -m pip install ".[step]"
-```
-
-Restart the Studio server. The optional extra installs CadQuery's no-VTK bindings for Open CASCADE 7.9. Editing an original patch and preparing its router relief use the base install. STEP operations require the extra and a compatible wheel or build for the installed Python and OS. The browser, including a phone browser, uses the server's kernel.
+STEP import and export use the Open CASCADE add-on, `kerfkite-step`, beside the workstation server. The macOS and Linux packages carry it; on Windows choose **STEP import and export (Open CASCADE)** in Setup. The setup page says whether it is installed. From a source checkout, install Open CASCADE 7.6 or later before building (on Debian and Ubuntu `libocct-data-exchange-dev` and `libocct-modeling-algorithms-dev`); CMake then builds `kerfkite-step` beside the server ([the native programs](../native/README.md)). Restart the Studio server afterwards. Editing an original patch and preparing its router relief need no add-on. The browser, including a phone browser, uses the server's kernel.
 
 ## Exchange a part
 

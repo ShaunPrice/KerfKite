@@ -38,24 +38,24 @@ KerfKite prefers its own code to third-party components. The aim is a smaller su
 
 The rest of the editor is KerfKite's own JavaScript.
 
-## Studio (Python), to be retired as the C++ port proceeds
+## Studio (Python), retired in Studio 0.7
 
-Each of these goes when the part that uses it is ported, under rule 5.
+The Python service was ported to the native programs under rule 5 and removed in Studio 0.7, with its dependencies. They remain only at the commit that keeps the Python reference, for the comparisons run from it ([The Python reference](DEVELOPER.md#the-python-reference)).
 
-| Component | Use | Plan |
+| Component | Use until 0.7 | Now |
 | --- | --- | --- |
-| Shapely 2.2.0, which carries GEOS | Polygon work in ten modules: CAM operations, entry moves, sketch profiles, imports, solid text, exchange | **Being replaced.** Offsets, pockets, hatch fills, the placing of helical pocket entries, V-carving and the artwork relief's rasteriser now run on the in-house kernel, through the compiled extension; V-carving follows the kernel's own Voronoi diagram, so no CAM operation needs Shapely where the extension is installed. Shapely stays for now as their fallback where the extension is not installed (the portable wheel), as the reference the kernel is compared with in the checks, and in the other modules (contour checks before entries and tabs, sketch profiles, imports, text, exchange) until each is ported. |
-| NumPy | Arrays in seven modules: relief, stock simulation and others | Replace on porting; plain arrays in C++. |
-| pyserial | The serial link to the controller | Replace on porting the sender: the serial port through each operating system's own interface. |
-| Flask, with Werkzeug, Jinja2, Click, itsdangerous, MarkupSafe, blinker | The local web server behind the editor | Replace on porting the server: a small local HTTP server of our own. |
-| ezdxf, with pyparsing, fonttools, typing-extensions | DXF import and export | Replace on porting: a reader and writer for the DXF entities Studio handles. |
-| pypdf | Vector import from PDF | Replace on porting. A sizeable piece: objects, compressed streams and drawing operators. |
-| manifold3d | Was: solid modelling and the 2D drawings of CAD scripts. Now: the fallback for both where the compiled extension is not installed, and the oracle the kernels are tested against | **Replaced where the extension is installed** (owner's decision to replace, 21 November 2026). Studio's 3D CAD runs on the in-house solid kernel and its script drawings on the in-house polygon kernel, through the compiled extension ([Solid kernel](SOLID-KERNEL.md#how-studio-uses-the-kernel)); the library is not imported then. It stays a dependency for the portable wheel and for a source checkout without a compiler, and for the differential tests. It goes when the fallback goes: when every installation carries the extension, or the test oracle is no longer wanted. |
-| Pillow | Used only by packaging and guide-building scripts, not by Studio when it runs | **Quick win:** move it from the installed dependencies to a build-time requirement, after confirming the installers still build. |
-| cadquery-ocp (Open Cascade, LGPL 2.1 with exception), optional | STEP import and export | **Keep, optional** (owner's decision, 21 November 2026). Writing a STEP and B-rep kernel is not realistic. It stays a separately installed part, so the main product does not carry it. Without Python, the same Open Cascade is used through its C++ libraries by `kerfkite-step` (`native/step/`), the C++ server's STEP add-on; cadquery-ocp remains the Python service's STEP and the reference the add-on is compared with. |
-| cheroot and cryptography, optional | The hosted editor, and the encrypted pendant link | Keep cryptography: rule 2. In a native application the operating system's own TLS can take its place. |
-| fastmcp, pydantic, playwright, optional | The MCP service | Replace on porting the service; the browser driver goes when the editor no longer needs driving. |
-| Python and setuptools | The runtime and packaging | Retired when the port is complete. |
+| Shapely 2.2.0, which carries GEOS | Polygon work in ten modules: CAM operations, entry moves, sketch profiles, imports, solid text, exchange | **Replaced** by the in-house polygon kernel and the core's ports of those modules. Shapely remains the measure in the comparisons kept at the reference commit. |
+| NumPy | Arrays in seven modules: relief, stock simulation and others | **Replaced**: plain arrays in C++, with the core's own linear algebra (`least_squares.hpp`). |
+| pyserial | The serial link to the controller | **Replaced**: the serial port through each operating system's own interface (`native/server/serial_port.cpp`). |
+| Flask, with Werkzeug, Jinja2, Click, itsdangerous, MarkupSafe, blinker | The local web server behind the editor | **Replaced** by the workstation server's own HTTP server (`native/server/http.cpp`). |
+| ezdxf, with pyparsing, fonttools, typing-extensions | DXF import | **Replaced** by the core's DXF reader (`native/core/src/dxf.cpp`). `scripts/build_aci_table.py` still reads ezdxf's colour table when the generated palette is rebuilt. |
+| pypdf | Vector import from PDF | **Replaced** by the core's PDF reader (`native/core/src/pdf_import.cpp`). The PDF browser lesson writes its fixture with pypdf. |
+| manifold3d | Solid modelling and the 2D drawings of CAD scripts where the compiled extension was not installed; the oracle the kernels were tested against | **Replaced** by the in-house solid and polygon kernels ([Solid kernel](SOLID-KERNEL.md#how-studio-uses-the-kernel)). It remains the oracle of the solid kernel's check at the reference commit. |
+| Pillow | Packaging and guide-building scripts | A build-time requirement of `packaging/desktop/build.py`, not part of Studio. |
+| cadquery-ocp (Open Cascade, LGPL 2.1 with exception), optional | STEP import and export | **Replaced** by `kerfkite-step` (`native/step/`), the workstation server's add-on, which uses the same Open Cascade through its C++ libraries. cadquery-ocp remains the reference the add-on is compared with. |
+| cheroot and cryptography, optional | The hosted editor, and the encrypted pendant link | **Replaced**: the hosted editor is `kerfkite-web`, its password hashes come from the operating system, and TLS from the Go relay (rule 2). |
+| fastmcp, pydantic, playwright, optional | The MCP service | **Replaced** by `kerfkite-mcp`, which drives an installed Chrome or Edge for its workshop. The comparisons at the reference commit and the browser lessons still use Playwright and the MCP client SDK. |
+| Python and setuptools | The runtime and packaging | **Retired** from the product. Python remains for the development tools, on its standard library unless a tool says otherwise. |
 
 ## Desktop launcher and installers
 
