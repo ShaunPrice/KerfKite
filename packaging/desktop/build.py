@@ -20,13 +20,15 @@ def run(*cmd, **kwargs):
     subprocess.run(cmd, check=True, **kwargs)
 
 
-NATIVE_PROGRAMS = ("kerfkite-studio", "kerfkite-pendant-tls")
+# Every program the packages carry: the workstation server, the HTTPS editor, the MCP assistant server, the
+# command-line CAM and the pendant's relay. The STEP add-on is optional, in step/.
+NATIVE_PROGRAMS = ("kerfkite-studio", "kerfkite-web", "kerfkite-mcp", "kerfkite-cam", "kerfkite-pendant-tls")
 
 
 def native_build(native, target):
-    """The native programs of one target, <native>/<target>/: the workstation server and the pendant's relay
-    (with kerfkite-cam where it was built), and in step/ the STEP add-on with Open CASCADE's libraries and notices
-    where it was built. The .github/workflows/native-programs.yml workflow makes these folders."""
+    """The native programs of one target, <native>/<target>/: every program in NATIVE_PROGRAMS, and in step/
+    the STEP add-on with Open CASCADE's libraries and notices where it was built. The
+    .github/workflows/native-programs.yml workflow makes these folders."""
     folder = native / target
     if not folder.is_dir():
         folder = native / f"native-{target}"  # as gh run download names the workflow's artifacts
