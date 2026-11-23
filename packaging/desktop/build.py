@@ -164,8 +164,12 @@ def linux(work, out, wheel, arch, version, native=None):
     pkg = work / "package"
     dest = pkg / "opt/kerfkite"
     payload(dest, wheel, "linux", arch, native)
+    # The GTK window, in C: it needs the GTK 3 headers to build, and finds WebKitGTK when it starts.
+    window = work / "window"
+    run("cmake", "-S", HERE / "linux", "-B", window, "-DCMAKE_BUILD_TYPE=Release")
+    run("cmake", "--build", window, "--target", "kerfkite-native")
     helper = dest / "kerfkite-native"
-    shutil.copyfile(HERE / "linux/kerfkite-native", helper)
+    shutil.copyfile(window / "kerfkite-native", helper)
     helper.chmod(0o755)
     # The launcher points the menu entry and desktop shortcut of a portable copy at this icon.
     with Image.open(ICON) as im:
@@ -186,7 +190,8 @@ def linux(work, out, wheel, arch, version, native=None):
     meta.write_text(
         f"Package: kerfkite-studio\nVersion: {version}-{revision}\nArchitecture: {arch}\nSection: graphics\n"
         "Priority: optional\nMaintainer: KerfKite Studio contributors <maintainers@users.noreply.github.com>\n"
-        "Depends: xdg-utils, ca-certificates, libgl1, python3, python3-gi, gir1.2-gtk-3.0, gir1.2-webkit2-4.1 | gir1.2-webkit2-4.0\nDescription: KerfKite CAD and machining simulator\n"
+        "Depends: xdg-utils, ca-certificates, libgl1, libgtk-3-0, libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37\n"
+        "Description: KerfKite CAD and machining simulator\n"
     )
     run("dpkg-deb", "--root-owner-group", "-Zxz", "--build", pkg, out / f"KerfKite-Linux-{arch}.deb")
     run(

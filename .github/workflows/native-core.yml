@@ -11,6 +11,8 @@ on:
       - validation/pendant_tls_pin_check.py
       - validation/step_exchange_parity.py
       - packaging/pendant-tls/**
+      - packaging/desktop/linux/**
+      - studio/static/desktop-workspace.js
       - studio/cad_exchange.py
       # The workstation server is compared route by route with the Flask app.
       - studio/server.py
@@ -78,3 +80,16 @@ jobs:
       - name: Compare STEP exchange with the reference's Open CASCADE
         if: runner.os == 'Linux'
         run: python validation/step_exchange_parity.py --server build/native/kerfkite-studio --parts 40 --surfaces 40
+      - name: Exercise the Linux desktop window against the workstation server
+        # The GTK window in C with Ubuntu's WebKitGTK 4.1, driven as a person would under a virtual display.
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y --no-install-recommends libgtk-3-dev libwebkit2gtk-4.1-0 xvfb xauth dbus-x11
+          cmake -S packaging/desktop/linux -B build/window -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/window --parallel 4
+          build/window/kerfkite-native --check
+          build/native/kerfkite-studio --port 18765 --static studio/static > studio.log 2>&1 &
+          server=$!
+          for i in $(seq 100); do grep -q KERFKITE_READY studio.log && break; sleep 0.1; done
+          dbus-run-session -- xvfb-run -a -s "-screen 0 1600x1000x24" build/window/kerfkite-native-smoke http://127.0.0.1:18765/
+          kill $server

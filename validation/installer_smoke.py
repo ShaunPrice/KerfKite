@@ -104,9 +104,12 @@ def exercise_native(exe, scratch):
     env = os.environ.copy()
     if sys.platform.startswith("linux"):
         host = exe.with_name("kerfkite-native")
-        assert os.access(host, os.X_OK)
-        env["KERFKITE_NATIVE_HOST"] = str(host)
-        command = ["/usr/bin/python3", str(sources / "linux/smoke.py"), STUDIO]
+        # The installed window finds WebKitGTK; the smoke runner, built from the same sources, drives it.
+        subprocess.run([host, "--check"], check=True, timeout=60)
+        build = scratch / "window"
+        subprocess.run(["cmake", "-S", sources / "linux", "-B", build, "-DCMAKE_BUILD_TYPE=Release"], check=True)
+        subprocess.run(["cmake", "--build", build, "--target", "kerfkite-native-smoke"], check=True)
+        command = [build / "kerfkite-native-smoke", STUDIO]
     elif sys.platform == "darwin":
         host = exe.with_name("KerfKiteNative")
         subprocess.run(["codesign", "--verify", "--strict", host], check=True)

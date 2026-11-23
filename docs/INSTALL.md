@@ -26,7 +26,7 @@ Windows Setup checks for a 64-bit Intel/AMD Windows 10 or 11 client before insta
 
 The Windows window uses .NET Framework 4.8 and the Microsoft Edge WebView2 Evergreen Runtime. Windows 11 includes WebView2. If the window reports that the runtime is missing, install the x64 Evergreen Runtime and reopen the window. [Microsoft WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
 
-The macOS window uses AppKit and the system WebKit. Keep macOS and Safari updated. On Linux the Debian package installs GTK 3, PyGObject and WebKitGTK. For a tar archive, install the distribution packages that provide Python 3 with GI, GTK 3 and the WebKit2 4.1 or 4.0 typelib. Run it from a graphical session. You can always select **Open in browser** from the launcher.
+The macOS window uses AppKit and the system WebKit. Keep macOS and Safari updated. On Linux the Debian package installs GTK 3 and WebKitGTK. For a tar archive, install your distribution's GTK 3 and WebKitGTK 4.1 or 4.0 (on Debian and Ubuntu, `libgtk-3-0` and `libwebkit2gtk-4.1-0`). Run it from a graphical session. You can always select **Open in browser** from the launcher.
 
 [Drawing and saving in the desktop window](DESKTOP.md)
 
