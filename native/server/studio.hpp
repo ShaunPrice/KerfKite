@@ -75,6 +75,8 @@ public:
     void forget_level();
 
 private:
+    // The answer before the own rules are named (handle).
+    http::Response dispatch(const http::Request &request);
     Options options_;
     std::string token_;
     Device device_;

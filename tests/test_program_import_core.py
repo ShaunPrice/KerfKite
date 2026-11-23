@@ -167,15 +167,28 @@ class NativeProgramImportTests(unittest.TestCase):
             self.assertAlmostEqual(math.hypot(x - 20, y - 15), 6, places=9)
         self.assertEqual(circle[0], circle[-1])
 
-    def test_a_spline_given_only_by_fit_points_is_answered_by_the_reference(self):
+    def test_a_spline_given_only_by_fit_points_is_interpolated_as_cad_programs_do(self):
         doc = ezdxf.new(units=units.MM)
-        doc.modelspace().add_spline([(0, 0), (10, 10), (20, 0)])
+        spline = doc.modelspace().add_spline([(0, 0), (10, 10), (20, 0)])
+        tool = spline.construction_tool()
         stream = io.StringIO()
         doc.write(stream)
         payload = {'name': 'fit.dxf', 'text': stream.getvalue()}
+        path = import_program(payload, backend='native')['objects'][0]['paths'][0]
+        self.assertEqual(path[0], [0.0, 0.0])
+        self.assertLess(math.dist(path[-1], [20.0, 0.0]), 1e-9)
+        # Every vertex on the curve ezdxf makes from the fit points, within the chord tolerance.
+        curve = [tool.point(t / 2000) for t in range(2001)]
+        for point in path:
+            self.assertLess(min(math.dist(point, (q.x, q.y)) for q in curve), 0.03)
+        # A fit point given twice: the reference cannot interpolate it (a division by zero); the core's own rule
+        # passes through it once, and with the reference's rules in force (the extension) it is declined.
+        doc = ezdxf.new(units=units.MM)
+        doc.modelspace().add_spline([(0, 0), (0, 0), (10, 10), (20, 0)])
+        stream = io.StringIO()
+        doc.write(stream)
         with self.assertRaises(NotImplementedError):
-            import_program(payload, backend='native')
-        self.assertEqual(outcome(payload, 'auto'), outcome(payload, 'python'))
+            import_program({'name': 'twice.dxf', 'text': stream.getvalue()}, backend='native')
 
     def test_the_route_sends_the_core_text(self):
         client = create_app().test_client()

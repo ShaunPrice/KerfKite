@@ -2,6 +2,8 @@
 // See studio.hpp.
 #include "studio.hpp"
 
+#include <cstdlib>
+
 #include <cmath>
 #include <cstring>
 #include <set>
@@ -171,7 +173,26 @@ size_t Studio::body_limit(const http::Request &request) const {
     return kMaxContent;
 }
 
+// With KERFKITE_PARITY set in its environment, the server names in a header the core's own rules it answered a
+// request by (own_rule, kerfkite/cam.hpp), for validation/server_route_parity.py, which compares it with the Python
+// reference that does not share them.
 http::Response Studio::handle(const http::Request &request) {
+    static const bool parity = [] {
+        const char *value = std::getenv("KERFKITE_PARITY");
+        return value && *value && std::string(value) != "0";
+    }();
+    take_own_rules();
+    http::Response response = dispatch(request);
+    const std::vector<std::string> rules = take_own_rules();
+    if (parity && !rules.empty()) {
+        std::string named;
+        for (const std::string &rule : rules) named += (named.empty() ? "" : "; ") + rule;
+        response.set("X-KerfKite-Own-Rule", named);
+    }
+    return response;
+}
+
+http::Response Studio::dispatch(const http::Request &request) {
     // Local UI only. Host validation blocks DNS rebinding; the token prevents cross-origin writes.
     const std::string host = host_name(request);
     if (host != "127.0.0.1" && host != "localhost") return http::Response::error(403, "Use localhost on the Raspberry Pi");

@@ -1,8 +1,9 @@
 """Inspect selected text members of a LightBurn user bundle entirely in memory.
 
 The native core reads bundles to the bit (native/core/src/bundle_import.cpp) and is used where the compiled
-extension is installed; this module answers what the core declines (ZIP64 records, entries that share a header,
-members that inflate past 4 MB and the like) and is the reference the parity harness compares it with.
+extension is installed; this module is the reference the parity harness compares it with, and the reader without
+the extension. The core declines nothing: where zipfile raises something other than its read errors (a newer
+entry version, patched or strongly encrypted data, a header before the data) it refuses the bundle as unreadable.
 """
 
 import base64

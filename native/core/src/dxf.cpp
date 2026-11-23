@@ -13,8 +13,11 @@
 // The reference reads the file with ezdxf and flattens ezdxf's Bézier paths; this reader flattens the true
 // curves. The outlines therefore agree to the tolerance, not vertex for vertex: arcs and circles are divided
 // into equal steps whose sagitta is at most 0.025 mm, and splines are divided until every midpoint is within
-// 0.025 mm of its chord. validation/dxf_import_check.py compares the two. A spline given only by fit points,
-// whose interpolation ezdxf takes from AutoCAD's own method, is declined (NotPorted) to the reference.
+// 0.025 mm of its chord. validation/dxf_import_check.py compares the two. A spline given only by fit points is
+// interpolated as CAD programs and ezdxf interpolate it (fit_point_spline below). The core's own rules, where the
+// reference stops with an error that is no refusal or its answer turns on rounding (own_rule, kerfkite/cam.hpp):
+// a repeated fit point is passed through once, a zero end tangent leaves the ends free, an XCLIP boundary's
+// validity is decided exactly, and nested windows beyond the polygon kernel's range are refused.
 #include "dxf_reader.hpp"
 
 #include <algorithm>
@@ -412,16 +415,165 @@ void bezier_points(const std::vector<Homogeneous> &piece, int depth, std::vector
     bezier_points(right, depth + 1, out);
 }
 
+// The values of the degree + 1 B-spline basis functions that are not zero at u, and the span (the index of the
+// first of them plus the degree): The NURBS Book's A2.1 and A2.2, with the last span at the end of the domain.
+size_t basis_at(const std::vector<double> &knots, size_t degree, size_t count, double u, std::vector<double> &values) {
+    size_t span = count - 1;
+    if (u < knots[count]) span = static_cast<size_t>(std::upper_bound(knots.begin() + static_cast<std::ptrdiff_t>(degree),
+                                                                      knots.begin() + static_cast<std::ptrdiff_t>(count), u) - knots.begin()) - 1;
+    values.assign(degree + 1, 0.0);
+    std::vector<double> left(degree + 1), right(degree + 1);
+    values[0] = 1.0;
+    for (size_t j = 1; j <= degree; ++j) {
+        left[j] = u - knots[span + 1 - j];
+        right[j] = knots[span + j] - u;
+        double saved = 0.0;
+        for (size_t r = 0; r < j; ++r) {
+            const double temp = values[r] / (right[r + 1] + left[j - r]);
+            values[r] = saved + right[r + 1] * temp;
+            saved = left[j - r] * temp;
+        }
+        values[j] = saved;
+    }
+    return span;
+}
+
+// A x = b for a square matrix whose rows hold their few nonzero values near the diagonal: Gaussian elimination
+// with partial pivoting among the rows that reach the column, three right-hand sides at once. False when the
+// matrix is singular.
+struct SparseRow {
+    size_t first = 0;
+    std::vector<double> values;
+    double at(size_t column) const { return column >= first && column - first < values.size() ? values[column - first] : 0.0; }
+};
+
+bool solve_rows(std::vector<SparseRow> rows, std::vector<Vec3> rhs, std::vector<Vec3> &x) {
+    const size_t n = rows.size();
+    for (size_t k = 0; k < n; ++k) {
+        size_t pivot = k;
+        double best = std::fabs(rows[k].at(k));
+        for (size_t r = k + 1; r < n && rows[r].first <= k; ++r)
+            if (std::fabs(rows[r].at(k)) > best) {
+                best = std::fabs(rows[r].at(k));
+                pivot = r;
+            }
+        if (!(best > 0) || !std::isfinite(best)) return false;
+        std::swap(rows[k], rows[pivot]);
+        std::swap(rhs[k], rhs[pivot]);
+        const SparseRow &top = rows[k];
+        const double diagonal = top.at(k);
+        for (size_t r = k + 1; r < n && rows[r].first <= k; ++r) {
+            const double factor = rows[r].at(k) / diagonal;
+            if (factor == 0) continue;
+            SparseRow &row = rows[r];
+            const size_t last = std::max(row.first + row.values.size(), top.first + top.values.size());
+            std::vector<double> merged(last - k, 0.0);
+            for (size_t c = k; c < last; ++c) merged[c - k] = row.at(c) - factor * top.at(c);
+            merged[0] = 0.0;
+            row.first = k;
+            row.values = merged;
+            rhs[r] = rhs[r] - factor * rhs[k];
+        }
+    }
+    x.assign(n, Vec3{});
+    for (size_t k = n; k-- > 0;) {
+        Vec3 sum = rhs[k];
+        const SparseRow &row = rows[k];
+        for (size_t c = k + 1; c < row.first + row.values.size(); ++c) sum = sum - row.at(c) * x[c];
+        x[k] = (1.0 / row.at(k)) * sum;
+    }
+    return true;
+}
+
+// The cubic B-spline through a SPLINE's fit points, as CAD programs make it and the reference (ezdxf) reads it:
+// parameters by chord length, the interior parameters as the knots, and at the ends the given tangents scaled
+// to the total chord length, or without them a curve that does not bend at its ends. Written from Piegl and
+// Tiller, The NURBS Book, 9.2.1 and 9.2.2: the control points solve the interpolation and the two end
+// conditions. In the entity's own coordinates.
+void fit_point_spline(const Record &record, std::vector<double> &knots, std::vector<Vec3> &control) {
+    const std::vector<Vec3> given = points(record, 11);
+    std::vector<Vec3> fit;
+    for (const Vec3 &p : given)
+        if (fit.empty() || p.x != fit.back().x || p.y != fit.back().y || p.z != fit.back().z) fit.push_back(p);
+    // The reference cannot interpolate through a repeated point (a division by zero, a singular system); the
+    // core's own rule passes through it once.
+    if (fit.size() != given.size()) own_rule("a DXF spline whose fit points repeat");
+    if (fit.size() < 2) {
+        own_rule("a DXF spline with fewer than two distinct fit points");
+        malformed();
+    }
+    const size_t m = fit.size(), n = m - 1, count = m + 2, degree = 3;
+    std::vector<double> distance(n);
+    double total = 0;
+    for (size_t k = 0; k < n; ++k) total += distance[k] = length(fit[k + 1] - fit[k]);
+    if (!(total > 1e-12) || !std::isfinite(total)) malformed();
+    std::vector<double> t = {0.0};
+    double run = 0;
+    for (size_t k = 0; k + 1 < n; ++k) t.push_back((run += distance[k]) / total);
+    t.push_back(1.0);
+    knots.assign(4, 0.0);
+    for (size_t k = 1; k < n; ++k) knots.push_back(t[k]);
+    knots.insert(knots.end(), 4, 1.0);
+    // The tangents, when both ends have one of some length.
+    const std::vector<Vec3> starts = points(record, 12), ends = points(record, 13);
+    bool tangents = !starts.empty() && !ends.empty();
+    if (tangents && (length(starts.front()) == 0 || length(ends.front()) == 0)) {
+        own_rule("a DXF spline with an end tangent of no length");
+        tangents = false;
+    }
+    // The rows: each fit point at its parameter, the start condition after the first and the end condition before
+    // the last.
+    std::vector<SparseRow> rows;
+    std::vector<Vec3> rhs;
+    std::vector<double> values;
+    const double u1 = knots[4], u2 = knots[5], v1 = knots[knots.size() - 5], v2 = knots[knots.size() - 6];
+    for (size_t k = 0; k < m; ++k) {
+        const size_t span = basis_at(knots, degree, count, t[k], values);
+        rows.push_back(SparseRow{span - degree, values});
+        rhs.push_back(fit[k]);
+        if (k == 0) {
+            if (tangents) {  // C'(0) = the start tangent: P1 - P0 = C'(0) u_{p+1} / p
+                rows.push_back(SparseRow{0, {-1.0, 1.0}});
+                rhs.push_back((u1 / 3 / length(starts.front()) * total) * starts.front());
+            } else {  // C''(0) = 0
+                const double f = 6.0 / u1;
+                rows.push_back(SparseRow{0, {f / u1, -f * (u1 + u2) / (u1 * u2), f / u2}});
+                rhs.push_back(Vec3{});
+            }
+        }
+        if (k + 2 == m) {
+            if (tangents) {  // C'(1) = the end tangent
+                rows.push_back(SparseRow{count - 2, {-1.0, 1.0}});
+                rhs.push_back(((1.0 - v1) / 3 / length(ends.front()) * total) * ends.front());
+            } else {  // C''(1) = 0
+                const double f = 6.0 / (1.0 - v1);
+                rows.push_back(SparseRow{count - 3, {f / (1.0 - v2), -f * (2.0 - v1 - v2) / (1.0 - v1) / (1.0 - v2), f / (1.0 - v1)}});
+                rhs.push_back(Vec3{});
+            }
+        }
+    }
+    if (!solve_rows(rows, rhs, control)) malformed();
+    // A clamped curve begins and ends at its end control points: exactly the first and last fit points, which the
+    // elimination gives only to rounding.
+    control.front() = fit.front();
+    control.back() = fit.back();
+}
+
 void spline_points(const Record &record, const Affine &frame, std::vector<Vec3> &out) {
-    const long long degree = whole(record, 71, 3);
+    long long degree = whole(record, 71, 3);
     std::vector<double> knots = reals(record, 40), weights = reals(record, 41);
     std::vector<Vec3> control;
     for (const Vec3 &p : points(record, 10)) control.push_back(frame.apply(p));
-    const size_t n = control.size();
-    if (n == 0) {
-        if (!points(record, 11).empty()) throw NotPorted("a DXF spline given only by fit points");
-        return;
+    if (control.empty()) {
+        if (points(record, 11).empty()) return;
+        // A curve through fit points is cubic whatever degree the entity gives.
+        std::vector<Vec3> local;
+        fit_point_spline(record, knots, local);
+        for (const Vec3 &p : local) control.push_back(frame.apply(p));
+        degree = 3;
+        weights.clear();
     }
+    const size_t n = control.size();
     if (degree < 1 || degree > 15 || n < static_cast<size_t>(degree) + 1) malformed();
     Spline spline;
     spline.degree = static_cast<size_t>(degree);
@@ -685,7 +837,8 @@ Window intersect(const Window &mask, const Ring &local) {
     try {
         answer = polygon_call("polygon", request);
     } catch (const ValueError &) {
-        throw NotPorted("nested XCLIP windows beyond the polygon kernel's range");
+        own_rule("nested XCLIP windows beyond the polygon kernel's range");
+        throw ValueError("Nested XCLIP windows lie beyond the range Studio can clip; move the drawing nearer its origin");
     }
     Window out;
     if (!(answer.at("area").get<double>() > 0)) return out;

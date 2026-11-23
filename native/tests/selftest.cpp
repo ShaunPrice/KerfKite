@@ -192,11 +192,29 @@ static void self_crossing() {
     const LineCheck by_tree = check_line(comb), by_pairs = check_line(comb, LineMethod::EveryPair);
     expect(by_tree.simple && by_pairs.simple && by_pairs.work > 3000ull * 3000 / 2 && by_tree.work * 10 < by_pairs.work,
            "a comb of long segments, which the test of every pair takes the square of its length over");
-    // Past the budget a contour is declined, and the work stops there: that is the bound on the worst case.
+    // Past the budget a contour is refused, and the work stops there: that is the bound on the worst case. With the
+    // reference's rules in force it is declined instead.
+    std::string refused;
+    try {
+        check_line(comb, LineMethod::Usual, 20000);
+    } catch (const kerfkite::ValueError &error) {
+        refused = error.what();
+    }
+    expect(refused == "A contour is too complex to test whether it crosses itself; simplify it or split it",
+           "a contour whose test would take too long is refused");
+    kerfkite::set_reference_rules(true);
     const LineCheck stopped = check_line(comb, LineMethod::Usual, 20000);
+    kerfkite::set_reference_rules(false);
     expect(stopped.declined && stopped.reason == "a contour whose self-crossing test needs more comparisons than the core allows" &&
                stopped.work > 20000 && stopped.work < 20000 + 40000,
-           "a contour whose test would take too long is declined");
+           "and declined with the reference's rules in force");
+    // Points one unit in the last place off a line, where GEOS's arithmetic is not exact: subnormal and huge
+    // coordinates included, the core's own answer is the exact one.
+    const double tiny = std::ldexp(1.0, -1074), huge = std::ldexp(1.0, 600);
+    expect(geos_orientation({22, -0.5}, {22.25, 0.5}, {22.125, tiny}) == 1 &&
+               geos_orientation({22, -0.5}, {22.25, 0.5}, {22.125, -tiny}) == -1 &&
+               geos_orientation({huge, 1}, {2 * huge, 2}, {1.5 * huge, std::nextafter(1.5, 10.0)}) == 1,
+           "orientation is exact for subnormal and huge coordinates");
     expect(line_check_budget() >= 100000000 && line_check_budget() <= 1000000000, "the budget is about a second of work");
     // A crossing ends the search: many long segments that all cross take almost no work.
     Line scribble;
@@ -1147,7 +1165,14 @@ static void solid_histories() {
     expect(refusal(divided) == "plate: Division by zero in dimension", "a division by zero names its feature");
     json power = request;
     power["model"]["features"][0]["size"][2] = "w ** 2";
-    expect(refusal(power) == "declined", "an expression beyond the core's grammar is declined");
+    expect(refusal(power) == "plate: Use numbers, named parameters, parentheses and + \xe2\x88\x92 * / in dimensions",
+           "an expression beyond the core's grammar is refused");
+    power["model"]["features"][0]["size"][2] = "(w + 2";
+    expect(refusal(power) == "plate: Invalid dimension expression", "and one that does not parse");
+    power["model"]["features"][0]["size"][2] = "w ** 2";
+    kerfkite::set_reference_rules(true);
+    expect(refusal(power) == "declined", "and declined with the reference's rules in force");
+    kerfkite::set_reference_rules(false);
     json scripted = request;
     scripted["model"]["features"][1] = json::parse(R"({"id": "pins", "kind": "script", "op": "cut", "scriptParameters": {"n": 2},
         "source": "for (i = [0:n-1]) translate([4 + i * 12, h / 2, -1]) cylinder(h=6, r=1, $fn=12);"})");
@@ -1365,13 +1390,124 @@ static void program_imports() {
            "the page count and the text skipped");
 }
 
-// A LightBurn bundle written by hand: a stored device file and a text file the reader leaves out.
-static void bundle_imports() {
-    struct Entry {
-        std::string name, data;
-        uint32_t crc;
+// A one-page PDF written by hand, with what a file that departs from the usual form may hold, for the core's own
+// rules (own_rule): a wrong stream length, cross-reference entries of a looser form, no %%EOF, a page without
+// /Type, resources that are not there, a filter's data without its end marker, an unusual security handler.
+struct PdfShape {
+    std::string content = "0 0 m 72 0 l S";
+    std::string filter;        // the content stream's /Filter entry, its data given as content
+    long long length_shift = 0;  // added to the content stream's /Length
+    bool loose_xref = false;     // entries ending in a single line feed
+    bool no_eof = false;         // more after the %%EOF line
+    std::string page = "/Type /Page /Parent 2 0 R /MediaBox [0 0 144 144] /Contents 4 0 R";
+    std::string trailer_extra;
+};
+
+static std::string pdf_of(const PdfShape &shape) {
+    std::string pdf = "%PDF-1.4\n";
+    std::vector<size_t> offsets;
+    const auto object = [&](const std::string &body) {
+        offsets.push_back(pdf.size());
+        pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n";
     };
-    const Entry entries[] = {{"dev/one.lbdev", "{\"a\":1}", 0x561bacafu}, {"notes.txt", "x", 0x8cdc1683u}};
+    object("<< /Type /Catalog /Pages 2 0 R >>");
+    object("<< /Type /Pages /Count 1 /Kids [3 0 R] >>");
+    object("<< " + shape.page + " >>");
+    object("<< /Length " + std::to_string(static_cast<long long>(shape.content.size()) + shape.length_shift) + shape.filter + " >>\nstream\n" +
+           shape.content + "\nendstream");
+    const size_t xref = pdf.size();
+    pdf += shape.loose_xref ? "xref\n0 5\n0000000000 65535 f\n" : "xref\n0 5\n0000000000 65535 f \n";
+    for (const size_t offset : offsets) {
+        char line[40];
+        std::snprintf(line, sizeof line, shape.loose_xref ? "%zu 0 n\n" : "%010zu 00000 n \n", offset);
+        pdf += line;
+    }
+    pdf += "trailer\n<< /Size 5 /Root 1 0 R" + shape.trailer_extra + " >>\nstartxref\n" + std::to_string(xref) + "\n";
+    pdf += shape.no_eof ? "%%EOF\nappended by a mail program\n" : "%%EOF\n";
+    return pdf;
+}
+
+static void pdf_own_rules() {
+    const auto read = [](const PdfShape &shape) -> std::string {
+        json request = json::object();
+        request["content"] = base64_text(pdf_of(shape));
+        try {
+            const json page = kerfkite::program_import_call("pdf-import", request);
+            std::string out = std::to_string(page.at("objects").size()) + " objects";
+            for (const json &warning : page.at("warnings")) out += "; " + warning.get<std::string>();
+            return out;
+        } catch (const kerfkite::ValueError &error) {
+            return std::string("refused: ") + error.what();
+        } catch (const kerfkite::NotPorted &error) {
+            return std::string("declined: ") + error.what();
+        }
+    };
+    const auto reads = [&](const PdfShape &shape) { return read(shape).compare(0, 9, "1 objects") == 0; };
+    PdfShape plain;
+    expect(reads(plain), "a plain page is read");
+    PdfShape longer = plain, shorter = plain;
+    longer.length_shift = 5;
+    shorter.length_shift = -3;
+    expect(reads(longer) && reads(shorter), "a stream whose length is wrong ends at its endstream");
+    PdfShape loose = plain;
+    loose.loose_xref = true;
+    expect(reads(loose), "cross-reference entries of a looser form are read");
+    PdfShape unended = plain;
+    unended.no_eof = true;
+    expect(reads(unended), "with more after %%EOF, the last startxref is found");
+    PdfShape untyped = plain;
+    untyped.page = "/Parent 2 0 R /MediaBox [0 0 144 144] /Contents 4 0 R /Resources 9 0 R";
+    expect(reads(untyped), "a page without /Type, whose resources are not there (the null object)");
+    PdfShape run = plain;
+    run.content = "0 0 m 72 0l S";
+    expect(reads(run), "a number run into an operator ends where its characters do");
+    PdfShape encoded = plain;
+    encoded.filter = " /Filter /ASCII85Decode";
+    encoded.content = "0H`%lD'1bm+>=pS+B&";  // "0 0 m 72 0 l S" without the ~> end marker
+    expect(reads(encoded), "ASCII85 data without its end marker");
+    PdfShape image = plain;
+    image.content = "0 0 m 72 0 l S BI /W 2 /H 2 /CS /G /BPC 8 ID \x01\x45\x49\x02 EI q Q";
+    const std::string skipped = read(image);
+    expect(skipped.compare(0, 9, "1 objects") == 0 && skipped.find("1 \xc3\x97 image or shading omitted") != std::string::npos,
+           "an inline image is skipped to its EI and counted");
+    PdfShape escaped = plain;
+    escaped.content = "0 0 m 72 0 l S BT (a\\qb) Tj ET";
+    expect(reads(escaped), "an unusual escape in a string drops its backslash");
+    PdfShape locked = plain;
+    locked.trailer_extra = " /Encrypt << /Filter /Other /V 5 >>";
+    expect(read(locked) == "refused: Export an unencrypted PDF for vector review", "an encrypted PDF of any kind is refused");
+    kerfkite::set_reference_rules(true);
+    const std::string declined = read(longer);
+    kerfkite::set_reference_rules(false);
+    expect(declined == "declined: a PDF stream whose length pypdf would correct", "with the reference's rules in force such a file is declined");
+}
+
+// A LightBurn bundle written by hand: stored members, by default a device file and a text file the reader leaves
+// out, with what an unusual archive may hold: ZIP64 fields and end records, an Info-ZIP Unicode path, a newer
+// version, flags, entries that share a header and a directory offset that puts a header before the data.
+struct BundleEntry {
+    std::string name, data;
+    unsigned offset_of = ~0u;  // the header of an earlier entry, for entries that share one
+};
+struct BundleShape {
+    std::vector<BundleEntry> entries = {{"dev/one.lbdev", "{\"a\":1}"}, {"notes.txt", "x"}};
+    bool zip64_fields = false, zip64_end = false;
+    std::string unicode;        // the first member's Info-ZIP Unicode path
+    bool unicode_crc_wrong = false;
+    unsigned version = 20, flags = 0;
+    uint32_t directory_shift = 0;  // added to the end record's directory offset
+};
+
+static uint32_t crc32_of(const std::string &bytes) {
+    uint32_t c = 0xffffffffu;
+    for (const unsigned char b : bytes) {
+        c ^= b;
+        for (int k = 0; k < 8; ++k) c = c & 1 ? 0xedb88320u ^ (c >> 1) : c >> 1;
+    }
+    return ~c;
+}
+
+static std::string bundle_of(const BundleShape &shape) {
     const auto u16 = [](std::string &s, unsigned v) {
         s += static_cast<char>(v & 255);
         s += static_cast<char>((v >> 8) & 255);
@@ -1380,25 +1516,66 @@ static void bundle_imports() {
         u16(s, v & 0xffff);
         u16(s, v >> 16);
     };
+    const auto u64 = [&](std::string &s, uint64_t v) {
+        u32(s, static_cast<uint32_t>(v));
+        u32(s, static_cast<uint32_t>(v >> 32));
+    };
     std::string zip, directory;
-    for (const Entry &e : entries) {
-        const size_t offset = zip.size();
-        zip += "PK\x03\x04";
-        u16(zip, 20), u16(zip, 0), u16(zip, 0), u16(zip, 0), u16(zip, 0x21);
-        u32(zip, e.crc), u32(zip, static_cast<uint32_t>(e.data.size())), u32(zip, static_cast<uint32_t>(e.data.size()));
-        u16(zip, static_cast<unsigned>(e.name.size())), u16(zip, 0);
-        zip += e.name + e.data;
+    std::vector<size_t> offsets;
+    for (size_t i = 0; i < shape.entries.size(); ++i) {
+        const BundleEntry &e = shape.entries[i];
+        const uint32_t crc = crc32_of(e.data), size = static_cast<uint32_t>(e.data.size());
+        size_t offset = zip.size();
+        if (e.offset_of != ~0u) {
+            offset = offsets[e.offset_of];
+        } else {
+            zip += "PK\x03\x04";
+            u16(zip, 20), u16(zip, i == 0 ? shape.flags : 0), u16(zip, 0), u16(zip, 0), u16(zip, 0x21);
+            u32(zip, crc), u32(zip, size), u32(zip, size);
+            u16(zip, static_cast<unsigned>(e.name.size())), u16(zip, 0);
+            zip += e.name + e.data;
+        }
+        offsets.push_back(offset);
+        std::string extra;
+        if (shape.zip64_fields) {
+            u16(extra, 1), u16(extra, 24), u64(extra, size), u64(extra, size), u64(extra, offset);
+        }
+        if (i == 0 && !shape.unicode.empty()) {
+            u16(extra, 0x7075), u16(extra, static_cast<unsigned>(5 + shape.unicode.size()));
+            extra += '\x01';
+            u32(extra, crc32_of(e.name) ^ (shape.unicode_crc_wrong ? 1u : 0u));
+            extra += shape.unicode;
+        }
         directory += "PK\x01\x02";
-        u16(directory, 0x0314), u16(directory, 20), u16(directory, 0), u16(directory, 0), u16(directory, 0), u16(directory, 0x21);
-        u32(directory, e.crc), u32(directory, static_cast<uint32_t>(e.data.size())), u32(directory, static_cast<uint32_t>(e.data.size()));
-        u16(directory, static_cast<unsigned>(e.name.size())), u16(directory, 0), u16(directory, 0), u16(directory, 0), u16(directory, 0);
-        u32(directory, 0100644u << 16), u32(directory, static_cast<uint32_t>(offset));
-        directory += e.name;
+        u16(directory, 0x0314), u16(directory, i == 0 ? shape.version : 20), u16(directory, i == 0 ? shape.flags : 0), u16(directory, 0),
+            u16(directory, 0), u16(directory, 0x21);
+        u32(directory, crc), u32(directory, shape.zip64_fields ? 0xffffffffu : size), u32(directory, shape.zip64_fields ? 0xffffffffu : size);
+        u16(directory, static_cast<unsigned>(e.name.size())), u16(directory, static_cast<unsigned>(extra.size())), u16(directory, 0),
+            u16(directory, 0), u16(directory, 0);
+        u32(directory, 0100644u << 16), u32(directory, shape.zip64_fields ? 0xffffffffu : static_cast<uint32_t>(offset));
+        directory += e.name + extra;
     }
     const size_t start = zip.size();
-    zip += directory + "PK\x05\x06";
-    u16(zip, 0), u16(zip, 0), u16(zip, 2), u16(zip, 2);
-    u32(zip, static_cast<uint32_t>(directory.size())), u32(zip, static_cast<uint32_t>(start)), u16(zip, 0);
+    zip += directory;
+    const uint32_t count = static_cast<uint32_t>(shape.entries.size());
+    if (shape.zip64_end) {
+        const size_t record = zip.size();
+        zip += "PK\x06\x06";
+        u64(zip, 44), u16(zip, 45), u16(zip, 45), u32(zip, 0), u32(zip, 0), u64(zip, count), u64(zip, count);
+        u64(zip, directory.size()), u64(zip, start + shape.directory_shift);
+        zip += "PK\x06\x07";
+        u32(zip, 0), u64(zip, record), u32(zip, 1);
+    }
+    zip += "PK\x05\x06";
+    u16(zip, 0), u16(zip, 0), u16(zip, shape.zip64_end ? 0xffff : count), u16(zip, shape.zip64_end ? 0xffff : count);
+    u32(zip, shape.zip64_end ? 0xffffffffu : static_cast<uint32_t>(directory.size()));
+    u32(zip, shape.zip64_end ? 0xffffffffu : static_cast<uint32_t>(start + shape.directory_shift)), u16(zip, 0);
+    return zip;
+}
+
+static void bundle_imports() {
+    BundleShape shape;
+    std::string zip = bundle_of(shape);
     json request = json::object();
     request["content"] = base64_text(zip);
     const auto refusal = [&]() -> std::string {
@@ -1408,6 +1585,17 @@ static void bundle_imports() {
             return error.what();
         }
         return "";
+    };
+    const auto names = [&]() {
+        request.erase("index");
+        std::string out;
+        const json listed = kerfkite::program_import_call("bundle-import", request);
+        for (const json &file : listed.at("files")) out += file.at("name").get<std::string>() + ";";
+        return out;
+    };
+    const auto text = [&](int index) {
+        request["index"] = index;
+        return kerfkite::program_import_call("bundle-import", request).at("text").get<std::string>();
     };
     const json listing = kerfkite::program_import_call("bundle-import", request);
     expect(listing.at("files").size() == 1 && listing.at("files").at(0).at("name") == json("one.lbdev") &&
@@ -1421,6 +1609,56 @@ static void bundle_imports() {
     request["content"] = base64_text(zip);
     request["index"] = 0;
     expect(refusal() == "Cannot read the bundle or selected text member", "a member whose CRC-32 does not match");
+
+    // ZIP64: the directory's sizes and offsets in extra fields, and its place in a ZIP64 end record.
+    const auto with = [&](const BundleShape &changed) { request["content"] = base64_text(bundle_of(changed)); };
+    BundleShape zip64;
+    zip64.zip64_fields = zip64.zip64_end = true;
+    with(zip64);
+    expect(names() == "one.lbdev;" && text(0) == "{\"a\":1}", "an archive written with ZIP64 records and fields");
+    zip64.directory_shift = 1;
+    with(zip64);
+    request.erase("index");
+    expect(refusal() == "Cannot read the bundle or selected text member", "a ZIP64 record that does not lead to its directory");
+
+    // The Info-ZIP Unicode path names the member when its CRC-32 is the stored name's.
+    BundleShape unicode;
+    unicode.unicode = "dev/\xc3\xbcn\xc3\xaf.lbdev";
+    with(unicode);
+    expect(names() == "\xc3\xbcn\xc3\xaf.lbdev;" && text(0) == "{\"a\":1}", "an Info-ZIP Unicode path names the member");
+    unicode.unicode_crc_wrong = true;
+    with(unicode);
+    expect(names() == "one.lbdev;", "a Unicode path for another name is left aside");
+    unicode.unicode_crc_wrong = false;
+    unicode.unicode = "dev/\xff.lbdev";
+    with(unicode);
+    request.erase("index");
+    expect(refusal() == "Cannot read the bundle or selected text member", "a Unicode path that is not UTF-8");
+
+    // What zipfile cannot open: a newer entry, patched data, a header before the data.
+    BundleShape newer;
+    newer.version = 64;
+    with(newer);
+    request.erase("index");
+    expect(refusal() == "Cannot read the bundle or selected text member", "an entry that needs ZIP 6.4");
+    BundleShape patched;
+    patched.flags = 0x20;
+    with(patched);
+    expect(names() == "one.lbdev;", "a member with patched data is listed");
+    request["index"] = 0;
+    expect(refusal() == "Cannot read the bundle or selected text member", "and not read");
+    BundleShape shifted;
+    shifted.directory_shift = 100;
+    with(shifted);
+    expect(names() == "one.lbdev;", "a directory offset past the directory puts the headers before the data");
+    request["index"] = 0;
+    expect(refusal() == "Cannot read the bundle or selected text member", "where they cannot be read");
+
+    // Two entries at one header both read it.
+    BundleShape shared;
+    shared.entries = {{"dev/one.lbdev", "{\"a\":1}"}, {"dev/one.lbdev", "{\"a\":1}", 0}};
+    with(shared);
+    expect(names() == "one.lbdev;one.lbdev;" && text(0) == "{\"a\":1}" && text(1) == "{\"a\":1}", "entries that share a header");
 }
 
 // A bilinear patch on the reference's 25 by 25 grid, and an outline with a hole cut from it.
@@ -1638,6 +1876,7 @@ int main() {
     solid_histories();
     cad_scripts();
     program_imports();
+    pdf_own_rules();
     bundle_imports();
     surfaces();
     artwork_reliefs();

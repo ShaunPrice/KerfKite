@@ -391,7 +391,10 @@ def main():
         shutil.copytree(reference_dir, native_dir)
         reference = Reference(store, origin, destinations, allow_file_upload=True)
         native = Native(a.server, native_dir, origin, allow_file_upload=True, tls=a.tls)
-        ref, got = Session(reference, origin, '192.0.2.10'), Session(native, origin, '192.0.2.10')
+        # Through the relay the server sees each request come from the loopback address, which the reference's
+        # sessions then use as well: the login limit counts by address, and must count the same requests together.
+        main_address, legacy_address = ('127.0.0.1', '127.0.0.1') if a.tls else ('192.0.2.10', '192.0.2.11')
+        ref, got = Session(reference, origin, main_address), Session(native, origin, main_address)
 
         def both(label, method, path, body=None, content_type=None, headers=None, csrf=True):
             tally.compare(
@@ -450,11 +453,13 @@ def main():
         tally.compare('login form', a_form, b_form)
         tally.compare('login', a_post, b_post)
         # The account the Python made with scrypt: moved as it is.
-        legacy_ref, legacy_got = Session(reference, origin, '192.0.2.11'), Session(native, origin, '192.0.2.11')
+        legacy_ref, legacy_got = Session(reference, origin, legacy_address), Session(native, origin, legacy_address)
         a_form, a_post = legacy_ref.login('legacy', 'the legacy password, scrypt')
         b_form, b_post = legacy_got.login('legacy', 'the legacy password, scrypt')
         if a_post.status == 302 and b_post.status == 401 and native.said('cannot be checked here (scrypt)'):
             tally.scrypt_unavailable += 1  # Windows and macOS: reset-password sets a hash this system checks
+            # The refusal counted as a failed login there; one on the reference keeps the two limits in step.
+            legacy_ref.login('legacy', 'not the legacy password')
         else:
             tally.compare('login with the Python\'s scrypt hash', a_post, b_post)
         a_session, b_session = ref.send('GET', '/api/session'), got.send('GET', '/api/session')

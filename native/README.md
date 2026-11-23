@@ -153,7 +153,7 @@ solid kernel, with the mesh, measures and silhouette. `solid-cad-section` (`{"mo
 material at a height, and `sketch-solve` (`{"feature", "parameters", "order"}`, the parameters' names in
 the order Studio evaluates them, which decides which of two circular definitions is reported) a sketch's
 vertices with its constraints solved. STEP features need the server's STEP add-on, which tessellates them;
-`kerfkite-cam` declines them. `step-part` and `step-faces` give the exact steps and faces of a part and of a
+`kerfkite-cam` refuses them. `step-part` and `step-faces` give the exact steps and faces of a part and of a
 surface that the add-on builds in Open CASCADE for STEP export.
 
     kerfkite-cam assembly-solve request.json
@@ -174,7 +174,8 @@ and column.
 reads posted G-code, an HP-GL plot, a LinuxCNC INI file or an ASCII DXF drawing (`{"name", "text", "unit"}`)
 as Studio's **Import** does (`core/src/program_import.cpp`, the port of `studio/program_import.py`, and the
 core's own DXF reader, `core/src/dxf.cpp`): the artwork, layers, presets, devices and warnings, or the
-reference's message, for text that is not ASCII too. DXF splines given only by fit points are declined.
+reference's message, for text that is not ASCII too. DXF splines given only by fit points are interpolated as
+CAD programs interpolate them.
 
     kerfkite-cam pdf-import request.json
 
@@ -230,7 +231,7 @@ the part that touches and where, or refuses the first line it cannot read.
 | Ramp entry on router line jobs and on offset contours (`core/src/router_entry.cpp`) | Done, with or without holding tabs. A helix entry is accepted only on a pocket, so on a line job it is rejected with the reference's message. |
 | Helical entry into pockets (`core/src/router_entry.cpp`, `core/src/pocket_entry.cpp`) | Done. Where each helix goes (clear of the pocket's walls and islands by the cutter's radius, with a clear feed to the pass) is decided on the core's own polygon kernel. This is the only implementation: Studio calls it through its extension (`studio/router_entry.py`), and keeps Shapely only as the fallback where the extension is not installed. |
 | Holding tabs on router line jobs (`core/src/tabs.cpp`) | Done: tab count or explicit positions, tabs across the seam, and every rejection. |
-| Shapely's `LineString.is_simple` and `.length`, which both features ask of each contour (`core/src/simple_line.cpp`) | Done by GEOS's own rules, including its double-double orientation test. A contour whose answer depends on rounding inside GEOS is declined. The work is bounded: a tree over the segments leaves out, a branch at a time, the pairs GEOS's test is certain to pass, so a contour of 100,000 long segments side by side (a comb, a fan, a spiral) takes a tenth of a second where testing every pair took a minute; and past a fixed count of work, about a second, a contour is declined (`a contour whose self-crossing test needs more comparisons than the core allows`). |
+| Shapely's `LineString.is_simple` and `.length`, which both features ask of each contour (`core/src/simple_line.cpp`) | Done by GEOS's own rules, including its double-double orientation test. A contour whose answer depends on rounding inside GEOS gets the exact answer by the core's own rules (declined with the reference's). The work is bounded: a tree over the segments leaves out, a branch at a time, the pairs GEOS's test is certain to pass, so a contour of 100,000 long segments side by side (a comb, a fan, a spiral) takes a tenth of a second where testing every pair took a minute; and past a fixed count of work, about a second, a contour is refused (declined with the reference's rules: `a contour whose self-crossing test needs more comparisons than the core allows`). |
 | Inside and outside offsets (router: tool radius; laser: half the kerf), concentric pockets, hatch and cross-hatch fills (`core/src/operations.cpp`) | Done, on the core's own polygon kernel. This is the only implementation: Studio calls it through its extension (`studio/operations.py`), and keeps Shapely only as the fallback where the extension is not installed. |
 | The core's own polygon kernel (`core/src/polygon/`, `core/include/kerfkite/polygon.hpp`) | Done. See [The polygon kernel](#the-polygon-kernel). |
 | 3D solid modelling (`core/include/kerfkite/solid.hpp`, `core/src/solid/`) | Done as a kernel and a `solid` command. New in the core, and the only implementation of KerfKite's own: Studio's 3D CAD calls it through its extension (`studio/solid_kernel.py`), and keeps a third-party library only as the fallback where the extension is not installed. See `docs/SOLID-KERNEL.md`. |
@@ -247,9 +248,11 @@ the part that touches and where, or refuses the first line it cannot read.
 | Importers, sender, pendant, editors | Not yet. |
 
 Every operation of a job (lines, drilling, knife paths, offsets, pockets, fills, V-carving, entries and
-tabs) is now ported, so no job is declined for its operation. A request the core cannot fully reproduce is
-still declined, never approximated: a number beyond the range of a double, and a contour whose self-crossing
-test turns on rounding inside GEOS or needs more work than the core allows. (Digits of other scripts are read
+tabs) is now ported, so no job is declined for its operation. With the reference's rules in force, a request
+the core cannot fully reproduce is still declined, never approximated: a number beyond the range of a double,
+and a contour whose self-crossing test turns on rounding inside GEOS or needs more work than the core allows.
+By the core's own rules, which the server and `kerfkite-cam` use, such a request is answered by a rule the
+reference does not share (docs/NATIVE.md, "The core's own rules"). (Digits of other scripts are read
 as Python's float() reads them, a ramp along a contour of no length is refused, and the degenerate tab states
 the checks rule out are internal errors.) The core never writes a program for a case it does not reproduce.
 
@@ -377,8 +380,9 @@ of a helix does not: it is worked out with `+ - * /` alone, and the self-test co
 centres it places with a recorded value. Nor does a V-carve: its paths and depths use `sqrt` and no other
 function of the library, and the self-test compares a digest of them with a recorded value as well.
 
-Each case must be reproduced exactly, or declined. A different answer fails the check. The share of cases
-reproduced is the measure of progress, and the list of declined features is the work that remains.
+Each case must be reproduced exactly, or declined with the reference's rules in force. A different answer fails
+the check. Every declined case is then put to the core again with its own rules (`kerfkite-cam batch --own`),
+which must answer it as a program or a refusal.
 
 For offsets, pockets and fills the reference calls this core's kernel through the compiled extension, so
 the geometry of the operation is shared and cannot differ. Those jobs still compare everything round it:

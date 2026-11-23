@@ -14,14 +14,20 @@
 // by GEOS's test (geos_orientation), points on and inside rings by exact tests, rings' simplicity by the
 // simple-line port.
 //
-// Declined (NotPorted), for the Python to answer: files that deviate from that form (pypdf has repairs for
-// many of them), inline images (whose end pypdf finds by its own rules), operands pypdf would refuse in its
-// own way, clipping boundaries whose computed corners lie within rounding of a point tested against them,
-// and any decision near a limit of pypdf's.
+// Where pypdf answers by rules of its own (repairs of files that deviate from that form, its ways with inline
+// images and unusual operands, decisions near its limits, clipping boundaries whose computed corners lie within
+// rounding of a point tested against them), the core answers by its own rules (own_rule, kerfkite/cam.hpp; with
+// the reference's rules in force such a file is declined for the Python to answer). They follow the PDF format
+// where it says what to do (escapes in names and strings, references to objects that are not there, hybrid
+// cross-references, inline images skipped to their EI), repair what readers commonly repair (a stream's length
+// found from its endstream, startxref found by searching, cross-reference entries of a looser form, data decoded
+// as far as it goes), and otherwise refuse the file as unreadable, with the reference's message; limits are the
+// core's own, below pypdf's.
 #include "kerfkite/pdf_import.hpp"
 
 #include <algorithm>
 #include <array>
+#include <climits>
 #include <cmath>
 #include <cstdint>
 #include <functional>
@@ -56,7 +62,13 @@ const size_t kStreamLimit = 7500000;  // below pypdf's 8,000,000-byte limits on 
 // pypdf's own refusals, for which the reference gives one message.
 struct Unreadable {};
 [[noreturn]] void unreadable() { throw Unreadable(); }
-[[noreturn]] void decline(const char *what) { throw NotPorted(what); }
+// A case answered by the core's own rule: noted, or declined with the reference's rules in force.
+void own(const char *what) { own_rule(what); }
+// One the core's own rule refuses as unreadable.
+[[noreturn]] void refuse(const char *what) {
+    own_rule(what);
+    unreadable();
+}
 
 // ---- objects -----------------------------------------------------------------------------------------------
 
@@ -93,7 +105,9 @@ bool truth(const Object &o) {
         case Kind::Array: return !o.array->empty();
         case Kind::Dict:
         case Kind::Stream: return !o.dict->empty();
-        default: decline("the truth of an unusual PDF object");
+        case Kind::Null: own("the truth of an unusual PDF object"); return false;
+        case Kind::Bool: own("the truth of an unusual PDF object"); return o.flag;
+        default: own("the truth of an unusual PDF object"); return true;  // a reference or an operator
     }
 }
 
@@ -127,8 +141,10 @@ long long number_object(const std::string &text) {
     long long value = 0;
     for (size_t k = i; k < text.size(); ++k) {
         if (text[k] < '0' || text[k] > '9') return 0;
-        if (value > 100000000000000LL) decline("a PDF integer beyond the exact range of doubles");
-        value = value * 10 + (text[k] - '0');
+        if (value > 100000000000000LL) own("a PDF integer beyond the exact range of doubles");
+        // Past the range of 64 bits the value stays at its end: no PDF number means anything there.
+        const int digit = text[k] - '0';
+        value = value > (LLONG_MAX - digit) / 10 ? LLONG_MAX : value * 10 + digit;
     }
     return negative ? -value : value;
 }
@@ -162,6 +178,20 @@ public:
         }
     }
 
+    // After an inline image's ID: past its data and the EI that ends it, one with white space before it and white
+    // space, a delimiter or the end of the stream after it. False when there is none.
+    bool skip_inline_data() {
+        if (at_ < bytes_.size() && white(static_cast<unsigned char>(bytes_[at_]))) ++at_;
+        for (size_t i = at_; i + 1 < bytes_.size(); ++i) {
+            if (bytes_[i] != 'E' || bytes_[i + 1] != 'I' || i == 0 || !white(static_cast<unsigned char>(bytes_[i - 1]))) continue;
+            if (i + 2 < bytes_.size() && !white(static_cast<unsigned char>(bytes_[i + 2])) && !delimiter(static_cast<unsigned char>(bytes_[i + 2])))
+                continue;
+            at_ = i + 2;
+            return true;
+        }
+        return false;
+    }
+
     std::string word() {
         const size_t start = at_;
         while (at_ < bytes_.size() && regular(static_cast<unsigned char>(bytes_[at_]))) ++at_;
@@ -178,7 +208,7 @@ public:
 
     // One object, or in a content stream an operator.
     Object object(int depth = 0) {
-        if (depth > 64) decline("PDF objects nested more than 64 deep");
+        if (depth > 64) refuse("PDF objects nested more than 64 deep");
         skip();
         if (at_ >= bytes_.size()) unreadable();
         const unsigned char c = peek();
@@ -196,11 +226,11 @@ public:
                     at_ += 2;
                     break;
                 }
-                if (peek() != '/') decline("a PDF dictionary key that is not a name");
+                if (peek() != '/') refuse("a PDF dictionary key that is not a name");
                 const std::string key = name();
                 Object value = object(depth + 1);
-                if (value.kind == Kind::Operator) decline("a PDF dictionary value that is not an object");
-                if (o.dict->count(key)) decline("a PDF dictionary that defines a key twice");
+                if (value.kind == Kind::Operator) refuse("a PDF dictionary value that is not an object");
+                if (o.dict->count(key)) own("a PDF dictionary that defines a key twice");  // the later wins
                 (*o.dict)[key] = std::move(value);
             }
         } else if (c == '<') {
@@ -218,7 +248,7 @@ public:
                 }
                 if (at_ >= bytes_.size()) unreadable();
                 Object item = object(depth + 1);
-                if (item.kind == Kind::Operator) decline("a word in a PDF array");
+                if (item.kind == Kind::Operator) refuse("a word in a PDF array");
                 o.array->push_back(std::move(item));
             }
         } else if (c == '(') {
@@ -248,9 +278,9 @@ public:
             const size_t start = at_;
             while (at_ < bytes_.size() && numeric(static_cast<unsigned char>(bytes_[at_]))) ++at_;
             const std::string text = bytes_.substr(start, at_ - start);
-            if (text.size() >= 20) decline("a PDF number of 20 characters or more");
-            if (content_ && at_ < bytes_.size() && regular(static_cast<unsigned char>(bytes_[at_])))
-                decline("a PDF number run into a word");
+            if (text.size() >= 20) own("a PDF number of 20 characters or more");
+            // A number run into a word ends where its characters do; the word is read next.
+            if (content_ && at_ < bytes_.size() && regular(static_cast<unsigned char>(bytes_[at_]))) own("a PDF number run into a word");
             if (text.find('.') != std::string::npos) {
                 o.kind = Kind::Real;
                 o.real = float_object(text);
@@ -264,14 +294,16 @@ public:
                 skip();
                 const std::string second = word();
                 skip();
-                if (is_digits(text) && is_digits(second) && peek() == 'R') decline("a reference in a PDF content stream");
+                // A content stream has no references: R is read as an operator, which nothing draws.
+                if (is_digits(text) && is_digits(second) && peek() == 'R') own("a reference in a PDF content stream");
                 at_ = after;
             }
         } else if (regular(c)) {
             const std::string text = word();
             if (content_) {
-                if (!(std::isalpha(c) || c == '\'' || c == '"')) decline("an unusual word in a PDF content stream");
-                if (text.size() > 128) decline("a PDF operator longer than pypdf reads");
+                // Any other word is an operator too, one the extraction does not know.
+                if (!(std::isalpha(c) || c == '\'' || c == '"')) own("an unusual word in a PDF content stream");
+                if (text.size() > 128) own("a PDF operator longer than pypdf reads");
                 o.kind = Kind::Operator;
                 o.text = text;
             } else if (text == "true" || text == "false") {
@@ -284,7 +316,12 @@ public:
                 o.text = text;
             }
         } else {
-            decline("an unusual delimiter in a PDF");
+            // A stray ), >, ], { or }: in a content stream an operator of its own, which nothing draws.
+            if (!content_) refuse("an unusual delimiter in a PDF");
+            own("an unusual delimiter in a PDF");
+            o.kind = Kind::Operator;
+            o.text = std::string(1, static_cast<char>(c));
+            ++at_;
         }
         return o;
     }
@@ -306,12 +343,24 @@ private:
         std::string out = "/";
         while (at_ < bytes_.size() && regular(static_cast<unsigned char>(bytes_[at_]))) {
             const char c = bytes_[at_];
-            if (c == '#') decline("a PDF name with # escapes");
+            if (c == '#') {
+                // #xx is the byte xx (PDF 1.2 and later); a # not followed by two hexadecimal digits is itself.
+                own("a PDF name with # escapes");
+                if (at_ + 2 < bytes_.size() && std::isxdigit(static_cast<unsigned char>(bytes_[at_ + 1])) &&
+                    std::isxdigit(static_cast<unsigned char>(bytes_[at_ + 2]))) {
+                    out.push_back(static_cast<char>(std::stoi(bytes_.substr(at_ + 1, 2), nullptr, 16)));
+                    at_ += 3;
+                    continue;
+                }
+            }
             out.push_back(c);
             ++at_;
         }
         for (const unsigned char c : out)
-            if (c >= 0x80) decline("a PDF name that is not ASCII");
+            if (c >= 0x80) {
+                own("a PDF name that is not ASCII");  // kept as its bytes
+                break;
+            }
         return out;
     }
 
@@ -321,7 +370,10 @@ private:
         while (at_ < bytes_.size() && bytes_[at_] != '>') {
             const char c = bytes_[at_++];
             if (white(static_cast<unsigned char>(c))) continue;
-            if (!std::isxdigit(static_cast<unsigned char>(c))) decline("a PDF hex string with other characters");
+            if (!std::isxdigit(static_cast<unsigned char>(c))) {
+                own("a PDF hex string with other characters");  // left out
+                continue;
+            }
             digits.push_back(c);
         }
         if (at_ >= bytes_.size()) unreadable();
@@ -358,7 +410,9 @@ private:
                             for (int k = 0; k < 2 && at_ < bytes_.size() && bytes_[at_] >= '0' && bytes_[at_] <= '7'; ++k) value = value * 8 + (bytes_[at_++] - '0');
                             out.push_back(static_cast<char>(value & 0xff));
                         } else {
-                            decline("a PDF string with an unusual escape");
+                            // The backslash of any other escape is ignored (ISO 32000-1, 7.3.4.2).
+                            own("a PDF string with an unusual escape");
+                            out.push_back(e);
                         }
                 }
             } else if (c == '(') {
@@ -380,8 +434,9 @@ private:
 std::string flate(const std::string &raw) {
     std::vector<unsigned char> out;
     const detail::Inflated result = detail::zlib_decompress(reinterpret_cast<const unsigned char *>(raw.data()), raw.size(), kStreamLimit, out);
-    if (result == detail::Inflated::TooLong) decline("a PDF stream near pypdf's limit on decoded bytes");
-    if (result != detail::Inflated::Ok) decline("a PDF stream that pypdf would repair to decompress");
+    if (result == detail::Inflated::TooLong) refuse("a PDF stream near pypdf's limit on decoded bytes");
+    // A damaged stream is read as far as it decodes (with its checksum unchecked), as readers salvage one.
+    if (result != detail::Inflated::Ok) own("a PDF stream that pypdf would repair to decompress");
     return std::string(out.begin(), out.end());
 }
 
@@ -394,10 +449,13 @@ std::string ascii_hex(const std::string &raw) {
             break;
         }
         if (white(static_cast<unsigned char>(c))) continue;
-        if (!std::isxdigit(static_cast<unsigned char>(c))) decline("an ASCIIHexDecode stream with other characters");
+        if (!std::isxdigit(static_cast<unsigned char>(c))) {
+            own("an ASCIIHexDecode stream with other characters");  // left out
+            continue;
+        }
         digits.push_back(c);
     }
-    if (!ended) decline("an ASCIIHexDecode stream without its end marker");
+    if (!ended) own("an ASCIIHexDecode stream without its end marker");  // the data ends it
     if (digits.size() % 2) digits.push_back('0');
     for (size_t i = 0; i < digits.size(); i += 2) out.push_back(static_cast<char>(std::stoi(digits.substr(i, 2), nullptr, 16)));
     return out;
@@ -421,7 +479,10 @@ std::string ascii85(const std::string &raw) {
             out.append(4, '\0');
             continue;
         }
-        if (c < '!' || c > 'u') decline("an ASCII85Decode stream with other characters");
+        if (c < '!' || c > 'u') {
+            own("an ASCII85Decode stream with other characters");  // left out
+            continue;
+        }
         group = group * 85 + (c - '!');
         if (++count == 5) {
             for (int k = 3; k >= 0; --k) out.push_back(static_cast<char>((group >> (8 * k)) & 0xff));
@@ -429,8 +490,11 @@ std::string ascii85(const std::string &raw) {
             count = 0;
         }
     }
-    if (!ended) decline("an ASCII85Decode stream without its end marker");
-    if (count == 1) decline("an ASCII85Decode stream with a single character in its last group");
+    if (!ended) own("an ASCII85Decode stream without its end marker");  // the data ends it
+    if (count == 1) {
+        own("an ASCII85Decode stream with a single character in its last group");  // which holds no byte
+        count = 0;
+    }
     if (count) {
         for (int k = count; k < 5; ++k) group = group * 85 + 84;
         for (int k = 0; k < count - 1; ++k) out.push_back(static_cast<char>((group >> (8 * (3 - k))) & 0xff));
@@ -445,16 +509,24 @@ std::string run_length(const std::string &raw) {
         const unsigned char length = static_cast<unsigned char>(raw[i++]);
         if (length == 128) return out;
         if (length < 128) {
-            if (i + length + 1 > raw.size()) decline("a RunLengthDecode stream that ends early");
+            if (i + length + 1 > raw.size()) {
+                own("a RunLengthDecode stream that ends early");  // what is there
+                out.append(raw, i, std::string::npos);
+                return out;
+            }
             out.append(raw, i, length + 1u);
             i += length + 1u;
         } else {
-            if (i >= raw.size()) decline("a RunLengthDecode stream that ends early");
+            if (i >= raw.size()) {
+                own("a RunLengthDecode stream that ends early");
+                return out;
+            }
             out.append(257u - length, raw[i++]);
         }
-        if (out.size() > kStreamLimit) decline("a PDF stream near pypdf's limit on decoded bytes");
+        if (out.size() > kStreamLimit) refuse("a PDF stream near pypdf's limit on decoded bytes");
     }
-    decline("a RunLengthDecode stream without its end marker");
+    own("a RunLengthDecode stream without its end marker");  // the data ends it
+    return out;
 }
 
 std::string lzw(const std::string &raw, bool early) {
@@ -474,7 +546,10 @@ std::string lzw(const std::string &raw, bool early) {
     bool have_previous = false;
     for (;;) {
         while (held < width) {
-            if (i >= raw.size()) decline("an LZWDecode stream without its end code");
+            if (i >= raw.size()) {
+                own("an LZWDecode stream without its end code");  // the data ends it
+                return out;
+            }
             buffer = (buffer << 8) | static_cast<unsigned char>(raw[i++]);
             held += 8;
         }
@@ -493,10 +568,11 @@ std::string lzw(const std::string &raw, bool early) {
         } else if (code == table.size() && have_previous) {
             entry = previous + previous[0];
         } else {
-            decline("an LZWDecode stream with an unknown code");
+            own("an LZWDecode stream with an unknown code");  // decoded as far as that code
+            return out;
         }
         out += entry;
-        if (out.size() > kStreamLimit) decline("a PDF stream near pypdf's limit on decoded bytes");
+        if (out.size() > kStreamLimit) refuse("a PDF stream near pypdf's limit on decoded bytes");
         if (have_previous && table.size() < 4096) table.push_back(previous + entry[0]);
         previous = entry;
         have_previous = true;
@@ -515,20 +591,25 @@ std::string predicted(std::string data, const Dict *parameters, const std::funct
         const auto found = parameters->find(key);
         if (found == parameters->end()) return fallback;
         const Object *o = resolve(found->second);
-        if (!o || o->kind != Kind::Int) decline("an unusual PDF stream decoding parameter");
+        if (o && o->kind == Kind::Real && o->real == std::floor(o->real) && std::fabs(o->real) < 1e9) {
+            own("an unusual PDF stream decoding parameter");  // a whole number written as a real
+            return static_cast<long long>(o->real);
+        }
+        if (!o || o->kind != Kind::Int) refuse("an unusual PDF stream decoding parameter");
         return o->integer;
     };
     const long long predictor = get("/Predictor", 1);
     if (predictor == 1) return data;
     const long long colors = get("/Colors", 1), bits = get("/BitsPerComponent", 8), columns = get("/Columns", 1);
     if (colors < 1 || colors > 32 || (bits != 1 && bits != 2 && bits != 4 && bits != 8 && bits != 16) || columns < 1 || columns > 1000000)
-        decline("unusual PDF predictor parameters");
+        refuse("unusual PDF predictor parameters");
     const size_t pixel = static_cast<size_t>(std::max(1LL, (colors * bits + 7) / 8));
     const size_t row = static_cast<size_t>((colors * bits * columns + 7) / 8);
     if (predictor >= 10 && predictor <= 15) {
-        if (data.size() % (row + 1)) decline("a PNG-predicted PDF stream that is not whole rows");
+        // A last row cut short is left out.
+        if (data.size() % (row + 1)) own("a PNG-predicted PDF stream that is not whole rows");
         std::string out, previous(row, '\0');
-        for (size_t at = 0; at < data.size(); at += row + 1) {
+        for (size_t at = 0; at + row + 1 <= data.size(); at += row + 1) {
             const unsigned type = static_cast<unsigned char>(data[at]);
             std::string line = data.substr(at + 1, row);
             for (size_t x = 0; x < row; ++x) {
@@ -543,7 +624,7 @@ std::string predicted(std::string data, const Dict *parameters, const std::funct
                     const int pa = std::abs(p - static_cast<int>(a)), pb = std::abs(p - static_cast<int>(b)), pc = std::abs(p - static_cast<int>(c));
                     value += pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
                 } else if (type != 0) {
-                    decline("a PNG predictor of an unknown type");
+                    refuse("a PNG predictor of an unknown type");
                 }
                 line[x] = static_cast<char>(value & 0xff);
             }
@@ -557,7 +638,7 @@ std::string predicted(std::string data, const Dict *parameters, const std::funct
             for (size_t x = pixel; x < row; ++x) data[at + x] = static_cast<char>(data[at + x] + data[at + x - pixel]);
         return data;
     }
-    decline("an unusual PDF predictor");
+    refuse("an unusual PDF predictor");
 }
 
 // ---- the document --------------------------------------------------------------------------------------------
@@ -577,7 +658,7 @@ public:
         if (o.kind != Kind::Ref) return &o;
         const auto cached = cache_.find(o.number);
         if (cached != cache_.end()) return &cached->second;
-        if (++resolutions_ > 200000) decline("a PDF with more objects than the core reads");
+        if (++resolutions_ > 200000) refuse("a PDF with more objects than the core reads");
         if (loading_.count(o.number)) unreadable();
         loading_.insert(o.number);
         Object value = load(o.number, o.generation);
@@ -619,14 +700,14 @@ public:
         for (size_t i = 0; i < names.size(); ++i) {
             const std::string &name = names[i];
             const Dict *p = parms[i] && parms[i]->kind == Kind::Dict ? parms[i]->dict.get() : nullptr;
-            if (parms[i] && parms[i]->kind != Kind::Dict && parms[i]->kind != Kind::Null) decline("unusual PDF decoding parameters");
+            if (parms[i] && parms[i]->kind != Kind::Dict && parms[i]->kind != Kind::Null) refuse("unusual PDF decoding parameters");
             if (name == "/FlateDecode" || name == "/Fl") {
                 data = predicted(flate(data), p, resolver);
             } else if (name == "/LZWDecode" || name == "/LZW") {
                 long long early = 1;
                 if (p && p->count("/EarlyChange")) {
                     const Object *e = resolve(p->at("/EarlyChange"));
-                    if (e->kind != Kind::Int) decline("an unusual LZW parameter");
+                    if (e->kind != Kind::Int) refuse("an unusual LZW parameter");
                     early = e->integer;
                 }
                 data = predicted(lzw(data, early != 0), p, resolver);
@@ -637,9 +718,9 @@ public:
             } else if (name == "/RunLengthDecode" || name == "/RL") {
                 data = run_length(data);
             } else {
-                decline("a PDF stream filter the core does not read");
+                refuse("a PDF stream filter the core does not read");
             }
-            if (data.size() > kStreamLimit) decline("a PDF stream near pypdf's limit on decoded bytes");
+            if (data.size() > kStreamLimit) refuse("a PDF stream near pypdf's limit on decoded bytes");
         }
         return data;
     }
@@ -657,12 +738,12 @@ private:
         Parser parser(bytes_, offset, false);
         const Object n = parser.object(), g = parser.object(), word = parser.object();
         if (n.kind != Kind::Int || g.kind != Kind::Int || word.kind != Kind::Operator || word.text != "obj")
-            decline("a PDF cross-reference entry that does not point at its object");
-        if (n.integer != number || g.integer != generation) decline("a PDF object whose number differs from its entry");
+            refuse("a PDF cross-reference entry that does not point at its object");
+        if (n.integer != number || g.integer != generation) refuse("a PDF object whose number differs from its entry");
         Object o = parser.object();
         if (o.kind == Kind::Operator) {
             if (o.text == "endobj") return Object();
-            decline("an unusual PDF object");
+            refuse("an unusual PDF object");
         }
         if (o.kind == Kind::Dict) {
             const size_t mark = parser.at();
@@ -689,26 +770,53 @@ private:
         if (length_entry == o.dict->end()) unreadable();
         Object length_value = length_entry->second;
         const Object *length = resolve(length_value);
-        if (length->kind != Kind::Int || length->integer < 0) decline("a PDF stream whose length is not a number");
-        const size_t end = start + static_cast<size_t>(length->integer);
-        if (end > bytes_.size()) decline("a PDF stream longer than the file");
-        Parser after(bytes_, end, false);
-        after.skip();
-        if (bytes_.compare(after.at(), 9, "endstream") != 0) decline("a PDF stream whose length pypdf would correct");
+        size_t end = bytes_.size() + 1;
+        if (length->kind != Kind::Int || length->integer < 0) {
+            own("a PDF stream whose length is not a number");
+        } else if (start + static_cast<size_t>(length->integer) > bytes_.size()) {
+            own("a PDF stream longer than the file");
+        } else {
+            end = start + static_cast<size_t>(length->integer);
+            Parser after(bytes_, end, false);
+            after.skip();
+            if (bytes_.compare(after.at(), 9, "endstream") != 0) {
+                own("a PDF stream whose length pypdf would correct");
+                end = bytes_.size() + 1;
+            }
+        }
+        if (end > bytes_.size()) {
+            // The stream ends at the line end before the first endstream after its start.
+            const size_t found = bytes_.find("endstream", start);
+            if (found == std::string::npos) unreadable();
+            end = found;
+            if (end > start && bytes_[end - 1] == '\n') --end;
+            if (end > start && bytes_[end - 1] == '\r') --end;
+        }
         o.kind = Kind::Stream;
         o.data = std::make_shared<std::string>(bytes_.substr(start, end - start));
     }
 
     Object load(long long number, long long generation) {
         const auto found = xref_.find(number);
-        if (found == xref_.end() || found->second.type == 0) decline("a reference to a PDF object that is not in use");
+        // A reference to an object that is not there, or not of that generation, is the null object (ISO 32000-1,
+        // 7.3.10).
+        if (found == xref_.end() || found->second.type == 0) {
+            own("a reference to a PDF object that is not in use");
+            return Object();
+        }
         const Entry &entry = found->second;
         if (entry.type == 1) {
-            if (entry.generation != generation) decline("a PDF reference whose generation differs from its entry");
+            if (entry.generation != generation) {
+                own("a PDF reference whose generation differs from its entry");
+                return Object();
+            }
             return at(static_cast<size_t>(entry.offset), number, generation);
         }
         if (entry.type == 2) {
-            if (generation != 0) decline("an unusual reference into a PDF object stream");
+            if (generation != 0) {
+                own("an unusual reference into a PDF object stream");  // objects there are of generation 0
+                return Object();
+            }
             Object container_ref;
             container_ref.kind = Kind::Ref;
             container_ref.number = entry.stream;
@@ -724,11 +832,23 @@ private:
                 if (n.kind != Kind::Int || offset.kind != Kind::Int) unreadable();
                 offsets.push_back({n.integer, offset.integer});
             }
-            if (entry.index < 0 || entry.index >= static_cast<long long>(offsets.size()) || offsets[static_cast<size_t>(entry.index)].first != number)
-                decline("a PDF object-stream entry that does not match its stream");
-            Parser parser(data, static_cast<size_t>(first->integer + offsets[static_cast<size_t>(entry.index)].second), false);
+            long long index = entry.index;
+            if (index < 0 || index >= static_cast<long long>(offsets.size()) || offsets[static_cast<size_t>(index)].first != number) {
+                // The stream's own list of its objects says where the object is, or that it is not there.
+                own("a PDF object-stream entry that does not match its stream");
+                index = -1;
+                for (size_t k = 0; k < offsets.size(); ++k)
+                    if (offsets[k].first == number) {
+                        index = static_cast<long long>(k);
+                        break;
+                    }
+                if (index < 0) return Object();
+            }
+            const long long place = first->integer + offsets[static_cast<size_t>(index)].second;
+            if (place < 0 || static_cast<size_t>(place) >= data.size()) unreadable();
+            Parser parser(data, static_cast<size_t>(place), false);
             Object o = parser.object();
-            if (o.kind == Kind::Operator) decline("an unusual object in a PDF object stream");
+            if (o.kind == Kind::Operator) refuse("an unusual object in a PDF object stream");
             return o;
         }
         return Object();
@@ -737,7 +857,9 @@ private:
     // The trailer chain from startxref, newest first.
     void read() {
         if (bytes_.compare(0, 5, "%PDF-") != 0) unreadable();
-        // %%EOF at the start of the last line, after optional line ends, then startxref and its offset.
+        // %%EOF at the start of the last line, after optional line ends, then startxref and its offset. Where the
+        // file does not end so, the core's own rule takes the offset after the last startxref in it.
+        bool search = false;
         size_t end = bytes_.size();
         while (end > 0 && white(static_cast<unsigned char>(bytes_[end - 1]))) --end;
         if (end < 5 || bytes_.compare(end - 5, 5, "%%EOF") != 0) {
@@ -749,7 +871,8 @@ private:
             const bool cut = truncated || (last.size() >= 3 && (last.compare(last.size() - 3, 3, "%%E") == 0)) ||
                              (last.size() >= 4 && last.compare(last.size() - 4, 4, "%%EO") == 0);
             if (bytes_.find("%%EOF") == std::string::npos && !cut) unreadable();
-            decline("a PDF whose end pypdf would search for");
+            own("a PDF whose end pypdf would search for");
+            search = true;
         }
         const auto previous_line = [&](size_t &at) {
             size_t stop = at;
@@ -759,30 +882,39 @@ private:
             at = start;
             return bytes_.substr(start, stop - start);
         };
-        size_t at = end - 5;
-        if (at > 0 && bytes_[at - 1] != '\r' && bytes_[at - 1] != '\n') decline("a PDF whose %%EOF is not on a line of its own");
-        const std::string offset_line = previous_line(at), keyword_line = previous_line(at);
+        size_t at = search ? 0 : end - 5;
+        if (!search && at > 0 && bytes_[at - 1] != '\r' && bytes_[at - 1] != '\n') own("a PDF whose %%EOF is not on a line of its own");
+        const std::string offset_line = search ? std::string() : previous_line(at), keyword_line = search ? std::string() : previous_line(at);
         const auto trimmed = [](std::string s) {
             while (!s.empty() && white(static_cast<unsigned char>(s.back()))) s.pop_back();
             size_t b = 0;
             while (b < s.size() && white(static_cast<unsigned char>(s[b]))) ++b;
             return s.substr(b);
         };
-        const std::string offset_text = trimmed(offset_line);
-        if (trimmed(keyword_line) != "startxref" || offset_text.empty() || offset_text.size() > 12 ||
-            offset_text.find_first_not_of("0123456789") != std::string::npos)
-            decline("a PDF whose startxref pypdf would search for");
+        std::string offset_text = trimmed(offset_line);
+        if (search || trimmed(keyword_line) != "startxref" || offset_text.empty() || offset_text.size() > 12 ||
+            offset_text.find_first_not_of("0123456789") != std::string::npos) {
+            own("a PDF whose startxref pypdf would search for");
+            const size_t keyword = bytes_.rfind("startxref");
+            if (keyword == std::string::npos) unreadable();
+            size_t digits = keyword + 9;
+            while (digits < bytes_.size() && white(static_cast<unsigned char>(bytes_[digits]))) ++digits;
+            size_t stop = digits;
+            while (stop < bytes_.size() && stop - digits < 12 && bytes_[stop] >= '0' && bytes_[stop] <= '9') ++stop;
+            offset_text = bytes_.substr(digits, stop - digits);
+            if (offset_text.empty()) unreadable();
+        }
         size_t offset = static_cast<size_t>(std::stoll(offset_text));
         std::set<size_t> seen;
         bool first = true;
         while (true) {
-            if (offset >= bytes_.size() || !seen.insert(offset).second || seen.size() > 64) decline("an unusual chain of PDF cross-reference sections");
+            if (offset >= bytes_.size() || !seen.insert(offset).second || seen.size() > 64) refuse("an unusual chain of PDF cross-reference sections");
             Dict section = section_at(offset);
             if (first) trailer = section;
             first = false;
             const auto previous = section.find("/Prev");
             if (previous == section.end()) break;
-            if (previous->second.kind != Kind::Int || previous->second.integer < 0) decline("an unusual PDF /Prev");
+            if (previous->second.kind != Kind::Int || previous->second.integer < 0) refuse("an unusual PDF /Prev");
             offset = static_cast<size_t>(previous->second.integer);
         }
         if (!trailer.count("/Root")) unreadable();
@@ -801,23 +933,45 @@ private:
                 if (bytes_.compare(parser.at(), 7, "trailer") == 0) break;
                 const Object start = parser.object(), count = parser.object();
                 if (start.kind != Kind::Int || count.kind != Kind::Int || start.integer < 0 || count.integer < 0 || count.integer > 1000000)
-                    decline("an unusual PDF cross-reference table");
+                    refuse("an unusual PDF cross-reference table");
                 // Each entry is 20 bytes: ten digits, a space, five digits, a space, n or f, and two bytes of
                 // line end.
                 size_t at = parser.at();
                 while (at < bytes_.size() && (bytes_[at] == '\r' || bytes_[at] == '\n' || bytes_[at] == ' ')) ++at;
-                for (long long i = 0; i < count.integer; ++i, at += 20) {
-                    if (at + 20 > bytes_.size()) decline("a PDF cross-reference table that ends early");
-                    const std::string line = bytes_.substr(at, 20);
-                    if (line.find_first_not_of("0123456789", 0) != 10 || line[10] != ' ' || line.substr(11, 5).find_first_not_of("0123456789") != std::string::npos ||
-                        line[16] != ' ' || (line[17] != 'n' && line[17] != 'f') ||
-                        !((line[18] == '\r' && line[19] == '\n') || (line[18] == ' ' && (line[19] == '\n' || line[19] == '\r'))))
-                        decline("a PDF cross-reference entry of an unusual form");
-                    if (line[17] == 'n') {
+                for (long long i = 0; i < count.integer; ++i) {
+                    long long entry_offset = 0, entry_generation = 0;
+                    char kind = 0;
+                    const std::string line = at + 20 <= bytes_.size() ? bytes_.substr(at, 20) : std::string();
+                    if (line.size() == 20 && line.find_first_not_of("0123456789", 0) == 10 && line[10] == ' ' &&
+                        line.substr(11, 5).find_first_not_of("0123456789") == std::string::npos && line[16] == ' ' && (line[17] == 'n' || line[17] == 'f') &&
+                        ((line[18] == '\r' && line[19] == '\n') || (line[18] == ' ' && (line[19] == '\n' || line[19] == '\r')))) {
+                        entry_offset = std::stoll(line.substr(0, 10));
+                        entry_generation = std::stoll(line.substr(11, 5));
+                        kind = line[17];
+                        at += 20;
+                    } else {
+                        // An entry of a looser form: an offset, a generation and n or f, apart by spaces, then any
+                        // line end.
+                        own("a PDF cross-reference entry of an unusual form");
+                        const auto digits = [&](long long &value) {
+                            while (at < bytes_.size() && bytes_[at] == ' ') ++at;
+                            const size_t from = at;
+                            while (at < bytes_.size() && at - from < 12 && bytes_[at] >= '0' && bytes_[at] <= '9') ++at;
+                            if (at == from) refuse("a PDF cross-reference table that ends early");
+                            value = std::stoll(bytes_.substr(from, at - from));
+                        };
+                        digits(entry_offset);
+                        digits(entry_generation);
+                        while (at < bytes_.size() && bytes_[at] == ' ') ++at;
+                        if (at >= bytes_.size() || (bytes_[at] != 'n' && bytes_[at] != 'f')) refuse("a PDF cross-reference table that ends early");
+                        kind = bytes_[at++];
+                        while (at < bytes_.size() && white(static_cast<unsigned char>(bytes_[at]))) ++at;
+                    }
+                    if (kind == 'n') {
                         Entry entry;
                         entry.type = 1;
-                        entry.offset = std::stoll(line.substr(0, 10));
-                        entry.generation = std::stoll(line.substr(11, 5));
+                        entry.offset = entry_offset;
+                        entry.generation = entry_generation;
                         add(start.integer + i, entry);
                     } else if (!xref_.count(start.integer + i)) {
                         xref_[start.integer + i] = Entry();
@@ -829,12 +983,20 @@ private:
             const Object trailer_dict = parser.object();
             if (trailer_dict.kind != Kind::Dict) unreadable();
             Dict section = *trailer_dict.dict;
-            if (section.count("/XRefStm")) decline("a hybrid PDF cross-reference");
+            const auto hidden = section.find("/XRefStm");
+            if (hidden != section.end()) {
+                // A hybrid file (ISO 32000-1, 7.5.8.4): the stream's entries for the objects the table leaves out.
+                own("a hybrid PDF cross-reference");
+                if (hidden->second.kind != Kind::Int || hidden->second.integer < 0 || static_cast<size_t>(hidden->second.integer) >= bytes_.size() ||
+                    static_cast<size_t>(hidden->second.integer) == offset)
+                    unreadable();
+                section_at(static_cast<size_t>(hidden->second.integer));
+            }
             return section;
         }
         // A cross-reference stream.
         const Object n = parser.object(), g = parser.object(), word = parser.object();
-        if (n.kind != Kind::Int || g.kind != Kind::Int || word.kind != Kind::Operator || word.text != "obj") decline("a PDF whose startxref pypdf would correct");
+        if (n.kind != Kind::Int || g.kind != Kind::Int || word.kind != Kind::Operator || word.text != "obj") refuse("a PDF whose startxref pypdf would correct");
         Object o = parser.object();
         if (o.kind != Kind::Dict || !parser.keyword("stream")) unreadable();
         stream_body(parser, o);
@@ -848,7 +1010,7 @@ private:
         int w[3];
         for (int i = 0; i < 3; ++i) {
             const Object &v = (*widths->second.array)[static_cast<size_t>(i)];
-            if (v.kind != Kind::Int || v.integer < 0 || v.integer > 8) decline("unusual PDF cross-reference widths");
+            if (v.kind != Kind::Int || v.integer < 0 || v.integer > 8) refuse("unusual PDF cross-reference widths");
             w[i] = static_cast<int>(v.integer);
         }
         std::vector<long long> index;
@@ -863,7 +1025,7 @@ private:
             }
         }
         // The stream's own filters are read before the table it holds exists: no references in them.
-        if (d.count("/Filter") && d.at("/Filter").kind == Kind::Ref) decline("an indirect filter on a PDF cross-reference stream");
+        if (d.count("/Filter") && d.at("/Filter").kind == Kind::Ref) refuse("an indirect filter on a PDF cross-reference stream");
         const std::string table = data(o);
         const size_t row = static_cast<size_t>(w[0] + w[1] + w[2]);
         size_t at = 0;
@@ -875,7 +1037,7 @@ private:
         };
         for (size_t k = 0; k < index.size(); k += 2) {
             for (long long i = 0; i < index[k + 1]; ++i) {
-                if (at + row > table.size()) decline("a PDF cross-reference stream that ends early");
+                if (at + row > table.size()) refuse("a PDF cross-reference stream that ends early");
                 const long long kind = field(w[0], 1), second = field(w[1], 0), third = field(w[2], 0);
                 Entry entry;
                 if (kind == 1) {
@@ -887,9 +1049,9 @@ private:
                     entry.stream = second;
                     entry.index = third;
                 } else if (kind != 0) {
-                    decline("a PDF cross-reference entry of an unknown type");
+                    own("a PDF cross-reference entry of an unknown type");  // the null object (ISO 32000-1, 7.5.8.3)
                 }
-                if (kind == 0) {
+                if (kind != 1 && kind != 2) {
                     if (!xref_.count(index[k] + i)) xref_[index[k] + i] = Entry();
                 } else {
                     add(index[k] + i, entry);
@@ -919,7 +1081,10 @@ std::vector<double> numbers(const Array &args, size_t count) {
     if (args.size() != count) throw ValueError("PDF path command has the wrong number of coordinates");
     std::vector<double> values;
     for (const Object &o : args) {
-        if (!o.is_number()) decline("a PDF operand float() would refuse in its own words");
+        if (!o.is_number()) {
+            own("a PDF operand float() would refuse in its own words");
+            throw ValueError("PDF path command has a coordinate that is not a number");
+        }
         values.push_back(o.value());
     }
     check(values.data(), values.size());
@@ -1032,7 +1197,8 @@ bool covers(const Clip &clip, const std::vector<Point> &points) {
                 const double size = std::hypot(dx, dy);
                 const double scale = std::max({1.0, std::fabs(p[0]), std::fabs(p[1]), std::fabs(ring[i][0]), std::fabs(ring[i][1])});
                 const double offset = std::fabs((p[0] - ring[i][0]) * dy - (p[1] - ring[i][1]) * dx);
-                if (offset <= 1e-9 * scale * std::max(size, 1e-300)) decline("a point within rounding of a computed PDF clipping boundary");
+                // The core's own rule: its exact test against its own corners below decides.
+                if (offset <= 1e-9 * scale * std::max(size, 1e-300)) own("a point within rounding of a computed PDF clipping boundary");
             }
         }
         if (locate(ring, p) == Location::Outside) return false;
@@ -1072,7 +1238,8 @@ Clip intersect(const Clip &a, const std::vector<Point> &b_corners) {
     std::sort(points.begin(), points.end());
     points.erase(std::unique(points.begin(), points.end()), points.end());
     if (points.size() < 3) {
-        if (!points.empty() && out.computed) decline("a PDF clipping region that narrows to a line or a point");
+        // A region that narrows to a line or a point shows nothing.
+        if (!points.empty() && out.computed) own("a PDF clipping region that narrows to a line or a point");
         return Clip();
     }
     std::vector<Point> hull(2 * points.size());
@@ -1087,7 +1254,7 @@ Clip intersect(const Clip &a, const std::vector<Point> &b_corners) {
     }
     hull.resize(k - 1);
     if (hull.size() < 3) {
-        if (out.computed) decline("a PDF clipping region that narrows to a line or a point");
+        if (out.computed) own("a PDF clipping region that narrows to a line or a point");
         return Clip();
     }
     out.corners = hull;
@@ -1098,7 +1265,10 @@ Clip rectangle(const Matrix &m, const std::vector<double> &box) {
     Clip clip;
     std::vector<Point> corners = {apply(m, box[0], box[1]), apply(m, box[2], box[1]), apply(m, box[2], box[3]), apply(m, box[0], box[3])};
     const double area = twice_area(closed(corners));
-    if (area == 0) decline("a PDF box with no area");
+    if (area == 0) {
+        own("a PDF box with no area");  // which shows nothing
+        return clip;
+    }
     clip.corners = counter_clockwise_corners(corners);
     return clip;
 }
@@ -1126,7 +1296,10 @@ bool fill_boundaries(const std::vector<std::vector<Point>> &contours, bool even_
     size_t comparisons = 0;
     for (size_t i = 0; i < rings.size(); ++i)
         for (size_t j = 0; j < rings.size(); ++j) comparisons += overlap(i, j);
-    if (comparisons > 60000) decline("a PDF fill whose overlap test reaches the reference's limit");
+    if (comparisons > 60000) {
+        own("a PDF fill whose overlap test reaches the reference's limit");
+        throw ValueError("Simplify the overlapping regions of the PDF fill");
+    }
     size_t work = 0;
     std::vector<bool> ccw;
     for (const auto &ring : rings) ccw.push_back(counter_clockwise(ring));
@@ -1135,7 +1308,10 @@ bool fill_boundaries(const std::vector<std::vector<Point>> &contours, bool even_
         for (size_t j = 0; j < rings.size(); ++j) {
             if (i == j || !overlap(i, j)) continue;
             work += rings[i].size() * rings[j].size();
-            if (work > 50000000) decline("a PDF fill whose overlap test takes more work than the core does");
+            if (work > 50000000) {
+                own("a PDF fill whose overlap test takes more work than the core does");
+                throw ValueError("Simplify the overlapping regions of the PDF fill");
+            }
             for (size_t a = 0; a + 1 < rings[i].size(); ++a)
                 for (size_t b = 0; b + 1 < rings[j].size(); ++b)
                     if (segments_meet(rings[i][a], rings[i][a + 1], rings[j][b], rings[j][b + 1])) return false;
@@ -1206,10 +1382,27 @@ std::vector<Operation> operations(const std::string &content) {
     Array operands;
     size_t tokens = 0;
     while (!parser.done()) {
-        if (++tokens > 190000) decline("a PDF content stream near pypdf's parsing limit");
+        if (++tokens > 190000) refuse("a PDF content stream near pypdf's parsing limit");
         Object o = parser.object();
         if (o.kind == Kind::Operator) {
-            if (o.text == "BI") decline("an inline image, whose end pypdf finds by its own rules");
+            if (o.text == "BI") {
+                // An inline image: its entries up to ID, then its data, which ends at an EI between white space
+                // (or the end of the stream). It is skipped, as images are.
+                own("an inline image, whose end pypdf finds by its own rules");
+                for (;;) {
+                    if (parser.done()) unreadable();
+                    if (++tokens > 190000) refuse("a PDF content stream near pypdf's parsing limit");
+                    const Object entry = parser.object();
+                    if (entry.kind == Kind::Operator) {
+                        if (entry.text != "ID") unreadable();
+                        break;
+                    }
+                }
+                if (!parser.skip_inline_data()) unreadable();
+                operands.clear();
+                out.push_back({Array(), "BI"});
+                continue;
+            }
             out.push_back({std::move(operands), o.text});
             operands.clear();
         } else {
@@ -1220,11 +1413,15 @@ std::vector<Operation> operations(const std::string &content) {
 }
 
 // An array of direct numbers, as the reference reads it with float().
-Array direct(const Object *array) {
+Array direct(const Object *array, Document &doc) {
     if (!array || array->kind != Kind::Array) unreadable();
-    for (const Object &v : *array->array)
-        if (v.kind == Kind::Ref) decline("a PDF array with a reference where the reference reads a number");
-    return *array->array;
+    Array out = *array->array;
+    for (Object &v : out)
+        if (v.kind == Kind::Ref) {
+            own("a PDF array with a reference where the reference reads a number");  // the object it refers to
+            v = *doc.resolve(v);
+        }
+    return out;
 }
 
 // dict.get(key) as pypdf answers it: the entry itself, not the object it refers to.
@@ -1280,7 +1477,7 @@ public:
         std::string data;
         for (const Object *block : streams) {
             data += doc_.data(*block);
-            if (data.size() > kStreamLimit) decline("a PDF content near pypdf's limit on decoded bytes");
+            if (data.size() > kStreamLimit) refuse("a PDF content near pypdf's limit on decoded bytes");
             if (data.empty() || data.back() != '\n') data.push_back('\n');
         }
         return data;
@@ -1363,7 +1560,10 @@ public:
             const Object *table = doc_.get(*resources, category);
             if (!table) return nullptr;
             if (!table->has_dict()) unreadable();
-            if (name.kind != Kind::Name) decline("a PDF resource named by something other than a name");
+            if (name.kind != Kind::Name) {
+                own("a PDF resource named by something other than a name");  // which names nothing there
+                return nullptr;
+            }
             const auto found = table->dict->find(name.text);
             if (found == table->dict->end()) return nullptr;
             return doc_.resolve(found->second);
@@ -1453,8 +1653,12 @@ public:
                 if (const Object *mask = doc_.get(d, "/SMask")) state.soft_mask = !mask->is_name("/None");
                 if (const Object *dash = doc_.get(d, "/D")) {
                     if (dash->kind != Kind::Array || dash->array->empty()) unreadable();
-                    if ((*dash->array)[0].kind == Kind::Ref) decline("a PDF dash given by a reference");
-                    state.dashed = truth((*dash->array)[0]);
+                    if ((*dash->array)[0].kind == Kind::Ref) {
+                        own("a PDF dash given by a reference");  // the truth of the array it refers to
+                        state.dashed = truth(*doc_.resolve((*dash->array)[0]));
+                    } else {
+                        state.dashed = truth((*dash->array)[0]);
+                    }
                 }
             } else if (op == "BMC" || op == "BDC") {
                 marks.push_back((!marks.empty() && marks.back()) || name_of(args).is_name("/OC"));
@@ -1470,14 +1674,17 @@ public:
             } else if (op == "ET" && skip_text) {
                 state.clip.reset();
                 skip_text = false;
-            } else if (op == "sh") {
+            } else if (op == "sh" || op == "BI") {
                 skip("image or shading omitted; use a raster import for this artwork");
             } else if (op == "Do") {
                 const Object *form = lookup("/XObject", name_of(args));
                 if (!form) throw ValueError("PDF refers to a missing image or form");
                 if (!form->has_dict()) unreadable();
                 const Object *subtype = raw_entry(*form->dict, "/Subtype");
-                if (subtype && subtype->kind == Kind::Ref) decline("a PDF form whose subtype is a reference");
+                if (subtype && subtype->kind == Kind::Ref) {
+                    own("a PDF form whose subtype is a reference");  // the name it refers to
+                    subtype = doc_.resolve(*subtype);
+                }
                 if (!subtype || !subtype->is_name("/Form")) {
                     skip("image omitted; use a raster import for this artwork");
                     continue;
@@ -1490,8 +1697,11 @@ public:
                 const Object *given = raw_entry(*form->dict, "/Matrix");
                 Array matrix_values;
                 if (given) {
-                    if (given->kind == Kind::Ref) decline("a PDF form whose matrix is a reference");
-                    matrix_values = direct(given);
+                    if (given->kind == Kind::Ref) {
+                        own("a PDF form whose matrix is a reference");  // the array it refers to
+                        given = doc_.resolve(*given);
+                    }
+                    matrix_values = direct(given, doc_);
                 } else {
                     for (const double v : kIdentity) {
                         Object o;
@@ -1502,12 +1712,16 @@ public:
                 }
                 const std::vector<double> m = numbers(matrix_values, 6);
                 const Matrix matrix = compose(state.matrix, {m[0], m[1], m[2], m[3], m[4], m[5]});
-                const Array box_values = direct(doc_.get(*form->dict, "/BBox"));
+                const Array box_values = direct(doc_.get(*form->dict, "/BBox"), doc_);
                 State form_state = state;
                 form_state.matrix = matrix;
                 form_state.clip = std::make_shared<Clip>(intersect(*state.clip, rectangle(matrix, numbers(box_values, 4)).corners));
                 const std::string inner = content(form);
                 const Object *form_resources = doc_.get(*form->dict, "/Resources");
+                if (form_resources && form_resources->kind == Kind::Null) {
+                    own("a PDF page whose resources are the null object");
+                    form_resources = nullptr;
+                }
                 if (form_resources && !form_resources->has_dict()) unreadable();
                 process(inner, true, form_resources ? form_resources->dict.get() : resources, form_state, depth + 1);
             }
@@ -1538,26 +1752,36 @@ private:
 };
 
 // RectangleObject(page.cropbox) and the like: four numbers. pypdf reads a reference in the array as 0.
-std::vector<double> box_of(const Object *box) {
-    if (!box || box->kind == Kind::Null) decline("a PDF page without a media box");
+std::vector<double> box_of(const Object *box, Document &doc) {
+    if (!box || box->kind == Kind::Null) refuse("a PDF page without a media box");
     if (box->kind != Kind::Array) unreadable();
-    for (const Object &v : *box->array)
-        if (v.kind == Kind::Ref) decline("a PDF box with a reference among its numbers");
-    return numbers(*box->array, 4);
+    Array values = *box->array;
+    for (Object &v : values)
+        if (v.kind == Kind::Ref) {
+            own("a PDF box with a reference among its numbers");  // the number it refers to
+            v = *doc.resolve(v);
+        }
+    return numbers(values, 4);
 }
 
 json read_page(const std::string &bytes, long long number) {
     Document doc(bytes);
     // pypdf reads an encrypted file's security handler before the reference refuses it: the core refuses the
-    // standard RC4 handlers pypdf reads, and declines the others.
+    // standard RC4 handlers pypdf reads with the reference's message, and the others by its own rule with the same.
     if (doc.trailer.count("/Encrypt")) {
         const Object *encrypt = doc.get(doc.trailer, "/Encrypt");
         const auto whole = [&](const char *key) -> long long {
             const Object *o = encrypt && encrypt->kind == Kind::Dict ? raw_entry(*encrypt->dict, key) : nullptr;
-            if (!o || o->kind != Kind::Int) decline("an encrypted PDF of a kind the core does not read");
+            if (!o || o->kind != Kind::Int) {
+                own("an encrypted PDF of a kind the core does not read");
+                throw ValueError("Export an unencrypted PDF for vector review");
+            }
             return o->integer;
         };
-        if (!encrypt || encrypt->kind != Kind::Dict) decline("an encrypted PDF of a kind the core does not read");
+        if (!encrypt || encrypt->kind != Kind::Dict) {
+            own("an encrypted PDF of a kind the core does not read");
+            throw ValueError("Export an unencrypted PDF for vector review");
+        }
         const Object *filter = raw_entry(*encrypt->dict, "/Filter");
         const Object *id = raw_entry(doc.trailer, "/ID");
         const long long version = whole("/V"), revision = whole("/R");
@@ -1566,7 +1790,7 @@ json read_page(const std::string &bytes, long long number) {
         if (!filter || !filter->is_name("/Standard") || encrypt->dict->count("/SubFilter") || (version != 1 && version != 2) ||
             (revision != 2 && revision != 3) || !id || id->kind != Kind::Array || id->array->size() != 2 ||
             (*id->array)[0].kind != Kind::String)
-            decline("an encrypted PDF of a kind the core does not read");
+            own("an encrypted PDF of a kind the core does not read");
         throw ValueError("Export an unencrypted PDF for vector review");
     }
     const Object *root = doc.get(doc.trailer, "/Root");
@@ -1583,11 +1807,11 @@ json read_page(const std::string &bytes, long long number) {
     std::set<const Object *> visiting;
     std::function<void(const Object *, Dict)> walk = [&](const Object *node, Dict inherited) {
         if (!node || node->kind != Kind::Dict) unreadable();
-        if (!visiting.insert(node).second) decline("a PDF page tree that refers to itself");
+        if (!visiting.insert(node).second) refuse("a PDF page tree that refers to itself");
         const Object *type = doc.get(*node->dict, "/Type");
         const Object *kids = doc.get(*node->dict, "/Kids");
         const bool pages = type ? type->is_name("/Pages") : kids != nullptr;
-        if (!type) decline("a PDF page-tree node without a /Type");
+        if (!type) own("a PDF page-tree node without a /Type");  // a node of pages when it has kids, else a page
         if (pages) {
             if (!kids || kids->kind != Kind::Array) unreadable();
             for (const char *key : {"/Resources", "/MediaBox", "/CropBox", "/Rotate"}) {
@@ -1595,12 +1819,13 @@ json read_page(const std::string &bytes, long long number) {
                 if (found != node->dict->end()) inherited[key] = found->second;
             }
             entries += kids->array->size();
-            if (entries > 400) decline("a PDF page tree near pypdf's limit on entries");
+            if (entries > 400) own("a PDF page tree near pypdf's limit on entries");
+            if (entries > 1000) unreadable();  // the core's own limit
             for (const Object &kid : *kids->array) walk(doc.resolve(kid), inherited);
         } else {
-            if (!type->is_name("/Page")) decline("an unusual PDF page-tree node");
+            if (type && !type->is_name("/Page")) refuse("an unusual PDF page-tree node");
             leaves.push_back({node, inherited});
-            if (leaves.size() > 400) decline("a PDF with more pages than the core reads");
+            if (leaves.size() > 400) own("a PDF with more pages than the core reads");  // then refused past 500
         }
         visiting.erase(node);
     };
@@ -1618,13 +1843,13 @@ json read_page(const std::string &bytes, long long number) {
     };
     double user_unit = 1.0;
     if (const Object *unit = raw_entry(page, "/UserUnit")) {
-        if (!unit->is_number()) decline("an unusual PDF user unit");
-        user_unit = unit->value();
+        if (!unit->is_number()) own("an unusual PDF user unit");  // which is then 1
+        else user_unit = unit->value();
     }
     const double scale = user_unit * 25.4 / 72;
     const Object *media = attribute("/MediaBox");
     const Object *crop = attribute("/CropBox");
-    std::vector<double> c = box_of(crop && crop->kind != Kind::Null ? crop : media), mb = box_of(media);
+    std::vector<double> c = box_of(crop && crop->kind != Kind::Null ? crop : media, doc), mb = box_of(media, doc);
     const double x = py_max(c[0], mb[0]), y = py_max(c[1], mb[1]), X = py_min(c[2], mb[2]), Y = py_min(c[3], mb[3]);
     if (!(0 < scale && scale <= 1e5) || !(x < X && y < Y)) throw ValueError("Invalid PDF page scale or crop box");
     long long rotation = 0;
@@ -1638,7 +1863,7 @@ json read_page(const std::string &bytes, long long number) {
             if (turned != 0 && turned != 90 && turned != 180 && turned != 270) throw ValueError("PDF page rotation must be a multiple of 90 degrees");
             rotation = static_cast<long long>(turned);
         } else {
-            decline("an unusual PDF page rotation");
+            refuse("an unusual PDF page rotation");
         }
     }
     const double width = (X - x) * scale, height = (Y - y) * scale;
@@ -1657,14 +1882,18 @@ json read_page(const std::string &bytes, long long number) {
     const Object *raw = contents == page.end() ? nullptr : doc.resolve(contents->second);
     const std::string content = extraction.content(raw);
     const Object *resources = attribute("/Resources");
+    if (resources && resources->kind == Kind::Null) {
+        own("a PDF page whose resources are the null object");  // none
+        resources = nullptr;
+    }
     if (resources && !resources->has_dict()) unreadable();
     extraction.process(content, raw != nullptr, resources ? resources->dict.get() : nullptr, state);
     if (const Object *annotations = raw_entry(page, "/Annots")) {
         // page.get('/Annots') is the entry itself, which a reference makes true; len() of what it refers to.
         if (annotations->kind == Kind::Ref || truth(*annotations)) {
             const Object *list = doc.resolve(*annotations);
-            if (list->kind != Kind::Array) decline("unusual PDF annotations");
-            extraction.skip("annotations omitted", static_cast<long long>(list->array->size()));
+            if (list->kind != Kind::Array) own("unusual PDF annotations");  // which name no annotation
+            else extraction.skip("annotations omitted", static_cast<long long>(list->array->size()));
         }
     }
     Drawing &drawing = extraction.drawing;

@@ -14,7 +14,7 @@ file(READ ${KERFKITE_PROTOCOLS} KERFKITE_PROTOCOLS_JSON)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${KERFKITE_PROTOCOLS})
 configure_file(core/src/protocols_data.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/generated/protocols_data.hpp @ONLY)
 
-add_library(kerfkite_core STATIC core/src/api.cpp core/src/cam.cpp core/src/drilling.cpp core/src/knife.cpp core/src/laser.cpp
+add_library(kerfkite_core STATIC core/src/api.cpp core/src/own_rules.cpp core/src/cam.cpp core/src/drilling.cpp core/src/knife.cpp core/src/laser.cpp
   core/src/leveling.cpp core/src/protocols.cpp core/src/relief.cpp core/src/rotary.cpp core/src/router_entry.cpp
   core/src/simple_line.cpp core/src/stock.cpp core/src/tabs.cpp core/src/tool_changes.cpp core/src/fixture_collision.cpp core/src/stl_heightmap.cpp
   core/src/artwork_relief.cpp core/src/program_import.cpp core/src/dxf.cpp
@@ -139,10 +139,13 @@ if(TARGET kerfkite-step)
   if(CMAKE_VERSION VERSION_LESS 3.21)
     message(WARNING "CMake 3.21 or later installs the STEP add-on with its Open CASCADE libraries")
   else()
+    # Open CASCADE's libraries are its TK... toolkits. On Windows CMake matches DLL names in lower case, so the
+    # pattern takes either case. On Apple, CMake wants a destination for frameworks even when there are none;
+    # Open CASCADE is built as plain .dylib files, so that destination is the add-on's folder too.
     install(TARGETS kerfkite-step
-      RUNTIME_DEPENDENCIES PRE_INCLUDE_REGEXES "TK[A-Za-z0-9]+" PRE_EXCLUDE_REGEXES ".*"
+      RUNTIME_DEPENDENCIES PRE_INCLUDE_REGEXES "[Tt][Kk][A-Za-z0-9]+" PRE_EXCLUDE_REGEXES ".*"
         DIRECTORIES ${OpenCASCADE_BINARY_DIR} ${OpenCASCADE_LIBRARY_DIR}
-      RUNTIME DESTINATION step LIBRARY DESTINATION step)
+      RUNTIME DESTINATION step LIBRARY DESTINATION step FRAMEWORK DESTINATION step)
   endif()
 endif()
 add_executable(kerfkite_machine_selftest tests/machine_selftest.cpp)

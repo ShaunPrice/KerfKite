@@ -1,16 +1,18 @@
 // The text members of a LightBurn user bundle (a ZIP archive), read in memory as studio/import_bundle.py reads
 // them, to the bit. The archive is read as Python 3.13's zipfile reads it: the end record found as _EndRecData
-// finds it, the central directory walked as _RealGetContents walks it (names in code page 437 or, with flag bit
-// 11, strict UTF-8; cut at a NUL, and on Windows with backslashes as slashes), a member opened as ZipFile.open
-// opens it (the local header's name compared, entries that overrun the next one refused) and read as
-// ZipExtFile.read(4000001) reads it (stored bytes, or raw DEFLATE data inflated as zlib inflates it, cut at the
-// directory's size and checked against its CRC-32). The member's text is decoded as UTF-16 after a byte-order
-// mark, and otherwise as UTF-8 with an optional signature.
+// finds it, with the ZIP64 records as _EndRecData64 reads them, the central directory walked as _RealGetContents
+// walks it (names in code page 437 or, with flag bit 11, strict UTF-8; cut at a NUL, and on Windows with
+// backslashes as slashes; the ZIP64 and Info-ZIP Unicode path fields as _decodeExtra reads them), a member
+// opened as ZipFile.open opens it (the local header's name compared, entries that overrun the next one refused,
+// and entries that share a header read) and read as ZipExtFile.read(4000001) reads it (stored bytes, or raw
+// DEFLATE data inflated as zlib inflates it, cut at the directory's size and checked against its CRC-32). The
+// member's text is decoded as UTF-16 after a byte-order mark, and otherwise as UTF-8 with an optional signature.
 //
-// Declined (NotPorted), where Python versions read differently or zipfile raises something other than its read
-// errors: ZIP64 records and extra fields, the Info-ZIP Unicode path field, an extract version above 6.3,
-// patched or strongly encrypted data, entries that share a header offset, a negative header offset, and a
-// member that inflates past 4 MB. Written from the ZIP application note and zipfile's documented behaviour.
+// The core's own answers, where zipfile stops with an error that is not one of its read errors (NotImplementedError
+// for an entry that needs a ZIP version above 6.3, for patched data and for strong encryption; ValueError for a
+// header before the start of the data) or where Python versions read differently (DEFLATE data past the 4 MB a
+// member may hold): such an archive cannot be read, and data past the limit is not looked at. Written from the
+// ZIP application note and zipfile's documented behaviour.
 #include "kerfkite/bundle_import.hpp"
 
 #include <algorithm>
@@ -36,7 +38,7 @@ using detail::get;
 
 const size_t kMaxArchive = 4000000;
 const size_t kMaxMember = 4000000;
-const unsigned long long kMaxTotal = 16000000;
+const uint64_t kMaxTotal = 16000000;
 const size_t kMaxMembers = 256;
 const size_t kRead = kMaxMember + 1;  // what inspect_bundle asks a member for
 
@@ -44,9 +46,37 @@ const size_t kRead = kMaxMember + 1;  // what inspect_bundle asks a member for
 // and zlib.error.
 struct Unreadable {};
 
-[[noreturn]] void decline(const std::string &what) {
-    throw NotPorted("A bundle with " + what + " is read by Studio's Python bundle reader");
-}
+// A position in the archive as zipfile computes it, with Python's integers: a ZIP64 record can give offsets near
+// 2**64 that the adjustment for data before the archive brings back into the file. Two's complement in 128 bits,
+// more than any sum of these fields needs.
+struct Position {
+    uint64_t high = 0, low = 0;
+    static Position of(uint64_t value) { return Position{0, value}; }
+    Position operator+(const Position &o) const {
+        Position r;
+        r.low = low + o.low;
+        r.high = high + o.high + (r.low < low ? 1u : 0u);
+        return r;
+    }
+    Position operator-(const Position &o) const {
+        Position r;
+        r.low = low - o.low;
+        r.high = high - o.high - (low < o.low ? 1u : 0u);
+        return r;
+    }
+    bool negative() const { return (high >> 63) != 0; }
+    bool operator<(const Position &o) const {
+        const uint64_t sign = uint64_t(1) << 63;
+        return high != o.high ? (high ^ sign) < (o.high ^ sign) : low < o.low;
+    }
+    bool operator==(const Position &o) const { return high == o.high && low == o.low; }
+    // The value where it is from 0 to limit.
+    bool within(uint64_t limit, uint64_t &out) const {
+        if (high != 0 || low > limit) return false;
+        out = low;
+        return true;
+    }
+};
 
 // Code page 437's characters for bytes 0x80 to 0xFF; the lower half is ASCII.
 const uint16_t kCodePage437[128] = {
@@ -72,6 +102,7 @@ bool decode_name(const Bytes &raw, bool utf8, Text &out) {
 
 uint32_t u16(const unsigned char *p) { return static_cast<uint32_t>(p[0]) | static_cast<uint32_t>(p[1]) << 8; }
 uint32_t u32(const unsigned char *p) { return u16(p) | u16(p + 2) << 16; }
+uint64_t u64(const unsigned char *p) { return static_cast<uint64_t>(u32(p)) | static_cast<uint64_t>(u32(p + 4)) << 32; }
 
 bool signature(const Bytes &data, size_t at, unsigned char kind, unsigned char part) {
     return at + 4 <= data.size() && data[at] == 'P' && data[at + 1] == 'K' && data[at + 2] == kind && data[at + 3] == part;
@@ -88,10 +119,25 @@ struct Member {
     Text original;  // orig_filename
     Text name;      // filename: cut at the first NUL, and on Windows with backslashes as slashes
     unsigned flags = 0, method = 0;
-    uint32_t crc = 0, compressed = 0, size = 0, external = 0;
-    long long header = 0;  // the local header's offset, with any data before the archive
-    long long end = 0;     // _end_offset: the next header by offset, or the central directory
+    uint32_t crc = 0, external = 0;
+    uint64_t compressed = 0, size = 0;  // with a ZIP64 field, 64 bits
+    Position header;  // the local header's offset, with any data before the archive
+    Position end;     // _end_offset: the next header by offset, or the central directory
 };
+
+// _sanitize_filename: cut at the first NUL, and on Windows with backslashes as slashes.
+Text sanitized(const Text &name) {
+    Text out;
+    for (const uint32_t ch : name) {
+        if (ch == 0) break;
+#ifdef _WIN32
+        out.push_back(ch == '\\' ? '/' : ch);
+#else
+        out.push_back(ch);
+#endif
+    }
+    return out;
+}
 
 // The components of PurePosixPath(name): split at slashes, without empty and "." parts.
 std::vector<Text> parts(const Text &name) {
@@ -146,7 +192,7 @@ bool eligible(const Member &m) {
     return (kind == 0 || kind == 0100000) && !(m.flags & 1) && (m.method == 0 || m.method == 8);
 }
 
-// The central directory, as _EndRecData and _RealGetContents read it.
+// The central directory, as _EndRecData, _EndRecData64 and _RealGetContents read it.
 std::vector<Member> directory(const Bytes &data) {
     const size_t filesize = data.size();
     size_t location = 0;
@@ -167,15 +213,36 @@ std::vector<Member> directory(const Bytes &data) {
             }
         if (!found || filesize - location < 22) throw Unreadable();
     }
-    // Python 3.13 looks for the ZIP64 locator just before the record when there is room for it, earlier versions
-    // at the start of the file when there is not.
-    if (signature(data, location >= 20 ? location - 20 : 0, 6, 7)) decline("a ZIP64 end record");
-    const uint32_t size_cd = u32(&data[location + 12]), offset_cd = u32(&data[location + 16]);
-    const long long concat = static_cast<long long>(location) - size_cd - offset_cd;
-    const long long start = static_cast<long long>(location) - size_cd;
-    if (start < 0) throw Unreadable();
-    const size_t stop = std::min<size_t>(filesize, static_cast<size_t>(start) + size_cd);
-    size_t at = static_cast<size_t>(start);
+    uint64_t size_cd = u32(&data[location + 12]), offset_cd = u32(&data[location + 16]);
+    // The ZIP64 locator just before the record, where there is room for one, and the ZIP64 record it points to:
+    // at its stated offset, or where it would be with data before the archive and no extensible data.
+    if (location >= 20 && signature(data, location - 20, 6, 7)) {
+        const unsigned char *locator = &data[location - 20];
+        const uint64_t stated = u64(locator + 8);
+        if (u32(locator + 4) != 0 || u32(locator + 16) > 1) throw Unreadable();  // spans disks
+        if (location < 76 || stated > location - 76) throw Unreadable();
+        const size_t offset = location - 76;
+        size_t at = static_cast<size_t>(stated);
+        size_t extra = offset - at;
+        if (!signature(data, at, 6, 6) && at != offset) {
+            at = offset;
+            extra = 0;
+        }
+        if (!signature(data, at, 6, 6)) throw Unreadable();
+        const unsigned char *record = &data[at];
+        const uint64_t record_size = u64(record + 4), dir_size = u64(record + 40), dir_offset = u64(record + 48);
+        // diroffset + dirsize == reloff and sz + 12 == 56 + extrasz, without overflow.
+        if (dir_offset > stated || dir_size != stated - dir_offset || record_size != 44u + extra) throw Unreadable();
+        size_cd = dir_size;
+        offset_cd = dir_offset;
+        location = at;
+    }
+    // concat = location - size_cd - offset_cd, and the directory starts at offset_cd + concat.
+    if (size_cd > location) throw Unreadable();
+    const size_t start = location - static_cast<size_t>(size_cd);
+    const Position concat = Position::of(location) - Position::of(size_cd) - Position::of(offset_cd);
+    const size_t stop = location;
+    size_t at = start;
     const auto read = [&](size_t count) {
         const size_t n = std::min(count, stop - at);
         Bytes out(data.begin() + static_cast<long>(at), data.begin() + static_cast<long>(at + n));
@@ -183,7 +250,7 @@ std::vector<Member> directory(const Bytes &data) {
         return out;
     };
     std::vector<Member> members;
-    unsigned long long total = 0;
+    uint64_t total = 0;
     while (total < size_cd) {
         if (stop - at < 46) throw Unreadable();
         const Bytes entry = read(46);
@@ -198,34 +265,50 @@ std::vector<Member> directory(const Bytes &data) {
         m.size = u32(c + 24);
         const uint32_t name_length = u16(c + 28), extra_length = u16(c + 30), comment_length = u16(c + 32);
         m.external = u32(c + 38);
-        const uint32_t header = u32(c + 42);
-        if (!decode_name(read(name_length), m.flags & 0x800, m.original)) throw Unreadable();
-        for (const uint32_t ch : m.original) {
-            if (ch == 0) break;
-#ifdef _WIN32
-            m.name.push_back(ch == '\\' ? '/' : ch);
-#else
-            m.name.push_back(ch);
-#endif
-        }
+        uint64_t header = u32(c + 42);
+        const Bytes raw_name = read(name_length);
+        const uint32_t name_crc = detail::crc32(raw_name.data(), raw_name.size());
+        if (!decode_name(raw_name, m.flags & 0x800, m.original)) throw Unreadable();
+        m.name = sanitized(m.original);
         const Bytes extra = read(extra_length);
         read(comment_length);
-        if (extract_version > 63) decline("an entry that needs a ZIP version above 6.3");
+        // zipfile raises NotImplementedError for a newer entry; the archive cannot be read.
+        if (extract_version > 63) throw Unreadable();
         for (size_t i = 0; extra.size() - i >= 4;) {
             const uint32_t type = u16(&extra[i]), length = u16(&extra[i + 2]);
             if (length + 4 > extra.size() - i) throw Unreadable();
-            if (type == 0x0001) decline("a ZIP64 extra field");
-            if (type == 0x7075) decline("an Info-ZIP Unicode path field");
+            const unsigned char *field = &extra[i + 4];
+            if (type == 0x0001) {
+                // ZIP64: the sizes and the offset that the entry leaves at their largest, in that order.
+                size_t left = length;
+                const auto next = [&](uint64_t &value) {
+                    if (left < 8) throw Unreadable();
+                    value = u64(field);
+                    field += 8;
+                    left -= 8;
+                };
+                if (m.size == 0xFFFFFFFFu || m.size == 0xFFFFFFFFFFFFFFFFull) next(m.size);
+                if (m.compressed == 0xFFFFFFFFu) next(m.compressed);
+                if (header == 0xFFFFFFFFu) next(header);
+            } else if (type == 0x7075) {
+                // Info-ZIP Unicode path: version 1 and the CRC-32 of the name it stands for.
+                if (length < 5) throw Unreadable();
+                if (field[0] == 1 && u32(field + 1) == name_crc) {
+                    Text unicode;
+                    if (!detail::python_utf8(field + 5, length - 5, unicode)) throw Unreadable();
+                    if (!unicode.empty()) m.name = sanitized(unicode);
+                }
+            }
             i += length + 4;
         }
-        m.header = header + concat;
+        m.header = Position::of(header) + concat;
         members.push_back(m);
         total += 46ull + name_length + extra_length + comment_length;
     }
     std::vector<size_t> order(members.size());
     std::iota(order.begin(), order.end(), size_t(0));
     std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) { return members[a].header < members[b].header; });
-    long long end = start;
+    Position end = Position::of(start);
     for (size_t k = order.size(); k-- > 0;) {
         members[order[k]].end = end;
         end = members[order[k]].header;
@@ -235,9 +318,11 @@ std::vector<Member> directory(const Bytes &data) {
 
 // The member's bytes as ZipFile.open(member).read(4000001) gives them.
 Bytes member_bytes(const Bytes &data, const Member &m) {
-    if (m.header < 0) decline("a negative header offset");
     const size_t filesize = data.size();
-    size_t pos = static_cast<size_t>(m.header);
+    // A header before the data is a seek zipfile cannot make (ValueError), one past it a truncated header.
+    uint64_t offset = 0;
+    if (!m.header.within(filesize, offset)) throw Unreadable();
+    size_t pos = static_cast<size_t>(offset);
     const auto take = [&](size_t count) {
         const size_t n = pos < filesize ? std::min(count, filesize - pos) : 0;
         Bytes out(data.begin() + static_cast<long>(pos), data.begin() + static_cast<long>(pos + n));
@@ -249,32 +334,32 @@ Bytes member_bytes(const Bytes &data, const Member &m) {
     const uint32_t local_flags = u16(&header[6]), name_length = u16(&header[26]), extra_length = u16(&header[28]);
     const Bytes name = take(name_length);
     pos += extra_length;
-    if (m.flags & 0x20) decline("patched data");
-    if (m.flags & 0x40) decline("strongly encrypted data");
+    // Patched data and strong encryption, for which zipfile raises NotImplementedError: not readable here.
+    if (m.flags & 0x60) throw Unreadable();
     Text local;
     if (!decode_name(name, local_flags & 0x800, local) || local != m.original) throw Unreadable();
-    if (static_cast<long long>(pos) + m.compressed > m.end) {
-        if (m.end == m.header) decline("entries that share a header");
-        throw Unreadable();
-    }
+    // An entry that overruns the next is refused; one that shares its header with another is read (zipfile warns).
+    if (m.end < Position::of(pos) + Position::of(m.compressed) && !(m.end == m.header)) throw Unreadable();
     // The first read takes all the compressed data there is; a second, needed when that falls short, finds none.
-    const size_t available = pos < filesize ? std::min<size_t>(m.compressed, filesize - pos) : 0;
+    const size_t available = pos < filesize ? static_cast<size_t>(std::min<uint64_t>(m.compressed, filesize - pos)) : 0;
     if (m.compressed && !available) throw Unreadable();
     const Bytes compressed(data.begin() + static_cast<long>(std::min(pos, filesize)),
                            data.begin() + static_cast<long>(std::min(pos, filesize) + available));
     Bytes out;
     bool ended = true;
     if (m.method == 8) {
-        const detail::Inflated result = detail::raw_inflate(compressed.data(), compressed.size(), kRead - 1, out, ended);
+        // zlib is asked for the 4000001 bytes read() wants. Data that inflates further is cut there, as zlib
+        // stops, and nothing after it is looked at: a member holds at most 4 MB, so the cut is never short.
+        const detail::Inflated result = detail::raw_inflate(compressed.data(), compressed.size(), kRead, out, ended);
         if (result == detail::Inflated::Broken) throw Unreadable();
-        if (result == detail::Inflated::TooLong) decline("a member that inflates past 4 MB");
+        if (result == detail::Inflated::TooLong) ended = false;
     } else {
         out = compressed;
         ended = false;
     }
     bool eof = ended || available == m.compressed;
     if (out.size() >= m.size) {
-        out.resize(m.size);
+        out.resize(static_cast<size_t>(m.size));
         eof = true;
     }
     if (!eof || detail::crc32(out.data(), out.size()) != m.crc) throw Unreadable();
@@ -315,8 +400,10 @@ Json inspect_bundle(const Json &payload) {
     if (data.empty() || data.size() > kMaxArchive) throw ValueError("Choose a bundle of up to 4 MB");
     try {
         const std::vector<Member> members = directory(data);
-        unsigned long long total = 0;
-        for (const Member &m : members) total += m.size;
+        // The sum as Python's integers make it: past the limit is all the check needs to know.
+        uint64_t total = 0;
+        for (const Member &m : members)
+            if (total <= kMaxTotal) total = m.size > kMaxTotal - total ? kMaxTotal + 1 : total + m.size;
         if (members.size() > kMaxMembers || total > kMaxTotal) throw ValueError("Bundle exceeds 256 members or 16 MB uncompressed");
         std::vector<size_t> accepted;
         for (size_t i = 0; i < members.size(); ++i)

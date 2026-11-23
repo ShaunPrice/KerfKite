@@ -102,17 +102,9 @@ std::string first_code_points(const std::string &text, size_t limit) {
     return text.substr(0, at);
 }
 
-std::string fixed_text(double value, int decimals) {
-    std::string out;
-    if (!text::fixed(out, value, decimals)) throw NotPorted("a coordinate beyond the range written with fixed decimals");
-    return out;
-}
+std::string fixed_text(double value, int decimals) { return text::fixed_exact(value, decimals); }
 
-double python_round(double value, int decimals) {
-    double result = 0;
-    if (!text::rounded(value, decimals, result)) throw NotPorted("a placement beyond the exact range of round()");
-    return result;
-}
+double python_round(double value, int decimals) { return text::rounded_exact(value, decimals); }
 
 // pcb_api._number: a number (never a bool) within the bounds.
 double board_number(const json *value, const std::string &name, double low, double high) {

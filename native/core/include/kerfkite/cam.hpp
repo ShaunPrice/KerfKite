@@ -22,6 +22,18 @@ struct NotPorted : std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
+// A place where the core answers by a rule of its own, which the Python reference does not share: a repair or a
+// reading the format allows where the reference refuses or repairs otherwise, an exact answer where the
+// reference's turns on rounding, a limit of the core's own. what names the case. With the reference's rules in
+// force (set_reference_rules(true), for a caller that falls back to the Python and for the parity comparison)
+// the case is declined: NotPorted(what) is thrown for the reference to answer. Otherwise the core goes on by its
+// own rule and notes the case for this thread (take_own_rules).
+void own_rule(const char *what);
+void set_reference_rules(bool on);
+bool reference_rules();
+// The cases own_rule noted on this thread since the last call, in order and each once; the call clears them.
+std::vector<std::string> take_own_rules();
+
 // One cutting move for the preview: start and end in millimetres, and the laser power when there is one.
 struct Segment {
     double x, y, nx, ny, end_z;

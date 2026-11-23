@@ -35,6 +35,8 @@ setup(
                 # The native core's levelling module and its Python entry point.
                 'studio/_core_native.cpp',
                 'native/core/src/json.cpp',
+                # Where the core answers by its own rules; Studio's Python keeps the reference's (see below).
+                'native/core/src/own_rules.cpp',
                 'native/core/src/leveling.cpp',
                 # G-code and rotary output: the planar generator, drilling, the drag knife, laser paths, ramp
                 # and helix entries, holding tabs, the self-crossing test they ask of contours, the

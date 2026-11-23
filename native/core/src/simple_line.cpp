@@ -6,7 +6,8 @@
 // for some nearly collinear points whose coordinates differ greatly in size it gives another sign than
 // exact arithmetic. Both steps are repeated here operation for operation (the copy agreed with GEOS 3.14
 // on 30,000 such constructed cases), and the result is also checked against the exact sign. Where the two
-// disagree the answer depends on rounding inside GEOS, and the contour is declined instead of answered.
+// disagree the answer depends on rounding inside GEOS: the core's own rule is the exact sign, and with the
+// reference's rules in force the contour is declined instead (own_rule, kerfkite/cam.hpp).
 //
 // The line is simple when no pair of its segments is found to cross, so the answer does not depend on
 // which pairs are looked at first, nor on leaving out a pair that GEOS's own test is certain to pass.
@@ -19,17 +20,20 @@
 //   end point in one branch is clear of, and on one side of, the line of every segment in the other. See
 //   Index below for why that is certain. A crossing ends the walk at once.
 // * A count of the work done, in units that cost about the same time. Past kSimpleLineBudget the contour
-//   is declined (NotPorted), so no contour takes more than about a second. The count, unlike the time,
-//   is the same on every machine, and the tests bound it.
+//   is refused (declined with the reference's rules in force), so no contour takes more than about a second.
+//   The count, unlike the time, is the same on every machine, and the tests bound it.
 #include "simple_line.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <climits>
 #include <limits>
 #include <numeric>
+#include <vector>
 
 #include "kerfkite/cam.hpp"
+#include "kerfkite/errors.hpp"
 #include "kerfkite/line_check.hpp"
 
 namespace kerfkite {
@@ -48,7 +52,10 @@ struct Meter {
     std::uint64_t limit = kSimpleLineBudget;
     void spend(std::uint64_t cost) {
         units += cost;
-        if (units > limit) throw NotPorted("a contour whose self-crossing test needs more comparisons than the core allows");
+        if (units > limit) {
+            own_rule("a contour whose self-crossing test needs more comparisons than the core allows");
+            throw ValueError("A contour is too complex to test whether it crosses itself; simplify it or split it");
+        }
     }
 };
 
@@ -132,6 +139,70 @@ int exact_orientation(const Point &p1, const Point &p2, const Point &q) {
     return count ? sign(parts[count - 1]) : 0;
 }
 
+// The exact sign for any coordinates, the subnormal and the huge included: each of the six products is an integer
+// of at most 106 bits times a power of two, and their sum is taken exactly in integers of as many 32-bit words as
+// the powers need (up to about seventy). Slow, and used only where the expansions above could underflow or
+// overflow.
+int exact_orientation_wide(const Point &p1, const Point &p2, const Point &q) {
+    struct Term {
+        bool negative;
+        uint64_t hi, lo;  // the product of the two integers
+        int exponent;
+    };
+    const auto term = [](double x, double y, bool minus) {
+        Term t{false, 0, 0, 0};
+        if (x == 0 || y == 0) return t;
+        int ex, ey;
+        const uint64_t mx = static_cast<uint64_t>(std::ldexp(std::frexp(std::fabs(x), &ex), 53));
+        const uint64_t my = static_cast<uint64_t>(std::ldexp(std::frexp(std::fabs(y), &ey), 53));
+        const uint64_t a = mx >> 32, b = mx & 0xffffffffu, c = my >> 32, d = my & 0xffffffffu;
+        const uint64_t ac = a * c, ad = a * d, bc = b * c, bd = b * d;
+        const uint64_t middle = (bd >> 32) + (ad & 0xffffffffu) + (bc & 0xffffffffu);
+        t.lo = (bd & 0xffffffffu) | (middle << 32);
+        t.hi = ac + (ad >> 32) + (bc >> 32) + (middle >> 32);
+        t.exponent = ex + ey - 106;
+        t.negative = (std::signbit(x) != std::signbit(y)) != minus;
+        return t;
+    };
+    const Term terms[6] = {term(p2[0], q[1], false), term(p1[0], q[1], true),  term(p1[0], p2[1], false),
+                           term(p2[1], q[0], true),  term(p1[1], q[0], false), term(p1[1], p2[0], true)};
+    int lowest = INT32_MAX;
+    for (const Term &t : terms)
+        if (t.hi || t.lo) lowest = std::min(lowest, t.exponent);
+    if (lowest == INT32_MAX) return 0;
+    // The positive and the negative terms summed apart, in words of 32 bits, least significant first.
+    std::vector<uint32_t> sums[2];
+    for (const Term &t : terms) {
+        if (!t.hi && !t.lo) continue;
+        const int shift = t.exponent - lowest;
+        const size_t words = static_cast<size_t>(shift / 32) + 6;
+        std::vector<uint32_t> &sum = sums[t.negative ? 1 : 0];
+        if (sum.size() < words) sum.resize(words, 0u);
+        const uint32_t parts[4] = {static_cast<uint32_t>(t.lo), static_cast<uint32_t>(t.lo >> 32), static_cast<uint32_t>(t.hi),
+                                   static_cast<uint32_t>(t.hi >> 32)};
+        // Each part of the product, moved up by shift bits, added in with its carry.
+        uint64_t carry = 0;
+        const size_t base = static_cast<size_t>(shift / 32);
+        const int bits = shift % 32;
+        for (size_t i = 0; i < 5 || carry; ++i) {
+            const uint64_t low = i < 4 ? static_cast<uint64_t>(parts[i]) << bits : 0;
+            const uint64_t high = i > 0 && bits ? static_cast<uint64_t>(parts[i - 1]) >> (32 - bits) : 0;
+            const uint64_t piece = (i < 4 ? static_cast<uint32_t>(low) : 0u) | (i > 0 && i <= 4 ? high : 0u);
+            if (base + i >= sum.size()) sum.push_back(0u);
+            const uint64_t total = static_cast<uint64_t>(sum[base + i]) + (i <= 4 ? piece : 0u) + carry;
+            sum[base + i] = static_cast<uint32_t>(total);
+            carry = total >> 32;
+        }
+    }
+    std::vector<uint32_t> &positive = sums[0], &negative = sums[1];
+    const size_t size = std::max(positive.size(), negative.size());
+    positive.resize(size, 0u);
+    negative.resize(size, 0u);
+    for (size_t i = size; i-- > 0;)
+        if (positive[i] != negative[i]) return positive[i] > negative[i] ? 1 : -1;
+    return 0;
+}
+
 // geos::algorithm::Orientation::index(p1, p2, q): 1 when q is to the left of p1 -> p2, -1 to the right.
 int orientation(const Point &p1, const Point &p2, const Point &q, Meter &meter) {
     const double detleft = (p1[0] - q[0]) * (p2[1] - q[1]);
@@ -156,13 +227,21 @@ int orientation(const Point &p1, const Point &p2, const Point &q, Meter &meter) 
     const DD left = dd_multiply(dx1, dy2), right = dd_multiply(dy1, dx2);
     const DD d = dd_add(left, {-right.hi, -right.lo});
     const int index = d.hi < 0 || (d.hi == 0 && d.lo < 0) ? -1 : d.hi > 0 || (d.hi == 0 && d.lo > 0) ? 1 : 0;
-    // Products of very small coordinates underflow, and then neither computation is exact.
+    // Products of very small coordinates underflow, and those of very large ones overflow: then neither computation
+    // above is exact, and the core's own answer is the exact sign in integers.
+    bool tiny = false, huge = false;
     for (const Point *point : {&p1, &p2, &q})
-        for (const double v : *point)
-            if (v != 0 && std::fabs(v) < 1e-140) throw NotPorted("contours with coordinates below 1e-140");
-    if (index != exact_orientation(p1, p2, q))
-        throw NotPorted("contours whose crossing test depends on rounding inside GEOS");
-    return index;
+        for (const double v : *point) {
+            tiny = tiny || (v != 0 && std::fabs(v) < 1e-140);
+            huge = huge || std::fabs(v) > 1e140;
+        }
+    if (tiny) {
+        own_rule("contours with coordinates below 1e-140");
+        return exact_orientation_wide(p1, p2, q);
+    }
+    const int exact = huge ? exact_orientation_wide(p1, p2, q) : exact_orientation(p1, p2, q);
+    if (index != exact) own_rule("contours whose crossing test depends on rounding inside GEOS");
+    return exact;
 }
 
 // geos::geom::Envelope::intersects(p1, p2, q): q inside the box of p1 and p2.
@@ -492,7 +571,8 @@ bool line_shorter_than(const Contour &path, double limit) {
         const double dx = path[i][0] - path[i - 1][0], dy = path[i][1] - path[i - 1][1];
         length += std::sqrt(dx * dx + dy * dy);
     }
-    if (std::fabs(length - limit) <= limit * 1e-12) throw NotPorted("a contour length within rounding of the reference's limit");
+    // Within rounding of the limit, GEOS's sum and this one may fall either side; the core's own answer is its sum.
+    if (std::fabs(length - limit) <= limit * 1e-12) own_rule("a contour length within rounding of the reference's limit");
     return length < limit;
 }
 
