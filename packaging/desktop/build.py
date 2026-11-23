@@ -64,7 +64,8 @@ def native_build(native, target):
 
 
 def copy_native(folder, dest, step=True):
-    """The server, its programs and the editor's files; the STEP add-on too unless the installer offers it apart."""
+    """The server, its programs and the editor's files; the STEP add-on too unless the installer offers it apart.
+    The assistant server (kerfkite-mcp) reads the template collection beside static/."""
     for item in folder.iterdir():
         if item.name == "step":
             if step:
@@ -74,6 +75,7 @@ def copy_native(folder, dest, step=True):
         else:
             shutil.copy2(item, dest)
     shutil.copytree(ROOT / "studio/static", dest / "static", ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copy2(ROOT / "studio/builtin_templates.kkart", dest)
 
 
 def payload(dest, wheel, goos, arch, native=None):
