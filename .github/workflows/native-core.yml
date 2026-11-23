@@ -102,7 +102,7 @@ jobs:
           python -m pip install "fastmcp>=3.4.11,<4" "pydantic>=2.12,<3" "playwright>=1.51,<2"
           python validation/mcp_parity.py --server build/native/kerfkite-mcp
           python validation/mcp_remote_parity.py --server build/native/kerfkite-mcp --web build/native/kerfkite-web
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           python validation/mcp_http_parity.py --server build/native/kerfkite-mcp
           # Google Chrome is on the x86-64 runners only.
           chrome=$(command -v google-chrome || true)
