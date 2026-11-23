@@ -1,28 +1,21 @@
-"""Exercise the CAD workspace using the real editor and a local simulator-only server.
+"""Exercise the CAD workspace using the real editor and the workstation server in simulation.
 
-Install the app and Playwright, then run:
-    python -m playwright install chromium
-    python validation/simulate_solid_workspace.py
-Use --browser PATH to select an installed Chromium executable. With --url the lessons run against a server
-that is already running instead, such as the C++ workstation server (kerfkite-studio); the lessons that need
-the Python controller object (the synthetic Grbl of machine setup and the phone arm) are then left out, and so is
-STEP exchange (the exchange lesson and the loft lesson's STEP download) unless --step says the server has it (the
-C++ server with its Open CASCADE add-on, kerfkite-step).
+Build the native programs (native/README.md), install Playwright, then run:
+    python validation/simulate_solid_workspace.py --browser /path/to/chromium
+It starts kerfkite-studio (--server, KERFKITE_STUDIO or build/native) on a free port and runs the lessons, STEP
+exchange among them when the Open CASCADE add-on (kerfkite-step) is beside it. With --url
+the lessons run against a server that is already running instead; the phone arm is then left out, and so is STEP
+exchange (the exchange lesson and the loft lesson's STEP download) unless --step says the server has it.
 """
 
 import argparse
-import logging
+import contextlib
 import struct
-import threading
 from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
-from werkzeug.serving import make_server
 
-from studio.device import DeviceController
-from studio.phone_jobs import PhoneJobs
-from studio.phone_monitor_service import PhoneMonitor
-from studio.server import create_app
+from native_servers import beside, program, studio
 
 
 def run(page):
@@ -149,111 +142,105 @@ def run(page):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--browser", help="Path to a Chromium executable")
+    parser.add_argument("--server", help="kerfkite-studio to start (default: KERFKITE_STUDIO or build/native)")
     parser.add_argument("--url", help="A Studio server that is already running, such as http://127.0.0.1:8765/")
     parser.add_argument("--step", action="store_true", help="The server at --url has STEP exchange")
     args = parser.parse_args()
-    step = not args.url or args.step
-    logging.getLogger("werkzeug").setLevel(logging.ERROR)
-    controller = jobs = monitor = server = worker = None
-    if not args.url:
-        controller = DeviceController()
-        jobs = PhoneJobs(controller)
-        monitor = PhoneMonitor(controller, jobs, port=0)
-        app = create_app(controller, jobs, allow_hardware=False, phone_monitor=monitor)
-        server = make_server("127.0.0.1", 0, app, threaded=True)
-        worker = threading.Thread(target=server.serve_forever, daemon=True)
-        worker.start()
-    url = args.url or f"http://127.0.0.1:{server.server_port}/"
-    try:
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(executable_path=args.browser)
-            try:
-                page = browser.new_page(viewport={"width": 1440, "height": 980}, accept_downloads=True)
-                page.on("dialog", lambda dialog: dialog.accept())
-                page.goto(url)
-                run(page)
-                from cad_script_workflow import run as cad_script
-                from rotary_workflow import run as rotary
-                from depth_slice_workflow import run as depth_slices
-                from cad_macro_workflow import run as cad_macros
-                from editor_performance_workflow import run as editor_performance
-                from cad_views_workflow import run as cad_views
-                from desktop_workflow import run as desktop
-                from router_entry_workflow import run as router_entries
-                from svg_import_workflow import run as svg_import
-                from placement_workflow import run as placement
-                from production_label_workflow import run as production_labels
-                from drilling_workflow import run as drilling
-                from laser_pattern_workflow import run as laser_patterns
-                from corner_workflow import run as corner
-                from relief_link_workflow import run as linked_relief
-                from image_relief_workflow import run as image_relief
-                from sketch_join_workflow import run as sketch_join
-                from machining_lessons_workflow import run as machining_lessons
-                from loft_workflow import run as loft
-                from cad_link_workflow import run as linked_cad
-                from materials_workflow import run as materials
-                from lightburn_workflow import run as lightburn
-                from import_fixture_workflow import run as fixture_imports
-                from assembly_laser_workflow import run as assembly_laser
-                from simulate_exchange_workspace import run as exchange
-                from probe_leveling_workflow import run as probe_leveling
-                from pcb_workflow import run as circuit_board
-                from machine_setup_workflow import run as machine_setup
+    with contextlib.ExitStack() as stack:
+        server = None
+        if args.url:
+            url, step = args.url, args.step
+        else:
+            path = program("kerfkite-studio", args.server, "KERFKITE_STUDIO")
+            step = beside(path, "kerfkite-step")
+            server = stack.enter_context(studio(path, args=("--monitor-port", "0")))
+            url = server.url
+        lessons(args, url, step, server)
 
-                # Each lesson can modify the example or viewport.
-                for lesson in (
-                    cad_views,
-                    editor_performance,
-                    cad_script,
-                    cad_macros,
-                    depth_slices,
-                    rotary,
-                    desktop,
-                    lightburn,
-                    fixture_imports,
-                    assembly_laser,
-                    *((exchange,) if step else ()),
-                    materials,
-                    corner,
-                    linked_cad,
-                    *((loft,) if step else ()),
-                    linked_relief,
-                    image_relief,
-                    sketch_join,
-                    production_labels,
-                    laser_patterns,
-                    drilling,
-                    placement,
-                    router_entries,
-                    svg_import,
-                    machining_lessons,
-                    probe_leveling,
-                    circuit_board,
-                    *(() if args.url else (machine_setup,)),
-                ):
-                    with browser.new_context(viewport={"width": 1440, "height": 980}, accept_downloads=True) as context:
-                        workshop = context.new_page()
-                        workshop.on("dialog", lambda dialog: dialog.accept())
-                        workshop.goto(page.url)
-                        lesson(workshop)
-                from phone_arm_workflow import run as check_phone_arm
 
-                if args.url:
-                    return
-                with browser.new_context(viewport={"width": 1440, "height": 980}) as context:
-                    workstation = context.new_page()
-                    workstation.on("dialog", lambda dialog: dialog.accept())
-                    workstation.goto(page.url)
-                    check_phone_arm(workstation, controller, jobs)
-            finally:
-                browser.close()
-    finally:
-        if server:
-            monitor.disable()
-            server.shutdown()
-            worker.join()
-            server.server_close()
+def lessons(args, url, step, server):
+    """The lessons in one browser, against the server at url."""
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(executable_path=args.browser)
+        try:
+            page = browser.new_page(viewport={"width": 1440, "height": 980}, accept_downloads=True)
+            page.on("dialog", lambda dialog: dialog.accept())
+            page.goto(url)
+            run(page)
+            from cad_script_workflow import run as cad_script
+            from rotary_workflow import run as rotary
+            from depth_slice_workflow import run as depth_slices
+            from cad_macro_workflow import run as cad_macros
+            from editor_performance_workflow import run as editor_performance
+            from cad_views_workflow import run as cad_views
+            from desktop_workflow import run as desktop
+            from router_entry_workflow import run as router_entries
+            from svg_import_workflow import run as svg_import
+            from placement_workflow import run as placement
+            from production_label_workflow import run as production_labels
+            from drilling_workflow import run as drilling
+            from laser_pattern_workflow import run as laser_patterns
+            from corner_workflow import run as corner
+            from relief_link_workflow import run as linked_relief
+            from image_relief_workflow import run as image_relief
+            from sketch_join_workflow import run as sketch_join
+            from machining_lessons_workflow import run as machining_lessons
+            from loft_workflow import run as loft
+            from cad_link_workflow import run as linked_cad
+            from materials_workflow import run as materials
+            from lightburn_workflow import run as lightburn
+            from import_fixture_workflow import run as fixture_imports
+            from assembly_laser_workflow import run as assembly_laser
+            from simulate_exchange_workspace import run as exchange
+            from probe_leveling_workflow import run as probe_leveling
+            from pcb_workflow import run as circuit_board
+
+            # Each lesson can modify the example or viewport.
+            for lesson in (
+                cad_views,
+                editor_performance,
+                cad_script,
+                cad_macros,
+                depth_slices,
+                rotary,
+                desktop,
+                lightburn,
+                fixture_imports,
+                assembly_laser,
+                *((exchange,) if step else ()),
+                materials,
+                corner,
+                linked_cad,
+                *((loft,) if step else ()),
+                linked_relief,
+                image_relief,
+                sketch_join,
+                production_labels,
+                laser_patterns,
+                drilling,
+                placement,
+                router_entries,
+                svg_import,
+                machining_lessons,
+                probe_leveling,
+                circuit_board,
+            ):
+                with browser.new_context(viewport={"width": 1440, "height": 980}, accept_downloads=True) as context:
+                    workshop = context.new_page()
+                    workshop.on("dialog", lambda dialog: dialog.accept())
+                    workshop.goto(page.url)
+                    lesson(workshop)
+            from phone_arm_workflow import run as check_phone_arm
+
+            if server is None:
+                return
+            with browser.new_context(viewport={"width": 1440, "height": 980}) as context:
+                workstation = context.new_page()
+                workstation.on("dialog", lambda dialog: dialog.accept())
+                workstation.goto(page.url)
+                check_phone_arm(workstation, server)
+        finally:
+            browser.close()
 
 
 if __name__ == "__main__":

@@ -66,7 +66,7 @@ To verify the display preference, run this on a disposable emulator. The check e
 python validation/android_screen_awake_workflow.py --serial emulator-5554 --apk path/to/Pocket-0.4.1.apk --previous path/to/Pocket-0.4.0.apk
 ```
 
-For integrated priority Stop validation, boot a disposable emulator, install Playwright and Chromium, and run the following. The test opens the workstation, generates and arms a preview, then verifies that one phone can stop a pending Start or jog and recover fresh status.
+For integrated priority Stop validation, boot a disposable emulator, build the workstation server (`native/README.md`), install Playwright and Chromium, and run the following. The test opens the workstation, generates and arms a preview, then verifies that one phone can stop a pending Start or jog and recover fresh status.
 
 ```sh
 python validation/android_priority_stop_workflow.py --serial emulator-5554 --apk path/to/Pocket.apk

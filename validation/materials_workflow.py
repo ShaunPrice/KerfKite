@@ -3,8 +3,6 @@
 import json
 from pathlib import Path
 from secrets import token_urlsafe
-from tempfile import TemporaryDirectory
-from threading import Thread
 from urllib.parse import urlsplit
 
 from playwright.sync_api import expect
@@ -164,49 +162,34 @@ def exercise_guide(page):
 
 
 def hosted_notebooks(browser):
-    from werkzeug.serving import make_server
-    from studio.web_server import create_app
-    from studio.web_store import WebStore
+    from native_servers import web
 
-    with TemporaryDirectory() as directory:
-        store = WebStore(directory)
-        accounts = {name: token_urlsafe(24) for name in ("sample-maker", "sample-reader")}
-        for name, password in accounts.items():
-            store.add_user(name, password)
-        # Reserve the TCP port first so the HTTPS app can check the exact Origin.
-        server = make_server("127.0.0.1", 0, None, ssl_context="adhoc", threaded=True)
-        url = f"https://127.0.0.1:{server.server_port}"
-        server.app = create_app(store, url)
-        worker = Thread(target=server.serve_forever, daemon=True)
-        worker.start()
-        try:
-            with browser.new_context(ignore_https_errors=True) as context:
-                editor = context.new_page()
-                for index, name in enumerate(("sample-maker", "sample-reader", "sample-maker")):
-                    context.clear_cookies()  # Simulate an expired login, retaining the same browser database.
-                    editor.goto(url)
-                    editor.get_by_label("Username").fill(name)
-                    editor.get_by_label("Password").fill(accounts[name])
-                    editor.get_by_role("button", name="Log in").click()
-                    guide = launch_guide(editor, "knife", "knife")
-                    loc = guide.locator
-                    loc("#guide-operation").select_option("kiss")
-                    loc("#guide-material").select_option("pvc-vinyl")
-                    notes = ["Bench A, test sheet passed.", "Bench B, adjust blade."]
-                    if index < 2:
-                        loc("#sample-stock").fill("Sign film offcut")
-                        loc("#sample-result").select_option("pass")
-                        loc("#sample-notes").fill(notes[index])
-                        loc("#sample-save").click()
-                        expect(loc("#sample-entries")).to_contain_text(notes[index])
-                    expect(loc("#sample-entries")).to_contain_text(notes[index % 2])
-                    expect(loc("#sample-entries")).not_to_contain_text(notes[1 - index % 2])
-                    guide.close()
-                print("PASS separate hosted HTTPS sample notebooks across account changes in one browser")
-        finally:
-            server.shutdown()
-            worker.join()
-            server.server_close()
+    accounts = {name: token_urlsafe(24) for name in ("sample-maker", "sample-reader")}
+    with web(users=accounts.items()) as server:
+        url = server.origin
+        with browser.new_context(ignore_https_errors=True) as context:
+            editor = context.new_page()
+            for index, name in enumerate(("sample-maker", "sample-reader", "sample-maker")):
+                context.clear_cookies()  # Simulate an expired login, retaining the same browser database.
+                editor.goto(url)
+                editor.get_by_label("Username").fill(name)
+                editor.get_by_label("Password").fill(accounts[name])
+                editor.get_by_role("button", name="Log in").click()
+                guide = launch_guide(editor, "knife", "knife")
+                loc = guide.locator
+                loc("#guide-operation").select_option("kiss")
+                loc("#guide-material").select_option("pvc-vinyl")
+                notes = ["Bench A, test sheet passed.", "Bench B, adjust blade."]
+                if index < 2:
+                    loc("#sample-stock").fill("Sign film offcut")
+                    loc("#sample-result").select_option("pass")
+                    loc("#sample-notes").fill(notes[index])
+                    loc("#sample-save").click()
+                    expect(loc("#sample-entries")).to_contain_text(notes[index])
+                expect(loc("#sample-entries")).to_contain_text(notes[index % 2])
+                expect(loc("#sample-entries")).not_to_contain_text(notes[1 - index % 2])
+                guide.close()
+            print("PASS separate hosted HTTPS sample notebooks across account changes in one browser")
 
 
 def run(editor):

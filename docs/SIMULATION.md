@@ -1,12 +1,12 @@
 # Simulation and acceptance
 
-From a source checkout, install the workstation dependencies using the [installation guide](INSTALL.md). Run the harness from the project root using the same Python environment as the workstation. The extended run also requires Node.js with its built-in test runner and the dependencies used by the web tests.
+From a source checkout, build the native programs as the [installation guide](INSTALL.md) describes. Run the harness from the project root with Python 3.10 or later; the harness itself needs no Python packages. The extended run also requires Node.js with its built-in test runner and the dependencies used by the web tests.
 
 ```sh
 python scripts/simulate_studio.py --all --json simulation-result.json
 ```
 
-For a quick CAD and machining check, omit `--all`. The harness creates an isolated workstation with Flask's test client and connects the controller to its in-process GRBL simulator. It does not require a running server, local port or machine. A nonzero exit status identifies a failed check. The JSON report preserves each case, results, errors, skipped dependencies and areas awaiting other forms of acceptance.
+For a quick CAD and machining check, omit `--all`. The harness starts the workstation server, `kerfkite-studio`, on a free loopback port in simulation and connects its controller to the built-in GRBL simulator. It takes the server from `--server PATH`, the `KERFKITE_STUDIO` environment variable or `build/native`, in that order, and needs no machine. A nonzero exit status identifies a failed check. The JSON report preserves each case, results, errors, skipped dependencies and areas awaiting other forms of acceptance.
 
 ## What the fixture checks
 
@@ -23,7 +23,7 @@ The motion interpreter covers the absolute millimetre linear GRBL subset emitted
 
 ## Advanced CAD and file workflows
 
-Run `python scripts/simulate_studio.py --all --require-step` to include a real open surface and cylinder STEP round trip, a mated shaft offset into its bore wall, a holder strike during a posted rapid, relocation of the clamp and a plotter-to-knife conversion. The separate browser harness in `validation/simulate_solid_workspace.py` exercises editing, saving, reopening, image registration and file import through the actual controls. Install the STEP extra and Playwright first. The simulated fixture positions and tools are numerical test inputs.
+The harness also checks a mated shaft offset into its bore wall, a holder strike during a posted rapid, relocation of the clamp and a plotter-to-knife conversion. With the STEP add-on, `kerfkite-step`, beside the server, it adds a real open surface and cylinder STEP round trip; `python scripts/simulate_studio.py --all --require-step` makes a missing add-on a failure. The separate browser harness in `validation/simulate_solid_workspace.py` exercises editing, saving, reopening, image registration and file import through the actual controls. Install Playwright first. The simulated fixture positions and tools are numerical test inputs.
 
 ## Workshop and Pocket checks
 

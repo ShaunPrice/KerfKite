@@ -215,30 +215,19 @@ def run(page):
 
 if __name__ == '__main__':
     import argparse
-    import logging
-    import threading
 
     from playwright.sync_api import sync_playwright
-    from werkzeug.serving import make_server
 
-    from studio.device import DeviceController
-    from studio.server import create_app
+    from native_servers import studio
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--browser', help='Path to a Chromium executable')
+    parser.add_argument('--server', help='kerfkite-studio (default: KERFKITE_STUDIO or build/native)')
     arguments = parser.parse_args()
-    logging.getLogger('werkzeug').setLevel(logging.ERROR)
-    controller = DeviceController()
-    server = make_server('127.0.0.1', 0, create_app(controller), threaded=True)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    try:
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(executable_path=arguments.browser)
-            workshop = browser.new_page(viewport={'width': 1440, 'height': 980}, accept_downloads=True)
-            workshop.on('dialog', lambda dialog: dialog.accept())
-            workshop.goto(f'http://127.0.0.1:{server.server_port}/')
-            run(workshop)
-            browser.close()
-    finally:
-        controller.disconnect()
-        server.shutdown()
+    with studio(arguments.server) as server, sync_playwright() as playwright:
+        browser = playwright.chromium.launch(executable_path=arguments.browser)
+        workshop = browser.new_page(viewport={'width': 1440, 'height': 980}, accept_downloads=True)
+        workshop.on('dialog', lambda dialog: dialog.accept())
+        workshop.goto(server.url)
+        run(workshop)
+        browser.close()

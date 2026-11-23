@@ -1,26 +1,21 @@
 """Check Pocket's certificate pinning against a real Studio phone listener, without a phone.
 
-Compiles the plain-Java pinning class Pocket uses (PinnedTls) with a JDK, then makes pinned requests to
-phone listeners started here on the simulator. Requires `javac` and `java` on PATH and Studio's web extra.
+Compiles the plain-Java pinning class Pocket uses (PinnedTls) with a JDK, then makes pinned requests to the phone
+listeners of workstation servers (kerfkite-studio) started here on the simulator, with their TLS relay
+(kerfkite-pendant-tls, beside the server unless --relay names it), on the loopback interface only. Requires `javac`
+and `java` on PATH.
 
-    python validation/pendant_tls_pin_check.py
-    python validation/pendant_tls_pin_check.py --server build/native/kerfkite-studio [--relay PROGRAM]
-
-With --server the listeners are those of the C++ workstation server and its TLS relay (kerfkite-pendant-tls,
-beside the server unless --relay names it), started on the loopback interface only.
+    python validation/pendant_tls_pin_check.py [--server build/native/kerfkite-studio] [--relay PROGRAM]
 """
 
 import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
+from native_servers import program
+
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-from studio.device import DeviceController
-from studio.phone_jobs import PhoneJobs
-from studio.phone_monitor_service import PhoneMonitor
 
 SOURCES = ROOT / 'android/app/src'
 PACKAGE = 'au/cncstudio/pocket'
@@ -64,23 +59,14 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    parser.add_argument('--server', help='a kerfkite-studio program to check in place of the Python listener')
+    parser.add_argument('--server', help='kerfkite-studio (default: KERFKITE_STUDIO or build/native)')
     parser.add_argument('--relay', help='its TLS relay, kerfkite-pendant-tls')
     arguments = parser.parse_args()
     if not shutil.which('javac') or not shutil.which('java'):
         raise SystemExit('A JDK (javac and java) is required.')
-    controller = None
-    if arguments.server:
-        server = Path(arguments.server).resolve()
-        relay = arguments.relay or str(server.with_name('kerfkite-pendant-tls' + server.suffix))
-        genuine, impostor, plain = (NativeListener(str(server), relay, flag) for flag in (False, False, True))
-    else:
-        controller = DeviceController()
-        controller.connect('simulator')
-        jobs = PhoneJobs(controller)
-        genuine, impostor, plain = (
-            PhoneMonitor(controller, jobs, port=0, plaintext=flag) for flag in (False, False, True)
-        )
+    server = Path(program('kerfkite-studio', arguments.server, 'KERFKITE_STUDIO'))
+    relay = arguments.relay or str(server.with_name('kerfkite-pendant-tls' + server.suffix))
+    genuine, impostor, plain = (NativeListener(str(server), relay, flag) for flag in (False, False, True))
     with tempfile.TemporaryDirectory() as classes:
         files = [SOURCES / 'main/java' / PACKAGE / 'PinnedTls.java']
         files += [SOURCES / 'test/java' / PACKAGE / name for name in ('PinnedTlsCheck.java', 'PinnedTlsProbe.java')]
@@ -100,7 +86,7 @@ def main():
         try:
             a, b, c = genuine.enable(), impostor.enable(), plain.enable()
             assert a['encryption'] == b['encryption'] == 'pinned', (
-                'Install the web extra: the listener is not encrypted.'
+                'The listener is not encrypted: is the TLS relay beside the server?'
             )
             assert a['fingerprint'] != b['fingerprint'], 'Each pairing must have its own certificate.'
             assert c['encryption'] == 'none' and c['fingerprint'] is None
@@ -121,8 +107,6 @@ def main():
         finally:
             for monitor in (genuine, impostor, plain):
                 monitor.disable()
-            if controller:
-                controller.disconnect()
     print('PASS Pocket certificate pinning against the Studio phone listener')
 
 

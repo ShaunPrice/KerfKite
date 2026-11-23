@@ -1,4 +1,4 @@
-"""Operate the native Pocket pendant on a physical handset against Studio's simulated GRBL controller.
+"""Operate the native Pocket pendant on a physical handset against the workstation server's simulated controller.
 
 The emulator workflow (android_pendant_workflow.py) refuses real devices. This one is for a
 supervised handset on the same private network as the workstation:
@@ -14,31 +14,21 @@ The run pairs over the LAN, sends a 0.1 mm X jog, Home and Zero XYZ, starts an a
 resumes, sends Pocket to the background and back with the job running, stops, and forgets the pairing.
 It refuses to continue when the handset already holds a pairing unless --replace-pairing is given.
 
-With --encrypted the run uses Studio's own phone listener and its pairing link, which carries the
-fingerprint of the certificate created for that pairing (Pocket 0.5.0 or later). Without it the run
-uses the plain HTTP listener that Pocket 0.4.1 understands.
+The workstation server is kerfkite-studio (--server, KERFKITE_STUDIO or build/native), and this script plays the
+editor's part in the phone's Start. With --encrypted the run uses the server's own phone listener and its pairing
+link, which carries the fingerprint of the certificate created for that pairing (Pocket 0.5.0 or later); the checks
+then read what the phone did from the controller's log. Without it the handset reaches the plain HTTP monitor that
+Pocket 0.4.1 understands through a proxy on --port that records each request and the address it came from.
 """
 
 import argparse
-import logging
-from pathlib import Path
 import re
-import secrets
 import subprocess
-import sys
-import threading
 import time
 from xml.etree import ElementTree
 
-from flask import request
-from werkzeug.serving import make_server
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from studio.device import DeviceController
+from native_servers import Proxy, moves, owner, studio
 from pocket_app import PACKAGE, component
-from studio import phone_monitor_service
-from studio.monitor import create_monitor_app
-from studio.phone_jobs import PhoneJobs
 
 # The launcher's own intent: returning with a different intent starts a second editor on top of the pendant.
 LAUNCH = (
@@ -132,7 +122,7 @@ def step(name, action):
     print(f'PASS {name} ({time.monotonic() - started:.1f} s)', flush=True)
 
 
-def exercise(phone, host, port, replace_pairing, encrypted=False):
+def exercise(phone, host, port, replace_pairing, encrypted=False, program=None):
     assert phone.run('shell', 'getprop', 'sys.boot_completed') == '1', 'Unlock and boot the handset before running.'
     assert phone.run('shell', 'pm', 'list', 'packages', PACKAGE), 'Install KerfKite Pocket on the handset first.'
     print(
@@ -144,51 +134,48 @@ def exercise(phone, host, port, replace_pairing, encrypted=False):
         phone.run('shell', 'getprop', 'ro.build.version.sdk'),
         flush=True,
     )
-    controller = DeviceController()
-    controller.connect('simulator')
-    jobs = PhoneJobs(controller)
-    token = secrets.token_urlsafe(32)
     accepted, peers = [], set()
 
-    def record(response):
-        peers.add(request.remote_addr)
-        if request.method == 'POST' and response.status_code == 200:
-            accepted.append(request.get_json())
-        return response
+    def record(seen, status, body):
+        peers.add(seen.peer)
+        if seen.method == 'POST' and status == 200:
+            accepted.append(seen.json())
 
     if encrypted:
-        # Studio's own listener, as the workstation starts it. Its monitor app is given the same recorder.
-        build = phone_monitor_service.create_monitor_app
-
-        def recording(*args, **kwargs):
-            app = build(*args, **kwargs)
-            app.after_request(record)
-            return app
-
-        phone_monitor_service.create_monitor_app = recording
-        monitor = phone_monitor_service.PhoneMonitor(controller, jobs, port=port)
-        try:
-            info = monitor.enable()
-        finally:
-            phone_monitor_service.create_monitor_app = build
-        assert info['encryption'] == 'pinned', 'Install the web extra: the listener is not encrypted.'
-        link = f'https://{host}:{port}/#{info["fragment"]}'
-        print('Listener: HTTPS, certificate fingerprint', info['fingerprint'][:16] + '…', flush=True)
-
-        def close():
-            monitor.disable()
+        # The server's own listener on the LAN, as the workstation starts it when pairing is switched on.
+        server_args = ('--monitor-port', str(port))
     else:
-        app = create_monitor_app(controller, token, jobs)
-        app.after_request(record)
-        server = make_server('0.0.0.0', port, app, threaded=True)  # noqa: S104 - the handset connects over the LAN
-        worker = threading.Thread(target=server.serve_forever, daemon=True)
-        worker.start()
-        link = f'http://{host}:{port}/#token={token}'
+        # The plain monitor stays on the loopback interface; the handset reaches it through the recording proxy.
+        server_args = ('--monitor', '--monitor-host', '127.0.0.1', '--monitor-port', '0', '--monitor-plaintext')
+    with studio(program, args=server_args) as server:
+        server.post('api/connect', {'port': 'simulator'})
+        if encrypted:
+            info = server.enable_monitor(plaintext=False)
+            assert info['encryption'] == 'pinned', 'The listener is not encrypted: is the TLS relay beside the server?'
+            link = f'https://{host}:{port}/#{info["fragment"]}'
+            print('Listener: HTTPS, certificate fingerprint', info['fingerprint'][:16] + '…', flush=True)
+            proxy = None
+        else:
+            proxy = Proxy(server.monitor, after=record, host='0.0.0.0', port=port)  # noqa: S104 - the handset is on the LAN
+            link = f'http://{host}:{port}/#token={server.token}'
+        try:
+            handset(phone, server, link, replace_pairing, encrypted, accepted)
+        finally:
+            if proxy:
+                proxy.close()
+    if not encrypted:
+        assert len(peers) == 1, 'Requests arrived from more than one address.'
+    print(
+        'PASS native pair, X jog, home, zero, start, pause, resume, background return, stop and forget on a physical handset'
+        + (' over the pinned HTTPS listener.' if encrypted else '.')
+    )
 
-        def close():
-            server.shutdown()
-            worker.join()
-            server.server_close()
+
+def handset(phone, server, link, replace_pairing, encrypted, accepted):
+    status = server.status
+
+    def logged(text):
+        return any(text in entry for entry in status()['log'])
 
     paired = False
     try:
@@ -228,64 +215,76 @@ def exercise(phone, host, port, replace_pairing, encrypted=False):
 
         def jog():
             phone.tap('Jog X positive')
-            wait_until(lambda: len(accepted) == 1 and not controller.status()['active'], 'Jog failed.')
-            assert (accepted[0]['axis'], accepted[0]['distance'], accepted[0]['feed']) == ('X', 0.1, 100)
-            assert any('$J=G91 G21 X0.100' in entry for entry in controller.status()['log'])
+            wait_until(lambda: logged('$J=G91 G21 X0.100 F100') and not status()['active'], 'Jog failed.')
+            if not encrypted:
+                assert len(accepted) == 1
+                assert (accepted[0]['axis'], accepted[0]['distance'], accepted[0]['feed']) == ('X', 0.1, 100)
 
         step('jog X +0.1 mm', jog)
 
-        for action, label in [('home', 'Home'), ('zero', 'Zero XYZ')]:
+        for action, label, line in [('home', 'Home', '$H'), ('zero', 'Zero XYZ', 'G10 L20 P1 X0 Y0 Z0')]:
 
-            def confirmed(action=action, label=label):
+            def confirmed(action=action, label=label, line=line):
                 phone.tap(label, button=True)
                 phone.confirm()
-                wait_until(
-                    lambda: accepted[-1]['action'] == action and not controller.status()['active'], action + ' failed.'
-                )
+                wait_until(lambda: logged(line) and not status()['active'], action + ' failed.')
+                assert encrypted or accepted[-1]['action'] == action
 
             step(action, confirmed)
 
         # Leave enough simulated motion queued to exercise feed hold, resume and a background return.
-        jobs.arm(['G1 X0 Y0 F100'] * 20_000)
+        arm_id = server.arm(moves(12_000))
+        with owner(server, arm_id):  # the editor's part: it checks in and confirms the phone's Start
 
-        def start():
-            phone.tap('Start', button=True)
-            phone.confirm()
-            wait_until(lambda: controller.status()['active'], 'Armed job did not start.')
+            def start():
+                phone.tap('Start', button=True)
+                phone.confirm()
+                wait_until(lambda: status()['active'], 'Armed job did not start.')
 
-        step('start armed job', start)
+            step('start armed job', start)
 
-        def pause():
-            phone.tap('Pause', button=True)
-            wait_until(lambda: controller.status()['state'] == 'Hold', 'Feed hold failed.')
+            def pause():
+                phone.tap('Pause', button=True)
+                wait_until(lambda: status()['state'] == 'Hold', 'Feed hold failed.')
 
-        step('pause', pause)
+            step('pause', pause)
 
-        def resume():
-            phone.tap('Resume', button=True)
-            wait_until(lambda: controller.status()['state'] == 'Run', 'Resume failed.')
+            def resume():
+                phone.tap('Resume', button=True)
+                wait_until(lambda: status()['state'] == 'Run', 'Resume failed.')
 
-        step('resume', resume)
+            step('resume', resume)
 
-        def background():
-            phone.run('shell', 'input', 'keyevent', 'KEYCODE_HOME')
-            time.sleep(6)
-            assert controller.status()['active'], 'The job stopped while Pocket was in the background.'
-            phone.run(*LAUNCH)
-            wait_until(lambda: phone.find('Stop', button=True), 'Pendant controls missing after returning to Pocket.')
+            def background():
+                phone.run('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+                time.sleep(6)
+                assert status()['active'], 'The job stopped while Pocket was in the background.'
+                phone.run(*LAUNCH)
+                wait_until(
+                    lambda: phone.find('Stop', button=True), 'Pendant controls missing after returning to Pocket.'
+                )
 
-        step('background for 6 s and return to the pendant with the job running', background)
+            step('background for 6 s and return to the pendant with the job running', background)
 
-        def stop():
-            phone.tap('Stop', button=True)
-            phone.confirm()
-            wait_until(lambda: not controller.status()['active'], 'Abort failed.')
-            assert not jobs.status()['armed']
+            def stop():
+                phone.tap('Stop', button=True)
+                phone.confirm()
+                wait_until(lambda: not status()['active'], 'Abort failed.')
+                assert not server.post('api/arm/check', {'arm_id': arm_id})['armed']
 
-        step('stop after the background return', stop)
+            step('stop after the background return', stop)
 
-        assert [action['action'] for action in accepted] == ['jog', 'home', 'zero', 'start', 'pause', 'resume', 'stop']
-        assert len({action['request_id'] for action in accepted}) == len(accepted)
+        if not encrypted:
+            assert [action['action'] for action in accepted] == [
+                'jog',
+                'home',
+                'zero',
+                'start',
+                'pause',
+                'resume',
+                'stop',
+            ]
+            assert len({action['request_id'] for action in accepted}) == len(accepted)
 
         def forget():
             phone.tap('Forget pairing', button=True)
@@ -302,16 +301,9 @@ def exercise(phone, host, port, replace_pairing, encrypted=False):
             pass
         raise
     finally:
-        close()
-        controller.disconnect()
         phone.cleanup()
         if paired:
             print('The handset still holds the test pairing. Open CNC pendant and choose Forget pairing.', flush=True)
-    assert len(peers) == 1, 'Requests arrived from more than one address.'
-    print(
-        'PASS native pair, X jog, home, zero, start, pause, resume, background return, stop and forget on a physical handset'
-        + (' over the pinned HTTPS listener.' if encrypted else '.')
-    )
 
 
 if __name__ == '__main__':
@@ -321,7 +313,7 @@ if __name__ == '__main__':
     parser.add_argument('--host', required=True, help='Workstation address the handset can reach')
     parser.add_argument('--port', type=int, default=8766, help='Monitor port to listen on')
     parser.add_argument('--replace-pairing', action='store_true', help='Forget a pairing already stored on the handset')
-    parser.add_argument('--encrypted', action='store_true', help="Pair with Studio's pinned HTTPS listener")
+    parser.add_argument('--encrypted', action='store_true', help="Pair with the server's pinned HTTPS listener")
+    parser.add_argument('--server', help='kerfkite-studio (default: KERFKITE_STUDIO, then build/native)')
     args = parser.parse_args()
-    logging.getLogger('werkzeug').setLevel(logging.ERROR)
-    exercise(Phone(args.adb, args.serial), args.host, args.port, args.replace_pairing, args.encrypted)
+    exercise(Phone(args.adb, args.serial), args.host, args.port, args.replace_pairing, args.encrypted, args.server)

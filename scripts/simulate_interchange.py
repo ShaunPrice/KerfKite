@@ -1,13 +1,11 @@
-"""Analytic acceptance cases through Studio's HTTP API on the simulator."""
+"""Analytic acceptance cases through the workstation server's HTTP API on its simulator."""
 
 import base64
 import math
 
 
 def assembly(client):
-    from studio.assembly import example_assembly
-
-    doc = example_assembly()
+    doc = client.get('assembly/example')
     good = client.request('assembly/solve', {'assembly': doc})
     assert not good['interferences'] and len(good['parts']) == 2
     doc['mates'][0]['parentFrame']['origin'][0] += 4

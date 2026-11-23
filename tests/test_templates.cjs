@@ -17,30 +17,32 @@ function compareArtwork(actual,expected,path='templates') {
     for(const key of Object.keys(expected))compareArtwork(actual[key],expected[key],`${path}.${key}`);
   } else assert.equal(actual,expected,path);
 }
-test('packed MCP and SVG catalog matches every browser template', async () => {
-  const {spawn} = require('node:child_process');
-  const {once} = require('node:events');
-  const {createInterface} = require('node:readline');
-  const path = require('node:path');
-  const script = 'import json\nfrom studio.template_catalog import TemplateCatalog\n' +
-    'for item in TemplateCatalog(): print(json.dumps(item, separators=(",", ":")))';
-  const child = spawn(process.platform === 'win32' ? 'python' : 'python3', ['-c', script],
-    {cwd: path.resolve(__dirname, '..'), stdio: ['ignore', 'pipe', 'inherit']});
-  const finished = once(child, 'close');
-  const lines = createInterface({input: child.stdout, crlfDelay: Infinity});
-  let count = 0;
-  try {
-    for await (const line of lines) {
-      assert.ok(count < templates.length);
-      compareArtwork(JSON.parse(line), templates[count], templates[count].id);
-      count++;
+// The packed catalogue that kerfkite-mcp and the SVG export read (scripts/build_templates.cjs): the magic, each
+// template's zlib-compressed paths (a count, then each path's point count and little-endian double pairs), and a
+// JSON index of [offset, length, metadata] records whose byte length ends the file.
+function packedCatalog(file) {
+  const data = require('node:fs').readFileSync(file), zlib = require('node:zlib');
+  assert.equal(data.subarray(0, 8).toString('latin1'), 'KKART\x01\r\n');
+  const size = data.readUInt32LE(data.length - 4), start = data.length - 4 - size;
+  assert.ok(start >= 8, 'Invalid artwork catalog index');
+  return JSON.parse(data.subarray(start, data.length - 4).toString('utf8')).map(([offset, length, metadata]) => {
+    const packed = zlib.inflateSync(data.subarray(offset, offset + length)), paths = [];
+    let position = 4;
+    for (let count = packed.readUInt32LE(0); paths.length < count;) {
+      const points = packed.readUInt32LE(position), path = [];
+      position += 4;
+      assert.ok(position + 16 * points <= packed.length, 'Truncated template path');
+      for (let i = 0; i < points; i++, position += 16) path.push([packed.readDoubleLE(position), packed.readDoubleLE(position + 8)]);
+      paths.push(path);
     }
-    assert.equal((await finished)[0], 0);
-    assert.equal(count, templates.length);
-  } finally {
-    lines.close();
-    if (child.exitCode === null) child.kill();
-  }
+    assert.equal(position, packed.length, 'Unexpected data after template paths');
+    return {...metadata, paths};
+  });
+}
+test('packed MCP and SVG catalog matches every browser template', () => {
+  const packed = packedCatalog(require('node:path').resolve(__dirname, '../studio/builtin_templates.kkart'));
+  assert.equal(packed.length, templates.length);
+  packed.forEach((item, count) => compareArtwork(item, templates[count], templates[count].id));
 });
 test('artwork comparison rejects changed geometry and topology',()=>{
   assert.throws(()=>compareArtwork([[1,2]],[[1,2.000001]]));
