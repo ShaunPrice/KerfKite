@@ -130,6 +130,8 @@ class Native:
             raise SystemExit(f'kerfkite-web did not start: {lines!r}')
         self.port = port if tls else int(lines[1].rsplit(':', 1)[1])
         self.host = urllib.parse.urlsplit(origin).netloc
+        relay = Path(program).with_name('kerfkite-pendant-tls' + Path(program).suffix)
+        self.relay = relay.is_file()  # without it a send cannot be made (an installation has it)
 
     def said(self, text):
         return text in self.log.read_text()
@@ -204,11 +206,14 @@ def cookie_form(text):
 
 class Tally:
     def __init__(self, verbose=False):
-        self.cases = self.same = self.html_errors = self.scrypt_unavailable = 0
+        self.cases = self.same = self.html_errors = self.scrypt_unavailable = self.no_relay = 0
         self.differences = []
         self.verbose = verbose
 
     def compare(self, label, ref, got):
+        if got.status == 400 and b"needs KerfKite's TLS relay" in got.body and b'could not be verified' in ref.body:
+            self.no_relay += 1  # a build without the relay beside kerfkite-web: the send is not compared
+            return
         self.cases += 1
         if self.verbose:
             print(f'{ref.status} {got.status} {label}: {ref.body[:90]!r} | {got.body[:90]!r}')
@@ -625,6 +630,8 @@ def main():
         f'{tally.cases} cases: {tally.same} the same ({tally.html_errors} of them Flask\'s HTML error page as JSON), '
         f'{len(tally.differences)} different'
     )
+    if tally.no_relay:
+        print(f'{tally.no_relay} sends to a receiver not compared: the TLS relay is not beside kerfkite-web')
     if tally.scrypt_unavailable:
         print(
             'The account with the Python\'s scrypt hash was refused, as it is where the system has no scrypt: set its password again'
