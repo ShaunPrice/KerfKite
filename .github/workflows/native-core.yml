@@ -21,7 +21,7 @@ env:
   # The last commit with the Python reference: studio/*.py, its tests and the harnesses that compared the native
   # programs with it while both existed. They run from there, unchanged, against the programs built here, so a
   # change to the programs is still compared with the behaviour they were ported from.
-  REFERENCE: REFERENCE_COMMIT
+  REFERENCE: 121123404323a9e8e928986d8dba0d412df271f4
 jobs:
   core:
     strategy:

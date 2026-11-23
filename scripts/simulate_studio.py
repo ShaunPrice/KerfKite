@@ -26,6 +26,7 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))  # for the regression suite's imports
 sys.path.insert(0, str(ROOT / 'validation'))
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # simulate_interchange, also when run with -I
 
 from native_servers import beside, program, studio  # noqa: E402 - found through the path above
 
