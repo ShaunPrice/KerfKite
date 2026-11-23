@@ -192,11 +192,29 @@ static void self_crossing() {
     const LineCheck by_tree = check_line(comb), by_pairs = check_line(comb, LineMethod::EveryPair);
     expect(by_tree.simple && by_pairs.simple && by_pairs.work > 3000ull * 3000 / 2 && by_tree.work * 10 < by_pairs.work,
            "a comb of long segments, which the test of every pair takes the square of its length over");
-    // Past the budget a contour is declined, and the work stops there: that is the bound on the worst case.
+    // Past the budget a contour is refused, and the work stops there: that is the bound on the worst case. With the
+    // reference's rules in force it is declined instead.
+    std::string refused;
+    try {
+        check_line(comb, LineMethod::Usual, 20000);
+    } catch (const kerfkite::ValueError &error) {
+        refused = error.what();
+    }
+    expect(refused == "A contour is too complex to test whether it crosses itself; simplify it or split it",
+           "a contour whose test would take too long is refused");
+    kerfkite::set_reference_rules(true);
     const LineCheck stopped = check_line(comb, LineMethod::Usual, 20000);
+    kerfkite::set_reference_rules(false);
     expect(stopped.declined && stopped.reason == "a contour whose self-crossing test needs more comparisons than the core allows" &&
                stopped.work > 20000 && stopped.work < 20000 + 40000,
-           "a contour whose test would take too long is declined");
+           "and declined with the reference's rules in force");
+    // Points one unit in the last place off a line, where GEOS's arithmetic is not exact: subnormal and huge
+    // coordinates included, the core's own answer is the exact one.
+    const double tiny = std::ldexp(1.0, -1074), huge = std::ldexp(1.0, 600);
+    expect(geos_orientation({22, -0.5}, {22.25, 0.5}, {22.125, tiny}) == 1 &&
+               geos_orientation({22, -0.5}, {22.25, 0.5}, {22.125, -tiny}) == -1 &&
+               geos_orientation({huge, 1}, {2 * huge, 2}, {1.5 * huge, std::nextafter(1.5, 10.0)}) == 1,
+           "orientation is exact for subnormal and huge coordinates");
     expect(line_check_budget() >= 100000000 && line_check_budget() <= 1000000000, "the budget is about a second of work");
     // A crossing ends the search: many long segments that all cross take almost no work.
     Line scribble;
@@ -1147,7 +1165,14 @@ static void solid_histories() {
     expect(refusal(divided) == "plate: Division by zero in dimension", "a division by zero names its feature");
     json power = request;
     power["model"]["features"][0]["size"][2] = "w ** 2";
-    expect(refusal(power) == "declined", "an expression beyond the core's grammar is declined");
+    expect(refusal(power) == "plate: Use numbers, named parameters, parentheses and + \xe2\x88\x92 * / in dimensions",
+           "an expression beyond the core's grammar is refused");
+    power["model"]["features"][0]["size"][2] = "(w + 2";
+    expect(refusal(power) == "plate: Invalid dimension expression", "and one that does not parse");
+    power["model"]["features"][0]["size"][2] = "w ** 2";
+    kerfkite::set_reference_rules(true);
+    expect(refusal(power) == "declined", "and declined with the reference's rules in force");
+    kerfkite::set_reference_rules(false);
     json scripted = request;
     scripted["model"]["features"][1] = json::parse(R"({"id": "pins", "kind": "script", "op": "cut", "scriptParameters": {"n": 2},
         "source": "for (i = [0:n-1]) translate([4 + i * 12, h / 2, -1]) cylinder(h=6, r=1, $fn=12);"})");
@@ -1363,6 +1388,98 @@ static void program_imports() {
     expect(std::fabs(pdf_objects.at(0).at("paths").at(0).at(1).at(0).get<double>() - 25.4) < 1e-12, "72 points are 25.4 mm");
     expect(page.at("pageCount") == json(1) && page.at("warnings").at(1) == json("1 \xc3\x97 text objects omitted; convert text to paths in the source."),
            "the page count and the text skipped");
+}
+
+// A one-page PDF written by hand, with what a file that departs from the usual form may hold, for the core's own
+// rules (own_rule): a wrong stream length, cross-reference entries of a looser form, no %%EOF, a page without
+// /Type, resources that are not there, a filter's data without its end marker, an unusual security handler.
+struct PdfShape {
+    std::string content = "0 0 m 72 0 l S";
+    std::string filter;        // the content stream's /Filter entry, its data given as content
+    long long length_shift = 0;  // added to the content stream's /Length
+    bool loose_xref = false;     // entries ending in a single line feed
+    bool no_eof = false;         // more after the %%EOF line
+    std::string page = "/Type /Page /Parent 2 0 R /MediaBox [0 0 144 144] /Contents 4 0 R";
+    std::string trailer_extra;
+};
+
+static std::string pdf_of(const PdfShape &shape) {
+    std::string pdf = "%PDF-1.4\n";
+    std::vector<size_t> offsets;
+    const auto object = [&](const std::string &body) {
+        offsets.push_back(pdf.size());
+        pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n";
+    };
+    object("<< /Type /Catalog /Pages 2 0 R >>");
+    object("<< /Type /Pages /Count 1 /Kids [3 0 R] >>");
+    object("<< " + shape.page + " >>");
+    object("<< /Length " + std::to_string(static_cast<long long>(shape.content.size()) + shape.length_shift) + shape.filter + " >>\nstream\n" +
+           shape.content + "\nendstream");
+    const size_t xref = pdf.size();
+    pdf += shape.loose_xref ? "xref\n0 5\n0000000000 65535 f\n" : "xref\n0 5\n0000000000 65535 f \n";
+    for (const size_t offset : offsets) {
+        char line[40];
+        std::snprintf(line, sizeof line, shape.loose_xref ? "%zu 0 n\n" : "%010zu 00000 n \n", offset);
+        pdf += line;
+    }
+    pdf += "trailer\n<< /Size 5 /Root 1 0 R" + shape.trailer_extra + " >>\nstartxref\n" + std::to_string(xref) + "\n";
+    pdf += shape.no_eof ? "%%EOF\nappended by a mail program\n" : "%%EOF\n";
+    return pdf;
+}
+
+static void pdf_own_rules() {
+    const auto read = [](const PdfShape &shape) -> std::string {
+        json request = json::object();
+        request["content"] = base64_text(pdf_of(shape));
+        try {
+            const json page = kerfkite::program_import_call("pdf-import", request);
+            std::string out = std::to_string(page.at("objects").size()) + " objects";
+            for (const json &warning : page.at("warnings")) out += "; " + warning.get<std::string>();
+            return out;
+        } catch (const kerfkite::ValueError &error) {
+            return std::string("refused: ") + error.what();
+        } catch (const kerfkite::NotPorted &error) {
+            return std::string("declined: ") + error.what();
+        }
+    };
+    const auto reads = [&](const PdfShape &shape) { return read(shape).compare(0, 9, "1 objects") == 0; };
+    PdfShape plain;
+    expect(reads(plain), "a plain page is read");
+    PdfShape longer = plain, shorter = plain;
+    longer.length_shift = 5;
+    shorter.length_shift = -3;
+    expect(reads(longer) && reads(shorter), "a stream whose length is wrong ends at its endstream");
+    PdfShape loose = plain;
+    loose.loose_xref = true;
+    expect(reads(loose), "cross-reference entries of a looser form are read");
+    PdfShape unended = plain;
+    unended.no_eof = true;
+    expect(reads(unended), "with more after %%EOF, the last startxref is found");
+    PdfShape untyped = plain;
+    untyped.page = "/Parent 2 0 R /MediaBox [0 0 144 144] /Contents 4 0 R /Resources 9 0 R";
+    expect(reads(untyped), "a page without /Type, whose resources are not there (the null object)");
+    PdfShape run = plain;
+    run.content = "0 0 m 72 0l S";
+    expect(reads(run), "a number run into an operator ends where its characters do");
+    PdfShape encoded = plain;
+    encoded.filter = " /Filter /ASCII85Decode";
+    encoded.content = "0H`%lD'1bm+>=pS+B&";  // "0 0 m 72 0 l S" without the ~> end marker
+    expect(reads(encoded), "ASCII85 data without its end marker");
+    PdfShape image = plain;
+    image.content = "0 0 m 72 0 l S BI /W 2 /H 2 /CS /G /BPC 8 ID \x01\x45\x49\x02 EI q Q";
+    const std::string skipped = read(image);
+    expect(skipped.compare(0, 9, "1 objects") == 0 && skipped.find("1 \xc3\x97 image or shading omitted") != std::string::npos,
+           "an inline image is skipped to its EI and counted");
+    PdfShape escaped = plain;
+    escaped.content = "0 0 m 72 0 l S BT (a\\qb) Tj ET";
+    expect(reads(escaped), "an unusual escape in a string drops its backslash");
+    PdfShape locked = plain;
+    locked.trailer_extra = " /Encrypt << /Filter /Other /V 5 >>";
+    expect(read(locked) == "refused: Export an unencrypted PDF for vector review", "an encrypted PDF of any kind is refused");
+    kerfkite::set_reference_rules(true);
+    const std::string declined = read(longer);
+    kerfkite::set_reference_rules(false);
+    expect(declined == "declined: a PDF stream whose length pypdf would correct", "with the reference's rules in force such a file is declined");
 }
 
 // A LightBurn bundle written by hand: stored members, by default a device file and a text file the reader leaves
@@ -1759,6 +1876,7 @@ int main() {
     solid_histories();
     cad_scripts();
     program_imports();
+    pdf_own_rules();
     bundle_imports();
     surfaces();
     artwork_reliefs();

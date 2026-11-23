@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <vector>
 
 #include "kerfkite/decimal.hpp"
 
@@ -105,6 +106,77 @@ inline bool fixed(std::string &out, double value, int decimals) {
     return true;
 }
 
+// f'{value:.{decimals}f}' for every double and decimals 0..9: fixed() where it can, and otherwise the exact value
+// in a number of 32-bit words, scaled by 10^decimals and rounded half to even, then written in decimal. 'inf',
+// '-inf' and 'nan' as Python writes them.
+inline std::string fixed_exact(double value, int decimals) {
+    std::string out;
+    if (fixed(out, value, decimals)) return out;
+    if (std::isnan(value)) return "nan";
+    if (std::isinf(value)) return value < 0 ? "-inf" : "inf";
+    if (decimals < 0) decimals = 0;
+    // |value| = mantissa * 2^shift exactly.
+    int exponent;
+    const double fraction = std::frexp(std::fabs(value), &exponent);
+    uint64_t mantissa = static_cast<uint64_t>(std::ldexp(fraction, 53));
+    int shift = exponent - 53;
+    std::vector<uint32_t> n = {static_cast<uint32_t>(mantissa), static_cast<uint32_t>(mantissa >> 32)};
+    const auto times = [&](uint32_t k) {
+        uint64_t carry = 0;
+        for (uint32_t &word : n) {
+            const uint64_t product = static_cast<uint64_t>(word) * k + carry;
+            word = static_cast<uint32_t>(product);
+            carry = product >> 32;
+        }
+        if (carry) n.push_back(static_cast<uint32_t>(carry));
+    };
+    for (int i = 0; i < decimals; ++i) times(10);
+    if (shift > 0) {
+        for (; shift >= 32; shift -= 32) n.insert(n.begin(), 0u);
+        if (shift) times(1u << shift);
+    } else if (shift < 0) {
+        // Divide by 2^-shift, rounding half to even on the bits shifted out.
+        const int bits = -shift;
+        const auto bit = [&](int i) -> bool { return i / 32 < static_cast<int>(n.size()) && ((n[static_cast<size_t>(i / 32)] >> (i % 32)) & 1u); };
+        const bool half = bit(bits - 1);
+        bool below = false;
+        for (int i = 0; i < bits - 1 && !below; ++i) below = bit(i);
+        std::vector<uint32_t> q((n.size() * 32 > static_cast<size_t>(bits) ? n.size() * 32 - static_cast<size_t>(bits) : 0) / 32 + 1, 0u);
+        for (size_t i = 0; i < q.size() * 32; ++i)
+            if (bit(static_cast<int>(i) + bits)) q[i / 32] |= 1u << (i % 32);
+        n = q;
+        if (half && (below || (n[0] & 1u))) {
+            for (uint32_t &word : n)
+                if (++word != 0) break;
+            if (n.back() == 0) n.push_back(1u);
+        }
+    }
+    // The decimal digits, nine at a time from the bottom.
+    std::string digits;
+    for (;;) {
+        while (!n.empty() && n.back() == 0) n.pop_back();
+        if (n.empty()) break;
+        uint64_t remainder = 0;
+        for (size_t i = n.size(); i-- > 0;) {
+            const uint64_t part = (remainder << 32) | n[i];
+            n[i] = static_cast<uint32_t>(part / 1000000000u);
+            remainder = part % 1000000000u;
+        }
+        for (int k = 0; k < 9; ++k) {
+            digits.push_back(static_cast<char>('0' + remainder % 10));
+            remainder /= 10;
+        }
+    }
+    while (digits.size() > 1 && digits.back() == '0') digits.pop_back();
+    while (digits.size() <= static_cast<size_t>(decimals)) digits.push_back('0');
+    if (std::signbit(value)) out.push_back('-');
+    for (size_t i = digits.size(); i-- > 0;) {
+        out.push_back(digits[i]);
+        if (i == static_cast<size_t>(decimals) && decimals) out.push_back('.');
+    }
+    return out;
+}
+
 // Python's round(value, decimals) for decimals 0..9: the double nearest the correctly rounded decimal. q and the
 // scale are exact doubles, so their quotient, correctly rounded, is that double. False beyond 2^53 units.
 inline bool rounded(double value, int decimals, double &result) {
@@ -112,6 +184,14 @@ inline bool rounded(double value, int decimals, double &result) {
     if (decimals < 0 || decimals > 9 || !scaled_round(value, scale_of(decimals), q) || q > (1ULL << 53)) return false;
     result = std::copysign(static_cast<double>(q) / scale_of(decimals), value);
     return true;
+}
+
+// round(value, decimals) for every double and decimals 0..9. Beyond 2^53 units the spacing of doubles is wider than
+// 10^-decimals, so the rounded decimal is nearer value than any other double: Python's answer is value itself, as
+// it is for an infinity or a NaN.
+inline double rounded_exact(double value, int decimals) {
+    double result = 0;
+    return rounded(value, decimals, result) ? result : value;
 }
 
 // Python's float ** 2 calls libm pow; reading the exponent through a volatile stops the compiler

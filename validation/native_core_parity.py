@@ -3580,6 +3580,30 @@ def main():
         tally = collections.Counter()
         declined = collections.Counter()
         failures = []
+        own_rules = collections.Counter()
+        own_faults = []
+
+        def answer_own(lines):
+            """Put the cases the core declined with the reference's rules to it again with its own: each must be
+            answered, as a program or a refusal, never declined or failed inside."""
+            if not lines:
+                return
+            cases.write_text(''.join(line + '\n' for line in lines), encoding='utf-8')
+            answers = subprocess.run(
+                [str(args.cli), 'batch', '--own', str(cases)],
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                check=True,
+            ).stdout.split('\n')[:-1]
+            assert len(answers) == len(lines), 'The native core did not answer every case by its own rules.'
+            for line, answer in zip(lines, answers, strict=True):
+                got = json.loads(answer)
+                if 'ok' in got or 'error' in got:
+                    for rule in got.get('own', ['(none named)']):
+                        own_rules[rule] += 1
+                else:
+                    own_faults.append((json.loads(line), got))
 
         def compare(lines):
             """Put a set of cases to the native core and count how each was answered."""
@@ -3589,6 +3613,7 @@ def main():
                 [str(args.cli), 'batch', str(cases)], capture_output=True, text=True, encoding='utf-8', check=True
             ).stdout.split('\n')[:-1]
             assert len(answers) == len(lines), 'The native core did not answer every case.'
+            by_own_rules = []
             for (line, origin), answer in zip(lines.items(), answers, strict=True):
                 case, got = json.loads(line), json.loads(answer)
                 expect = case['expect']
@@ -3606,6 +3631,7 @@ def main():
                 elif 'declined' in got:
                     tally[origin, 'declined'] += 1
                     declined[got['declined']] += 1
+                    by_own_rules.append(line)
                 elif got.get('error') == NOT_ASCII_ROTARY and not json.dumps(subject, ensure_ascii=False).isascii():
                     # Defined by the core: a rotary source is ASCII. The reference read digits and spaces of
                     # other scripts there and copied them into the program a controller runs.
@@ -3621,6 +3647,7 @@ def main():
                     tally[origin, 'defined'] += 1
                 else:
                     failures.append((subject, expect, got))
+            answer_own(by_own_rules)
 
         compare(lines)
         # A helix into a pocket is a long program, and so is a V-carve, so these are compared a few hundred at
@@ -3668,7 +3695,17 @@ def main():
             + (f', {tally[origin, "left out"]} with polygon operations NOT COMPARED' if not shared else '')
         )
     if declined:
-        print('Not ported yet: ' + ', '.join(f'{name} ({n})' for name, n in declined.most_common()))
+        print(
+            'Declined with the reference\'s rules: ' + ', '.join(f'{name} ({n})' for name, n in declined.most_common())
+        )
+    if own_rules:
+        print('Answered by the core\'s own rules: ' + ', '.join(f'{name} ({n})' for name, n in own_rules.most_common()))
+    for case, got in own_faults[:5]:
+        print(
+            'NOT ANSWERED by the core\'s own rules\n  case', json.dumps(case)[:300], '\n  native', json.dumps(got)[:300]
+        )
+    if own_faults:
+        raise SystemExit(f'{len(own_faults)} declined cases were not answered by the core\'s own rules.')
     if failures:
         for project, expect, got in failures[:5]:
             brief = lambda value: json.dumps(value)[:300]

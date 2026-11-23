@@ -9,8 +9,9 @@ Two routes are compared by what they describe rather than value for value, becau
 different algorithm (the reference used Shapely/GEOS; Studio's own polygon and solid kernels replace it, see
 docs/NATIVE.md): /api/geometry (the region of the answer, to a stated tolerance) and /api/extrude (a closed mesh
 of the same volume). Answers the C++ server gives in place of a reference fallback are reported apart:
-"declined" where the core declines an input the Python answered, and "no STEP" where the reference used Open
-CASCADE, which the C++ server does not include.
+"declined" where the core declines an input the Python answered, "defined by the core" where the server
+answered by one of the core's own rules (it names them in a header when started with KERFKITE_PARITY=1), and
+"no STEP" where the reference used Open CASCADE, which the C++ server does not include.
 
 Usage:
     PYTHONPATH=$PWD python validation/server_route_parity.py --server /tmp/kkb/kerfkite-studio [--seed 1] [--mutations 6]
@@ -24,6 +25,7 @@ import copy
 import http.client
 import json
 import math
+import os
 import random
 import struct
 import subprocess
@@ -62,6 +64,12 @@ class Reference:
         return response.status_code, response.headers.get('Content-Type', ''), response.get_data()
 
 
+class Answer(tuple):
+    """(status, content type, body), with the core's own rules the C++ server named for it (own), if any."""
+
+    own = None
+
+
 class Native:
     """A kerfkite-studio process on a free port."""
 
@@ -71,6 +79,7 @@ class Native:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            env=dict(os.environ, KERFKITE_PARITY='1'),
         )
         line = self.process.stdout.readline()
         if 'http://127.0.0.1:' not in line:
@@ -90,7 +99,9 @@ class Native:
         try:
             connection.request(method, path, body=body, headers=headers)
             response = connection.getresponse()
-            return response.status, response.getheader('Content-Type', ''), response.read()
+            answer = Answer((response.status, response.getheader('Content-Type', ''), response.read()))
+            answer.own = response.getheader('X-KerfKite-Own-Rule')
+            return answer
         finally:
             connection.close()
 
@@ -244,7 +255,7 @@ def extrusion_agrees(reference, native):
 
 class Tally:
     def __init__(self):
-        self.cases = self.differences = self.declined = self.no_step = self.reference_faults = 0
+        self.cases = self.differences = self.declined = self.no_step = self.reference_faults = self.defined = 0
         self.by_route = {}
 
     def record(self, label, reference, native, compare=None):
@@ -252,6 +263,11 @@ class Tally:
         route = label.split(' ')[0]
         self.by_route[route] = self.by_route.get(route, 0) + 1
         (rs, rv), (ns, nv) = decoded(reference), decoded(native)
+        if getattr(native, 'own', None):
+            # Answered by the core's own rules, which the reference does not share.
+            self.defined += 1
+            print(f'defined   {label}: {native.own[:200]}')
+            return
         if ns == 400 and isinstance(nv, dict) and str(nv.get('error')).endswith(NO_STEP):
             # A server without the STEP add-on; a solid feature of kind step names its feature first.
             self.no_step += 1
@@ -807,7 +823,7 @@ def main():
         print(f'known: {member}: {reason}')
     print(
         f'{tally.cases} cases: {tally.differences} different, {tally.declined} declined by the core, '
-        f'{tally.no_step} STEP requests, {tally.reference_faults} reference faults'
+        f'{tally.defined} defined by the core, {tally.no_step} STEP requests, {tally.reference_faults} reference faults'
     )
     for route, count in sorted(tally.by_route.items()):
         print(f'  {route}: {count}')

@@ -103,8 +103,9 @@ inline bool plain_number(const json &value, double &out) {
         out = static_cast<double>(value.get<int64_t>());
     } else if (value.is_number_float()) {
         out = value.get<double>();
-        // A literal beyond the double range reads as infinity here, but may be a Python int there.
-        if (!std::isfinite(out)) throw NotPorted("numbers outside the double range");
+        // A literal beyond the double range reads as infinity here, but may be a Python int there (whose float()
+        // raises OverflowError). The core's own rule: an infinity, which every bound refuses.
+        if (!std::isfinite(out)) own_rule("numbers outside the double range");
     } else {
         return false;
     }

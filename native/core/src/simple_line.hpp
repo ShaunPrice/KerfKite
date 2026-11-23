@@ -25,8 +25,10 @@ extern const std::uint64_t kSimpleLineBudget;
 
 // shapely's LineString(path).is_simple, by the rules GEOS applies to one line: no two segments cross,
 // overlap or touch, except neighbours at their shared vertex and a closed line at its seam.
-// Throws NotPorted for the rare contour whose answer depends on rounding inside GEOS, and for one whose
-// test would take more than kSimpleLineBudget. work, when given, is filled in either way.
+// For the rare contour whose answer depends on rounding inside GEOS, the exact answer by the core's own rules and
+// NotPorted by the reference's (own_rule, kerfkite/cam.hpp); for one whose test would take more than
+// kSimpleLineBudget, ValueError by the core's own rules and NotPorted by the reference's. work, when given, is
+// filled in either way.
 bool line_is_simple(const Contour &path, SimpleLineWork *work = nullptr);
 
 // The same answer by GEOS's test of every pair of segments whose boxes overlap, with no tree and no limit
@@ -34,7 +36,8 @@ bool line_is_simple(const Contour &path, SimpleLineWork *work = nullptr);
 // either may decline a contour the other answers; where both answer, they answer alike.
 bool line_is_simple_every_pair(const Contour &path, SimpleLineWork *work = nullptr);
 
-// LineString(path).length < limit. Throws NotPorted when the length is within rounding of the limit.
+// LineString(path).length < limit. When the length is within rounding of the limit, the core's sum decides by its
+// own rules, and NotPorted is thrown by the reference's.
 bool line_shorter_than(const Contour &path, double limit);
 
 }  // namespace detail
