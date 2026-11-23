@@ -209,9 +209,11 @@ MachineOptions synthetic(std::vector<std::string> *written, SyntheticGrbl **open
         return std::unique_ptr<Link>(std::move(link));
     };
     machine.ports = [] { return std::vector<PortInfo>{{"KK-SYNTHETIC", "Synthetic Grbl controller"}}; };
-    // Twenty times faster than the wall clock: the controller's two-second boot pause takes a tenth of one.
+    // Five times faster than the wall clock: the controller's two-second boot pause takes 0.4 s. Faster, the status
+    // polls (every 0.25 s of this clock) come about as often as the transport reads a line (every 10 ms and more on
+    // a busy computer), and its replies to the configuration queries are never all read.
     const auto start = std::chrono::steady_clock::now();
-    machine.clock = [start] { return 20 * std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count(); };
+    machine.clock = [start] { return 5 * std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count(); };
     return machine;
 }
 
@@ -1065,14 +1067,15 @@ void step_without_open_cascade() {
     model["features"][0]["content"] = 7;
     CHECK(error_of(client.post("/api/solid-cad", with(Json::object(), "model", model))) == "part: Select a STEP file up to 1.5 MB");
 #ifndef _WIN32
-    // An add-on that answers nothing: the request is refused, the server goes on.
-    o.step_program = "/bin/true";
+    // An add-on that answers nothing: the request is refused, the server goes on. (true is in /usr/bin on Linux
+    // and macOS alike.)
+    o.step_program = "/usr/bin/true";
     Studio broken(o);
     Client second{broken};
-    CHECK(error_of(second.post("/api/solid-cad/step/import", with(Json::object(), "content", Json(document)))) ==
-          "Open CASCADE could not translate this STEP shape");
-    CHECK(error_of(second.post("/api/solid-cad/step/export", Json::parse(R"({"model": {"version": 1, "features": [{"id": "b", "kind": "box", "size": [1, 2, 3]}]}})"))) ==
-          "Could not translate the geometry to STEP");
+    CHECK_TEXT(error_of(second.post("/api/solid-cad/step/import", with(Json::object(), "content", Json(document)))),
+               "Open CASCADE could not translate this STEP shape");
+    CHECK_TEXT(error_of(second.post("/api/solid-cad/step/export", Json::parse(R"({"model": {"version": 1, "features": [{"id": "b", "kind": "box", "size": [1, 2, 3]}]}})"))),
+               "Could not translate the geometry to STEP");
     o.step_program = "/nonexistent/kerfkite-step";
     Studio missing(o);
     Client third{missing};

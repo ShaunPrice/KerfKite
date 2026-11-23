@@ -874,10 +874,12 @@ private:
     std::deque<std::string> incoming_;
 };
 
-// Twenty times the wall clock: boot pauses and the report timeout pass quickly, and nothing else is changed.
+// Five times the wall clock: boot pauses and the report timeout pass quickly, and nothing else is changed. Faster,
+// the status polls (every 0.25 s of this clock) come about as often as the transport reads a line on a busy
+// computer, and the replies they add are never all read.
 std::function<double()> fast_clock() {
     const auto start = std::chrono::steady_clock::now();
-    return [start] { return 20 * std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count(); };
+    return [start] { return 5 * std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count(); };
 }
 
 MachineOptions table(std::vector<std::pair<std::string, std::vector<std::string>>> answers, std::vector<std::string> *writes,
