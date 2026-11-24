@@ -4,6 +4,16 @@ See the [single-board computer guide](SBC.md) for board-specific downloads and t
 
 [Download the desktop installers](https://github.com/ShaunPrice/KerfKite/releases/latest) or the [Android companion](ANDROID.md). The table below records source-installation and hardware evidence. See the [installation guide](INSTALL.md) for the graphical installers.
 
+## Studio 0.7.0 package verification
+
+Studio 0.7.0 is the first release without Python: each package carries the native programs and nothing else to set up. The release files were built on hosted runners from the release commit by the **Build the desktop programs and installers** workflow. They were checked before publication, by their SHA-256 against `SHA256SUMS.txt`:
+
+- **macOS and Linux installers.** On macOS (Apple silicon and Intel) and Linux (AMD64 and ARM64), each was installed, its window tested, a simulated toolpath generated, STEP exercised and Studio relaunched offline.
+- **Windows Server.** The installer rejected the Windows Server runner, as intended.
+- **SBC packages.** Both Linux architectures passed, including the desktop package on Ubuntu 22.04 and 26.04 userlands and the offline Browser Editor.
+
+The programs passed their self-tests, the pinned results, the acceptance fixture and the comparisons with the Python reference on all five desktop targets, and the sanitizer builds. The graphical acceptance test on a Windows 10 or 11 client and physical Pi and CNC testing remain open. [Release build](https://github.com/ShaunPrice/KerfKite/actions/runs/45240468680) · [Desktop installer checks](https://github.com/ShaunPrice/KerfKite/actions/runs/45251776348) · [SBC package checks](https://github.com/ShaunPrice/KerfKite/actions/runs/45251779649) · [Release notes](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.7.0)
+
 ## Studio 0.6.1 package verification
 
 The public Windows build passed fresh and offline starts on Windows 11 Pro x64. With hardware disabled, the extracted launcher produced the expected CAD volume, laser toolpath and router relief depths. This run used a noninteractive session. The earlier 0.5.1 run below covers the Windows desktop controls. [Release notes](https://github.com/ShaunPrice/KerfKite/releases/tag/v0.6.1)

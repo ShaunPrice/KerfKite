@@ -3150,6 +3150,14 @@ kerfkite-cam excellon-drills board.drl --offset [-95,115]
 </section><section id="platforms"><h1>Platforms and verification</h1>
 <p>See the <a href="#sbc">single-board computer guide</a> for board-specific downloads and the offline Browser Editor.</p>
 <p><a href="https://github.com/ShaunPrice/KerfKite/releases/latest">Download the desktop installers</a> or the <a href="#android">Android companion</a>. The table below records source-installation and hardware evidence. See the <a href="#install">installation guide</a> for the graphical installers.</p>
+<h2>Studio 0.7.0 package verification</h2>
+<p>Studio 0.7.0 is the first release without Python: each package carries the native programs and nothing else to set up. The release files were built on hosted runners from the release commit by the <strong>Build the desktop programs and installers</strong> workflow. They were checked before publication, by their SHA-256 against <code>SHA256SUMS.txt</code>:</p>
+<ul>
+<li><strong>macOS and Linux installers.</strong> On macOS (Apple silicon and Intel) and Linux (AMD64 and ARM64), each was installed, its window tested, a simulated toolpath generated, STEP exercised and Studio relaunched offline.</li>
+<li><strong>Windows Server.</strong> The installer rejected the Windows Server runner, as intended.</li>
+<li><strong>SBC packages.</strong> Both Linux architectures passed, including the desktop package on Ubuntu 22.04 and 26.04 userlands and the offline Browser Editor.</li>
+</ul>
+<p>The programs passed their self-tests, the pinned results, the acceptance fixture and the comparisons with the Python reference on all five desktop targets, and the sanitizer builds. The graphical acceptance test on a Windows 10 or 11 client and physical Pi and CNC testing remain open. <a href="https://github.com/ShaunPrice/KerfKite/actions/runs/45240468680">Release build</a> · <a href="https://github.com/ShaunPrice/KerfKite/actions/runs/45251776348">Desktop installer checks</a> · <a href="https://github.com/ShaunPrice/KerfKite/actions/runs/45251779649">SBC package checks</a> · <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.7.0">Release notes</a></p>
 <h2>Studio 0.6.1 package verification</h2>
 <p>The public Windows build passed fresh and offline starts on Windows 11 Pro x64. With hardware disabled, the extracted launcher produced the expected CAD volume, laser toolpath and router relief depths. This run used a noninteractive session. The earlier 0.5.1 run below covers the Windows desktop controls. <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.6.1">Release notes</a></p>
 <p>The native CAM build passed on all five desktop targets. On macOS (Apple silicon and Intel) and Linux (AMD64 and ARM64), the published packages passed native window, STEP and offline relaunch checks. The Windows Server job confirmed that the installer rejects Server. Both Linux architectures passed the SBC package checks, including the offline Browser Editor. Physical Pi and CNC testing remains open for 0.6.1. <a href="https://github.com/ShaunPrice/KerfKite/actions/runs/44426960223">Native CAM builds</a> · <a href="https://github.com/ShaunPrice/KerfKite/actions/runs/44427177409">Desktop installers</a> · <a href="https://github.com/ShaunPrice/KerfKite/actions/runs/44427181115">SBC packages</a></p>
@@ -6381,7 +6389,7 @@ python ../kerfkite-reference/validation/solid_kernel_check.py --tool build/nativ
 <tr>
 <td>Studio</td>
 <td>The launcher, <code>kerfkite-studio</code> with the editor's files, <code>kerfkite-web</code>, <code>kerfkite-mcp</code> with the template collection, <code>kerfkite-cam</code> and the pendant's relay; nothing is downloaded on the first start. Probe levelling and circuit-board import live in the core, so they arrive with the programs.</td>
-<td>Packaging is ready: the <strong>Build the desktop programs and installers</strong> workflow builds the programs and packages every installer with <code>build.py</code>. <strong>Not in a release yet</strong>. The installer check starts the installed launcher and exercises the server.</td>
+<td>In release 0.7.0. The <strong>Build the desktop programs and installers</strong> workflow builds the programs and packages every installer with <code>build.py</code>. The installer check starts the installed launcher and exercises the server.</td>
 </tr>
 <tr>
 <td>The in-house kernels (2D polygons, 3D solids, JSON)</td>
@@ -6396,7 +6404,7 @@ python ../kerfkite-reference/validation/solid_kernel_check.py --tool build/nativ
 <tr>
 <td>STEP add-on</td>
 <td><code>kerfkite-step</code> and the Open Cascade 7.9.3 libraries with their notices, as separate files: a Setup component on Windows, carried by the macOS and Linux packages.</td>
-<td>Packaging is ready, <strong>not in a release yet</strong>; the installer check writes and reads a part through it.</td>
+<td>In release 0.7.0; the installer check writes and reads a part through it.</td>
 </tr>
 <tr>
 <td>Encrypted links</td>
