@@ -78,6 +78,21 @@ bool Device::probes() {
     return driver_->probes();
 }
 
+std::string Device::zeroing() {
+    Hold hold(lock);
+    return driver_->zeroing();
+}
+
+Json Device::setup_report() {
+    Hold hold(lock);
+    return driver_->setup_report();
+}
+
+void Device::start_checked(const std::vector<std::string> &lines) {
+    Hold hold(lock);
+    driver_->start_checked(lines);
+}
+
 void Device::expect_touch_plate(double thickness, double wall, double radius) {
     Hold hold(lock);
     driver_->expect_touch_plate(thickness, wall, radius);

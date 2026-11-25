@@ -442,7 +442,7 @@ void tile_program(const std::vector<std::string> &lines, const double box[4], do
             else if (word.letter == 'Y' && !has_y) { has_y = true; y = word.value; }
             else if (word.letter == 'Z' && !has_z) { has_z = true; z = word.value; }
             else if (word.letter == 'F' && feed.empty() && cutting) feed = " F" + word.text;
-            else throw refuse(index, text, word.letter == 'S' ? "tiling is for cutter programs, not laser power" : "unexpected word");
+            else throw refuse(index, text, "unexpected word");
         }
         if (!has_x && !has_y && !has_z) throw refuse(index, text, "a move with no axis");
         if (!feed.empty() && (has_x || has_y)) last_feed = feed;
@@ -512,6 +512,102 @@ void tile_program(const std::vector<std::string> &lines, const double box[4], do
     }
 }
 
+// One tile of a laser job. The job has no heights: the beam is switched by M3 or M4 with a power and by M5, and
+// each cutting move carries its feed and power. In a tile the beam is put on only at the start of a cut inside the
+// tile, with the head already there, and is put out wherever a cut leaves the tile or the head has to travel.
+void tile_laser_program(const std::vector<std::string> &lines, const double box[4], Tile &tile) {
+    std::vector<std::string> &out = tile.lines;
+    bool have_xy = false, there = false, lit = false;
+    double px = 0, py = 0;
+    std::string beam, last_feed, last_power;  // beam: the job's line that has the beam on, while it is on
+    std::vector<Word> line;
+    const auto refuse = [](size_t index, const std::string &text, const char *why) -> ValueError {
+        return ValueError("Line " + std::to_string(index + 1) + " cannot be tiled (" + why + "): " + text);
+    };
+    const auto inside = [&](double x, double y) { return x >= box[0] - EDGE && x <= box[2] + EDGE && y >= box[1] - EDGE && y <= box[3] + EDGE; };
+    const auto at = [&](double x, double y) { return "X" + fixed3(x - box[0]) + " Y" + fixed3(y - box[1]); };
+    const auto dark = [&] {
+        if (lit) out.push_back("M5");
+        lit = false;
+    };
+    for (size_t index = 0; index < lines.size(); ++index) {
+        const std::string &text = lines[index];
+        if (text.empty() || text[0] == '(' || text[0] == ';' || text == "%") {
+            out.push_back(text);
+            continue;
+        }
+        if (!words(text, line)) throw refuse(index, text, "not understood");
+        const bool motion = line[0].letter == 'G' && (line[0].value == 0 || line[0].value == 1);
+        if (!motion) {
+            if (line[0].letter == 'M' && (line[0].value == 3 || line[0].value == 4)) {
+                if (line.size() > 2 || (line.size() == 2 && line[1].letter != 'S')) throw refuse(index, text, "unexpected word");
+                beam = text;  // put on in a tile only where a cut starts
+            } else if (line[0].letter == 'M' && line[0].value == 5 && line.size() == 1) {
+                beam.clear();
+                lit = false;
+                out.push_back(text);
+            } else if (passes(line)) {
+                out.push_back(text);
+            } else {
+                throw refuse(index, text, "only straight moves in absolute millimetres are handled");
+            }
+            continue;
+        }
+        const bool cutting = line[0].value == 1;
+        bool has_x = false, has_y = false;
+        double x = px, y = py;
+        std::string feed, power;
+        for (size_t k = 1; k < line.size(); ++k) {
+            const Word &word = line[k];
+            if (word.letter == 'X' && !has_x) { has_x = true; x = word.value; }
+            else if (word.letter == 'Y' && !has_y) { has_y = true; y = word.value; }
+            else if (word.letter == 'F' && feed.empty() && cutting) feed = " F" + word.text;
+            else if (word.letter == 'S' && power.empty() && cutting) power = " S" + word.text;
+            else throw refuse(index, text, word.letter == 'Z' ? "a laser job with a height in it" : "unexpected word");
+        }
+        if (!has_x && !has_y) throw refuse(index, text, "a move with no axis");
+        if (!feed.empty()) last_feed = feed;
+        if (!power.empty()) last_power = power;
+        if (!cutting || beam.empty()) {
+            // Travel, with the beam out.
+            dark();
+            there = inside(x, y);
+            if (there) out.push_back((cutting ? "G1 " : "G0 ") + at(x, y) + (cutting ? last_feed + " S0" : std::string()));
+        } else {
+            if (!have_xy) throw refuse(index, text, "a cut before the start position is set");
+            double enter = 0, leave = 1;
+            bool cut = false;
+            if (clip(px, py, x, y, box, enter, leave)) {
+                const double ex = px + (x - px) * enter, ey = py + (y - py) * enter;
+                const double lx = px + (x - px) * leave, ly = py + (y - py) * leave;
+                const double length = pymath::dist(ex, ey, lx, ly);
+                if (length > EDGE || (enter == 0 && leave == 1)) {
+                    if (!there || enter > 0) {
+                        dark();
+                        out.push_back("G0 " + at(ex, ey));
+                    }
+                    if (!lit) out.push_back(beam);
+                    lit = true;
+                    out.push_back("G1 " + at(lx, ly) + last_feed + last_power);
+                    tile.cut += length;
+                    cut = true;
+                    there = leave == 1;
+                    if (leave < 1) dark();
+                }
+            }
+            if (!cut) {
+                dark();
+                there = false;
+            }
+        }
+        have_xy = true;
+        px = x;
+        py = y;
+        if (out.size() > 2000000) throw ValueError("A tile's program exceeds 2,000,000 lines");
+    }
+    dark();  // a program that never puts its beam out still leaves each tile dark
+}
+
 }  // namespace
 
 // {"lines": [...], "tile_width", "tile_height", optionally "plunge" (the feed for coming back down into a cut;
@@ -531,6 +627,17 @@ json tile_request(const json &request) {
     }
     const double width = need(request, "tile_width", "Tile width", 10, 10000), height = need(request, "tile_height", "Tile height", 10, 10000);
     const double plunge = get(request, "plunge") ? need(request, "plunge", "Plunge feed", 1, 20000) : 0;
+    // A laser job is known by the power its cutting moves carry.
+    bool laser = false;
+    {
+        std::vector<Word> line;
+        for (const std::string &text : program) {
+            if (text.empty() || text[0] == '(' || text[0] == ';' || text == "%" || !words(text, line)) continue;
+            if (line[0].letter != 'G' || line[0].value != 1) continue;
+            for (size_t k = 1; k < line.size() && !laser; ++k) laser = line[k].letter == 'S';
+            if (laser) break;
+        }
+    }
     // Where the job cuts: the tiles are counted from the origin to its far corner.
     double bounds[4] = {0, 0, 0, 0};
     bool any = false;
@@ -573,7 +680,8 @@ json tile_request(const json &request) {
             tile.row = row;
             const double x0 = width * static_cast<double>(column), y0 = height * static_cast<double>(row);
             const double box[4] = {x0, y0, x0 + width, y0 + height};
-            tile_program(program, box, plunge, tile);
+            if (laser) tile_laser_program(program, box, tile);
+            else tile_program(program, box, plunge, tile);
             if (tile.cut <= EDGE) continue;
             tiles.push_back(json{{"column", column}, {"row", row}, {"origin", json::array({x0, y0})}, {"lines", tile.lines}, {"cut_length", tile.cut}});
         }
@@ -582,6 +690,7 @@ json tile_request(const json &request) {
                 {"bounds", json::array({bounds[0], bounds[1], bounds[2], bounds[3]})},
                 {"tile_width", width},
                 {"tile_height", height},
+                {"kind", laser ? "laser" : "cutter"},
                 {"tiles", tiles}};
 }
 

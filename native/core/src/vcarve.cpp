@@ -300,11 +300,17 @@ void arrange(std::vector<Trail> &trails) {
 
 }  // namespace
 
-VCarve vcarve_paths(const PolygonSet &g, double resolution, double angle, double max_depth, double radius) {
+VCarve vcarve_paths(const PolygonSet &g, double resolution, double angle, double max_depth, double radius, double start) {
     // math.tan(math.radians(angle / 2)), from the kernel's series.
     double cosine, sine;
     cos_sin_degrees(angle / 2, cosine, sine);
     const double tangent = sine / cosine;
+    // A carve that starts below the stock top (the plug of a V inlay): the outline is cut at that depth, and
+    // every depth is that much greater. The bit is already that wide at the stock top, which leaves less of it.
+    if (start > 0) {
+        radius -= start * tangent;
+        if (!(radius > 0)) throw ValueError("The V-bit is too narrow to carve from that start depth: use a wider bit or a smaller start depth");
+    }
 
     const std::vector<Point> sites = samples(g, resolution);
     Point low{0, 0}, high{0, 0};
@@ -350,7 +356,7 @@ VCarve vcarve_paths(const PolygonSet &g, double resolution, double angle, double
                 if (i == 0 || z < lowest) lowest = z;
                 if (kept) {
                     piece.points.push_back(p);
-                    piece.depths.push_back(z);
+                    piece.depths.push_back(start > 0 ? z - start : z);
                 } else if (lowest < -1e-4) {
                     break;
                 }

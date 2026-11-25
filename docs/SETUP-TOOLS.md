@@ -6,7 +6,7 @@ Every tool that moves the machine or writes to its controller needs the controll
 
 ## Zero on a touch plate
 
-A touch plate is a metal block of known thickness wired to the controller's probe input, with a clip for the cutter. The tool finds the plate by probing and sets work zero from it. It needs a Grbl-family controller (Grbl 1.1, grblHAL, FluidNC, xPRO V5), which probes with `G38.2`.
+A touch plate is a metal block of known thickness wired to the controller's probe input, with a clip for the cutter. The tool finds the plate by probing and sets work zero from it. It works with the Grbl family (Grbl 1.1, grblHAL, FluidNC, xPRO V5) and with Marlin, which all probe with `G38.2`. A Marlin firmware has that move only when it is built with `G38_PROBE_TARGET`: see [Marlin](#marlin) below.
 
 Test the circuit first: touch the clip to the plate and confirm that the controller's status report shows the probe pin (`Pn:P`). A probe that does not trigger drives the cutter into the plate until the probe travel is used up.
 
@@ -39,18 +39,41 @@ The program, for a corner plate (distances relative, in millimetres):
     ...                       the same for Y
     G90
 
+### Marlin
+
+On Marlin the zeroing program is the same, except that work zero is set by renaming the present position (`G92 Z15.000`) where the Grbl family sets a work offset (`G10 L20 P1 Z15.000`). Marlin has no status report of the probe pin: test the circuit with `M119` from a macro, which lists the probe's state in the log.
+
+Two things differ in what happens when it goes wrong:
+
+- **A firmware without the probing move.** Marlin answers an unknown command and carries on. A zeroing program that carried on would set work zero wherever the cutter happened to be, so the program is stopped at the first line the firmware says it does not know, and nothing is zeroed.
+- **A probe that finds nothing.** Marlin reports `Failed to reach target`. The driver treats any error as a fault: the program stops before zero is set and the controller has to be reconnected.
+
+Marlin does not report where a probe touched, so [probe levelling](PROBE-LEVELING.md) remains for the Grbl family.
+
 ## Controller settings
 
 **Show settings** lists the numbered settings the controller reported, with the names of the common Grbl ones. Change a value and choose **Write**: after you confirm, the setting is written (`$100=80.125`) and every setting is read back, so the list shows what the controller now holds. **Export settings…** saves them all as a JSON file. Export before changing anything: a wrong value can make the machine move the wrong distance or the wrong way.
 
 Only numbered settings can be written, one at a time. The simulator reports `$30` and `$32` and keeps whatever is written to it.
 
+### Marlin
+
+Marlin keeps these settings under M codes, not numbers. **Show settings** lists what the firmware's `M503` report gave for each of X, Y and Z:
+
+| Setting | Meaning |
+|---|---|
+| `M92` | Steps per millimetre |
+| `M203` | Maximum feed, in millimetres a second |
+| `M201` | Maximum acceleration, in millimetres a second squared |
+
+**Write** sends the one value (`M92 X80.125`) and then `M503`, so the list shows what the firmware now holds. Marlin keeps a change only until it is switched off. **Store in the controller · M500** writes the present settings to its memory, after you confirm; nothing is stored until you choose it, so a setting can be tried and abandoned by cycling the power. Other Marlin settings are not offered here.
+
 ## Calibrate an axis
 
 1. Mark where the axis is, against a rule or with a dial gauge.
 2. Move it a known distance: with the jog buttons, or with a macro such as `G91` / `G0 X100` / `G90` for a longer move.
 3. Measure how far it went, choose the **Axis**, and enter the **Commanded** and **Measured** distances. The tool reads the axis's steps per millimetre from the controller's settings and shows the corrected value: steps × commanded ÷ measured.
-4. **Write the corrected steps per mm** writes it as a setting. Repeat the move to confirm.
+4. **Write the corrected steps per mm** writes it as a setting: `$100`, `$101` or `$102` on the Grbl family, `M92` on Marlin (where it must then be stored to last). Repeat the move to confirm.
 
 A correction of more than 20% is refused: that is a wrong pulley, microstep setting or measurement, not a calibration.
 
@@ -70,4 +93,6 @@ A macro holds plain G-code words only: letters, numbers, spaces and `. + -`, at 
 
 `tests/test_machine_setup.py` runs the routes against the simulator. The simulator's touch plate is at a place the zeroing program is not told; the test follows the program's own moves and the controller's probe reports, works out where work zero ended up, and compares it with the plate's faces, wall and top for several walls and cutters. It also checks a probe that finds nothing, each refusal, a setting written and read back, and what a macro may hold. `tests/js/setup-tools.test.cjs` checks the calibration arithmetic, that a surfacing pass covers its whole area and stays inside it, and the macro rules. `validation/setup_tools_workflow.py` drives the panel in a browser.
 
-None of these tools has been run on a physical controller.
+The Marlin tests in the same file use a simulated Marlin with the plate in the same place. Marlin reports no contacts, so they go by the position the simulator holds: after a corner plate the cutter is 10 mm inside the stock on both axes and 15 mm above it in the new coordinates, for several walls and cutters; a probe that finds nothing stops the program before any `G92`; a setting is written, read back from `M503` and stored only when asked; and the status the editor reads is unchanged. `validation/setup_tools_workflow.py` drives both controllers in a browser.
+
+None of these tools has been run on a physical controller. Marlin builds differ in what they include and in how they word their reports: the first use on one is the real test of this driver.

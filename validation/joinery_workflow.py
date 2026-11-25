@@ -1,4 +1,4 @@
-"""Draw a finger-jointed box from the wizard, cut it in the simulator, dog-bone a slot, make an inlay and nest."""
+"""Draw a finger-jointed box from the wizard, cut it in the simulator, dog-bone a slot, make inlays and nest."""
 
 import re
 
@@ -142,6 +142,97 @@ def run(page):
     used = re.search(r'nested in ([\d.]+) × ([\d.]+) mm', loc('#message').text_content())
     assert float(used.group(1)) <= 400 and float(used.group(2)) <= 300
     print(f'PASS three parts nested in {used.group(1)} × {used.group(2)} mm with a 5 mm gap')
+
+    # Two L-shaped parts nest into each other when they may be turned, and not when they may not.
+    page.evaluate(
+        """() => { const ell = [[0,0],[60,0],[60,20],[20,20],[20,60],[0,60],[0,0]];
+            objects = [0, 1].map(k => ({name: 'Bracket ' + (k + 1), designLayerId: 'default',
+                paths: [ell.map(([x, y]) => [x + 100 + 150 * k, y + 100])]})); selected = 0; invalidate(); draw(); }"""
+    )
+    loc('#nestGap').fill('4')
+    loc('#nestMargin').fill('2')
+    loc('#nestTurns').select_option('none')
+    loc('#nestApply').click()
+    expect(loc('#message')).to_contain_text('2 parts nested in')
+    plain = float(re.search(r'nested in ([\d.]+) ×', loc('#message').text_content()).group(1))
+    loc('#nestTurns').select_option('quarter')
+    loc('#nestApply').click()
+    expect(loc('#message')).to_contain_text('1 of them turned')
+    turned = float(re.search(r'nested in ([\d.]+) ×', loc('#message').text_content()).group(1))
+    assert turned < plain - 20, (plain, turned)
+    # The outlines themselves keep the gap: no corner of one bracket is inside or within 4 mm of the other.
+    apart = page.evaluate(
+        """() => { const [a, b] = objects.map(o => o.paths[0]); let least = Infinity;
+            const d = (p, q, r) => { const t = Math.max(0, Math.min(1, ((p[0]-q[0])*(r[0]-q[0]) + (p[1]-q[1])*(r[1]-q[1])) / ((r[0]-q[0])**2 + (r[1]-q[1])**2)));
+                return Math.hypot(p[0] - q[0] - t*(r[0]-q[0]), p[1] - q[1] - t*(r[1]-q[1])); };
+            for (const [m, n] of [[a, b], [b, a]]) for (const p of m) for (let k = 0; k + 1 < n.length; k++) least = Math.min(least, d(p, n[k], n[k+1]));
+            return least; }"""
+    )
+    assert apart >= 4 - 1e-6, apart
+    print(
+        f'PASS two brackets nest in {turned:.1f} mm of width when one is turned, against {plain:.1f} mm upright, {apart:.2f} mm apart'
+    )
+
+    # A V-carved inlay of a star-like shape: clearing and carving for the pocket and for the mirrored plug.
+    page.evaluate(
+        """() => { objects = [{name: 'Arrow', designLayerId: 'default', paths: [[[30,30],[80,30],[80,50],[100,50],[55,90],[10,50],[30,50],[30,30]]]}];
+            selected = 0; invalidate(); draw(); }"""
+    )
+    loc('#inlayKind').select_option('v')
+    expect(loc('#inlayV')).to_be_visible()
+    expect(loc('#inlayToolLabel')).to_have_text('Clearing cutter diameter · mm')
+    loc('#inlayStart').fill('4')
+    loc('#inlayMake').click()
+    expect(loc('#message')).to_contain_text('to leave a gap for glue')
+    loc('#inlayStart').fill('3')
+    loc('#inlayVDiameter').fill('4')
+    loc('#inlayMake').click()
+    expect(loc('#message')).to_contain_text('use a wider bit')
+    loc('#inlayVDiameter').fill('12.7')
+    loc('#inlayMake').click()
+    expect(loc('#message')).to_contain_text(
+        'V inlay added: a pocket 4 mm deep and a mirrored plug that goes in 3 mm', timeout=30000
+    )
+    made = page.evaluate(
+        """() => objects.slice(1).map(o => ({name: o.name, s: o.operationSettings, box: CNCLayout.extent(o), paths: o.paths.length}))"""
+    )
+    assert [m['s']['operation'] for m in made] == ['pocket', 'vcarve', 'pocket', 'vcarve'], [m['name'] for m in made]
+    pocket_clear, pocket_carve, plug_clear, plug_carve = made
+    assert pocket_carve['s']['depth'] == 4 and 'v_start_depth' not in pocket_carve['s']
+    # The plug's outline is carved 0.2 ÷ tan 30° = 0.346 mm deeper than the 3 mm it goes in, for the sampling
+    # step the pocket's carve stays short of its wall.
+    assert plug_carve['s']['depth'] == 4.846 and plug_carve['s']['v_start_depth'] == 3.346 and plug_carve['paths'] == 2
+    assert pocket_carve['s']['v_resolution'] == plug_carve['s']['v_resolution'] == 0.2
+    assert (
+        pocket_carve['s']['tool_id']
+        == plug_carve['s']['tool_id']
+        != pocket_clear['s']['tool_id']
+        == plug_clear['s']['tool_id']
+    )
+    # The pocket's floor is inset by depth × tan(30°) + the sampling step = 2.509 mm; the plug is the mirror image
+    # beside the shape.
+    assert abs(pocket_clear['box'][1] - (30 + 4 * 0.57735 + 0.2)) < 0.01, pocket_clear['box']
+    width = pocket_carve['box'][2] - pocket_carve['box'][0]
+    assert plug_carve['box'][0] > pocket_carve['box'][2] and plug_carve['box'][2] - plug_carve['box'][0] > width
+    mirrored = page.evaluate(
+        '() => { const a = objects[0].paths[0], b = objects[4].paths[1]; const ax = a.map(p => p[0]), bx = b.map(p => p[0]); return [Math.max(...ax) - a[4][0], b.find(p => Math.abs(p[1] - 90) < 1e-6)[0] - Math.min(...bx)]; }'
+    )
+    assert abs(mirrored[0] - mirrored[1]) < 1e-6, mirrored
+    # The plug's carve previews alone: its outline is cut 3 mm down, so no cutting move is above that.
+    tab('CAM')
+    loc('#mode').select_option('router')
+    # (In one pass straight down, so that the only depths in the program are the carve's own.)
+    page.evaluate(
+        "() => { objects.forEach((o, i) => { o.output = i === 4; }); Object.assign(objects[4].operationSettings, {step: 4.846, router_entry: 'plunge'}); invalidate(); draw(); }"
+    )
+    loc('#preview').click()
+    expect(loc('#summary')).to_contain_text('lines', timeout=60000)
+    program = loc('#gcode').text_content().splitlines()
+    depths = [float(w[1:]) for line in program if line.startswith('G1 X') for w in line.split() if w[0] == 'Z']
+    assert depths and max(depths) <= -3.346 + 1e-9 and min(depths) == -4.846, (max(depths), min(depths))
+    print(
+        f'PASS a V inlay makes clearing and carving for a 4 mm pocket and a mirrored plug carved from {-max(depths):.2f} to {-min(depths):.2f} mm'
+    )
 
 
 if __name__ == '__main__':

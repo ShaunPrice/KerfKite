@@ -80,3 +80,94 @@ test('nesting refuses what cannot fit, and turns a part only when allowed',()=>{
   const turned=nest([{w:10,h:140}],150,120,4,{rotate:true}).placements[0];
   assert.deepEqual([turned.w,turned.h,turned.turned],[140,10,true]);
 });
+
+// ---- nesting by outline ----
+const {nestShapes,vInlay}=require('../../studio/static/joinery.js');
+const bracket=s=>[[0,0],[3*s,0],[3*s,s],[s,s],[s,3*s],[0,3*s],[0,0]];
+const placed=(part,p)=>part.paths.map(path=>path.map(([x,y])=>[p.transform[0]*x-p.transform[1]*y+p.transform[2],p.transform[1]*x+p.transform[0]*y+p.transform[3]]));
+const segmentDistance=(a,b,c,d)=>{
+  const point=(p,q,r)=>{const l=(r[0]-q[0])**2+(r[1]-q[1])**2,t=l?Math.max(0,Math.min(1,((p[0]-q[0])*(r[0]-q[0])+(p[1]-q[1])*(r[1]-q[1]))/l)):0;return Math.hypot(p[0]-q[0]-t*(r[0]-q[0]),p[1]-q[1]-t*(r[1]-q[1]));};
+  const side=(p,q,r)=>Math.sign((q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0]));
+  if(side(a,b,c)!==side(a,b,d)&&side(c,d,a)!==side(c,d,b))return 0;
+  return Math.min(point(a,c,d),point(b,c,d),point(c,a,b),point(d,a,b));
+};
+// The least distance between two placed parts, by their own edges; 0 when one lies inside the other.
+const apart=(one,two)=>{
+  let least=Infinity;
+  for(const p of one)for(const q of two)for(let i=0;i+1<p.length;i++)for(let j=0;j+1<q.length;j++)least=Math.min(least,segmentDistance(p[i],p[i+1],q[j],q[j+1]));
+  for(const [m,n] of [[one,two],[two,one]])if(n[0].length>3&&inside(n[0],m[0][0]))return 0;
+  return least;
+};
+const check=(parts,result,width,height,gap)=>{
+  const shapes=result.placements.map(p=>placed(parts[p.index],p));
+  for(const shape of shapes)for(const path of shape)for(const [x,y] of path)assert.ok(x>=-1e-9&&y>=-1e-9&&x<=width+1e-9&&y<=height+1e-9,'a part hangs off the sheet');
+  for(let i=0;i<shapes.length;i++)for(let j=i+1;j<shapes.length;j++){const d=apart(shapes[i],shapes[j]);assert.ok(d>=gap-1e-9,`parts ${i+1} and ${j+1} are ${d.toFixed(3)} mm apart, less than the gap`);}
+  return shapes;
+};
+test('two brackets nest into each other when one may be turned',()=>{
+  const parts=[{paths:[bracket(20)]},{paths:[bracket(20)]}];
+  const upright=nestShapes(parts,300,200,4,{turns:'none'}),turned=nestShapes(parts,300,200,4,{turns:'quarter'});
+  check(parts,upright,300,200,4);check(parts,turned,300,200,4);
+  assert.deepEqual(upright.placements.map(p=>p.angle),[0,0]);
+  assert.deepEqual(turned.placements.map(p=>p.angle),[0,180]);
+  // Upright they sit side by side: two widths and the gap. Turned, the second sits in the hollow of the first.
+  assert.ok(upright.used[0]>=124-1e-9);
+  assert.ok(turned.used[0]<95,`turned they take ${turned.used[0]} mm`);
+  assert.ok(turned.used[1]<=60+1e-9);
+  // The turn is about the part's own origin and then a move: lengths are kept.
+  const [,second]=turned.placements;
+  assert.ok(Math.abs(Math.hypot(second.transform[0],second.transform[1])-1)<1e-12);
+});
+test('every part keeps the gap and stays on the sheet, whatever the turns',()=>{
+  const triangle=[[0,0],[40,0],[0,30],[0,0]],strip=[[0,0],[90,0],[90,12],[0,12],[0,0]],ring=[[0,0],[50,0],[50,50],[0,50],[0,0]],hole=[[15,15],[35,15],[35,35],[15,35],[15,15]];
+  const parts=[{paths:[bracket(15)]},{paths:[triangle]},{paths:[triangle]},{paths:[strip]},{paths:[ring,hole]},{paths:[bracket(10)]},{paths:[[[0,0],[25,18]]]}];
+  for(const turns of ['none','quarter',45,15])for(const gap of [0,3,7.5]){
+    const result=nestShapes(parts,260,140,gap,{turns});
+    assert.equal(result.placements.length,parts.length);
+    const shapes=check(parts,result,260,140,gap);
+    // Nothing is put in the ring's hole: every other part is outside the ring's outer outline.
+    const outer=shapes[4][0];
+    shapes.forEach((shape,i)=>{if(i!==4)for(const path of shape)for(const p of path)assert.ok(!inside(outer,p),'a part was placed in a hole');});
+    if(turns==='none')assert.ok(result.placements.every(p=>p.angle===0));
+  }
+});
+test('nesting by outline packs tighter than by bounding box',()=>{
+  const triangle=[[0,0],[60,0],[0,60],[0,0]],parts=Array.from({length:6},()=>({paths:[triangle]}));
+  const shapes=nestShapes(parts,400,300,2,{turns:'quarter'}),boxes=nest(parts.map(()=>({w:60,h:60})),400,300,2);
+  check(parts,shapes,400,300,2);
+  assert.ok(shapes.used[0]*shapes.used[1]<0.8*boxes.used[0]*boxes.used[1],`${shapes.used} against ${boxes.used}`);
+});
+test('a fixed part is not turned, and a part that needs turning to fit is turned',()=>{
+  const long=[[0,0],[150,0],[150,20],[0,20],[0,0]];
+  assert.equal(nestShapes([{paths:[long]}],100,200,2,{turns:'quarter'}).placements[0].angle%180,90);
+  assert.throws(()=>nestShapes([{paths:[long],fixed:true}],100,200,2,{turns:'quarter'}),/Part 1 is larger than the sheet/);
+  assert.throws(()=>nestShapes([{paths:[long]}],100,200,2,{turns:'none'}),/Part 1 is larger than the sheet/);
+  const fixed=nestShapes([{paths:[bracket(20)],fixed:true},{paths:[bracket(20)],fixed:true}],300,200,4,{turns:'quarter'});
+  assert.deepEqual(fixed.placements.map(p=>p.angle),[0,0]);
+});
+test('nesting refuses what cannot be nested',()=>{
+  const square=s=>[[0,0],[s,0],[s,s],[0,s],[0,0]];
+  assert.throws(()=>nestShapes([{paths:[square(60)]},{paths:[square(60)]}],100,100,2),/do not fit the sheet/);
+  assert.throws(()=>nestShapes([],100,100,2),/1 to 200 parts/);
+  assert.throws(()=>nestShapes([{paths:[]}],100,100,2),/Part 1 has no outline/);
+  assert.throws(()=>nestShapes([{paths:[[[0,0],[NaN,1]]]}],100,100,2),/invalid coordinates/);
+  assert.throws(()=>nestShapes([{paths:[square(10)]}],100,100,-1),/gap between parts/);
+  assert.throws(()=>nestShapes([{paths:[square(10)]}],100,100,2,{turns:7}),/divides a full turn/);
+  assert.throws(()=>nestShapes([{paths:[square(10)]}],0,100,2),/valid sheet size/);
+});
+
+// ---- V inlay sizes ----
+test('a V inlay is sized from the bit and the depths',()=>{
+  const size=vInlay(60,12.7,4,3,1.5,.2),slope=Math.tan(Math.PI/6);
+  assert.ok(Math.abs(size.slope-slope)<1e-12);
+  assert.equal(size.glue,1);
+  // The plug's outline is carved one sampling step ÷ slope deeper than it goes in: the pocket's wall stands that proud.
+  assert.equal(size.plugStart,Number((3+.2/slope).toFixed(3)));
+  assert.equal(size.plugDepth,Number((size.plugStart+1.5).toFixed(3)));
+  assert.ok(Math.abs(size.pocketInset-(4*slope+.2))<1e-12&&Math.abs(size.plugOutset-(1.5*slope+.2))<1e-12);
+  assert.throws(()=>vInlay(60,12.7,4,3.95,1.5),/gap for glue/);
+  assert.throws(()=>vInlay(60,4,4,3,1.5),/5\.60 mm wide at the top/);
+  assert.throws(()=>vInlay(90,12.7,4,3,4),/use a wider bit/);
+  assert.throws(()=>vInlay(5,12.7,4,3,1.5),/V-bit angle/);
+  assert.throws(()=>vInlay(60,12.7,4,3,1.5,.05),/V detail sampling/);
+});

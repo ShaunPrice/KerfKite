@@ -218,7 +218,6 @@ const json &levelling_project(const json &data) {
 json tile_project(const json &data, const json &tile) {
     if (!tile.is_object()) throw ValueError("Give the tile as its width, height, column and row");
     const json &project = data.at("project");
-    if (!(text_of(member(project, "mode"), "") == "router")) throw ValueError("Tiling applies to router jobs");
     if (truthy(member(project, "rotary")) || data.contains("rotary")) throw ValueError("Tiling does not apply to rotary jobs");
     json fits = project;
     fits["width"] = number(member(tile, "width"), "Tile width", 10, 10000);
@@ -333,13 +332,11 @@ void add_cam_routes(RouteTable &routes, bool strict) {
         return http::Response::json(to_json(generate(project)).dump());
     });
     routes.add("POST", "/api/tile", [strict](const Request &request) {
-        // A router job larger than the machine, as one program for each tile. Files only: nothing is run here.
+        // A router, knife or laser job larger than the machine, as one program for each tile. Files only: nothing is run here.
         // (Registered with job generation, not with the design routes the assistant server lists.)
         const json data = strict ? strict_json(request) : payload(request);
         const json *project = member(data, "project");
         if (!project || !project->is_object()) throw ValueError("Provide a project and a tile size");
-        const json *mode = member(*project, "mode");
-        if (!mode || !mode->is_string() || mode->get<std::string>() != "router") throw ValueError("Tiling applies to router jobs");
         if (truthy(member(*project, "rotary"))) throw ValueError("Tiling does not apply to rotary jobs");
         const Job job = generate(*project);
         json tiling = json::object();

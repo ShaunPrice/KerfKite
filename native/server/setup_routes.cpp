@@ -43,13 +43,16 @@ Response ok(json extra = json::object()) {
     return json_response(out);
 }
 
-void require_grbl(Studio &studio, const char *what) {
-    if (!studio.device().probes()) throw ValueError(std::string(what) + " needs a Grbl-family controller");
+// How the connected controller sets work zero after a probe, or a refusal when it has no probing move.
+std::string zeroing(Studio &studio, const char *what) {
+    const std::string how = studio.device().zeroing();
+    if (how.empty()) throw ValueError(std::string(what) + " needs a controller with a probing move");
+    return how;
 }
 
 }  // namespace
 
-TouchPlate touch_plate_program(const Json &data) {
+TouchPlate touch_plate_program(const Json &data, const std::string &zeroing) {
     if (!data.is_object()) throw ValueError("Expected the touch plate settings");
     const json *axes = member(data, "axes");
     const std::string which = axes && axes->is_string() ? axes->get<std::string>() : std::string("z");
@@ -69,12 +72,15 @@ TouchPlate touch_plate_program(const Json &data) {
     timed(travel, seek, "probe travel");
     timed(2, slow, "second probe feed's distance");
     std::vector<std::string> &lines = out.lines;
+    // The Grbl family sets the work offset (G10 L20 P1); Marlin renames the present position (G92). Either way
+    // the axis then reads the given value where the cutter stands.
+    const std::string zero = zeroing == "G92" ? "G92 " : "G10 L20 P1 ";
     lines = {"G21", "G91"};
     // Down onto the plate, back off and touch again slowly; the plate's top is its thickness above the stock.
     lines.push_back("G38.2 Z-" + fixed3(travel) + " F" + fixed1(seek));
     lines.push_back("G0 Z1.000");
     lines.push_back("G38.2 Z-2.000 F" + fixed1(slow));
-    lines.push_back("G10 L20 P1 Z" + fixed3(out.thickness));
+    lines.push_back(zero + "Z" + fixed3(out.thickness));
     lines.push_back("G0 Z" + fixed3(retract));
     if (out.corner) {
         out.wall = number(member(data, "wall"), "Plate wall", 0, 50);
@@ -93,7 +99,7 @@ TouchPlate touch_plate_program(const Json &data) {
             lines.push_back("G38.2 " + a + fixed3(reach) + " F" + fixed1(seek));
             lines.push_back("G0 " + a + "-1.000");
             lines.push_back("G38.2 " + a + "2.000 F" + fixed1(slow));
-            lines.push_back("G10 L20 P1 " + a + "-" + fixed3(edge));
+            lines.push_back(zero + a + "-" + fixed3(edge));
             lines.push_back("G0 " + a + "-2.000");
             lines.push_back("G0 Z" + fixed3(retract + drop));
             lines.push_back("G0 " + a + fixed3(edge + 2 + 10));  // to 10 mm inside the stock
@@ -121,6 +127,29 @@ std::string setting_line(const Json &data) {
     if (!text.empty() && text.back() == '.') text.pop_back();
     if (text == "-0") text = "0";
     return "$" + name + "=" + text;
+}
+
+// A Marlin setting: {"code": "M92" (steps per unit), "M203" (maximum feed, units a second) or "M201" (maximum
+// acceleration), "axis": "X", "Y" or "Z", "value"} as the line that sets it, such as M92 X80.2. {"store": true}
+// is M500, which keeps the present settings through a power cycle.
+std::string marlin_setting_line(const Json &data) {
+    if (!data.is_object()) throw ValueError("Expected a controller setting");
+    const json *store = member(data, "store");
+    if (store && store->is_boolean() && store->get<bool>()) return "M500";
+    const json *code = member(data, "code"), *axis = member(data, "axis"), *value = member(data, "value");
+    const std::string command = code && code->is_string() ? code->get<std::string>() : std::string();
+    if (command != "M92" && command != "M203" && command != "M201")
+        throw ValueError("Choose the setting: M92 steps per mm, M203 maximum feed or M201 maximum acceleration");
+    const std::string letter = axis && axis->is_string() ? axis->get<std::string>() : std::string();
+    if (letter != "X" && letter != "Y" && letter != "Z") throw ValueError("Choose the axis: X, Y or Z");
+    if (!value || value->is_boolean() || !value->is_number() || !std::isfinite(value->get<double>()) || !(value->get<double>() > 0) ||
+        value->get<double>() > 1e6)
+        throw ValueError("The setting's value must be a number greater than 0");
+    std::string text = fixed3(value->get<double>());
+    text.erase(text.find_last_not_of('0') + 1);
+    if (!text.empty() && text.back() == '.') text.pop_back();
+    if (text.empty() || text == "0") throw ValueError("The setting's value must be at least 0.001");
+    return command + " " + letter + text;
 }
 
 std::vector<std::string> macro_lines(const Json &data) {
@@ -154,22 +183,27 @@ void add_setup_routes(Studio &studio) {
     Studio *s = &studio;
     studio.add("GET", "/api/setup", [s](const Request &) {
         json out = json::object();
-        const bool grbl = s->device().probes();
-        out["touch_plate"] = grbl;
-        out["settings"] = grbl;
+        const std::string how = s->device().zeroing();
+        out["touch_plate"] = !how.empty();
+        out["settings"] = !how.empty();
         out["macros"] = true;
+        out["protocol"] = s->device().protocol();
+        // Marlin's settings and, in the simulator, its position: its status carries neither.
+        const json report = s->device().setup_report();
+        if (!report.is_null()) out["report"] = report;
         return json_response(out);
     });
     studio.add("POST", "/api/setup/probe", [s](const Request &request) {
         const json data = payload(request);
-        require_grbl(*s, "A touch plate");
+        const std::string how = zeroing(*s, "A touch plate");
         if (!confirmed(data))
             throw ValueError("Confirm that the plate is on the stock, its lead is connected and tested, and the spindle is stopped");
-        const TouchPlate plate = touch_plate_program(data);
+        const TouchPlate plate = touch_plate_program(data, how);
         s->jobs().disarm();
         s->forget_level();  // work zero moves
         s->device().expect_touch_plate(plate.thickness, plate.wall, plate.radius);
-        s->device().start(plate.lines);
+        // A firmware built without the probing move must stop there, not carry on and set a zero it never found.
+        s->device().start_checked(plate.lines);
         json lines = json::array();
         for (const std::string &line : plate.lines) lines.push_back(line);
         json extra = json::object();
@@ -178,11 +212,15 @@ void add_setup_routes(Studio &studio) {
     });
     studio.add("POST", "/api/setup/setting", [s](const Request &request) {
         const json data = payload(request);
-        require_grbl(*s, "Writing a controller setting");
+        const std::string how = zeroing(*s, "Writing a controller setting");
         if (!confirmed(data)) throw ValueError("Confirm the change: a wrong setting can make the machine move wrongly");
-        const std::string line = setting_line(data);
+        const bool marlin = how == "G92";
+        const std::string line = marlin ? marlin_setting_line(data) : setting_line(data);
         s->jobs().disarm();
-        s->device().start({line, "$$"});  // write it, then read every setting back
+        // Write it, then read every setting back. Marlin keeps a setting only until its power is cycled unless
+        // it is stored (M500), which is asked for on its own.
+        if (marlin) s->device().start_checked(line == "M500" ? std::vector<std::string>{line} : std::vector<std::string>{line, "M503"});
+        else s->device().start({line, "$$"});
         json extra = json::object();
         extra["line"] = line;
         return ok(extra);

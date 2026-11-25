@@ -100,6 +100,37 @@ def run(page):
     expect(loc('#manualToolStages')).to_contain_text('Finishing · 3.175 mm ball')
     print('PASS the tool-change plan has a roughing stage and a finishing stage')
 
+    # Adaptive clearing for the same relief: a width of cut to keep instead of a stepover.
+    tab('3D relief')
+    loc('#roughStrategy').select_option('adaptive')
+    expect(loc('#roughStepoverLabel')).to_have_text('Width of cut to keep · mm')
+    loc('#roughStepover').fill('0.3')
+    loc('#makeRoughing').click()
+    expect(loc('#message')).to_contain_text('at least 8% of the cutter diameter')
+    loc('#roughStepover').fill('2.5')
+    with page.expect_request(lambda request: request.url.endswith('/api/relief-roughing')) as sent:
+        loc('#makeRoughing').click()
+    expect(loc('#message')).to_contain_text('adaptive clearing keeping about 2.5 mm of cut', timeout=30000)
+    assert sent.value.post_data_json['rough_strategy'] == 'adaptive'
+    names = page.evaluate('() => objects.map(o => o.name)')
+    assert names[:2] == ['Relief roughing · pyramid.stl', 'Relief roughing (adaptive) · pyramid.stl'], names
+    adaptive = page.evaluate(
+        """() => { const o = objects[1], z = o.depths.flat();
+            return {lowest: Math.min(...z), highest: Math.max(...z), paths: o.paths.length, points: z.length,
+                    box: CNCLayout.extent(o)}; }"""
+    )
+    assert rough['lowest'] - 1e-9 <= adaptive['lowest'] < -4 and adaptive['highest'] <= 1e-9, adaptive
+    assert adaptive['box'][0] >= 20 - 1e-6 and adaptive['box'][2] <= 100 + 1e-6, adaptive
+    tab('CAM')
+    page.evaluate('() => { objects.forEach((o, i) => { o.output = i === 1; }); invalidate(); draw(); }')
+    loc('#preview').click()
+    expect(loc('#summary')).to_contain_text('lines', timeout=60000)
+    program = loc('#gcode').text_content()
+    assert f"Z{adaptive['lowest']:.3f}" in program
+    print(
+        f"PASS adaptive clearing adds {adaptive['paths']} paths of {adaptive['points']} points to {-adaptive['lowest']:.2f} mm and previews as a job of {program.count(chr(10))} lines"
+    )
+
 
 if __name__ == '__main__':
     import argparse

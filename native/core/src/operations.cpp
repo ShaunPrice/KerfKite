@@ -220,9 +220,16 @@ std::vector<std::string> prepare(const json &project, std::vector<Path> &paths, 
         if (!router) throw ValueError("V-carving requires router mode");
         const double resolution = value(project, "v_resolution", 0.5, 0.1, 5, "0.1", "5");
         const double angle = value(project, "v_angle", 60, 10, 170, "10", "170");
-        const double max_depth = value(project, "depth", 1, 0.01, 50, "0.01", "50");
+        double max_depth = value(project, "depth", 1, 0.01, 50, "0.01", "50");
         const double radius = value(project, "tool_diameter", 6, 0.1, 100, "0.1", "100") / 2;
-        VCarve carved = vcarve_paths(g, resolution, angle, max_depth, radius);
+        // v_start_depth: the outline is cut that far below the stock top, and the depth of cut is the whole depth
+        // from the top, as for every operation. Absent or 0, the carve is the ordinary one.
+        const double start = get(project, "v_start_depth") ? value(project, "v_start_depth", 0, 0, 50, "0", "50") : 0;
+        if (start > 0) {
+            if (!(max_depth - start >= 0.01)) throw ValueError("The depth of cut must be more than the V start depth");
+            max_depth -= start;
+        }
+        VCarve carved = vcarve_paths(g, resolution, angle, max_depth, radius, start);
         paths = std::move(carved.paths);
         depths = std::move(carved.depths);
         warnings.push_back("Sampled medial-axis V-carve with conservative sampling allowance; fine detail and wide-area flat "

@@ -1,4 +1,4 @@
-/* Tiling: a router job larger than the machine, cut one tile at a time. The server divides the previewed job
+/* Tiling: a router, knife or laser job larger than the machine, cut one tile at a time. The server divides the previewed job
    into a program for each tile, each with the tile's corner as X0 Y0. A tile is exported as a file, or run on
    the connected controller through the ordinary run route with the usual confirmation. */
 (()=>{
@@ -7,7 +7,7 @@ const host=document.querySelector('aside.operations');
 if(!host||(typeof offline!=='undefined'&&offline))return;
 const panel=document.createElement('details');panel.id='tilingPanel';
 panel.innerHTML=`<summary>Tile an oversized job</summary>
-<p class="hint">For a design larger than the machine can reach. Set the work area to the size of the whole sheet, design and preview the router job, then divide it into tiles the size of the machine's travel. Cut a tile, slide the sheet along by exactly one tile against a fence or pins, set work zero at the next tile's front-left corner, and cut the next. Cuts that cross from one tile to the next meet at the tile's edge.</p>
+<p class="hint">For a design larger than the machine can reach. Set the work area to the size of the whole sheet, design and preview the job, then divide it into tiles the size of the machine's travel. Cut a tile, slide the sheet along by exactly one tile against a fence or pins, set work zero at the next tile's front-left corner, and cut the next. Cuts that cross from one tile to the next meet at the tile's edge. Router, knife and laser jobs can be tiled; a laser's beam is put out wherever a cut leaves a tile.</p>
 <div class="pair"><label>Tile width · mm<input id="tileWidth" type="number" min="10" max="10000" step="1" value="300"></label><label>Tile height · mm<input id="tileHeight" type="number" min="10" max="10000" step="1" value="200"></label></div>
 <button id="tilePlan" type="button">Divide the previewed job into tiles</button>
 <div id="tileState" class="hint" role="status">No tiles yet</div><div id="tileList"></div>`;
@@ -15,7 +15,6 @@ host.append(panel);
 let plan=null,snapshot=null;
 const current=()=>{
  if(!preview||previewProject!==JSON.stringify(machiningProject()))throw Error('Generate a current preview first');
- if($('mode').value!=='router')throw Error('Tiling applies to router jobs');
  return machiningProject();
 };
 const fresh=()=>{if(!plan||snapshot!==JSON.stringify(machiningProject()))throw Error('The design or its settings changed. Divide the job into tiles again.');return plan;};

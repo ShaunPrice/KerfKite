@@ -1,4 +1,4 @@
-"""Zero on a simulated touch plate, write and calibrate a setting, add a surfacing job and run a macro."""
+"""Zero on a simulated touch plate, write and calibrate a setting, add a surfacing job and run a macro; then Marlin."""
 
 import json
 
@@ -119,6 +119,54 @@ def run(page):
     print(f'PASS the surfacing job covers {job["box"]} with a 25.4 mm cutter and previews at 0.5 mm deep')
     tab('Control')
     loc('#disconnect').click()
+
+    # The same tools on a Marlin controller: zero is set with G92 and the settings are M codes.
+    tab('Control')
+    if 'Disconnected' not in loc('#state').text_content():
+        loc('#disconnect').click()
+        expect(loc('#state')).to_contain_text('Disconnected')
+    # The protocol is chosen on the CAM tab; the server takes it when it connects.
+    page.evaluate(
+        "() => { const p = document.getElementById('protocol'); p.value = 'marlin'; p.dispatchEvent(new Event('change', {bubbles: true})); }"
+    )
+    loc('#connect').click()
+    expect(loc('#state')).to_contain_text('Idle')
+    for _ in range(50):
+        if page.evaluate("async () => (await api('setup')).protocol") == 'marlin':
+            break
+        page.wait_for_timeout(100)
+    opened('setupProbe')
+    loc('#setupProbeAxes').select_option('z')
+    loc('#setupProbeThickness').fill('12')
+    loc('#setupProbeConfirmed').check()
+    with page.expect_response(lambda response: response.url.endswith('/api/setup/probe')) as probed:
+        loc('#setupProbeRun').click()
+    lines = probed.value.json()['lines']
+    assert 'G92 Z12.000' in lines and not any(line.startswith('G10') for line in lines), lines
+    expect(loc('#setupProbeState')).to_contain_text('Work Z zero is the stock surface', timeout=30000)
+    report = page.evaluate("async () => (await api('setup')).report")
+    assert report['position'] == [0, 0, 17], report
+    opened('setupSettings')
+    loc('#setupSettingsRefresh').click()
+    expect(loc('#setupSettingsList [data-setting]')).to_have_count(9)
+    expect(loc('#setupSettingsList [data-setting="M92 X"] label')).to_contain_text('Steps per mm')
+    expect(loc('#setupSettingsStore')).to_be_visible()
+    opened('setupCalibrate')
+    loc('#setupCalAxis').select_option('Y')
+    loc('#setupCalAxis').select_option('X')
+    expect(loc('#setupCalSteps')).to_have_value('80')
+    loc('#setupCalMeasured').fill('99.2')
+    loc('#setupCalWrite').click()
+    expect(loc('#message')).to_contain_text('X now has 80.645 steps per mm', timeout=15000)
+    assert page.evaluate("async () => (await api('setup')).report.settings.M92.X") == 80.645
+    loc('#setupSettingsStore').click()
+    expect(loc('#message')).to_have_text('Settings stored in the controller', timeout=15000)
+    assert 'echo:Settings Stored' in status()['log']
+    print('PASS on Marlin the plate sets Z with G92, M92 is calibrated to 80.645 and the settings are stored with M500')
+    loc('#disconnect').click()
+    page.evaluate(
+        "() => { const p = document.getElementById('protocol'); p.value = 'grbl'; p.dispatchEvent(new Event('change', {bubbles: true})); }"
+    )
 
 
 if __name__ == '__main__':

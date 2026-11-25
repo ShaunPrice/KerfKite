@@ -159,7 +159,8 @@ class TilingTests(unittest.TestCase):
             bad(['G2 X10 Y10 I5 J0'])
         with self.assertRaisesRegex(ValueError, 'cannot be tiled'):
             bad(['G91'])
-        with self.assertRaisesRegex(ValueError, 'not laser power'):
+        # A cutting move with a power makes it a laser job, which has no heights.
+        with self.assertRaisesRegex(ValueError, 'a laser job with a height in it'):
             bad(['G1 X10 Y10 S500'])
         with self.assertRaisesRegex(ValueError, 'below the clearance height'):
             call(
@@ -189,6 +190,123 @@ class TilingTests(unittest.TestCase):
             call('tile', {'tile_width': 200, 'tile_height': 150})
         with self.assertRaisesRegex(ValueError, 'Every program line must be text'):
             call('tile', {'lines': [5], 'tile_width': 200, 'tile_height': 150})
+
+
+def follow_laser(lines, test, box=None):
+    """The burning moves of a laser program as ((x0, y0), (x1, y1), power), with the checks a tile must pass."""
+    x = y = None
+    beam = None  # the power word of the M3 or M4 that put the beam on
+    cuts = []
+    for line in lines:
+        words = line.split()
+        if words[0] in ('M3', 'M4'):
+            test.assertIsNone(beam, 'the beam is put on twice')
+            test.assertIsNotNone(x, 'the beam is put on before the head is anywhere')
+            beam = words[1]
+        elif words[0] == 'M5':
+            beam = None
+        if words[0] not in ('G0', 'G1'):
+            continue
+        at = {w[0]: float(w[1:]) for w in words[1:] if w[0] in 'XY'}
+        nx, ny = at.get('X', x), at.get('Y', y)
+        if words[0] == 'G0':
+            test.assertIsNone(beam, f'the head travels with the beam on: {line}')
+        elif beam:
+            test.assertIsNotNone(x, f'a cut from nowhere: {line}')
+            power = next(w for w in words if w[0] == 'S')
+            test.assertTrue(any(w[0] == 'F' for w in words), f'a cut without its feed: {line}')
+            cuts.append(((x, y), (nx, ny), power))
+        if box:
+            test.assertTrue(-1e-6 <= nx <= box[0] + 1e-6 and -1e-6 <= ny <= box[1] + 1e-6, f'outside the tile: {line}')
+        x, y = nx, ny
+    test.assertIsNone(beam, 'the program ends with the beam on')
+    return cuts
+
+
+@unittest.skipUnless(CLI, NOT_BUILT)
+class OtherHeadsTests(unittest.TestCase):
+    """Laser and knife jobs divided into tiles."""
+
+    PATHS = [
+        [[20, 20], [520, 20], [520, 280], [20, 280], [20, 20]],
+        [[40, 40], [500, 260]],
+        [[60, 250], [300, 250], [300, 60]],
+    ]
+
+    def project(self, mode, **changes):
+        project = dict(
+            mode=mode, protocol='grbl', width=600, height=300, feed=900, plunge=200, power=600, safe=5, depth=1.5, step=1.5,
+            paths=self.PATHS,
+        )  # fmt: skip
+        project.update(changes)
+        return project
+
+    def test_a_laser_job_is_divided_with_the_beam_on_only_inside_cuts(self):
+        for passes in (1, 2):
+            job = generate(self.project('laser', passes=passes))
+            whole = follow_laser(job['lines'], self)
+            total_whole = sum(math.dist(a, b) for a, b, _ in whole)
+            for width, height in ((200, 150), (130, 90), (97.5, 61.25), (520, 140)):
+                with self.subTest(passes=passes, tile=(width, height)):
+                    answer = call('tile', {'lines': job['lines'], 'tile_width': width, 'tile_height': height})
+                    self.assertEqual(answer['kind'], 'laser')
+                    total = 0
+                    for tile in answer['tiles']:
+                        cuts = follow_laser(tile['lines'], self, (width, height))
+                        self.assertAlmostEqual(
+                            sum(math.dist(a, b) for a, b, _ in cuts), tile['cut_length'], delta=0.01 + 0.002 * len(cuts)
+                        )
+                        ox, oy = tile['origin']
+                        for a, b, power in cuts:
+                            self.assertEqual(power, 'S600')
+                            piece = ((a[0] + ox, a[1] + oy, 0), (b[0] + ox, b[1] + oy, 0))
+                            job_cuts = [((p[0], p[1], 0), (q[0], q[1], 0)) for p, q, _ in whole]
+                            self.assertTrue(
+                                on_a_cut(piece, job_cuts), f'tile {tile["column"]},{tile["row"]} burns {piece}'
+                            )
+                        total += tile['cut_length']
+                    # Nothing is burnt twice and nothing is left out.
+                    self.assertAlmostEqual(total, total_whole, delta=0.05)
+
+    def test_a_laser_tile_that_holds_the_whole_job_is_the_job(self):
+        job = generate(self.project('laser'))
+        answer = call('tile', {'lines': job['lines'], 'tile_width': 600, 'tile_height': 300})
+        self.assertEqual(answer['tiles'][0]['lines'], job['lines'])
+
+    def test_a_knife_job_is_divided_as_a_cutter_job(self):
+        job = generate(self.project('knife'))
+        whole = follow(job['lines'])
+        # Tile sizes whose edges no cut runs along: a cut along a shared edge is made in both tiles.
+        for width, height in ((200, 150), (170, 110)):
+            with self.subTest(tile=(width, height)):
+                answer = call('tile', {'lines': job['lines'], 'tile_width': width, 'tile_height': height})
+                self.assertEqual(answer['kind'], 'cutter')
+                total = 0
+                for tile in answer['tiles']:
+                    cuts = follow(tile['lines'], self, (width, height))
+                    ox, oy = tile['origin']
+                    for a, b in cuts:
+                        piece = ((a[0] + ox, a[1] + oy, a[2]), (b[0] + ox, b[1] + oy, b[2]))
+                        self.assertTrue(on_a_cut(piece, whole), f'tile {tile["column"]},{tile["row"]} cuts {piece}')
+                    total += tile['cut_length']
+                self.assertAlmostEqual(total, length(whole), delta=0.05 + 0.002 * len(whole))
+
+    def test_a_program_that_leaves_its_beam_on_still_gives_dark_tiles(self):
+        lines = ['G21', 'G90', 'G0 X5 Y5', 'M4 S100', 'G1 X15 Y5 F300 S100']  # no M5 at the end
+        answer = call('tile', {'lines': lines, 'tile_width': 20, 'tile_height': 20})
+        self.assertEqual(answer['tiles'][0]['lines'][-1], 'M5')
+        follow_laser(answer['tiles'][0]['lines'], self, (20, 20))
+
+    def test_a_laser_job_with_a_height_in_it_is_refused(self):
+        with self.assertRaisesRegex(ValueError, 'a laser job with a height in it'):
+            call(
+                'tile',
+                {
+                    'lines': ['G21', 'G90', 'G0 X1 Y1', 'M4 S100', 'G1 X30 Y1 Z-1 F300 S100', 'M5'],
+                    'tile_width': 20,
+                    'tile_height': 20,
+                },
+            )
 
 
 @unittest.skipUnless(CLI and STUDIO, NOT_BUILT)
@@ -230,9 +348,14 @@ class TileRouteTests(unittest.TestCase):
         self.assertEqual(len(answer['tiles']), 6)
         self.refused(
             'api/tile',
-            {'project': {**self.PROJECT, 'mode': 'laser'}, 'tile_width': 200, 'tile_height': 150},
-            'router jobs',
+            {'project': {**self.PROJECT, 'rotary': {'axis': 'A'}}, 'tile_width': 200, 'tile_height': 150},
+            'does not apply to rotary jobs',
         )
+        # A laser job and a knife job are divided as well.
+        for mode, kind in (('laser', 'laser'), ('knife', 'cutter')):
+            project = {**self.PROJECT, 'mode': mode}
+            answer = self.server.post('api/tile', {'project': project, 'tile_width': 200, 'tile_height': 150})
+            self.assertEqual((answer['kind'], len(answer['tiles'])), (kind, 6))
         self.refused('api/tile', {'tile_width': 200, 'tile_height': 150}, 'Provide a project and a tile size')
         self.refused('api/tile', {'project': self.PROJECT, 'tile_width': 200}, 'Tile height')
         self.refused('api/tile', {'project': self.PROJECT, 'tile_width': 5, 'tile_height': 150}, 'Tile width')
@@ -267,9 +390,6 @@ class TileRouteTests(unittest.TestCase):
             'api/run',
             {'project': self.PROJECT, 'confirmed': True, 'tile': tile, 'leveled': True},
             'cannot follow a probed surface',
-        )
-        self.refused(
-            'api/run', {'project': {**self.PROJECT, 'mode': 'laser'}, 'confirmed': True, 'tile': tile}, 'router jobs'
         )
         self.server.post('api/disconnect', {})
 

@@ -15,7 +15,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${KERFKITE_PROTOC
 configure_file(core/src/protocols_data.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/generated/protocols_data.hpp @ONLY)
 
 add_library(kerfkite_core STATIC core/src/api.cpp core/src/own_rules.cpp core/src/cam.cpp core/src/drilling.cpp core/src/knife.cpp core/src/laser.cpp
-  core/src/leveling.cpp core/src/protocols.cpp core/src/relief.cpp core/src/rotary.cpp core/src/router_entry.cpp
+  core/src/leveling.cpp core/src/protocols.cpp core/src/relief.cpp core/src/relief_adaptive.cpp core/src/rotary.cpp core/src/router_entry.cpp
   core/src/simple_line.cpp core/src/stock.cpp core/src/tabs.cpp core/src/tool_changes.cpp core/src/fixture_collision.cpp core/src/stl_heightmap.cpp
   core/src/artwork_relief.cpp core/src/program_import.cpp core/src/dxf.cpp
   core/src/pdf_import.cpp core/src/inflate.cpp core/src/bundle_import.cpp core/src/python_text.cpp
