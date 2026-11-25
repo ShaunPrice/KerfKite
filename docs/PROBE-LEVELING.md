@@ -79,7 +79,7 @@ The simulator has a stock surface with a gentle tilt and a slight bow, so that p
 
 ## Not yet verified on a machine
 
-Levelling is tested against the simulator and by calculation. It has not yet been run on a physical controller. The first run on a machine should be supervised, with a probe that has been tested, a low probe feed and a hand on the reset.
+Levelling is tested against the simulator and by calculation: `tests/test_leveling.py` asks `kerfkite-cam` for plans, height maps and levelled programs and compares them with a bilinear surface worked out separately in the test. It has not yet been run on a physical controller. The first run on a machine should be supervised, with a probe that has been tested, a low probe feed and a hand on the reset.
 
 ## Circuit boards
 

@@ -6,12 +6,28 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
 func environment(values map[string]string) func(string) string {
 	return func(key string) string { return values[key] }
+}
+
+// The Linux and macOS shortcut rules are written for POSIX paths and permissions, so their tests run on a
+// POSIX host. A temporary folder is named by its real path, as the launcher names its own program: on macOS
+// the temporary folder is reached through a symbolic link.
+func posixHome(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the Linux and macOS shortcut rules are tested on a POSIX host")
+	}
+	home, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return home
 }
 
 func TestExecValueRoundTrips(t *testing.T) {
@@ -44,7 +60,7 @@ func TestExecValueRoundTrips(t *testing.T) {
 }
 
 func TestLinuxDesktopFolder(t *testing.T) {
-	home := t.TempDir()
+	home := posixHome(t)
 	config := filepath.Join(home, ".config")
 	os.MkdirAll(config, 0o755)
 	if got := linuxDesktop(home, environment(nil)); got != filepath.Join(home, "Desktop") {
@@ -67,7 +83,7 @@ func TestPortableLinuxShortcuts(t *testing.T) {
 	trusted := []string{}
 	defer func(previous func(string)) { trustLauncher = previous }(trustLauncher)
 	trustLauncher = func(path string) { trusted = append(trusted, path) }
-	home := t.TempDir()
+	home := posixHome(t)
 	folder := filepath.Join(home, "Apps", "kerf kite")
 	os.MkdirAll(folder, 0o755)
 	os.MkdirAll(filepath.Join(home, "Desktop"), 0o755)
@@ -117,7 +133,7 @@ func TestPortableLinuxShortcuts(t *testing.T) {
 }
 
 func TestInstalledLinuxPackage(t *testing.T) {
-	home := t.TempDir()
+	home := posixHome(t)
 	system := filepath.Join(home, "usr", "share")
 	exe := filepath.Join(home, "opt", "kerfkite", "KerfKite")
 	os.MkdirAll(filepath.Dir(exe), 0o755)
@@ -148,6 +164,9 @@ func TestInstalledLinuxPackage(t *testing.T) {
 }
 
 func TestMacShortcuts(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the Linux and macOS shortcut rules are tested on a POSIX host")
+	}
 	if p := findPlaces("darwin", "/Volumes/KerfKite Studio/KerfKite Studio.app/Contents/MacOS/KerfKite", "/Users/sam", environment(nil)); !p.offers().DiskImage || p.offers().Icon {
 		t.Fatalf("disk image not recognised: %+v", p.offers())
 	}
@@ -155,7 +174,7 @@ func TestMacShortcuts(t *testing.T) {
 	if p := findPlaces("darwin", translocated, "/Users/sam", environment(nil)); !p.offers().DiskImage {
 		t.Fatal("translocated copy not recognised")
 	}
-	home := t.TempDir()
+	home := posixHome(t)
 	os.MkdirAll(filepath.Join(home, "Desktop"), 0o755)
 	app := filepath.Join(home, "Applications", appName+".app")
 	exe := filepath.Join(app, "Contents", "MacOS", "KerfKite")

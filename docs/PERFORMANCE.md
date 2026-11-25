@@ -17,6 +17,23 @@ The indexed artwork catalog retained all 1,768 original entries and all 1,358,04
 
 Pocket's signed Android app was exercised on an ARM64 Android API 37 emulator configured with 2,048 MiB of RAM. The editor passed file import, reference-preserving export, resizing, SVG conversion, recovery, and library persistence after a cold restart. The paired pendant passed jog, home, zero, start, pause, resume and stop against the Studio simulator over virtual LAN and ADB reverse. The APK minimum is API 26. On a physical Galaxy S23 Ultra running Android 17, the published Pocket 0.4.1 APK started cold in 273 ms and 499 ms, used 41 to 97 MiB proportional memory while editing, and rendered 648 frames with a 5 ms median and a 13 ms 90th percentile. Pi 4/5 performance for this revision and material-cutting tests require their respective devices.
 
+## Studio 0.7.0 against 0.6.1
+
+The published Linux x86-64 packages of both releases were compared on 24 November 2026 under WSL 2 (Ubuntu 24.04, 12 threads): the 0.6.1 wheel with its compiled extension, serving through `studio.desktop_server`, and the 0.7.0 portable archive's `kerfkite-studio`. Each server was started fresh three times and sent the same requests on the loopback interface: the 256 × 256 relief fixture to `/api/relief`, then the relief job and a laser job to `/api/generate`, five times each. Both releases returned the same programs (hashes `08c0811b116f` and `6636b83bda44`).
+
+| Measure (range over three runs) | 0.6.1 | 0.7.0 |
+| --- | ---: | ---: |
+| Start to `KERFKITE_READY` | 0.32 to 0.40 s | 0.01 s |
+| Resident memory, idle | 46.6 to 46.9 MiB | 9.2 to 10.0 MiB |
+| Resident memory after the jobs | 85.3 to 88.2 MiB | 77.2 to 79.2 MiB |
+| Peak resident memory | 151.3 to 151.7 MiB | 137.5 to 139.6 MiB |
+| Relief, best of five | 0.102 to 0.130 s | 0.034 to 0.036 s |
+| Relief job G-code (135,886 lines), best of five | 1.082 to 1.204 s | 0.247 to 0.313 s |
+| Laser job G-code, best of five | 0.688 to 0.921 s | 0.060 to 0.067 s |
+| Installed size | 219 MB | 162 MB, 95 MB of it the Open CASCADE libraries of the STEP add-on |
+
+The 0.6.1 figures already include its compiled relief and stock kernels, so the comparison is with that release as shipped, not with pure Python. The times include the HTTP request and the JSON of the answer. These are one computer's figures for the servers alone: the launcher, the window, and the Windows, macOS and ARM64 packages were not measured.
+
 ## Relief contact on threads and the GPU
 
 Reliefs are prepared in the native core, whose contact shares its rasters out over the processor's threads and, for large jobs on a computer with a GPU that has double precision, may give part or all of them to the GPU, with the same depths to the last bit whichever computes what. Studio measures the threads and the GPU each time it starts and shares large jobs so that both finish together. On a 24-thread laptop a whole relief from a 1024-point image with a 12 mm ball takes 140 ms on the threads, 126 ms on its RTX 5090 Laptop GPU, 103 ms on both at once and 1.88 s on one thread; capped at 4 threads, as a small processor would be, it takes 472 ms on the threads and 116 ms shared, and `/api/relief` answers a relief from that image in half the time it took before the relief moved into the core. The measurements, the rules for choosing and the checks are in [Threads and the GPU](NATIVE.md#threads-and-a-gpu-for-large-reliefs); `validation/benchmark_relief.py` repeats them.

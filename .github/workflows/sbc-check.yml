@@ -7,7 +7,7 @@ on:
       tag:
         description: KerfKite release containing the desktop and browser installers (ignored when a run is given)
         required: false
-        default: v0.6.1
+        default: v0.7.0
       run:
         description: Or the ID of a native-programs.yml run whose release files to verify before publishing
         required: false
