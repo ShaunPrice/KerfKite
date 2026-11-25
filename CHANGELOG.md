@@ -6,6 +6,7 @@ Notable changes to KerfKite Studio and KerfKite Pocket. Versions before this fil
 
 ### Development
 - The board and levelling tests run against the native programs. `tests/test_pcb_import.py`, `test_pcb_isolation.py`, `test_pcb_api.py` and `test_leveling.py` are ported from the Python reference's tests of the same names: `tests/kerfkite_core.py` hands their requests to `kerfkite-cam`, and the route tests start `kerfkite-studio` and `kerfkite-web`. The **Build and check the native programs** workflow now runs every test in `tests/` on each platform, and stops if the programs or Shapely, the oracle, are missing. Tests of the reference's own Python wrapper (a missing or older extension, raw request text) had nothing left to test and are not carried over.
+- The launcher's shortcut tests pass on every host. Run on macOS and Windows for the first time, the tests of the Linux and macOS shortcut rules failed: they named a temporary folder through macOS's symbolic link, and expected POSIX paths and permissions on Windows. They now use the folder's real path, as the launcher does for its own program, and run on POSIX hosts. The launcher itself is unchanged.
 - The installer and SBC package checks default to the `v0.7.0` tag, and the performance guide records [Studio 0.7.0 against 0.6.1](docs/PERFORMANCE.md#studio-070-against-061).
 
 ## 0.7.0 — 2026-11-24
