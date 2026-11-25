@@ -12,6 +12,8 @@
 #include "kerfkite/cam.hpp"
 #include "kerfkite/errors.hpp"
 #include "kerfkite/leveling.hpp"
+#include "kerfkite/relief.hpp"
+#include "kerfkite/stl_heightmap.hpp"
 #include "kerfkite/rotary.hpp"
 #include "machine_setup.hpp"
 #include "phone_monitor.hpp"
@@ -297,6 +299,17 @@ void add_cam_routes(RouteTable &routes, bool strict) {
         const json project = strict ? strict_json(request) : payload(request);
         // The core writes the job as JSON itself: for a large job that is most of the time of the request.
         return http::Response::json(to_json(generate(project)).dump());
+    });
+    routes.add("POST", "/api/relief-roughing", [strict](const Request &request) {
+        // Roughing passes for a relief, from the request /api/relief takes with "rough_step". (Registered with job
+        // generation, not with the design routes the assistant server lists.)
+        json data = strict ? strict_json(request) : payload(request);
+        if (!truthy(member(data, "content_base64"))) return http::Response::json(relief_roughing(data).dump());
+        const json mesh = stl_heightmap(data);
+        data["heightmap"] = mesh.at("heightmap");
+        json result = relief_roughing(data);
+        for (const json &warning : mesh.at("warnings")) result["warnings"].push_back(warning);
+        return http::Response::json(result.dump());
     });
 }
 

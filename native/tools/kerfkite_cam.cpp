@@ -389,7 +389,7 @@ int main(int argc, char **argv) {
     if (command == "batch" && argc == 3) return batch(argv[2], false);
     if (command == "batch" && argc == 4 && std::string(argv[2]) == "--own") return batch(argv[3], true);
     if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "polygon" || command == "operation" ||
-         command == "solid" || command == "rotary" || command == "rotary-wrap" || command == "relief" || command == "stock" ||
+         command == "solid" || command == "rotary" || command == "rotary-wrap" || command == "relief" || command == "relief-roughing" || command == "stock" ||
          command == "tool-changes" || command == "fixture-collision" || command == "stl-heightmap" ||
          command == "solid-cad" || command == "solid-cad-section" || command == "cad-script" || command == "sketch-solve" || command == "assembly-solve" ||
          command == "solid-cad-surface" || command == "step-part" || command == "step-faces" ||

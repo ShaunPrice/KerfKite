@@ -34,6 +34,12 @@ std::vector<double> relief_depths(const ReliefContact &job, std::string &ran);
 // reference's base64 reader might read differently is declined (NotPorted) rather than guessed.
 Json prepare_relief(const Json &data);
 
+// Roughing passes that take the stock down level by level to the roughing cutter's contact: prepare_relief's
+// request with "rough_step", the depth of each level, and usually an "allowance" to leave for the finishing pass.
+// {"paths", "path_depths", "levels", "step", "lowest", "device", "surface", "warnings"}: the passes level by
+// level from the top, each along a raster wherever stock is left below the level above.
+Json relief_roughing(const Json &data);
+
 // The GPU the contact uses for large jobs, or why there is none, looking for it if that has not been done.
 std::string relief_gpu_status();
 
