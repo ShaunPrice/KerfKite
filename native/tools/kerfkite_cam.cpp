@@ -4,6 +4,7 @@
 //   kerfkite-cam probe-plan REQUEST.json     a probing program for the cutting bounds of a job
 //   kerfkite-cam height-map REQUEST.json     the surface heights from the probe results
 //   kerfkite-cam level REQUEST.json          a program corrected to follow that surface
+//   kerfkite-cam tile REQUEST.json           a program divided into tiles, each with its corner as X0 Y0
 //   kerfkite-cam rotary REQUEST.json         {"project", "options"}: the job wrapped onto a cylinder (studio.rotary)
 //   kerfkite-cam rotary-wrap REQUEST.json    {"job", "options"}: given canonical G-code lines wrapped the same way
 //   kerfkite-cam relief REQUEST.json         relief finishing paths and depths from a height field (studio.relief)
@@ -388,7 +389,7 @@ int main(int argc, char **argv) {
     if (command == "generate") return generate(argc, argv);
     if (command == "batch" && argc == 3) return batch(argv[2], false);
     if (command == "batch" && argc == 4 && std::string(argv[2]) == "--own") return batch(argv[3], true);
-    if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "polygon" || command == "operation" ||
+    if ((command == "probe-plan" || command == "height-map" || command == "level" || command == "tile" || command == "polygon" || command == "operation" ||
          command == "solid" || command == "rotary" || command == "rotary-wrap" || command == "relief" || command == "stock" ||
          command == "tool-changes" || command == "fixture-collision" || command == "stl-heightmap" ||
          command == "solid-cad" || command == "solid-cad-section" || command == "cad-script" || command == "sketch-solve" || command == "assembly-solve" ||
