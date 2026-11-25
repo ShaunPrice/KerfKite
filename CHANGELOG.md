@@ -5,6 +5,8 @@ Notable changes to KerfKite Studio and KerfKite Pocket. Versions before this fil
 ## Unreleased
 
 ### Added
+- **Dog-bone corners, inlays and nesting.** **Design → Joinery & nesting** relieves the corners a round cutter cannot reach (inside an opening, or round a part), makes a pocket and a matching plug from a shape with a clearance all round, and nests the parts whose output is on in rows on the sheet with a gap and a margin. See [Joinery, inlays and nesting](docs/JOINERY.md).
+- **Project wizards.** **Templates → Project wizards** draws a finger-jointed box (with or without a lid, with a fit allowance and dog-boned slots for a router), slot-together dividers and a sign blank with hanging holes, laid out on the sheet with outside profiles. See [Project wizards](docs/PROJECT-WIZARDS.md).
 - **Tool library with starting feeds and speeds.** **CAM → Tool library** keeps the cutters you own (twelve to start with, up to 200, exported and imported as `kerfkite-tools/1`) and works out a spindle speed, feed, plunge, step down and stepover for one of them in ten materials, from chip load, the cutting speed of the material and a description of the machine: its rigidity, spindle range and fastest cutting feed. **Use these settings** fills the CAM fields and the manual tool-change identity; nothing reaches a controller. The values are starting points to test on scrap, not tested recipes. See [Tool library and starting feeds](docs/TOOL-LIBRARY.md).
 
 ### Fixed
