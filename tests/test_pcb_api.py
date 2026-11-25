@@ -30,8 +30,9 @@ from validation import native_servers  # noqa: E402 - after the path of the chec
 
 
 def built(name):
+    """The path of a native program, from its environment variable (KERFKITE_STUDIO, KERFKITE_WEB) or build/native."""
     try:
-        return native_servers.program(name, None, 'KERFKITE_' + name.split('-')[1].upper())
+        return native_servers.program(name, None, 'KERFKITE_' + name.partition('-')[2].replace('-', '_').upper())
     except SystemExit:
         return None
 
@@ -301,7 +302,11 @@ class BoardRouteTests(unittest.TestCase):
         self.assertEqual(self.server.status(), before)
 
 
-@unittest.skipUnless(CLI and WEB and built('kerfkite-pendant-tls'), NOT_BUILT)
+# kerfkite-web serves HTTPS through the TLS relay installed beside it.
+RELAY = bool(WEB) and native_servers.beside(WEB, 'kerfkite-pendant-tls')
+
+
+@unittest.skipUnless(CLI and RELAY, NOT_BUILT)
 class HostedRouteTests(unittest.TestCase):
     def test_the_hosted_editor_offers_the_same_route_to_signed_in_users(self):
         password = 'A secure chosen password!'  # noqa: S105 - the account this test makes in a temporary folder

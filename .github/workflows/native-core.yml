@@ -91,7 +91,7 @@ jobs:
         shell: bash
         run: |
           export KERFKITE_CAM="$CAM" KERFKITE_STUDIO="$STUDIO" KERFKITE_WEB="$WEB"
-          python -c "import sys, shapely; sys.path.insert(0, 'tests'); import kerfkite_core, test_pcb_api as t; assert kerfkite_core.CLI and t.STUDIO and t.WEB and t.built('kerfkite-pendant-tls')"
+          python -c "import sys, shapely; sys.path.insert(0, 'tests'); import kerfkite_core, test_pcb_api as t; assert kerfkite_core.CLI and t.STUDIO and t.RELAY"
           python -m unittest discover -s tests 2>&1 | tee "$RUNNER_TEMP/tests.txt"
           tail -n 3 "$RUNNER_TEMP/tests.txt" | grep -q '^OK'
       - name: Run the acceptance fixture on the workstation server's simulator
