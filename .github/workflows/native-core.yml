@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - native/**
+      - tests/**
       - validation/native_servers.py
       - validation/check_pinned_results.py
       - validation/mcp_smoke.py
@@ -84,6 +85,15 @@ jobs:
         # The core's results on this platform against the values pinned for every platform: polygon operations,
         # a V-carve, levelling, board isolation, a part and a drawing, a relief, the stock preview and rotary posts.
         run: python validation/check_pinned_results.py "${{ env.CAM }}"
+      - name: Run the Python tests against the programs
+        # The board, levelling and polygon-kernel tests ask kerfkite-cam, and the board route tests ask the
+        # servers. A suite that is skipped proves nothing, so the programs and Shapely, the oracle, must be there.
+        shell: bash
+        run: |
+          export KERFKITE_CAM="$CAM" KERFKITE_STUDIO="$STUDIO" KERFKITE_WEB="$WEB"
+          python -c "import sys, shapely; sys.path.insert(0, 'tests'); import kerfkite_core, test_pcb_api as t; assert kerfkite_core.CLI and t.STUDIO and t.WEB and t.built('kerfkite-pendant-tls')"
+          python -m unittest discover -s tests 2>&1 | tee "$RUNNER_TEMP/tests.txt"
+          tail -n 3 "$RUNNER_TEMP/tests.txt" | grep -q '^OK'
       - name: Run the acceptance fixture on the workstation server's simulator
         run: python scripts/simulate_studio.py --server "${{ env.STUDIO }}"
       - name: Compare with the Python reference

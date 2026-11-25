@@ -64,7 +64,7 @@ The desktop examples in the following gallery were captured in Studio 0.4.0. The
 * Router relief, profile and pocket operations, drag-knife paths, rotary engraving and simulated fixture clearance. [Fourth-axis setup](docs/ROTARY.md) · [Laser depth slicing](docs/LASER-WORKSHOP.md)
 * Reviewed imports for LightBurn projects and settings, DXF drawings, G-code, HP-GL cutter programs and LinuxCNC workspace settings.
 
-See the [0.6.1 performance measurements](docs/PERFORMANCE.md), the [18 November CAD and workshop review (PDF)](docs/KerfKite-Release-Review.pdf), [file compatibility](docs/LIGHTBURN-IMPORT.md), [controller matrix](docs/PROTOCOLS.md) and [platforms](docs/PLATFORMS.md) for tested scope and open work. The machine limits in the public profiles are example dimensions. Enter your measured setup before preparing a physical job.
+See the [performance measurements](docs/PERFORMANCE.md), the [18 November CAD and workshop review (PDF)](docs/KerfKite-Release-Review.pdf), [file compatibility](docs/LIGHTBURN-IMPORT.md), [controller matrix](docs/PROTOCOLS.md) and [platforms](docs/PLATFORMS.md) for tested scope and open work. The machine limits in the public profiles are example dimensions. Enter your measured setup before preparing a physical job.
 
 To trim two crossing lines, open the [geometry guide](docs/GEOMETRY.md). In a solid sketch, you can [trim a crossing, dimension a fillet or constrain a profile](docs/SKETCH.md). A rebuilt solid can update linked machining contours, sections and reliefs. See [solid CAD](docs/SOLID-CAD.md).
 

@@ -15,9 +15,9 @@
 # gave every run of the workflow: the tracked files and the untracked files
 # that are not ignored are copied to CI_LOCAL_DIR/test-<os>/src, and the steps
 # run there. Work that is not committed yet is checked too. Nothing is built
-# in the checkout itself, and build output that is already in it (build/, a
-# compiled studio/_relief_native library) is not copied, so it cannot stand in
-# for a build that failed. The copy is made with git, from a git checkout.
+# in the checkout itself, and build output that is already in it (build/) is
+# not copied, so it cannot stand in for a build that failed. The copy is made
+# with git, from a git checkout.
 #
 # Usage
 #     scripts/ci-local.sh                run every job this machine can run

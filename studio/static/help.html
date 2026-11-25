@@ -113,7 +113,7 @@
 <li>Router relief, profile and pocket operations, drag-knife paths, rotary engraving and simulated fixture clearance. <a href="#rotary">Fourth-axis setup</a> · <a href="#laser-workshop">Laser depth slicing</a></li>
 <li>Reviewed imports for LightBurn projects and settings, DXF drawings, G-code, HP-GL cutter programs and LinuxCNC workspace settings.</li>
 </ul>
-<p>See the <a href="#performance">0.6.1 performance measurements</a>, the <a href="docs/KerfKite-Release-Review.pdf">18 November CAD and workshop review (PDF)</a>, <a href="#lightburn-import">file compatibility</a>, <a href="#protocols">controller matrix</a> and <a href="#platforms">platforms</a> for tested scope and open work. The machine limits in the public profiles are example dimensions. Enter your measured setup before preparing a physical job.</p>
+<p>See the <a href="#performance">performance measurements</a>, the <a href="docs/KerfKite-Release-Review.pdf">18 November CAD and workshop review (PDF)</a>, <a href="#lightburn-import">file compatibility</a>, <a href="#protocols">controller matrix</a> and <a href="#platforms">platforms</a> for tested scope and open work. The machine limits in the public profiles are example dimensions. Enter your measured setup before preparing a physical job.</p>
 <p>To trim two crossing lines, open the <a href="#geometry">geometry guide</a>. In a solid sketch, you can <a href="#sketch">trim a crossing, dimension a fillet or constrain a profile</a>. A rebuilt solid can update linked machining contours, sections and reliefs. See <a href="#solid-cad">solid CAD</a>.</p>
 <p>For phone control, open <strong>Control → Phone pendant</strong> on the Studio workstation and choose <strong>Enable phone pairing</strong>. Scan the QR code with Pocket, or use the private pairing link. Wi-Fi, USB tethering and Bluetooth tethering all connect the phone to the same server. See the <a href="#phone-connections">connection guide</a>.</p>
 <h2>Workshop tools</h2>
@@ -2879,9 +2879,9 @@ kerfkite-cam excellon-drills board.drl --offset [-95,115]
 <p><code>POST /api/pcb-import</code> takes the files of one side of a board as text and answers with all of the above, placed. Fields: <code>copper</code>, <code>outline</code>, <code>drill</code> (any may be absent); <code>side</code> (<code>&quot;top&quot;</code> or <code>&quot;bottom&quot;</code>); <code>offset</code>, or <code>margin</code> (5; one distance or <code>[X, Y]</code>) to place the outline's lowest corner; <code>mirror_x</code> (the bottom side only; by default the middle of the placed outline); <code>width</code> and <code>height</code>; <code>tool_width</code>, or <code>v_bit</code> as <code>{&quot;tip_width&quot;, &quot;angle&quot;, &quot;depth&quot;}</code>; <code>passes</code>, <code>overlap</code>, <code>direction</code>, <code>order</code>, <code>arc_tolerance</code>; <code>clip</code> (true to clip to the outline); and <code>drill_format</code> as <code>{&quot;units&quot;, &quot;integer&quot;, &quot;decimal&quot;, &quot;omitted_zeros&quot;}</code>. Each file may be up to 4 MiB. A field that is not known is refused.</p>
 <p>The answer has <code>side</code>, <code>offset</code>, <code>mirror_x</code>, <code>bounds</code>, <code>copper</code> (the isolation answer), <code>outline</code> (the outline answer), <code>drill</code> (the drilling answer with <code>plated</code>, <code>file_function</code> and <code>counts</code> added) and <code>warnings</code> about the files together. The underside needs the outline, or the <code>mirror_x</code> and <code>offset</code> of the first import, and is refused without. <code>/api/session</code> has <code>pcb_import: true</code> when the route can answer.</p>
 <h2>How it is checked</h2>
-<p>The Python reference's tests, kept at the reference commit (<a href="#developer">The Python reference</a>), checked the core through its extension. <code>tests/test_pcb_import.py</code> read small Gerber and Excellon files written by hand for the purpose (<code>tests/pcb/</code>), and compares the answers with coordinates, arcs, macro shapes and areas worked out separately in the test. It covers each feature above, each refusal, the limits, and several hundred randomly damaged copies of the fixtures, every one of which has to be read, isolated or refused with a reason. <code>native/tests/selftest.cpp</code> repeats a short form of the checks, and the reference's route comparison sends the route these boards with their members changed.</p>
-<p><code>tests/test_pcb_isolation.py</code> checked the isolation against Shapely as an independent oracle. The copper image is rebuilt in the test from the importer's list of objects, shape by shape, and compared with the core's: neither may reach beyond the other by more than the arc tolerance. Every contour is then measured against the copper: every point and every mid-edge point within the corner allowance of its pass's distance, and no part of any contour nearer. Which islands the first contour separates is worked out from the contours alone and has to be exactly the grouping the reported places give; every reported gap has to be the distance Shapely measures; and every pair of islands that the oracle finds clearly nearer than the tool has to be reported. The fixtures are pads and tracks at known spacings, a ground pour with clearances, thermal reliefs by spokes and by a thermal macro, clear cut-outs, a region with a cut-in, a step-and-repeat panel and a small two-sided board, with offset, mirror, clip, direction and order each checked for what it states.</p>
-<p><code>tests/test_pcb_api.py</code> checked the route: placement, the underside's mirror line, the warnings of each file, every refusal as a JSON <code>400</code>, the hosted service, and that an import calls no method of the controller. <code>tests/js/pcb-board.test.cjs</code> checks the panel's own logic. <code>validation/pcb_workflow.py</code> drives the editor in a browser against the simulator: it imports the fixture board, reads the warnings and the marks, corrects the drill format, adds the board, previews the isolation at its depth, probes and runs it levelled, drills a diameter as its own stage, exports the tool stages and registers the underside.</p>
+<p>The tests ask the programs: <code>tests/kerfkite_core.py</code> hands each request to <code>kerfkite-cam</code>, and the route tests start <code>kerfkite-studio</code> and <code>kerfkite-web</code> on the loopback interface. They were ported from the Python reference's tests of the same names and run with <code>python -m unittest discover -s tests</code>, in continuous integration on every platform the programs are built for; Shapely is their oracle, and they are skipped without it. <code>tests/test_pcb_import.py</code> reads small Gerber and Excellon files written by hand for the purpose (<code>tests/pcb/</code>), and compares the answers with coordinates, arcs, macro shapes and areas worked out separately in the test. It covers each feature above, each refusal, the limits, and several hundred randomly damaged copies of the fixtures, every one of which has to be read, isolated or refused with a reason. <code>native/tests/selftest.cpp</code> repeats a short form of the checks, and the reference's route comparison sends the route these boards with their members changed.</p>
+<p><code>tests/test_pcb_isolation.py</code> checks the isolation against Shapely as an independent oracle. The copper image is rebuilt in the test from the importer's list of objects, shape by shape, and compared with the core's: neither may reach beyond the other by more than the arc tolerance. Every contour is then measured against the copper: every point and every mid-edge point within the corner allowance of its pass's distance, and no part of any contour nearer. Which islands the first contour separates is worked out from the contours alone and has to be exactly the grouping the reported places give; every reported gap has to be the distance Shapely measures; and every pair of islands that the oracle finds clearly nearer than the tool has to be reported. The fixtures are pads and tracks at known spacings, a ground pour with clearances, thermal reliefs by spokes and by a thermal macro, clear cut-outs, a region with a cut-in, a step-and-repeat panel and a small two-sided board, with offset, mirror, clip, direction and order each checked for what it states.</p>
+<p><code>tests/test_pcb_api.py</code> checks the route: placement, the underside's mirror line, the warnings of each file, the width worked out for a V-bit, every refusal as a JSON <code>400</code>, the hosted service, and that the server's controller status is the same before and after an import. <code>tests/js/pcb-board.test.cjs</code> checks the panel's own logic. <code>validation/pcb_workflow.py</code> drives the editor in a browser against the simulator: it imports the fixture board, reads the warnings and the marks, corrects the drill format, adds the board, previews the isolation at its depth, probes and runs it levelled, drills a diameter as its own stage, exports the tool stages and registers the underside.</p>
 <p>The importers have been run on the project's own fixtures and on files written to follow the formats that KiCad, Altium, EasyEDA and Eagle export. They have not yet been run on a large collection of boards from those programs, and no board has been cut on a machine. Check an imported board's bounds, hole counts and warnings against the design before cutting.</p>
 </section><section id="performance"><h1>Native CAM and editor verification</h1>
 <p>These measurements were made while Studio's Python reference existed, as each part moved into the native core. The benchmarks that ran the reference (<code>validation/benchmark_native.py</code>, <code>benchmark_gcode.py</code> and the others) are kept with it at the reference commit (<a href="#developer">The Python reference</a>); <code>kerfkite_solid_bench</code> and <code>validation/benchmark_viewport.py</code> run from this tree.</p>
@@ -2920,6 +2920,60 @@ kerfkite-cam excellon-drills board.drl --offset [-95,115]
 <p>The reference's <code>python -m validation.benchmark_native result.json</code>, run with its extension installed, requires matching G-code hashes and a maximum stock-cell difference below 1 × 10⁻¹⁰ mm. Since the stock preview moved into the native core it is the reference's to the bit, so that difference is now zero. For the viewport, <code>python validation/benchmark_viewport.py --browser PATH</code> compares the same camera orbit through WebGL2 and Canvas. On Apple M4 using Metal, median frame intervals for an 18,432-triangle mesh were 16.7 ms and 50.0 ms respectively.</p>
 <p>The indexed artwork catalog retained all 1,768 original entries and all 1,358,040 coordinate pairs in a value-for-value comparison. An isolated Mac process searching metadata and loading one template peaked at 32.6 MiB with the index. The earlier eager loader peaked at 432.8 MiB. The compressed catalog payload decreased from 18.89 MiB to 15.11 MiB.</p>
 <p>Pocket's signed Android app was exercised on an ARM64 Android API 37 emulator configured with 2,048 MiB of RAM. The editor passed file import, reference-preserving export, resizing, SVG conversion, recovery, and library persistence after a cold restart. The paired pendant passed jog, home, zero, start, pause, resume and stop against the Studio simulator over virtual LAN and ADB reverse. The APK minimum is API 26. On a physical Galaxy S23 Ultra running Android 17, the published Pocket 0.4.1 APK started cold in 273 ms and 499 ms, used 41 to 97 MiB proportional memory while editing, and rendered 648 frames with a 5 ms median and a 13 ms 90th percentile. Pi 4/5 performance for this revision and material-cutting tests require their respective devices.</p>
+<h2>Studio 0.7.0 against 0.6.1</h2>
+<p>The published Linux x86-64 packages of both releases were compared on 24 November 2026 under WSL 2 (Ubuntu 24.04, 12 threads): the 0.6.1 wheel with its compiled extension, serving through <code>studio.desktop_server</code>, and the 0.7.0 portable archive's <code>kerfkite-studio</code>. Each server was started fresh three times and sent the same requests on the loopback interface: the 256 × 256 relief fixture to <code>/api/relief</code>, then the relief job and a laser job to <code>/api/generate</code>, five times each. Both releases returned the same programs (hashes <code>08c0811b116f</code> and <code>6636b83bda44</code>).</p>
+<table>
+<thead>
+<tr>
+<th>Measure (range over three runs)</th>
+<th style="text-align:right">0.6.1</th>
+<th style="text-align:right">0.7.0</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Start to <code>KERFKITE_READY</code></td>
+<td style="text-align:right">0.32 to 0.40 s</td>
+<td style="text-align:right">0.01 s</td>
+</tr>
+<tr>
+<td>Resident memory, idle</td>
+<td style="text-align:right">46.6 to 46.9 MiB</td>
+<td style="text-align:right">9.2 to 10.0 MiB</td>
+</tr>
+<tr>
+<td>Resident memory after the jobs</td>
+<td style="text-align:right">85.3 to 88.2 MiB</td>
+<td style="text-align:right">77.2 to 79.2 MiB</td>
+</tr>
+<tr>
+<td>Peak resident memory</td>
+<td style="text-align:right">151.3 to 151.7 MiB</td>
+<td style="text-align:right">137.5 to 139.6 MiB</td>
+</tr>
+<tr>
+<td>Relief, best of five</td>
+<td style="text-align:right">0.102 to 0.130 s</td>
+<td style="text-align:right">0.034 to 0.036 s</td>
+</tr>
+<tr>
+<td>Relief job G-code (135,886 lines), best of five</td>
+<td style="text-align:right">1.082 to 1.204 s</td>
+<td style="text-align:right">0.247 to 0.313 s</td>
+</tr>
+<tr>
+<td>Laser job G-code, best of five</td>
+<td style="text-align:right">0.688 to 0.921 s</td>
+<td style="text-align:right">0.060 to 0.067 s</td>
+</tr>
+<tr>
+<td>Installed size</td>
+<td style="text-align:right">219 MB</td>
+<td style="text-align:right">162 MB, 95 MB of it the Open CASCADE libraries of the STEP add-on</td>
+</tr>
+</tbody>
+</table>
+<p>The 0.6.1 figures already include its compiled relief and stock kernels, so the comparison is with that release as shipped, not with pure Python. The times include the HTTP request and the JSON of the answer. These are one computer's figures for the servers alone: the launcher, the window, and the Windows, macOS and ARM64 packages were not measured.</p>
 <h2>Relief contact on threads and the GPU</h2>
 <p>Reliefs are prepared in the native core, whose contact shares its rasters out over the processor's threads and, for large jobs on a computer with a GPU that has double precision, may give part or all of them to the GPU, with the same depths to the last bit whichever computes what. Studio measures the threads and the GPU each time it starts and shares large jobs so that both finish together. On a 24-thread laptop a whole relief from a 1024-point image with a 12 mm ball takes 140 ms on the threads, 126 ms on its RTX 5090 Laptop GPU, 103 ms on both at once and 1.88 s on one thread; capped at 4 threads, as a small processor would be, it takes 472 ms on the threads and 116 ms shared, and <code>/api/relief</code> answers a relief from that image in half the time it took before the relief moved into the core. The measurements, the rules for choosing and the checks are in <a href="#native">Threads and the GPU</a>; <code>validation/benchmark_relief.py</code> repeats them.</p>
 <h2>G-code and rotary generation after 0.6.1</h2>
@@ -4342,7 +4396,7 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 <h2>Simulator</h2>
 <p>The simulator has a stock surface with a gentle tilt and a slight bow, so that probing and levelling can be rehearsed without a machine. It stops a probe on that surface, writes a <code>[PRB:...]</code> report in machine coordinates, tracks <code>G10 L20 P1</code>, and raises <code>ALARM:5</code> when a probe ends above the surface.</p>
 <h2>Not yet verified on a machine</h2>
-<p>Levelling is tested against the simulator and by calculation. It has not yet been run on a physical controller. The first run on a machine should be supervised, with a probe that has been tested, a low probe feed and a hand on the reset.</p>
+<p>Levelling is tested against the simulator and by calculation: <code>tests/test_leveling.py</code> asks <code>kerfkite-cam</code> for plans, height maps and levelled programs and compares them with a bilinear surface worked out separately in the test. It has not yet been run on a physical controller. The first run on a machine should be supervised, with a probe that has been tested, a low probe feed and a hand on the reset.</p>
 <h2>Circuit boards</h2>
 <p>Probe levelling is what circuit board engraving rests on. A board's Gerber layers and Excellon drill file are imported under <strong>Projects</strong>, <strong>Circuit board</strong>, which adds the isolation contours, the holes and the cut-out to the design as stages, one for each tool; the isolation stage is then previewed, probed and run as described above. See <a href="#pcb">Circuit boards</a>.</p>
 </section><section id="product"><h1>Feature and acceptance matrix</h1>
