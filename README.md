@@ -63,6 +63,7 @@ The desktop examples in the following gallery were captured in Studio 0.4.0. The
 * Layer-based laser editing, image processing, material test grids, camera registration and 1,768 original vector templates.
 * [Project wizards](docs/PROJECT-WIZARDS.md) for a finger-jointed box, slot-together dividers and a sign blank, with [dog-bone corners, inlays and nesting](docs/JOINERY.md).
 * [Machine setup tools](docs/SETUP-TOOLS.md): touch-plate zeroing, controller settings, axis calibration, spoilboard surfacing and macros, on the simulator so far.
+* [Tiling](docs/TILING.md) of a job larger than the machine into one program for each tile.
 * A [tool library](docs/TOOL-LIBRARY.md) with starting feeds and speeds worked out from chip load for the cutter, the material and the machine.
 * Router relief, profile and pocket operations, drag-knife paths, rotary engraving and simulated fixture clearance. [Fourth-axis setup](docs/ROTARY.md) · [Laser depth slicing](docs/LASER-WORKSHOP.md)
 * Reviewed imports for LightBurn projects and settings, DXF drawings, G-code, HP-GL cutter programs and LinuxCNC workspace settings.

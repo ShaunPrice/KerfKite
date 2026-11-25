@@ -55,7 +55,15 @@ std::vector<std::string> level_program(const std::vector<std::string> &lines, co
 // {"lines":[...], "height_map":{...}, optionally "max_segment"} -> {"lines":[...], "max_segment", "highest"}.
 Json level_request(const Json &request);
 
-// The levelling commands by name, each taking and returning JSON: "probe-plan", "height-map" and "level".
+// A job larger than the machine, cut one tile at a time: the program is divided over a grid of tiles from the
+// origin, and each tile gets a program of its own with the tile's corner as X0 Y0. A cut is kept in a tile only
+// where it lies inside; the tool retracts where a cut leaves the tile and plunges where one enters. Like the
+// leveller, it takes absolute millimetre programs of straight moves and refuses a line it does not understand.
+// {"lines": [...], "tile_width", "tile_height", optionally "plunge"} -> {"columns", "rows", "bounds", "tiles":
+// [{"column", "row", "origin", "lines", "cut_length"}, ...]}, the tiles with cutting in them, row by row.
+Json tile_request(const Json &request);
+
+// The levelling commands by name, each taking and returning JSON: "probe-plan", "height-map", "level" and "tile".
 // This is what the Python extension exposes.
 Json levelling_call(const std::string &command, const Json &request);
 

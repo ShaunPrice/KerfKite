@@ -212,6 +212,38 @@ const json &levelling_project(const json &data) {
     return *project;
 }
 
+// The project of a tiled run with the tile's size as its work area, after the checks a tile needs.
+json tile_project(const json &data, const json &tile) {
+    if (!tile.is_object()) throw ValueError("Give the tile as its width, height, column and row");
+    const json &project = data.at("project");
+    if (!(text_of(member(project, "mode"), "") == "router")) throw ValueError("Tiling applies to router jobs");
+    if (truthy(member(project, "rotary")) || data.contains("rotary")) throw ValueError("Tiling does not apply to rotary jobs");
+    json fits = project;
+    fits["width"] = number(member(tile, "width"), "Tile width", 10, 10000);
+    fits["height"] = number(member(tile, "height"), "Tile height", 10, 10000);
+    return fits;
+}
+
+// The program of one tile of a job, by its column and row.
+std::vector<std::string> tile_lines(const std::vector<std::string> &job, const json &tile) {
+    json request = json::object();
+    json given = json::array();
+    for (const std::string &line : job) given.push_back(line);
+    request["lines"] = given;
+    request["tile_width"] = *member(tile, "width");
+    request["tile_height"] = *member(tile, "height");
+    const json answer = tile_request(request);
+    const json *column = member(tile, "column"), *row = member(tile, "row");
+    if (!column || !row || !column->is_number_unsigned() || !row->is_number_unsigned()) throw ValueError("Give the tile's column and row, counted from 0");
+    for (const json &entry : answer.at("tiles"))
+        if (entry.at("column") == *column && entry.at("row") == *row) {
+            std::vector<std::string> lines;
+            for (const json &line : entry.at("lines")) lines.push_back(line.get<std::string>());
+            return lines;
+        }
+    throw ValueError("That tile has no cutting in it");
+}
+
 std::vector<std::string> levelled(Studio &studio, const Job &job, const json &project, const json &status) {
     json surface;
     {
@@ -297,6 +329,24 @@ void add_cam_routes(RouteTable &routes, bool strict) {
         const json project = strict ? strict_json(request) : payload(request);
         // The core writes the job as JSON itself: for a large job that is most of the time of the request.
         return http::Response::json(to_json(generate(project)).dump());
+    });
+    routes.add("POST", "/api/tile", [strict](const Request &request) {
+        // A router job larger than the machine, as one program for each tile. Files only: nothing is run here.
+        // (Registered with job generation, not with the design routes the assistant server lists.)
+        const json data = strict ? strict_json(request) : payload(request);
+        const json *project = member(data, "project");
+        if (!project || !project->is_object()) throw ValueError("Provide a project and a tile size");
+        const json *mode = member(*project, "mode");
+        if (!mode || !mode->is_string() || mode->get<std::string>() != "router") throw ValueError("Tiling applies to router jobs");
+        if (truthy(member(*project, "rotary"))) throw ValueError("Tiling does not apply to rotary jobs");
+        const Job job = generate(*project);
+        json tiling = json::object();
+        json lines = json::array();
+        for (const std::string &line : job.lines) lines.push_back(line);
+        tiling["lines"] = lines;
+        for (const char *key : {"tile_width", "tile_height", "plunge"})
+            if (const json *value = member(data, key)) tiling[key] = *value;
+        return http::Response::json(tile_request(tiling).dump());
     });
 }
 
@@ -450,9 +500,19 @@ void add_machine_routes(Studio &studio) {
         const json *leveled = member(data, "leveled");
         if (leveled && !leveled->is_boolean()) throw ValueError("Levelled must be true or false");
         const Prepared job = prepared(data);
-        const json status = validate_machine(*s, data.at("project"), job);
-        std::vector<std::string> lines = job.lines;
-        if (is_true(leveled)) lines = levelled(*s, job.planar, levelling_project(data), status);
+        const json *tile = member(data, "tile");
+        std::vector<std::string> lines;
+        if (tile && !tile->is_null()) {
+            // One tile of a job larger than the machine: the machine has to hold the tile, not the whole design.
+            if (is_true(leveled)) throw ValueError("A tiled job cannot follow a probed surface; run it without levelling");
+            const json fits = tile_project(data, *tile);
+            validate_machine(*s, fits, job);
+            lines = tile_lines(job.lines, *tile);
+        } else {
+            const json status = validate_machine(*s, data.at("project"), job);
+            lines = job.lines;
+            if (is_true(leveled)) lines = levelled(*s, job.planar, levelling_project(data), status);
+        }
         s->jobs().disarm();
         s->device().start(lines);
         json extra = json::object();
