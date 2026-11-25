@@ -185,6 +185,9 @@ $('setupCalWrite').onclick=task(async()=>{
 // ---- surfacing ----
 const syncArea=()=>{$('setupSurfaceWidth').value=$('width').value;$('setupSurfaceHeight').value=$('height').value;};
 syncArea();root.addEventListener('cnc-project-loaded',syncArea);
+// The work area can change after the page loads (a machine profile, a project): take it again when the tool opens.
+$('setupSurface').addEventListener('toggle',()=>{if($('setupSurface').open)syncArea();});
+for(const id of ['width','height'])$(id).addEventListener('change',syncArea);
 $('setupSurfaceAdd').onclick=task(()=>{
  const width=Number($('setupSurfaceWidth').value),height=Number($('setupSurfaceHeight').value),tool=Number($('setupSurfaceTool').value),depth=number($('setupSurfaceDepth').value,'Depth to remove',.05,5);
  if(width>Number($('width').value)||height>Number($('height').value))throw Error('The area is larger than the work area');

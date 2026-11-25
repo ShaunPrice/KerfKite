@@ -88,8 +88,14 @@ def run(page):
     print('PASS a setting is written and exported, and a measured move corrects the steps per mm to 80.645')
 
     # The surfacing job lands in the design with its own operation and previews as a router job.
+    tab('Design')
+    for key, value in {'width': 300, 'height': 180}.items():
+        loc('#' + key).fill(str(value))
+        loc('#' + key).dispatch_event('change')
+    tab('Control')
     opened('setupSurface')
     expect(loc('#setupSurfaceWidth')).to_have_value('300')
+    expect(loc('#setupSurfaceHeight')).to_have_value('180')
     loc('#setupSurfaceStep').fill('40')
     loc('#setupSurfaceAdd').click()
     expect(loc('#message')).to_contain_text('must not be more than the cutter diameter')
