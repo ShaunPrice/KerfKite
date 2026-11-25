@@ -4,6 +4,14 @@ Notable changes to KerfKite Studio and KerfKite Pocket. Versions before this fil
 
 ## Unreleased
 
+### Added
+- **Dog-bone corners, inlays and nesting.** **Design → Joinery & nesting** relieves the corners a round cutter cannot reach (inside an opening, or round a part), makes a pocket and a matching plug from a shape with a clearance all round, and nests the parts whose output is on in rows on the sheet with a gap and a margin. See [Joinery, inlays and nesting](docs/JOINERY.md).
+- **Project wizards.** **Templates → Project wizards** draws a finger-jointed box (with or without a lid, with a fit allowance and dog-boned slots for a router), slot-together dividers and a sign blank with hanging holes, laid out on the sheet with outside profiles. See [Project wizards](docs/PROJECT-WIZARDS.md).
+- **Tool library with starting feeds and speeds.** **CAM → Tool library** keeps the cutters you own (twelve to start with, up to 200, exported and imported as `kerfkite-tools/1`) and works out a spindle speed, feed, plunge, step down and stepover for one of them in ten materials, from chip load, the cutting speed of the material and a description of the machine: its rigidity, spindle range and fastest cutting feed. **Use these settings** fills the CAM fields and the manual tool-change identity; nothing reaches a controller. The values are starting points to test on scrap, not tested recipes. See [Tool library and starting feeds](docs/TOOL-LIBRARY.md).
+
+### Fixed
+- The editor's footer said Studio 0.6.
+
 ### Development
 - The board and levelling tests run against the native programs. `tests/test_pcb_import.py`, `test_pcb_isolation.py`, `test_pcb_api.py` and `test_leveling.py` are ported from the Python reference's tests of the same names: `tests/kerfkite_core.py` hands their requests to `kerfkite-cam`, and the route tests start `kerfkite-studio` and `kerfkite-web`. The **Build and check the native programs** workflow now runs every test in `tests/` on each platform, and stops if the programs or Shapely, the oracle, are missing. Tests of the reference's own Python wrapper (a missing or older extension, raw request text) had nothing left to test and are not carried over.
 - The launcher's shortcut tests pass on every host. Run on macOS and Windows for the first time, the tests of the Linux and macOS shortcut rules failed: they named a temporary folder through macOS's symbolic link, and expected POSIX paths and permissions on Windows. They now use the folder's real path, as the launcher does for its own program, and run on POSIX hosts. The launcher itself is unchanged.

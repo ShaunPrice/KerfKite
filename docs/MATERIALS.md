@@ -7,7 +7,7 @@ Open **CAM → Materials guide** to start with the tool selected in Studio. **3D
 1. Select the physical **Tool** and the intended **Operation**. The router has separate entries for flat, ball and V cutters. The laser entry describes a blue diode head, including the 25 W optical class. The knife entry covers a passive drag knife.
 2. Search by stock name or common term. Use **Material family** and **Suitability** to narrow the list. Select a matching material to see the reason for its rating, setup considerations, inspection points and references. A material name on a receipt may omit an adhesive, coating or liner. Check the exact product with the supplier.
 3. Choose a **Second material** to compare two stocks for the same operation. Changing the tool or operation updates both ratings.
-4. **Sample candidate** means the stock is a reasonable choice for a coupon. **Conditional** means there are specific requirements to meet first. **Avoid** means choose a different material or process for that combination. The guide supplies no machine-calibrated feeds, speeds, depths, blade exposure or laser power.
+4. **Sample candidate** means the stock is a reasonable choice for a coupon. **Conditional** means there are specific requirements to meet first. **Avoid** means choose a different material or process for that combination. The guide supplies no machine-calibrated feeds, speeds, depths, blade exposure or laser power. For router cutters, the [tool library](TOOL-LIBRARY.md) works out starting feeds and speeds to test.
 5. With the desired material selected, use the browser's print command to make a workshop reference sheet. Manufacturer links need an internet connection. The catalogue itself is bundled with Studio.
 
 ## Try the guide

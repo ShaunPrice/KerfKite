@@ -25,7 +25,9 @@ def run(page):
     tab('Templates')
     opened('projectWizards')
     loc('#wizardAdd').click()
-    expect(loc('#wizardStatus')).to_contain_text('Box added: 5 panels, 7 × 5 × 3 fingers, inside 108.0 × 68.0 × 54.0 mm')
+    expect(loc('#wizardStatus')).to_contain_text(
+        'Box added: 5 panels, 7 × 5 × 3 fingers, inside 108.0 × 68.0 × 54.0 mm'
+    )
     assert count() == 5
     parts = page.evaluate(
         """() => objects.map(o => ({name: o.name, operation: o.operationSettings.operation,
@@ -33,17 +35,26 @@ def run(page):
     )
     assert [p['name'] for p in parts] == ['Box · ' + n for n in ('Bottom', 'Front', 'Back', 'Left side', 'Right side')]
     assert all(p['operation'] == 'outside' and p['closed'] for p in parts)
-    assert all(b >= 0 for p in parts for b in p['box'][:2]) and all(p['box'][2] <= 400 and p['box'][3] <= 300 for p in parts)
+    assert all(b >= 0 for p in parts for b in p['box'][:2]) and all(
+        p['box'][2] <= 400 and p['box'][3] <= 300 for p in parts
+    )
     for a in parts:
         for b in parts:
             if a is not b:
-                apart = a['box'][2] <= b['box'][0] or b['box'][2] <= a['box'][0] or a['box'][3] <= b['box'][1] or b['box'][3] <= a['box'][1]
+                apart = (
+                    a['box'][2] <= b['box'][0]
+                    or b['box'][2] <= a['box'][0]
+                    or a['box'][3] <= b['box'][1]
+                    or b['box'][3] <= a['box'][1]
+                )
                 assert apart, (a['name'], b['name'])
     loc('#preview').click()
     expect(loc('#summary')).to_contain_text('lines', timeout=30000)
     program = loc('#gcode').text_content()
     assert 'Z-6.000' in program and 'Z-3.000' in program, program[:300]
-    print(f'PASS the box wizard added 5 panels that do not overlap, and their outside profiles preview to full depth ({program.count(chr(10))} lines)')
+    print(
+        f'PASS the box wizard added 5 panels that do not overlap, and their outside profiles preview to full depth ({program.count(chr(10))} lines)'
+    )
 
     # Undo takes the whole project away in one step.
     page.evaluate("() => document.getElementById('undo').click()")
@@ -90,7 +101,9 @@ def run(page):
     loc('#dogboneRadius').fill('1.64')
     loc('#dogboneApply').click()
     expect(loc('#message')).to_contain_text('4 dog-bone corners added')
-    slot = page.evaluate('() => ({name: objects[0].name, points: objects[0].paths[0].length, box: CNCLayout.extent(objects[0])})')
+    slot = page.evaluate(
+        '() => ({name: objects[0].name, points: objects[0].paths[0].length, box: CNCLayout.extent(objects[0])})'
+    )
     assert slot['name'] == 'Rectangle · dog-bones' and slot['points'] > 40
     assert slot['box'][0] < 20 and slot['box'][2] > 60, slot  # the reliefs reach past the corners
     page.evaluate("() => document.getElementById('undo').click()")
@@ -105,7 +118,10 @@ def run(page):
     assert [m['operation'] for m in made] == ['pocket', 'outside']
     pocket, plug = made[0]['box'], made[1]['box']
     # The plug is the pocket less the clearance of 0.1 mm all round.
-    assert abs((pocket[2] - pocket[0]) - (plug[2] - plug[0]) - 0.2) < 1e-6 and abs((pocket[3] - pocket[1]) - (plug[3] - plug[1]) - 0.2) < 1e-6, made
+    assert (
+        abs((pocket[2] - pocket[0]) - (plug[2] - plug[0]) - 0.2) < 1e-6
+        and abs((pocket[3] - pocket[1]) - (plug[3] - plug[1]) - 0.2) < 1e-6
+    ), made
     assert plug[0] > pocket[2]
     corner = page.evaluate('() => objects[2].paths[0].length')
     assert corner > 20  # rounded to the cutter
@@ -120,7 +136,9 @@ def run(page):
     assert min(b[0] for b in boxes) == 3 and min(b[1] for b in boxes) == 3, boxes
     for i, a in enumerate(boxes):
         for b in boxes[i + 1 :]:
-            assert a[2] + 5 <= b[0] + 1e-6 or b[2] + 5 <= a[0] + 1e-6 or a[3] + 5 <= b[1] + 1e-6 or b[3] + 5 <= a[1] + 1e-6
+            assert (
+                a[2] + 5 <= b[0] + 1e-6 or b[2] + 5 <= a[0] + 1e-6 or a[3] + 5 <= b[1] + 1e-6 or b[3] + 5 <= a[1] + 1e-6
+            )
     used = re.search(r'nested in ([\d.]+) × ([\d.]+) mm', loc('#message').text_content())
     assert float(used.group(1)) <= 400 and float(used.group(2)) <= 300
     print(f'PASS three parts nested in {used.group(1)} × {used.group(2)} mm with a 5 mm gap')
