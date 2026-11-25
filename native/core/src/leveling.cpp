@@ -376,7 +376,217 @@ json level_request(const json &request) {
     return json{{"lines", levelled}, {"max_segment", segment}, {"highest", surface.highest()}};
 }
 
+// ---- tiling -------------------------------------------------------------------------------------------------
+
+namespace {
+
+// The part of the move from (x0, y0) to (x1, y1) inside a rectangle, as parameters along it; false when none is.
+bool clip(double x0, double y0, double x1, double y1, const double box[4], double &enter, double &leave) {
+    enter = 0;
+    leave = 1;
+    const double p[4] = {-(x1 - x0), x1 - x0, -(y1 - y0), y1 - y0};
+    const double q[4] = {x0 - box[0], box[2] - x0, y0 - box[1], box[3] - y0};
+    for (int k = 0; k < 4; ++k) {
+        if (p[k] == 0) {
+            if (q[k] < 0) return false;
+        } else {
+            const double t = q[k] / p[k];
+            if (p[k] < 0) enter = std::max(enter, t);
+            else leave = std::min(leave, t);
+        }
+    }
+    return enter <= leave;
+}
+
+struct Tile {
+    size_t column = 0, row = 0;
+    std::vector<std::string> lines;
+    double cut = 0;  // millimetres of cutting moves inside the tile
+};
+
+// One tile's program: the job's own lines, with every cutting move kept only where it lies in the tile and moved
+// so that the tile's corner is the origin. Where a cut leaves the tile the tool retracts to the job's clearance;
+// where one enters, the tool travels there at clearance and plunges to the cut's depth.
+void tile_program(const std::vector<std::string> &lines, const double box[4], double plunge, Tile &tile) {
+    std::vector<std::string> &out = tile.lines;
+    bool have_xy = false, have_z = false, have_clear = false, there = false;  // there: the tool is at the programmed XY
+    double px = 0, py = 0, pz = 0, clear = 0;
+    std::string plunge_feed = plunge > 0 ? " F" + fixed3(plunge).substr(0, fixed3(plunge).size() - 2) : std::string();
+    std::string last_feed;
+    std::vector<Word> line;
+    const auto refuse = [](size_t index, const std::string &text, const char *why) -> ValueError {
+        return ValueError("Line " + std::to_string(index + 1) + " cannot be tiled (" + why + "): " + text);
+    };
+    const auto inside = [&](double x, double y) { return x >= box[0] - EDGE && x <= box[2] + EDGE && y >= box[1] - EDGE && y <= box[3] + EDGE; };
+    const auto at = [&](double x, double y) { return "X" + fixed3(x - box[0]) + " Y" + fixed3(y - box[1]); };
+    for (size_t index = 0; index < lines.size(); ++index) {
+        const std::string &text = lines[index];
+        if (text.empty() || text[0] == '(' || text[0] == ';' || text == "%") {
+            out.push_back(text);
+            continue;
+        }
+        if (!words(text, line)) throw refuse(index, text, "not understood");
+        const bool motion = line[0].letter == 'G' && (line[0].value == 0 || line[0].value == 1);
+        if (!motion) {
+            if (!passes(line)) throw refuse(index, text, "only straight moves in absolute millimetres are handled");
+            out.push_back(text);
+            continue;
+        }
+        const bool cutting = line[0].value == 1;
+        bool has_x = false, has_y = false, has_z = false;
+        double x = px, y = py, z = pz;
+        std::string feed;
+        for (size_t k = 1; k < line.size(); ++k) {
+            const Word &word = line[k];
+            if (word.letter == 'X' && !has_x) { has_x = true; x = word.value; }
+            else if (word.letter == 'Y' && !has_y) { has_y = true; y = word.value; }
+            else if (word.letter == 'Z' && !has_z) { has_z = true; z = word.value; }
+            else if (word.letter == 'F' && feed.empty() && cutting) feed = " F" + word.text;
+            else throw refuse(index, text, word.letter == 'S' ? "tiling is for cutter programs, not laser power" : "unexpected word");
+        }
+        if (!has_x && !has_y && !has_z) throw refuse(index, text, "a move with no axis");
+        if (!feed.empty() && (has_x || has_y)) last_feed = feed;
+        if (!cutting) {
+            if (has_z) {
+                // A rapid in Z is the job's retract: every tile makes it, so the tool is clear before it travels.
+                if (has_x || has_y) throw refuse(index, text, "a rapid that moves in Z and across at once");
+                clear = z;
+                have_clear = true;
+                out.push_back(text);
+            } else {
+                if (!have_clear || pz < clear - EDGE) throw refuse(index, text, "a rapid across the work below the clearance height");
+                if (inside(x, y)) {
+                    out.push_back("G0 " + at(x, y));
+                    there = true;
+                } else {
+                    there = false;
+                }
+            }
+        } else if (!has_x && !has_y) {
+            // A plunge or a change of depth where the tool stands.
+            if (!have_xy) throw refuse(index, text, "a plunge before any position is set");
+            if (plunge_feed.empty() && !feed.empty()) plunge_feed = feed;
+            if (inside(px, py)) {
+                if (!there) {
+                    out.push_back("G0 " + at(px, py));
+                    there = true;
+                }
+                out.push_back("G1 Z" + fixed3(z) + feed);
+            }
+        } else {
+            if (!have_xy || !have_z || !have_clear) throw refuse(index, text, "a cut before the start position, height and clearance are set");
+            double enter = 0, leave = 1;
+            if (clip(px, py, x, y, box, enter, leave)) {
+                const double ex = px + (x - px) * enter, ey = py + (y - py) * enter, ez = pz + (z - pz) * enter;
+                const double lx = px + (x - px) * leave, ly = py + (y - py) * leave, lz = pz + (z - pz) * leave;
+                const double length = pymath::dist(ex, ey, lx, ly);
+                // A move that only touches the tile's edge at a point cuts nothing in it.
+                if (length > EDGE || (enter == 0 && leave == 1)) {
+                    const std::string cut_feed = feed.empty() ? last_feed : feed;
+                    if (!there || enter > 0) {
+                        // Come to where the cut enters the tile at the clearance height, then down to its depth.
+                        out.push_back("G0 " + at(ex, ey));
+                        out.push_back("G1 Z" + fixed3(ez) + (plunge_feed.empty() ? cut_feed : plunge_feed));
+                    }
+                    out.push_back("G1 " + at(lx, ly) + cut_feed + (has_z ? " Z" + fixed3(lz) : std::string()));
+                    tile.cut += length;
+                    if (leave < 1) {
+                        out.push_back("G0 Z" + fixed3(clear));
+                        there = false;
+                    } else {
+                        there = true;
+                    }
+                } else {
+                    there = false;
+                }
+            } else {
+                there = false;
+            }
+        }
+        if (has_x || has_y) have_xy = true;
+        if (has_z) have_z = true;
+        px = x;
+        py = y;
+        pz = z;
+        if (out.size() > 2000000) throw ValueError("A tile's program exceeds 2,000,000 lines");
+    }
+}
+
+}  // namespace
+
+// {"lines": [...], "tile_width", "tile_height", optionally "plunge" (the feed for coming back down into a cut;
+// by default the feed of the job's own plunges)} -> {"columns", "rows", "bounds", "tile_width", "tile_height",
+// "tiles": [{"column", "row", "origin": [x, y], "lines": [...], "cut_length"}, ...]}: one program for each tile
+// that has cutting in it, row by row from the origin, each with its own corner as X0 Y0.
+json tile_request(const json &request) {
+    if (!request.is_object()) throw ValueError("The tiling request must be an object");
+    const json *given = get(request, "lines");
+    if (!given || !given->is_array()) throw ValueError("The tiling request needs the program lines");
+    if (given->size() > 400000) throw ValueError("The program is too long to tile");
+    std::vector<std::string> program;
+    program.reserve(given->size());
+    for (const json &entry : *given) {
+        if (!entry.is_string()) throw ValueError("Every program line must be text");
+        program.push_back(entry.get<std::string>());
+    }
+    const double width = need(request, "tile_width", "Tile width", 10, 10000), height = need(request, "tile_height", "Tile height", 10, 10000);
+    const double plunge = get(request, "plunge") ? need(request, "plunge", "Plunge feed", 1, 20000) : 0;
+    // Where the job cuts: the tiles are counted from the origin to its far corner.
+    double bounds[4] = {0, 0, 0, 0};
+    bool any = false;
+    {
+        std::vector<Word> line;
+        double x = 0, y = 0;
+        bool placed = false;
+        for (const std::string &text : program) {
+            if (text.empty() || text[0] == '(' || text[0] == ';' || text == "%" || !words(text, line)) continue;
+            if (line[0].letter != 'G' || (line[0].value != 0 && line[0].value != 1)) continue;
+            const double fx = x, fy = y;
+            bool moved = false;
+            for (size_t k = 1; k < line.size(); ++k) {
+                if (line[k].letter == 'X') { x = line[k].value; moved = true; }
+                if (line[k].letter == 'Y') { y = line[k].value; moved = true; }
+            }
+            if (line[0].value == 1 && placed && moved) {
+                const double xs[2] = {fx, x}, ys[2] = {fy, y};
+                for (int k = 0; k < 2; ++k) {
+                    bounds[0] = any ? std::min(bounds[0], xs[k]) : xs[k];
+                    bounds[1] = any ? std::min(bounds[1], ys[k]) : ys[k];
+                    bounds[2] = any ? std::max(bounds[2], xs[k]) : xs[k];
+                    bounds[3] = any ? std::max(bounds[3], ys[k]) : ys[k];
+                    any = true;
+                }
+            }
+            if (moved) placed = true;
+        }
+    }
+    if (!any) throw ValueError("The program has no cutting moves to tile");
+    if (bounds[0] < -EDGE || bounds[1] < -EDGE) throw ValueError("Tiling needs the whole job at X0 Y0 or beyond; move the design into the work area");
+    const size_t columns = static_cast<size_t>(std::max(1.0, std::ceil((bounds[2] - EDGE) / width)));
+    const size_t rows = static_cast<size_t>(std::max(1.0, std::ceil((bounds[3] - EDGE) / height)));
+    if (columns * rows > 100) throw ValueError("That is more than 100 tiles; use larger tiles");
+    json tiles = json::array();
+    for (size_t row = 0; row < rows; ++row)
+        for (size_t column = 0; column < columns; ++column) {
+            Tile tile;
+            tile.column = column;
+            tile.row = row;
+            const double x0 = width * static_cast<double>(column), y0 = height * static_cast<double>(row);
+            const double box[4] = {x0, y0, x0 + width, y0 + height};
+            tile_program(program, box, plunge, tile);
+            if (tile.cut <= EDGE) continue;
+            tiles.push_back(json{{"column", column}, {"row", row}, {"origin", json::array({x0, y0})}, {"lines", tile.lines}, {"cut_length", tile.cut}});
+        }
+    return json{{"columns", columns},
+                {"rows", rows},
+                {"bounds", json::array({bounds[0], bounds[1], bounds[2], bounds[3]})},
+                {"tile_width", width},
+                {"tile_height", height},
+                {"tiles", tiles}};
+}
+
 json levelling_call(const std::string &command, const json &request) {
+    if (command == "tile") return tile_request(request);
     if (command == "probe-plan") return probe_plan(request);
     if (command == "height-map") return to_json(height_map_from_probes(request));
     if (command == "level") return level_request(request);
