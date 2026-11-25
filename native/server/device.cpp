@@ -73,6 +73,16 @@ std::vector<std::string> Device::probe_reports() {
     return driver_->probe_reports();
 }
 
+bool Device::probes() {
+    Hold hold(lock);
+    return driver_->probes();
+}
+
+void Device::expect_touch_plate(double thickness, double wall, double radius) {
+    Hold hold(lock);
+    driver_->expect_touch_plate(thickness, wall, radius);
+}
+
 std::vector<std::string> controller_rotary_axes(const std::string &protocol, const Json &state) {
     const auto field = [&](const char *name) -> const json * {
         const auto found = state.find(name);

@@ -46,6 +46,9 @@ public:
     virtual void command(const std::string &action, const Json &fields) = 0;
     virtual bool probes() const { return false; }
     virtual std::vector<std::string> probe_reports() { return {}; }
+    // A touch plate for the simulator to probe, announced before a zeroing program starts: its thickness, the
+    // wall between its probing faces and the stock, and the cutter's radius. A real controller ignores it.
+    virtual void expect_touch_plate(double, double, double) {}
 };
 
 std::unique_ptr<Machine> grbl_machine(const MachineOptions &options, std::vector<std::string> initialization_queries);
@@ -65,6 +68,8 @@ public:
     void start(const std::vector<std::string> &lines);
     void command(const std::string &action, const Json &fields);
     std::vector<std::string> probe_reports();
+    bool probes();  // whether the controller reports probe contacts (the Grbl family)
+    void expect_touch_plate(double thickness, double wall, double radius);
     const std::string &protocol() const { return protocol_; }
 
 private:

@@ -17,6 +17,7 @@
 #include "os_random.hpp"
 #include "phone_monitor.hpp"
 #include "static_files.hpp"
+#include "setup_routes.hpp"
 #include "step_exchange.hpp"
 
 namespace kerfkite {
@@ -29,7 +30,8 @@ namespace {
 // The machine-control routes that hold the controller for the whole request.
 const std::set<std::string> kLockedRoutes = {"/api/connect", "/api/disconnect", "/api/arm",       "/api/disarm",
                                              "/api/run",     "/api/command",    "/api/head",      "/api/level/probe",
-                                             "/api/level/collect", "/api/level/clear"};
+                                             "/api/level/collect", "/api/level/clear",
+                                             "/api/setup/probe", "/api/setup/setting", "/api/setup/macro"};
 
 const size_t kMaxContent = 8 * 1024 * 1024;
 const size_t kStockBinary = 76 + 200000 * 56 + 1;  // stock_wire.MAX_BINARY_BYTES, and one byte more
@@ -148,6 +150,7 @@ Studio::Studio(Options options, MachineOptions machine)
     add_design_routes(*this);
     add_cam_routes(*this, false);
     add_machine_routes(*this);
+    add_setup_routes(*this);
 }
 
 Studio::~Studio() {

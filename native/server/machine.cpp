@@ -264,6 +264,7 @@ public:
                 throw ValueError("Invalid G-code line");
         queue_.assign(lines.begin(), lines.end());
         probes_.clear();
+        relative_ = false;
         total_ = static_cast<long>(lines.size());
         acked_ = 0;
         progress_ = 0;
@@ -272,6 +273,22 @@ public:
     }
 
     bool probes() const override { return true; }
+
+    // The simulator's touch plate sits on a corner of the stock, wherever the operator left the cutter: its left
+    // face is 12.5 mm to the left of the cutter, its front face 9.5 mm in front and its top 7.3 mm below. The
+    // zeroing program is not told this: it has to find the plate by probing.
+    void expect_touch_plate(double thickness, double wall, double radius) override {
+        std::lock_guard<std::recursive_mutex> hold(m_);
+        if (!simulated_) return;
+        const auto at = [&](const char *axis) { return position_.is_null() ? 0.0 : position_[axis].get<double>(); };
+        plate_.on = true;
+        plate_.x = at("x") + offset_[0] - 12.5 + wall;  // the stock's corner is the plate's wall inside its faces
+        plate_.y = at("y") + offset_[1] - 9.5 + wall;
+        plate_.top = at("z") + offset_[2] - 7.3;
+        plate_.thickness = thickness;
+        plate_.wall = wall;
+        plate_.radius = radius;
+    }
 
     std::vector<std::string> probe_reports() override {
         std::lock_guard<std::recursive_mutex> hold(m_);
@@ -362,6 +379,7 @@ private:
 
     void clear() {
         queue_.clear();
+        plate_.on = false;
         pending_.reset();
         active_ = paused_ = draining_ = false;
         hold_requested_at_.reset();
@@ -418,6 +436,17 @@ private:
 
     // _simulate: the simulated position through one line; false when a probe finds no surface.
     bool simulate(const std::string &line) {
+        if (line == "G91" || line == "G90") {
+            relative_ = line == "G91";
+            return true;
+        }
+        if (!line.empty() && line[0] == '$' && line.find('=') != std::string::npos) {
+            // A setting written: the simulator keeps it, as a controller would report it back.
+            const size_t equals = line.find('=');
+            double parsed = 0;
+            if (python_float(line.substr(equals + 1), parsed) && std::isfinite(parsed)) settings_[line.substr(1, equals - 1)] = parsed;
+            return true;
+        }
         std::vector<std::pair<char, double>> words;
         const std::vector<std::string> parts = split_space(line);
         for (size_t i = 1; i < parts.size(); ++i)
@@ -453,6 +482,46 @@ private:
             return false;
         };
         const auto axis_index = [](const std::string &axis) { return axis == "x" ? 0 : axis == "y" ? 1 : axis == "z" ? 2 : -1; };
+        const bool moves = starts(line, "G0 ") || starts(line, "G1 ") || starts(line, "G38.2 ");
+        if (relative_ && moves)
+            for (auto &a : axes)
+                if (position.contains(a.first)) a.second += position[a.first].get<double>();
+        const int probed = starts(line, "G38.2 ") && axes.size() == 1 ? axis_index(axes[0].first) : -1;
+        if (probed >= 0 && plate_.on) {
+            // Machine coordinates of the cutter's tip, and of where the probing move would end.
+            const double m[3] = {position["x"].get<double>() + offset_[0], position["y"].get<double>() + offset_[1],
+                                 position["z"].get<double>() + offset_[2]};
+            const double target = axes[0].second + offset_[probed];
+            const double low[2] = {plate_.x - plate_.wall, plate_.y - plate_.wall};  // the plate's outer faces
+            double contact = 0;
+            bool touches = false;
+            if (probed == 2) {
+                // Down onto the plate's top, when the cutter is over the plate.
+                const bool over = m[0] >= low[0] && m[0] <= plate_.x + 40 && m[1] >= low[1] && m[1] <= plate_.y + 40;
+                contact = plate_.top;
+                touches = over && m[2] >= contact && target <= contact;
+            } else {
+                // Sideways against an outer face: the tip is below the plate's top and beside its other span,
+                // and the cutter's edge, a radius ahead of its centre, meets the face.
+                const int other = 1 - probed;
+                contact = low[probed] - plate_.radius;
+                touches = m[2] < plate_.top && m[other] >= low[other] && m[other] <= (other == 0 ? plate_.x : plate_.y) + 40 &&
+                          m[probed] <= contact && target >= contact;
+            }
+            if (!touches) {
+                position[axes[0].first] = axes[0].second;
+                position_ = position;
+                return false;
+            }
+            position[axes[0].first] = contact - offset_[probed];
+            double at[3] = {m[0], m[1], m[2]};
+            at[probed] = contact;
+            const std::string report = "[PRB:" + fixed(at[0], 3) + "," + fixed(at[1], 3) + "," + fixed(at[2], 3) + ":1]";
+            probes_.push_back(report);
+            log_.append(report);
+            position_ = position;
+            return true;
+        }
         if (starts(line, "G0 ") || starts(line, "G1 ")) {
             for (const auto &a : axes) position[a.first] = a.second;
         } else if (starts(line, "G10 ")) {
@@ -664,6 +733,7 @@ private:
                             progress_ = std::min(99.0, static_cast<double>(acked_) / static_cast<double>(total_) * 100);
                         } else {
                             active_ = false;
+                            plate_.on = false;
                             state_ = "Idle";
                             progress_ = 100;
                         }
@@ -724,6 +794,11 @@ private:
     std::optional<double> hold_requested_at_, held_since_, resume_requested_at_;
     std::vector<std::string> probes_;
     double offset_[3] = {0, 0, 0};
+    bool relative_ = false;  // the simulator's distance mode (G91)
+    struct {
+        bool on = false;
+        double x = 0, y = 0, top = 0, thickness = 0, wall = 0, radius = 0;
+    } plate_;  // the simulator's touch plate: the stock corner under it and its top, in machine coordinates
 };
 
 // ---- Marlin -------------------------------------------------------------------------------------------------

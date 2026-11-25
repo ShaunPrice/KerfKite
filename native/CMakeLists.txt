@@ -60,7 +60,7 @@ target_link_libraries(kerfkite-cam PRIVATE kerfkite_core)
 # The C++ standard library and the operating system only; it fetches nothing.
 set(KERFKITE_SERVER_SOURCES server/child_process.cpp server/design_extra.cpp server/design_routes.cpp server/device.cpp server/http.cpp
   server/key_order.cpp server/machine.cpp server/machine_routes.cpp server/machine_setup.cpp server/os_crypto.cpp server/os_random.cpp
-  server/phone_jobs.cpp server/phone_monitor.cpp server/protocols.cpp server/serial_port.cpp server/sqlite_reader.cpp
+  server/phone_jobs.cpp server/setup_routes.cpp server/phone_monitor.cpp server/protocols.cpp server/serial_port.cpp server/sqlite_reader.cpp
   server/static_files.cpp server/step_exchange.cpp server/studio.cpp server/web_app.cpp server/web_store.cpp server/web_transfer.cpp
   server/browser.cpp server/mcp.cpp server/mcp_tools.cpp server/remote_tools.cpp server/ip_address.cpp server/oauth.cpp server/mcp_http.cpp server/workshop.cpp)
 add_library(kerfkite_server STATIC ${KERFKITE_SERVER_SOURCES})
