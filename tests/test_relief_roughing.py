@@ -146,3 +146,201 @@ class RoughingTests(Base):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def under(request, n, cx, cy, radius):
+    """The highest the field needs the cutter's flat end to be at a centre, from the samples under it."""
+    heights = request['heightmap']
+    dx, dy = request['width'] / (n - 1), request['height'] / (n - 1)
+    need = -request['depth'] - 1
+    for j in range(max(0, int((cy - radius) / dy)), min(n - 1, int((cy + radius) / dy) + 1) + 1):
+        for i in range(max(0, int((cx - radius) / dx)), min(n - 1, int((cx + radius) / dx) + 1) + 1):
+            if math.hypot(i * dx - cx, j * dy - cy) <= radius:
+                need = max(need, min(0.0, (heights[j][i] - 1) * request['depth'] + request['allowance']))
+    return need
+
+
+@unittest.skipUnless(CLI, NOT_BUILT)
+class AdaptiveTests(Base):
+    """Adaptive clearing, followed here on a grid of the test's own: where the cutter goes and what it takes."""
+
+    def rough(self, step=2, **changes):
+        request = self.request(**changes)
+        return request, call('relief-roughing', {**request, 'rough_step': step, 'rough_strategy': 'adaptive'})
+
+    def walk(self, request, rough, spacing):
+        """Every path as points no more than `spacing` apart: (x, y, z, level or None on the way down, length, first, the path's level)."""
+        for path, depths in zip(rough['paths'], rough['path_depths']):
+            floor = min(depths)
+            previous = None
+            for (x, y), z in zip(path, depths):
+                x, y = x - request['x'], y - request['y']
+                if previous is None:
+                    yield x, y, z, floor if z == floor else None, 0.0, True, floor
+                else:
+                    px, py, pz = previous
+                    span = math.hypot(x - px, y - py)
+                    pieces = max(1, math.ceil(span / spacing))
+                    for k in range(1, pieces + 1):
+                        t = k / pieces
+                        level = floor if z == floor and pz == floor else None
+                        yield (
+                            px + (x - px) * t,
+                            py + (y - py) * t,
+                            pz + (z - pz) * t,
+                            level,
+                            span / pieces,
+                            False,
+                            floor,
+                        )
+                previous = (x, y, z)
+
+    def test_the_cutter_stays_the_allowance_above_the_field_all_along_every_move(self):
+        request, rough = self.rough()
+        radius = request['tool_diameter'] / 2
+        self.assertEqual(rough['strategy'], 'adaptive')
+        self.assertEqual(rough['levels'], math.ceil(-rough['lowest'] / 2 - 1e-9))
+        checked = 0
+        for x, y, z, _, _, _, _ in self.walk(request, rough, 0.4):
+            self.assertTrue(-1e-9 <= x <= request['width'] + 1e-9 and -1e-9 <= y <= request['height'] + 1e-9)
+            self.assertLessEqual(z, 1e-9)
+            self.assertGreaterEqual(z, rough['lowest'] - 1e-9)
+            self.assertGreaterEqual(
+                z, under(request, self.N, x, y, radius) - 1e-9, f'the cutter gouges at {x:.2f}, {y:.2f}'
+            )
+            checked += 1
+        self.assertGreater(checked, 10000)
+
+    def test_passes_are_level_by_level_and_enter_down_a_helix_or_straight(self):
+        request, rough = self.rough()
+        floors = [min(depths) for depths in rough['path_depths']]
+        self.assertEqual(floors, sorted(floors, reverse=True))  # from the top down
+        levels = sorted(set(floors), reverse=True)
+        self.assertEqual(len(levels), rough['levels'])
+        for k, level in enumerate(levels):
+            self.assertAlmostEqual(level, max(-2.0 * (k + 1), rough['lowest']), 9)
+        helixes = 0
+        for depths in rough['path_depths']:
+            floor = min(depths)
+            down = [z for z in depths if z != floor]
+            if down:
+                helixes += 1
+                # Down from the level above, never rising, and nothing but the floor afterwards.
+                self.assertAlmostEqual(depths[0], min(0.0, floor + 2), 9)
+                self.assertEqual(down, sorted(down, reverse=True))
+                self.assertEqual(depths[: len(down)], down)
+        self.assertEqual(helixes, rough['helix_entries'])
+        self.assertGreaterEqual(rough['helix_entries'], 1)
+
+    def measure(self, request, rough, cell=0.5):
+        """Cutting on each level, on the test's own cells: the width of cut along the way and what is cleared."""
+        radius = request['tool_diameter'] / 2
+        reach = math.ceil(radius / cell) + 1
+        disc = [
+            (i, j)
+            for j in range(-reach, reach)
+            for i in range(-reach, reach)
+            if math.hypot((i + 0.5) * cell, (j + 0.5) * cell) <= radius
+        ]
+        columns, rows = round(request['width'] / cell), round(request['height'] / cell)
+        gone = {}
+        widths = []  # (width of cut, length) for each stretch of level cutting
+        run = [0.0, 0.0]
+        for x, y, _, level, length, first, floor in self.walk(request, rough, cell):
+            # What a helix takes on its way down belongs to the level it ends on.
+            cleared = gone.setdefault(floor, set())
+            ci, cj = round(x / cell), round(y / cell)
+            new = 0
+            for i, j in disc:
+                key = (ci + i, cj + j)
+                if 0 <= key[0] < columns and 0 <= key[1] < rows and key not in cleared:
+                    cleared.add(key)
+                    new += 1
+            if first:
+                run = [0.0, 0.0]
+            elif level is not None and length > 0:
+                # The width of cut over each stretch of about a cutter radius: single cells are too coarse a measure.
+                run[0] += new * cell * cell
+                run[1] += length
+                if run[1] >= radius:
+                    widths.append((run[0] / run[1], run[1]))
+                    run = [0.0, 0.0]
+        return widths, gone
+
+    def test_the_width_of_cut_keeps_near_the_engagement(self):
+        for engagement in (2.4, 1.2):
+            with self.subTest(engagement=engagement):
+                request, rough = self.rough(stepover=engagement)
+                self.assertEqual(rough['engagement'], engagement)
+                widths, _ = self.measure(request, rough)
+                total = sum(length for _, length in widths)
+                mean = sum(width * length for width, length in widths) / total
+                self.assertLess(mean, engagement)
+                self.assertGreater(mean, 0.5 * engagement)  # and it is not idling either
+                over = sum(length for width, length in widths if width > 1.5 * engagement)
+                self.assertLess(over / total, 0.02, 'too much of the cutting is well over the engagement')
+                # Nowhere is the cutter buried: the widest stretch is well short of its diameter.
+                self.assertLess(max(width for width, _ in widths), 0.75 * request['tool_diameter'])
+                self.assertLess(rough['forced_length'], 0.01 * rough['cut_length'])
+
+    def test_what_the_cutter_can_reach_on_a_level_is_cleared(self):
+        request, rough = self.rough()
+        radius, cell = request['tool_diameter'] / 2, 1.0
+        _, gone = self.measure(request, rough, cell)
+        reach = math.ceil(radius / cell) + 1
+        disc = [
+            (i, j)
+            for j in range(-reach, reach)
+            for i in range(-reach, reach)
+            if math.hypot((i + 0.5) * cell, (j + 0.5) * cell) <= radius
+        ]
+        columns, rows = round(request['width'] / cell), round(request['height'] / cell)
+        # The core bounds the field by the highest corner of each of the map's cells, so it keeps the cutter a map
+        # cell further from a wall than the samples alone would: the test allows that, the wall's extra and its own cell.
+        n = self.N
+        margin = radius + rough['wall_extra'] + math.hypot(request['width'], request['height']) / (n - 1) + cell
+        checked = 0
+        for level in sorted(gone):
+            # Where a cutter that much larger than the real one may stand at this level, by the field itself.
+            reachable = set()
+            for j in range(rows + 1):
+                for i in range(columns + 1):
+                    if under(request, self.N, i * cell, j * cell, margin) <= level + 1e-9:
+                        for a, b in disc:
+                            if 0 <= i + a < columns and 0 <= j + b < rows:
+                                reachable.add((i + a, j + b))
+            if not reachable:
+                continue  # the lowest level may be reachable only nearer the walls than the test allows
+            checked += 1
+            missed = reachable - gone[level]
+            self.assertLess(len(missed) / len(reachable), 0.03, f'stock left on the level at {level}')
+        self.assertGreaterEqual(checked, 2)
+
+    def test_the_passes_generate_as_a_router_job(self):
+        request, rough = self.rough()
+        project = dict(
+            mode='router', protocol='grbl', width=200, height=150, feed=900, plunge=200, power=12000, safe=5, depth=8, step=8,
+            tool_diameter=6, paths=rough['paths'], path_depths=rough['path_depths'],
+        )  # fmt: skip
+        job = generate(project)
+        deepest = min(float(word[1:]) for line in job['lines'] for word in line.split() if word.startswith('Z'))
+        self.assertAlmostEqual(deepest, rough['lowest'], 3)
+
+    def test_requests_are_checked(self):
+        request = self.request()
+        with self.assertRaisesRegex(ValueError, 'rough_strategy must be raster or adaptive'):
+            call('relief-roughing', {**request, 'rough_step': 2, 'rough_strategy': 'spiral'})
+        with self.assertRaisesRegex(ValueError, 'needs a flat cutter'):
+            call('relief-roughing', {**request, 'rough_step': 2, 'rough_strategy': 'adaptive', 'tool_shape': 'ball'})
+        with self.assertRaisesRegex(ValueError, 'between 8% and 100% of the cutter diameter'):
+            call('relief-roughing', {**request, 'rough_step': 2, 'rough_strategy': 'adaptive', 'stepover': 0.3})
+        with self.assertRaisesRegex(ValueError, 'nothing to rough'):
+            call(
+                'relief-roughing',
+                {**request, 'heightmap': [[1.0] * 8 for _ in range(8)], 'rough_step': 2, 'rough_strategy': 'adaptive'},
+            )
+        # A strategy named raster is the level passes, as before.
+        self.assertEqual(
+            call('relief-roughing', {**request, 'rough_step': 2, 'rough_strategy': 'raster'})['paths'],
+            call('relief-roughing', {**request, 'rough_step': 2})['paths'],
+        )

@@ -38,7 +38,12 @@ Json prepare_relief(const Json &data);
 // request with "rough_step", the depth of each level, and usually an "allowance" to leave for the finishing pass.
 // {"paths", "path_depths", "levels", "step", "lowest", "device", "surface", "warnings"}: the passes level by
 // level from the top, each along a raster wherever stock is left below the level above.
+// "rough_strategy": "adaptive" clears each level along paths that keep the width of cut near "stepover" (the
+// engagement) instead: see relief_adaptive.cpp. The answer then also has "strategy", "engagement", "grid",
+// "wall_extra", "cut_length", "forced_length", "helix_entries" and "plunge_entries".
 Json relief_roughing(const Json &data);
+// The adaptive passes for a map as prepare_relief read it, placed at the origin given.
+Json adaptive_roughing(const ReliefContact &map, double origin_x, double origin_y, double step, double engagement);
 
 // The GPU the contact uses for large jobs, or why there is none, looking for it if that has not been done.
 std::string relief_gpu_status();

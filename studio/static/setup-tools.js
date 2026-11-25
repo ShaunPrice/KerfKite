@@ -5,7 +5,8 @@
 ((root)=>{
 'use strict';
 const MACRO_FORMAT='kerfkite-macros/1';
-/* The Grbl settings most often changed during commissioning. Others are listed by number alone. */
+/* The Grbl settings most often changed during commissioning. Others are listed by number alone. Marlin's are
+   named where they are listed. */
 const SETTING_NAMES={0:'Step pulse time · µs',1:'Step idle delay · ms',2:'Step pulse invert · mask',3:'Step direction invert · mask',4:'Invert step enable pin',5:'Invert limit pins',6:'Invert probe pin',10:'Status report options · mask',11:'Junction deviation · mm',12:'Arc tolerance · mm',13:'Report in inches',20:'Soft limits',21:'Hard limits',22:'Homing cycle',23:'Homing direction invert · mask',24:'Homing locate feed · mm/min',25:'Homing search feed · mm/min',26:'Homing switch debounce · ms',27:'Homing pull-off · mm',30:'Maximum spindle speed · rev/min',31:'Minimum spindle speed · rev/min',32:'Laser mode',100:'X steps per mm',101:'Y steps per mm',102:'Z steps per mm',110:'X maximum rate · mm/min',111:'Y maximum rate · mm/min',112:'Z maximum rate · mm/min',120:'X acceleration · mm/s²',121:'Y acceleration · mm/s²',122:'Z acceleration · mm/s²',130:'X maximum travel · mm',131:'Y maximum travel · mm',132:'Z maximum travel · mm'};
 const STEPS={X:'100',Y:'101',Z:'102'};
 function number(value,label,low,high){
@@ -92,15 +93,15 @@ const box=document.createElement('details');box.id='setupToolsPanel';box.hidden=
 box.innerHTML=`<summary>Machine setup tools</summary>
 <p class="hint">These tools move the machine or change its controller. Each needs the controller connected and idle, and asks before it acts. Keep a hand near the stop.</p>
 <details id="setupProbe"><summary>Zero on a touch plate</summary>
-<p class="hint">Put the plate on the front-left corner of the stock with its lead connected, and the clip on the cutter. Touch the clip to the plate and check that the controller reports the probe before trusting it. For Z alone, place the cutter over the plate. For X, Y and Z, place it over the plate within the distance given of the plate's left and front faces, with room to its left and in front. Needs a Grbl-family controller.</p>
+<p class="hint">Put the plate on the front-left corner of the stock with its lead connected, and the clip on the cutter. Touch the clip to the plate and check that the controller reports the probe before trusting it. For Z alone, place the cutter over the plate. For X, Y and Z, place it over the plate within the distance given of the plate's left and front faces, with room to its left and in front. Works with the Grbl family and with Marlin; a Marlin firmware has to be built with the G38 probing move, and the program stops at the first probe when it is not.</p>
 <label>Probe<select id="setupProbeAxes"><option value="z">Z only · plate flat on the stock</option><option value="xyz">X, Y and Z · corner plate</option></select></label>
 <div class="pair"><label>Plate thickness · mm<input id="setupProbeThickness" type="number" min=".1" max="50" step=".01" value="15"></label><label>Probe feed · mm/min<input id="setupProbeFeed" type="number" min="10" max="500" step="10" value="150"></label></div>
 <div class="pair" id="setupProbeCorner" hidden><label>Plate wall, face to stock edge · mm<input id="setupProbeWall" type="number" min="0" max="50" step=".01" value="10"></label><label>Cutter diameter · mm<input id="setupProbeTool" type="number" min=".1" max="25" step=".001"></label><label>Cutter is within this of the plate's faces · mm<input id="setupProbeInset" type="number" min="5" max="40" step="1" value="15"></label></div>
 <label class="check"><input type="checkbox" id="setupProbeConfirmed"> Plate in place, lead tested, spindle stopped</label>
 <button id="setupProbeRun" type="button">Probe and set work zero</button><div id="setupProbeState" class="hint" role="status"></div></details>
 <details id="setupSettings"><summary>Controller settings</summary>
-<p class="hint">The settings the controller reported when it connected. Changing one writes it to the controller at once and reads every setting back. Export them first: a wrong value can make the machine move wrongly.</p>
-<div class="buttons"><button id="setupSettingsRefresh" type="button">Show settings</button><button id="setupSettingsExport" type="button">Export settings…</button></div>
+<p class="hint">The settings the controller reported. Changing one writes it to the controller at once and reads the settings back. A Grbl-family controller keeps the change; Marlin keeps it until it is switched off, unless you then store its settings. Export them first: a wrong value can make the machine move wrongly.</p>
+<div class="buttons"><button id="setupSettingsRefresh" type="button">Show settings</button><button id="setupSettingsExport" type="button">Export settings…</button><button id="setupSettingsStore" type="button" hidden>Store in the controller · M500</button></div>
 <div id="setupSettingsList" style="max-height:260px;overflow:auto"></div></details>
 <details id="setupCalibrate"><summary>Calibrate an axis</summary>
 <p class="hint">Mark the axis, move it a known distance with the jog buttons or a macro, and measure how far it went. The steps per millimetre are corrected by commanded ÷ measured. A longer move gives a better correction.</p>
@@ -137,14 +138,24 @@ $('setupProbeRun').onclick=task(async()=>{
 });
 
 // ---- settings ----
+// What the server's setup route last said: the protocol and, for Marlin, the settings its M503 report gave. A
+// Grbl-family controller's numbered settings come with the status instead.
+let setup={};
+const marlin=()=>setup.protocol==='marlin';
+const MARLIN_SETTINGS={M92:'Steps per mm',M203:'Maximum feed · mm/s',M201:'Maximum acceleration · mm/s²'};
+const present=key=>marlin()?setup.report?.settings?.[key.split(' ')[0]]?.[key.split(' ')[1]]:latest?.settings?.[key];
 function showSettings(){
- const settings=latest?.settings||{},keys=Object.keys(settings).filter(k=>/^\d{1,3}$/.test(k)).sort((a,b)=>a-b),list=$('setupSettingsList');
+ const list=$('setupSettingsList');
  list.replaceChildren();
- if(!keys.length){list.textContent='No numbered settings were reported. Connect a Grbl-family controller first.';return;}
- for(const key of keys){
+ const rows=marlin()
+   ?Object.keys(MARLIN_SETTINGS).flatMap(code=>['X','Y','Z'].filter(axis=>setup.report?.settings?.[code]?.[axis]!==undefined).map(axis=>[`${code} ${axis}`,`${code} ${axis} · ${MARLIN_SETTINGS[code]}`]))
+   :Object.keys(latest?.settings||{}).filter(k=>/^\d{1,3}$/.test(k)).sort((x,y)=>x-y).map(key=>[key,`$${key}${SETTING_NAMES[key]?' · '+SETTING_NAMES[key]:''}`]);
+ $('setupSettingsStore').hidden=!marlin();
+ if(!rows.length){list.textContent=marlin()?'The firmware did not report its settings (M503) when it connected.':'No numbered settings were reported. Connect the controller first.';return;}
+ for(const [key,text] of rows){
    const row=document.createElement('div');row.className='pair';row.dataset.setting=key;
-   const label=document.createElement('label');label.textContent=`$${key}${SETTING_NAMES[key]?' · '+SETTING_NAMES[key]:''}`;
-   const input=document.createElement('input');input.type='number';input.step='any';input.value=settings[key];input.setAttribute('aria-label',`Setting ${key}`);
+   const label=document.createElement('label');label.textContent=text;
+   const input=document.createElement('input');input.type='number';input.step='any';input.value=present(key);input.setAttribute('aria-label',`Setting ${key}`);
    const button=document.createElement('button');button.type='button';button.textContent='Write';
    button.onclick=task(()=>writeSetting(key,input.value));
    label.append(input);row.append(label,button);list.append(row);
@@ -153,33 +164,42 @@ function showSettings(){
 async function writeSetting(key,value){
  const next=Number(value);
  if(value===''||!Number.isFinite(next))throw Error('Enter a number for the setting');
- if(!confirm(`Write $${key}=${next} to the controller? Its present value is ${latest?.settings?.[key]}.`))return false;
- await api('setup/setting',{confirmed:true,key,value:next});
+ const [code,axis]=key.split(' '),line=marlin()?`${code} ${axis}${next}`:`$${key}=${next}`;
+ if(!confirm(`Write ${line} to the controller? Its present value is ${present(key)}.`))return false;
+ await api('setup/setting',marlin()?{confirmed:true,code,axis,value:next}:{confirmed:true,key,value:next});
  const status=await settle();latest=status;
  if(status.error)throw Error(`The controller refused the setting: ${status.error}`);
- showSettings();syncCalibration();
- message(`$${key} is now ${status.settings?.[key]}`);
+ await features();showSettings();syncCalibration();
+ message(marlin()?`${code} ${axis} is now ${present(key)}. It lasts until the controller is switched off unless you store the settings.`:`$${key} is now ${present(key)}`);
  return true;
 }
-$('setupSettingsRefresh').onclick=task(()=>showSettings());
-$('setupSettingsExport').onclick=task(()=>{
- const settings=latest?.settings||{};
+$('setupSettingsRefresh').onclick=task(async()=>{await features();showSettings();});
+$('setupSettingsStore').onclick=task(async()=>{
+ if(!confirm('Store the present settings in the controller (M500)? They then survive a power cycle.'))return;
+ await api('setup/setting',{confirmed:true,store:true});
+ const status=await settle();
+ if(status.error)throw Error(`The controller did not store its settings: ${status.error}`);
+ message('Settings stored in the controller');
+});
+$('setupSettingsExport').onclick=task(async()=>{
+ await features();
+ const settings=marlin()?setup.report?.settings||{}:latest?.settings||{};
  if(!Object.keys(settings).length)throw Error('There are no settings to export; connect the controller first');
  download('controller-settings.json',JSON.stringify({format:'kerfkite-controller-settings/1',protocol:latest.protocol,identification:latest.identification||[],settings},null,1),'application/json');
 });
 
 // ---- calibration ----
-function syncCalibration(){const key=STEPS[$('setupCalAxis').value],steps=latest?.settings?.[key];if(steps!==undefined)$('setupCalSteps').value=steps;showCalibration();}
+const stepsKey=()=>marlin()?`M92 ${$('setupCalAxis').value}`:STEPS[$('setupCalAxis').value];
+function syncCalibration(){const steps=present(stepsKey());if(steps!==undefined)$('setupCalSteps').value=steps;showCalibration();}
 function showCalibration(){
  try{const r=calibrate($('setupCalSteps').value,$('setupCalCommanded').value,$('setupCalMeasured').value);$('setupCalResult').textContent=`Corrected: ${r.steps} steps per mm (${r.change>=0?'+':''}${r.change}%)`;return r;}
  catch(e){$('setupCalResult').textContent=e.message;return null;}
 }
 for(const id of ['setupCalSteps','setupCalCommanded','setupCalMeasured'])$(id).addEventListener('input',showCalibration);
 $('setupCalAxis').onchange=syncCalibration;
-$('setupCalibrate').addEventListener('toggle',()=>{if($('setupCalibrate').open)syncCalibration();});
 $('setupCalWrite').onclick=task(async()=>{
  const r=calibrate($('setupCalSteps').value,$('setupCalCommanded').value,$('setupCalMeasured').value),axis=$('setupCalAxis').value;
- if(await writeSetting(STEPS[axis],r.steps)){$('setupCalMeasured').value=$('setupCalCommanded').value;message(`${axis} now has ${r.steps} steps per mm. Repeat the move to confirm it.`);}
+ if(await writeSetting(stepsKey(),r.steps)){$('setupCalMeasured').value=$('setupCalCommanded').value;message(`${axis} now has ${r.steps} steps per mm. Repeat the move to confirm it.`);}
 });
 
 // ---- surfacing ----
@@ -235,8 +255,10 @@ $('setupMacroFile').onchange=task(async()=>{
  library=macroLibrary(JSON.parse(await file.text()));store();showMacros();message(`${library.macros.length} macros imported`);
 });
 
-const features=async()=>{try{const f=await api('setup');box.hidden=false;$('setupProbe').hidden=!f.touch_plate;$('setupSettings').hidden=$('setupCalibrate').hidden=!f.settings;}catch{}};
-$('protocol')?.addEventListener('change',()=>setTimeout(features,800));  // after the server has taken the new protocol
+async function features(){try{const f=await api('setup');setup=f;box.hidden=false;$('setupProbe').hidden=!f.touch_plate;$('setupSettings').hidden=$('setupCalibrate').hidden=!f.settings;}catch{}}
+// The server takes the protocol when it connects: ask again once it has.
+$('connect')?.addEventListener('click',()=>setTimeout(features,800));
+for(const id of ['setupSettings','setupCalibrate'])$(id).addEventListener('toggle',()=>{if($(id).open)features().then(()=>{if(id==='setupCalibrate')syncCalibration();});});
 root.studioReady?.then(async session=>{
  if((typeof webMode!=='undefined'&&webMode)||session?.offline)return;
  if(session?.username)key+=':'+session.username;

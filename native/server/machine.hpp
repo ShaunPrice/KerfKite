@@ -49,6 +49,15 @@ public:
     // A touch plate for the simulator to probe, announced before a zeroing program starts: its thickness, the
     // wall between its probing faces and the stock, and the cutter's radius. A real controller ignores it.
     virtual void expect_touch_plate(double, double, double) {}
+    // Whether a touch plate can be probed (G38.2), and how work zero is then set: "G10" (G10 L20 P1) for the
+    // Grbl family, "G92" for Marlin; empty when the controller has no probing move.
+    virtual std::string zeroing() const { return std::string(); }
+    // What a setup tool may show beyond the status: for Marlin, the settings its M503 report gave and, in the
+    // simulator, the position. Null for a controller whose status already carries them.
+    virtual Json setup_report() { return Json(); }
+    // start(), for a program that must not carry on past a line the firmware does not know: a zeroing program
+    // whose probing move was ignored would set work zero wherever the cutter happens to be.
+    virtual void start_checked(const std::vector<std::string> &lines) { start(lines); }
 };
 
 std::unique_ptr<Machine> grbl_machine(const MachineOptions &options, std::vector<std::string> initialization_queries);
@@ -70,6 +79,9 @@ public:
     std::vector<std::string> probe_reports();
     bool probes();  // whether the controller reports probe contacts (the Grbl family)
     void expect_touch_plate(double thickness, double wall, double radius);
+    std::string zeroing();
+    Json setup_report();
+    void start_checked(const std::vector<std::string> &lines);
     const std::string &protocol() const { return protocol_; }
 
 private:

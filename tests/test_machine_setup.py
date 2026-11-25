@@ -93,7 +93,9 @@ class SetupTests(unittest.TestCase):
 
     def test_the_setup_routes_say_what_the_controller_can_do(self):
         with urllib.request.urlopen(self.server.url + 'api/setup', timeout=10) as response:  # noqa: S310 - loopback
-            self.assertEqual(json.loads(response.read()), {'touch_plate': True, 'settings': True, 'macros': True})
+            self.assertEqual(
+                json.loads(response.read()), {'touch_plate': True, 'settings': True, 'macros': True, 'protocol': 'grbl'}
+            )
 
     def test_z_alone_puts_work_zero_the_plate_thickness_below_its_top(self):
         answer = self.post('api/setup/probe', {'confirmed': True, 'axes': 'z', 'thickness': 12.7})
@@ -210,3 +212,135 @@ class SetupTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+@unittest.skipUnless(STUDIO, 'kerfkite-studio is not built: build native/ into build/native')
+class MarlinSetupTests(unittest.TestCase):
+    """The same tools on a Marlin controller, which sets work zero with G92 and keeps its settings under M codes.
+
+    The simulated Marlin's plate is where the Grbl simulator's is. Marlin does not report a probe's contact, so
+    the test goes by the position the simulator holds, which /api/setup gives for the simulator only.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.running = native_servers.studio(STUDIO)
+        cls.server = cls.running.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.running.__exit__(None, None, None)
+
+    def setUp(self):
+        self.post('api/disconnect', {})
+        self.post('api/connect', {'port': 'simulator', 'protocol': 'marlin'})
+        self.idle()
+
+    post = SetupTests.post
+    refused = SetupTests.refused
+    idle = SetupTests.idle
+
+    def setup(self):
+        with urllib.request.urlopen(self.server.url + 'api/setup', timeout=10) as response:  # noqa: S310 - loopback
+            return json.loads(response.read())
+
+    def test_the_setup_routes_report_marlin_and_its_settings(self):
+        answer = self.setup()
+        self.assertEqual((answer['touch_plate'], answer['settings'], answer['protocol']), (True, True, 'marlin'))
+        self.assertEqual(answer['report']['settings']['M92'], {'X': 80, 'Y': 80, 'Z': 400})
+        self.assertEqual(answer['report']['position'], [0, 0, 0])
+        # The status the editor and the reference comparisons read is as it was.
+        status = self.server.status()
+        self.assertEqual((status['settings'], status['position'], status['readback']), ({}, None, {}))
+
+    def test_z_alone_sets_zero_with_g92(self):
+        answer = self.post('api/setup/probe', {'confirmed': True, 'axes': 'z', 'thickness': 12.7})
+        self.assertEqual(
+            answer['lines'],
+            [
+                'G21',
+                'G91',
+                'G38.2 Z-15.000 F150.0',
+                'G0 Z1.000',
+                'G38.2 Z-2.000 F40.0',
+                'G92 Z12.700',
+                'G0 Z5.000',
+                'G90',
+            ],
+        )
+        self.assertFalse(any(line.startswith('G10') for line in answer['lines']))
+        status = self.idle()
+        self.assertIsNone(status['error'], status['log'][-5:])
+        # The cutter touched the plate 7.3 mm down, was told that is Z 12.7, and retracted 5 mm.
+        self.assertEqual(self.setup()['report']['position'], [0, 0, 17.7])
+
+    def test_a_corner_plate_puts_zero_on_the_corner_of_the_stock(self):
+        for wall, diameter in ((3, 3.175), (0, 6.35), (10, 1)):
+            with self.subTest(wall=wall, diameter=diameter):
+                self.setUp()
+                request = {'confirmed': True, 'axes': 'xyz', 'thickness': 10, 'wall': wall, 'tool_diameter': diameter}
+                answer = self.post('api/setup/probe', request)
+                status = self.idle()
+                self.assertIsNone(status['error'], status['log'][-5:])
+                self.assertEqual(sum(line.startswith('G92') for line in answer['lines']), 3)
+                # The cutter ends 10 mm inside the stock on both axes and 15 mm above it, in the new coordinates:
+                # so work zero is the corner of the stock at its surface, whatever the wall and the cutter.
+                x, y, z = self.setup()['report']['position']
+                self.assertAlmostEqual(x, 10, delta=0.0011)
+                self.assertAlmostEqual(y, 10, delta=0.0011)
+                self.assertAlmostEqual(z, 15, delta=0.0011)
+                # Followed independently from the program: every relative move from the start, against where the
+                # plate is. The cutter started 12.5 - wall left of the stock's edge and 9.5 - wall in front.
+                moved = [0.0, 0.0]
+                for line in answer['lines']:
+                    for word in line.split()[1:]:
+                        if line.startswith('G0') and word[0] in 'XY':
+                            moved['XY'.index(word[0])] += float(word[1:])
+                # The probing moves themselves end at the faces: left face less the cutter's radius.
+                touch = [FACES[0] - diameter / 2, FACES[1] - diameter / 2]
+                for k, face in enumerate(FACES):
+                    edge = face + wall  # the stock's edge, from the cutter's start
+                    out = -(15 + diameter / 2 + 5)  # the first move out past the face
+                    after = touch[k] - 2 + (wall + diameter / 2 + 12)  # back off 2, then in over the stock
+                    self.assertAlmostEqual(after - edge, 10, delta=0.0011)
+                    self.assertLess(out, touch[k])
+                self.assertEqual(len(moved), 2)
+
+    def test_a_probe_that_finds_nothing_stops_the_program_before_zero_is_set(self):
+        self.post('api/setup/probe', {'confirmed': True, 'axes': 'z', 'thickness': 10, 'travel': 5})
+        status = self.idle()
+        self.assertEqual(status['state'], 'Fault')
+        self.assertIn('Failed to reach target', status['error'])
+        probe = max(i for i, row in enumerate(status['log']) if 'G38.2' in row)
+        self.assertFalse(any('G92' in row for row in status['log'][probe:]))
+
+    def test_a_setting_is_written_read_back_and_stored_only_when_asked(self):
+        answer = self.post('api/setup/setting', {'confirmed': True, 'code': 'M92', 'axis': 'X', 'value': 80.125})
+        self.assertEqual(answer['line'], 'M92 X80.125')
+        status = self.idle()
+        self.assertIsNone(status['error'])
+        self.assertEqual(self.setup()['report']['settings']['M92'], {'X': 80.125, 'Y': 80, 'Z': 400})
+        self.assertFalse(any('M500' in row for row in status['log']))
+        self.assertEqual(self.post('api/setup/setting', {'confirmed': True, 'store': True})['line'], 'M500')
+        self.assertIn('echo:Settings Stored', self.idle()['log'])
+        self.assertEqual(
+            self.post('api/setup/setting', {'confirmed': True, 'code': 'M203', 'axis': 'Z', 'value': 8})['line'],
+            'M203 Z8',
+        )
+        self.idle()
+        self.assertEqual(self.setup()['report']['settings']['M203']['Z'], 8)
+        self.refused('api/setup/setting', {'code': 'M92', 'axis': 'X', 'value': 80}, 'Confirm the change')
+        for code in ('M500', 'M502', '$100', 'G92', None, 92):
+            self.refused(
+                'api/setup/setting', {'confirmed': True, 'code': code, 'axis': 'X', 'value': 80}, 'Choose the setting'
+            )
+        for axis in ('E', 'x', '', None):
+            self.refused(
+                'api/setup/setting', {'confirmed': True, 'code': 'M92', 'axis': axis, 'value': 80}, 'Choose the axis'
+            )
+        for value in (0, -1, '80', None, True, 1e9, 0.0001):
+            self.refused(
+                'api/setup/setting', {'confirmed': True, 'code': 'M92', 'axis': 'X', 'value': value}, "setting's value"
+            )
+        # A numbered Grbl setting means nothing here.
+        self.refused('api/setup/setting', {'confirmed': True, 'key': '100', 'value': 80}, 'Choose the setting')

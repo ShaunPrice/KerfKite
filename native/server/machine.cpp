@@ -273,6 +273,7 @@ public:
     }
 
     bool probes() const override { return true; }
+    std::string zeroing() const override { return "G10"; }
 
     // The simulator's touch plate sits on a corner of the stock, wherever the operator left the cutter: its left
     // face is 12.5 mm to the left of the cutter, its front face 9.5 mm in front and its top 7.3 mm below. The
@@ -868,6 +869,17 @@ public:
         acked_ = total_ = 0;
         receive_buffer_.clear();
         readback_ = json::object();
+        report_ = json::object();
+        sim_ = Simulated();
+        if (simulated_) {
+            // The simulator's settings, as a firmware's M503 report would have given them on connecting.
+            const char *names[3] = {"M92", "M203", "M201"};
+            for (int row = 0; row < 3; ++row) {
+                json values = json::object();
+                for (int k = 0; k < 3; ++k) values[std::string(1, "XYZ"[k])] = sim_.settings[row][k];
+                report_[names[row]] = values;
+            }
+        }
         queries_.clear();
         if (!simulated_) queries_ = {"M115", "M211", "M503"};
         ready_ = simulated_;
@@ -974,11 +986,131 @@ public:
         }
     }
 
+    std::string zeroing() const override { return "G92"; }
+
+    void start_checked(const std::vector<std::string> &lines) override {
+        std::lock_guard<std::recursive_mutex> hold(m_);
+        start(lines);
+        strict_ = true;
+    }
+
+    // The settings of the last M503 report, by command and axis letter, and the simulator's work position.
+    Json setup_report() override {
+        std::lock_guard<std::recursive_mutex> hold(m_);
+        json out = json::object();
+        out["settings"] = report_;
+        if (simulated_ && connected_) {
+            json at = json::array();
+            for (int k = 0; k < 3; ++k) at.push_back(round3(sim_.at[k]));
+            out["position"] = at;
+        }
+        return out;
+    }
+
+    // The simulator's touch plate, placed as the Grbl simulator's is: its left face 12.5 mm to the left of the
+    // cutter, its front face 9.5 mm in front and its top 7.3 mm below, wherever the cutter was left.
+    void expect_touch_plate(double thickness, double wall, double radius) override {
+        std::lock_guard<std::recursive_mutex> hold(m_);
+        if (!simulated_) return;
+        sim_.plate = true;
+        sim_.plate_x = sim_.at[0] + sim_.origin[0] - 12.5 + wall;
+        sim_.plate_y = sim_.at[1] + sim_.origin[1] - 9.5 + wall;
+        sim_.plate_top = sim_.at[2] + sim_.origin[2] - 7.3;
+        sim_.wall = wall;
+        sim_.radius = radius;
+        (void)thickness;
+    }
+
 private:
     struct Pending {
         long number;
-        std::string framed, kind;
+        std::string framed, kind, line;
     };
+
+    // The simulated machine: enough of Marlin to follow a zeroing program and a settings report.
+    struct Simulated {
+        double at[3] = {0, 0, 0};      // the position as the firmware reports it (after G92)
+        double origin[3] = {0, 0, 0};  // what G92 has taken off: machine = at + origin
+        bool relative = false, plate = false;
+        double plate_x = 0, plate_y = 0, plate_top = 0, wall = 0, radius = 0;
+        // M92 steps per unit, M203 maximum feed in units a second, M201 maximum acceleration.
+        double settings[3][3] = {{80, 80, 400}, {500, 500, 5}, {3000, 3000, 100}};
+    } sim_;
+
+    static int setting_row(const std::string &code) { return code == "M92" ? 0 : code == "M203" ? 1 : code == "M201" ? 2 : -1; }
+
+    // The replies of the simulated firmware to one line, before its ok; an "Error:" reply stands in place of the ok.
+    std::vector<std::string> simulate(const std::string &line) {
+        const std::vector<std::string> parts = split_space(line);
+        if (parts.empty()) return {};
+        const std::string &code = parts[0];
+        double value[3] = {0, 0, 0}, feed = 0;
+        bool has[3] = {false, false, false};
+        for (size_t i = 1; i < parts.size(); ++i) {
+            const std::string &word = parts[i];
+            const size_t k = std::string("XYZ").find(word[0]);
+            double parsed = 0;
+            if (word.size() < 2 || !python_float(word.substr(1), parsed)) continue;
+            if (k != std::string::npos) {
+                value[k] = parsed;
+                has[k] = true;
+            } else if (word[0] == 'F') {
+                feed = parsed;
+            }
+        }
+        (void)feed;
+        if (code == "G91" || code == "G90") {
+            sim_.relative = code == "G91";
+        } else if (code == "G0" || code == "G1") {
+            for (int k = 0; k < 3; ++k)
+                if (has[k]) sim_.at[k] = sim_.relative ? sim_.at[k] + value[k] : value[k];
+        } else if (code == "G92") {
+            for (int k = 0; k < 3; ++k)
+                if (has[k]) {
+                    sim_.origin[k] += sim_.at[k] - value[k];
+                    sim_.at[k] = value[k];
+                }
+        } else if (code == "G28") {
+            for (int k = 0; k < 3; ++k) sim_.at[k] = 0, sim_.origin[k] = 0;
+        } else if (code == "G38.2") {
+            int probed = -1, count = 0;
+            for (int k = 0; k < 3; ++k)
+                if (has[k]) probed = k, ++count;
+            bool touches = false;
+            double contact = 0;
+            if (count == 1 && sim_.plate) {
+                const double m[3] = {sim_.at[0] + sim_.origin[0], sim_.at[1] + sim_.origin[1], sim_.at[2] + sim_.origin[2]};
+                const double target = (sim_.relative ? sim_.at[probed] + value[probed] : value[probed]) + sim_.origin[probed];
+                const double low[2] = {sim_.plate_x - sim_.wall, sim_.plate_y - sim_.wall};  // the plate's outer faces
+                if (probed == 2) {
+                    const bool over = m[0] >= low[0] && m[0] <= sim_.plate_x + 40 && m[1] >= low[1] && m[1] <= sim_.plate_y + 40;
+                    contact = sim_.plate_top;
+                    touches = over && m[2] >= contact && target <= contact;
+                } else {
+                    const int other = 1 - probed;
+                    contact = low[probed] - sim_.radius;
+                    touches = m[2] < sim_.plate_top && m[other] >= low[other] && m[other] <= (other == 0 ? sim_.plate_x : sim_.plate_y) + 40 &&
+                              m[probed] <= contact && target >= contact;
+                }
+                if (!touches) sim_.at[probed] = target - sim_.origin[probed];
+            }
+            if (!touches) return {"Error:Failed to reach target"};
+            sim_.at[probed] = contact - sim_.origin[probed];
+        } else if (setting_row(code) >= 0) {
+            for (int k = 0; k < 3; ++k)
+                if (has[k]) sim_.settings[setting_row(code)][k] = value[k];
+        } else if (code == "M503") {
+            std::vector<std::string> out;
+            const char *names[3] = {"M92", "M203", "M201"};
+            for (int row = 0; row < 3; ++row)
+                out.push_back(std::string("echo:  ") + names[row] + " X" + fixed(sim_.settings[row][0], 3) + " Y" + fixed(sim_.settings[row][1], 3) +
+                              " Z" + fixed(sim_.settings[row][2], 3));
+            return out;
+        } else if (code == "M500") {
+            return {"echo:Settings Stored"};
+        }
+        return {};
+    }
 
     void write(const std::string &data) {
         if (link_) link_->write(data);
@@ -989,6 +1121,7 @@ private:
         pending_.reset();
         resend_handshake_ = false;
         active_ = paused_ = false;
+        strict_ = false;
     }
 
     void fault(const std::string &message) {
@@ -1010,7 +1143,7 @@ private:
 
     void send(const std::string &line, const std::string &kind) {
         const long number = number_++;
-        pending_ = Pending{number, frame(number, line), kind};
+        pending_ = Pending{number, frame(number, line), kind, line};
         resends_ = 0;
         resend_handshake_ = false;
         sent_at_ = options_.clock();
@@ -1044,6 +1177,15 @@ private:
                 for (int k = 0; k < 3; ++k) travel.push_back(round3(std::strtod(range[4 + k].str().c_str(), nullptr) - std::strtod(range[1 + k].str().c_str(), nullptr)));
                 readback_["travel"] = travel;
             }
+        }
+        // A line of the settings report: the command and its values by letter, as a setup tool shows them.
+        static const std::regex setting(R"(\b(M92|M201|M203)((?:\s+[A-Z]-?\d+(?:\.\d*)?)+))"), each(R"(([A-Z])(-?\d+(?:\.\d*)?))");
+        if (std::regex_search(line, found, setting)) {
+            json values = json::object();
+            const std::string rest = found[2].str();
+            for (std::sregex_iterator it(rest.begin(), rest.end(), each), end; it != end; ++it)
+                values[(*it)[1].str()] = std::strtod((*it)[2].str().c_str(), nullptr);
+            report_[found[1].str()] = values;
         }
         static const std::regex rates(R"(\bM203\s+X)" + number + R"(\s+Y)" + number + R"(\s+Z)" + number);
         if (std::regex_search(line, found, rates)) {
@@ -1086,6 +1228,10 @@ private:
             fault(line);
             return;
         }
+        if (strict_ && low.find("unknown command") != std::string::npos) {
+            fault("The firmware does not know a command this program depends on (" + line.substr(0, 60) + ")");
+            return;
+        }
         if (starts(low, "!!") || starts(low, "echo:busy: paused for user")) {
             fault(line);
             return;
@@ -1096,7 +1242,7 @@ private:
         }
         static const std::regex ok(R"(^ok(?:\s.*|$))", std::regex::icase);
         if (!std::regex_match(line, ok) || !pending_) {
-            if (pending_ && pending_->kind == "query") note(line);
+            if (pending_ && (pending_->kind == "query" || pending_->line == "M503")) note(line);
             return;
         }
         if (resend_handshake_) {
@@ -1121,6 +1267,7 @@ private:
                 queries_done();
             }
         } else if (kind == "finish") {
+            strict_ = false;
             active_ = paused_ = false;
             progress_ = 100;
             state_ = "Idle";
@@ -1164,7 +1311,13 @@ private:
                         initialized = true;
                     }
                 } else if (pending_) {
-                    receive("ok");
+                    bool refused = false;
+                    for (const std::string &reply : simulate(pending_->line)) {
+                        refused = refused || starts(reply, "Error:");
+                        receive(reply);
+                        if (!pending_) break;
+                    }
+                    if (pending_ && !refused) receive("ok");
                 }
                 if (pending_ && pending_->kind == "query" && now - sent_at_ > kQueryTimeout) {
                     // The machine is usable without its reports; say so and carry on.
@@ -1195,7 +1348,8 @@ private:
     bool connected_ = false, simulated_ = false, ready_ = false, active_ = false, paused_ = false, resend_handshake_ = false;
     std::string state_ = "Disconnected";
     std::optional<std::string> error_;
-    json readback_ = json::object();
+    json readback_ = json::object(), report_ = json::object();
+    bool strict_ = false;  // an unknown command ends the program (start_checked)
     std::deque<std::string> queries_;
     Log log_;
     std::deque<std::pair<std::string, std::string>> queue_;

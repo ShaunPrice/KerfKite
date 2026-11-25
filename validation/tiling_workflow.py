@@ -78,6 +78,39 @@ def run(page):
     tab('Control')
     loc('#disconnect').click()
 
+    # A laser job is tiled too: the beam is on only inside a tile's cuts.
+    tab('CAM')
+    loc('#mode').select_option('laser')
+    loc('#mode').dispatch_event('change')
+    loc('#power').fill('600')
+    loc('#preview').click()
+    expect(loc('#gcode')).to_contain_text('M4 S600')
+    loc('#tilePlan').click()
+    expect(loc('#tileState')).to_contain_text('tiles with cutting in a grid of 3 × 2')
+    with page.expect_download() as saved:
+        loc('#tileList [data-tile="1,0"] button').first.click()
+    program = open(saved.value.path(), encoding='ascii').read().splitlines()
+    beam = False
+    burns = 0
+    for line in program:
+        if line.startswith(('M3', 'M4')):
+            beam = True
+        elif line == 'M5':
+            beam = False
+        elif line.startswith('G0'):
+            assert not beam, f'the head travels with the beam on: {line}'
+        elif line.startswith('G1') and beam:
+            burns += 1
+        found = re.fullmatch(r'G[01] X([-\d.]+) Y([-\d.]+).*', line)
+        if found:
+            assert -1e-6 <= float(found.group(1)) <= 200 and -1e-6 <= float(found.group(2)) <= 150, line
+    assert burns and not beam and not any(' Z' in line for line in program), program[:12]
+    print(
+        f'PASS a laser job is tiled: the middle tile burns {burns} moves, all inside it, with the beam out for every travel'
+    )
+    loc('#mode').select_option('router')
+    loc('#mode').dispatch_event('change')
+
 
 if __name__ == '__main__':
     import argparse

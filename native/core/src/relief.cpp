@@ -689,7 +689,10 @@ void relief_test_device(bool on, double slowdown, long long wrong, double share)
 
 }  // namespace detail
 
-Json prepare_relief(const Json &data) {
+namespace {
+
+// prepare_relief, which can also hand back the map it read (for the roughing that works on the map itself).
+Json prepare_with_map(const Json &data, ReliefContact *keep, double *origin) {
     if (!data.is_object()) throw ValueError("Relief input must be an object");
     const json zero(0);
     const double width = setting_of(data, "width", nullptr, 0, true, 10000);
@@ -802,6 +805,11 @@ Json prepare_relief(const Json &data) {
             contact.maxima[size_t(j) * contact.cols + i] = image ? std::max(std::max(a, b), std::max(c, d))
                                                                  : py_max(py_max(py_max(a, b), c), d);
         }
+    if (keep) {
+        *keep = contact;
+        origin[0] = x;
+        origin[1] = y;
+    }
     std::string ran;
     const std::vector<double> depths = relief_depths(contact, ran);
 
@@ -855,6 +863,10 @@ Json prepare_relief(const Json &data) {
                 {"warnings", std::move(warnings)}};
 }
 
+}  // namespace
+
+Json prepare_relief(const Json &data) { return prepare_with_map(data, nullptr, nullptr); }
+
 std::string relief_gpu_status() {
     const bool off = gpu::mode() == "off";
     if (!off) gpu::available();
@@ -880,6 +892,31 @@ Json relief_roughing(const Json &data) {
     const double step = step_value->get<double>();
     json request = data;
     request.erase("rough_step");
+    const json *strategy = get(data, "rough_strategy");
+    const bool adaptive = is_text(strategy, "adaptive");
+    if (strategy && !adaptive && !is_text(strategy, "raster")) throw ValueError("rough_strategy must be raster or adaptive");
+    request.erase("rough_strategy");
+    if (adaptive) {
+        // Adaptive clearing works on the map itself; the stepover is the width of cut it keeps to.
+        if (!is_text(get(data, "tool_shape"), "flat")) throw ValueError("Adaptive clearing needs a flat cutter: set tool_shape to flat");
+        const double engagement = setting_of(data, "stepover", nullptr, 0, true, 10000);
+        // The map is read as for a finishing pass of the cutter's own width, whose rasters are not used here.
+        if (const json *diameter = get(data, "tool_diameter")) request["stepover"] = *diameter;
+        ReliefContact map;
+        double origin[2] = {0, 0};
+        const json finish = prepare_with_map(request, &map, origin);
+        json out = adaptive_roughing(map, origin[0], origin[1], step, engagement);
+        json warnings = finish.at("warnings");
+        warnings.push_back("Adaptive clearing leaves steps of up to one step down on slopes, and a little more than the allowance on walls.");
+        if (out.at("plunge_entries").get<long long>() > 0)
+            warnings.push_back("Some levels are entered straight down where there is no room for a helix: that needs a centre-cutting cutter.");
+        if (out.at("forced_length").get<double>() > 0)
+            warnings.push_back("Some channels are no wider than the cutter and are cut at its full width; see forced_length.");
+        out["device"] = finish.at("device");
+        out["surface"] = finish.at("surface");
+        out["warnings"] = std::move(warnings);
+        return out;
+    }
     const json finish = prepare_relief(request);
     const json &rasters = finish.at("paths");
     const json &contacts = finish.at("path_depths");
@@ -935,6 +972,7 @@ Json relief_roughing(const Json &data) {
                 {"levels", levels},
                 {"step", step},
                 {"lowest", lowest},
+                {"strategy", "raster"},
                 {"device", finish.at("device")},
                 {"surface", finish.at("surface")},
                 {"warnings", std::move(warnings)}};

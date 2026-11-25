@@ -1121,7 +1121,7 @@ Include the ZIP in <code>SHA256SUMS.txt</code>. Extracting it produces the <code
 <p>To package the interactive materials guide as one offline HTML file, run <code>python scripts/build_materials_guide.py dist/KerfKite-Materials-Guide.html</code>. Include that file in the release and its checksum in <code>SHA256SUMS.txt</code>. The desktop and browser packages already carry the guide as linked static assets.</p>
 <p>Build the stock-art SVG archive from the same source tree with <code>python scripts/export_stock_art.py dist/KerfKite-Stock-Artwork.zip</code>. Its offline index links to each individual design.</p>
 </section><section id="joinery"><h1>Joinery, inlays and nesting</h1>
-<p><strong>Design → Joinery &amp; nesting</strong> holds three helpers for parts cut with a round cutter. Each changes the drawing only, in one step that <strong>Undo</strong> reverses. Generate a new preview afterwards.</p>
+<p><strong>Design → Joinery &amp; nesting</strong> holds three helpers: corner reliefs for a round cutter, inlays for an end mill or a V-bit, and nesting. Each changes the drawing only, in one step that <strong>Undo</strong> reverses. Generate a new preview afterwards.</p>
 <h2>Dog-bone corners</h2>
 <p>A round cutter leaves every inside corner round, with the cutter's radius. A square-cornered part pushed into such a corner will not seat. A dog-bone cuts a small circle at the corner, just far enough for the corner point itself to be cleared.</p>
 <ol>
@@ -1133,19 +1133,72 @@ Include the ZIP in <code>SHA256SUMS.txt</code>. Extracting it produces the <code
 <p>Each relief is a circle of that radius whose edge passes through the corner point, centred on the line that halves the corner. The message gives the number added. A corner whose edges are too short for the relief is left as it was and counted: the relief may take at most half of each edge, so that reliefs at the two ends of one edge cannot meet. Corners sharper than 10° or flatter than 170° are left alone.</p>
 <p>The object keeps its name with <strong>· dog-bones</strong> added. A rectangle or gear becomes a plain outline, since its shape settings would redraw it without the reliefs.</p>
 <h2>Inlay</h2>
-<p>An inlay is a pocket in one piece and a plug of another material that fits it. <strong>Make pocket and plug</strong> draws both from the selected closed shape, for a straight-sided cutter:</p>
+<p>An inlay is a pocket in one piece and a plug of another material that fits it. <strong>Make pocket and plug</strong> draws both from the selected closed shape. Choose the kind under <strong>Inlay</strong>.</p>
+<h3>Straight-sided, for an end mill</h3>
 <ul>
 <li><strong>The pocket</strong> is the shape itself, with a pocket operation. The cutter rounds its inside corners.</li>
 <li><strong>The plug</strong> is what the cutter can reach inside the shape, made smaller all round by the <strong>Clearance</strong>, with an outside profile. Its corners are therefore rounded to match the pocket. It is placed beside the shape.</li>
 </ul>
-<p>Set the <strong>Cutter diameter</strong> (it starts as the CAM cutter) and the clearance: 0.1 mm suits a snug fit in wood, and more suits paint or glue. Then give the pocket its depth and the plug a little more, so that the plug stands proud for sanding flush. Both objects carry their own operation settings; the original shape is unchanged, so turn its output off if it should not be cut.</p>
-<p>A feature of the shape narrower than the cutter cannot be cut in the pocket and is absent from the plug. V-bit inlays, whose two halves are carved at an angle, are not made by this tool.</p>
+<p>Set the <strong>Cutter diameter</strong> (it starts as the CAM cutter) and the clearance: 0.1 mm suits a snug fit in wood, and more suits paint or glue. Then give the pocket its depth and the plug a little more, so that the plug stands proud for sanding flush. A feature of the shape narrower than the cutter cannot be cut in the pocket and is absent from the plug.</p>
+<h3>V-carved, for a V-bit</h3>
+<p>Both halves are carved with a V-bit, so their walls slope. The plug is carved as the mirror image of the shape, turned over, glued into the pocket and its back cut or planed away. The sloping walls wedge together, and inside corners come out sharp because the bit rises into them.</p>
+<p>Enter:</p>
+<ul>
+<li><strong>Clearing cutter diameter</strong>: the end mill that clears the flat areas.</li>
+<li><strong>V-bit angle</strong> and <strong>V-bit diameter</strong>.</li>
+<li><strong>Pocket depth</strong>: how deep the pocket is carved.</li>
+<li><strong>Plug goes in by</strong>: how far the plug enters the pocket. It must be at least 0.1 mm less than the pocket depth; the difference is the gap left under the plug for glue.</li>
+<li><strong>Plug left above the surface</strong>: how much of the plug stands out of the work, to be cut away.</li>
+</ul>
+<p>Four objects are added, each with its own operation:</p>
+<table>
+<thead>
+<tr>
+<th>Object</th>
+<th>Operation</th>
+<th>Cutter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>V inlay pocket · clear</td>
+<td>Pocket over the pocket's flat floor</td>
+<td>Clearing cutter</td>
+</tr>
+<tr>
+<td>V inlay pocket · carve</td>
+<td>V-carve of the shape to the pocket depth</td>
+<td>V-bit</td>
+</tr>
+<tr>
+<td>V inlay plug · clear</td>
+<td>Pocket over the stock round the plug, inside a border</td>
+<td>Clearing cutter</td>
+</tr>
+<tr>
+<td>V inlay plug · carve</td>
+<td>V-carve round the mirrored shape, started below the stock top</td>
+<td>V-bit</td>
+</tr>
+</tbody>
+</table>
+<p>The pocket's clearing is left out when the shape is too narrow for the clearing cutter: the V-bit then cuts all of it. The two cutters have tool identities, so <strong>Manual tool changes → Generate separate stage files</strong> makes a file for each. The original shape is unchanged: turn its output off if it should not be cut.</p>
+<p><strong>How the plug is sized.</strong> The plug's outline is carved at a depth below the top of its stock (the operation setting <code>v_start_depth</code>), so that the plug is narrower than the shape at its tip and reaches the shape's own size at the depth it goes in by. V-carving stops one sampling step short of the wall it carves towards, so the pocket's wall stands that much proud; the plug's outline is carved that step ÷ tan(half the angle) deeper to let it down to where it was meant to sit. The tool sets <strong>V detail sampling</strong> to 0.2 mm or finer for both carves. The bit must be wide enough to cut the deeper of the two carves: the tool refuses a bit that is not.</p>
+<p>Carve a test inlay in scrap of both materials before the real one: the fit depends on the true angle of the bit and on Z zero being set the same way for both cutters.</p>
 <h2>Nest parts on the sheet</h2>
-<p><strong>Nest parts</strong> moves every object whose output is on into rows from the bottom-left corner of the work area, tallest first, with the <strong>Gap</strong> between parts and the <strong>Margin</strong> at the edge of the sheet. Each part is placed by its bounding box, at its own angle: parts are not turned and are not fitted into each other's hollows. Objects with output off stay where they are.</p>
-<p>The message gives the area of the sheet the parts now take. If they cannot fit, nothing moves and the message says so.</p>
+<p><strong>Nest parts</strong> packs every object whose output is on towards the bottom-left corner of the work area, with the <strong>Gap</strong> between parts and the <strong>Margin</strong> at the edge of the sheet. Parts are placed by their own outlines, so one part can sit in the hollow of another, largest first, each at the lowest and then leftmost place where it fits.</p>
+<p><strong>Turn parts</strong> sets how a part may be turned to fit:</p>
+<ul>
+<li><strong>By quarter turns</strong> (the default).</li>
+<li><strong>Not at all</strong>, where the grain of the wood or a printed pattern must keep its direction.</li>
+<li><strong>In steps of 45°</strong> or <strong>15°</strong>, for sheet without a direction. Finer steps take longer and pack irregular parts tighter.</li>
+</ul>
+<p>Of the turns allowed, each part takes the one that ends lowest on the sheet. A closed outline counts as solid: nothing is placed inside a part's holes. A relief, and any object whose paths carry their own depths or powers, is moved but never turned. A turned rectangle, polygon or gear becomes a plain outline, since its shape settings would redraw it upright. Objects with output off stay where they are.</p>
+<p>The parts are compared on a grid of cells of 0.25 mm or 1/400 of the sheet's longer side, whichever is larger, and every cell a part touches counts as taken. So the gap between two parts is never less than the gap asked for, and can be up to two cells more.</p>
+<p>The message gives the area of the sheet the parts now take and how many were turned. If they cannot fit, nothing moves and the message says so. Up to 200 parts are nested at once.</p>
 <p>Objects that must stay together, such as a part and the holes inside it, should be one object or be moved together afterwards with <a href="#user-guide">Align &amp; distribute</a>.</p>
 <h2>What has been checked</h2>
-<p><code>tests/js/joinery.test.cjs</code> checks the dog-bone geometry (the corner point stays on the outline, a cutter of the radius fits at each relief, the reach along each edge, outlines drawn in either direction) and the nesting (no overlap, the gap kept, the sheet's bounds). <code>validation/joinery_workflow.py</code> drives the panel in a browser against the simulator. No part made with these tools has been cut on a machine: check the fit on scrap.</p>
+<p><code>tests/js/joinery.test.cjs</code> checks the dog-bone geometry (the corner point stays on the outline, a cutter of the radius fits at each relief, the reach along each edge, outlines drawn in either direction) and the nesting. Parts nested by outline are checked by their own edges: every pair is at least the gap apart, every part is on the sheet, nothing is placed in a hole, two brackets nest into each other only when one may be turned, and fixed parts keep their angle. <code>tests/test_v_inlay.py</code> follows the V-bit's point through the pocket's program and the plug's and works out the shape each leaves: across the walls of an arrow-shaped inlay the plug's wall lies on the pocket's to within 0.12 mm of depth, neither inside it nor away from it. <code>validation/joinery_workflow.py</code> drives the panel in a browser against the simulator. No part made with these tools has been cut on a machine: check the fit on scrap.</p>
 </section><section id="labels"><h1>Engraved lettering and production labels</h1>
 <h2>Single-line text</h2>
 <p>Open <strong>Text</strong> and choose <strong>Workshop Mono · single line</strong>. Enter lettering, size and spacing. Set the depth for router engraving. Straight, vertical and Bézier layouts use the same editable centreline glyphs. Rotation and Y tilt work with variable-depth toolpaths. This face covers printable ASCII. Use an outline font for other scripts supported by the text editor.</p>
@@ -4760,12 +4813,44 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 <p>For current scope see the <a href="#product">feature matrix</a>. At the time of the earlier review, the assembly solver accepted directed mate hierarchies. Closed-loop mechanical constraint solving and general surface trimming or stitching remain open. STEP exchange covers geometry; CAD feature-tree, PMI and assembly-mate round trips remain open. Tool and holder clearance depends on the supplied work frame, envelopes and fixture measurements. Rotary collision simulation and machine-frame component collisions require additional models.</p>
 <p>LightBurn compatibility covers documented subsets of the source formats. Lossless LightBurn round trips, some image effects, complete text shaping, proprietary controller protocols, camera lens-distortion correction and native commercial cutter-project formats remain open. Supervised physical commissioning is still required to measure cutting quality, clearance and stopping behaviour.</p>
 </section><section id="relief-roughing"><h1>Roughing a 3D relief</h1>
-<p>A deep relief is cut in two stages. <strong>Roughing</strong> takes most of the stock away with a sturdy flat cutter, one level at a time, and leaves a thin allowance everywhere. <strong>Finishing</strong> then follows the surface with a ball cutter taking a light, even cut. Cutting a deep relief with the finishing pass alone asks a small cutter to bury itself in the stock.</p>
+<p>A deep relief is cut in two stages. <strong>Roughing</strong> takes most of the stock away with a flat cutter, one level at a time, and leaves a thin allowance. <strong>Finishing</strong> then follows the surface with a ball cutter taking a light, even cut. Cutting a deep relief with the finishing pass alone asks a small cutter to bury itself in the stock.</p>
 <p><strong>3D relief → Roughing first</strong> adds the roughing passes for the relief chosen in the panel: an image, or an STL model seen from above.</p>
+<h2>Two strategies</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Level passes along the rasters</th>
+<th>Adaptive clearing</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Path</td>
+<td>Straight passes along each raster, level by level</td>
+<td>Curving paths that peel the stock away from a helix entry</td>
+</tr>
+<tr>
+<td>Width of cut</td>
+<td>The cutter's full width wherever a pass enters fresh stock</td>
+<td>Kept near the width you set</td>
+</tr>
+<tr>
+<td>What is left</td>
+<td>The allowance everywhere: passes follow the surface</td>
+<td>The allowance, plus steps of up to one step down on slopes and a little extra on walls</td>
+</tr>
+<tr>
+<td>Suits</td>
+<td>Shallow reliefs, soft materials, a sturdy cutter</td>
+<td>Deep reliefs, hard materials, a slender cutter, a light machine</td>
+</tr>
+</tbody>
+</table>
 <h2>Add the roughing</h2>
 <ol>
 <li>On <strong>3D relief</strong>, choose the image or STL and set its placement, depth and resolution as for the relief itself, and generate the finishing relief with <strong>Generate relief contours</strong>.</li>
-<li>Under <strong>Roughing first</strong>, enter the <strong>Roughing cutter diameter</strong> (a flat end mill), the <strong>Step down for each level</strong>, the <strong>Allowance left for finishing</strong> and the <strong>Stepover</strong>.</li>
+<li>Under <strong>Roughing first</strong>, choose the <strong>Roughing strategy</strong> and enter the <strong>Roughing cutter diameter</strong> (a flat end mill), the <strong>Step down for each level</strong>, the <strong>Allowance left for finishing</strong> and the <strong>Stepover</strong>. For adaptive clearing the last field is the <strong>Width of cut to keep</strong>, from 8% of the cutter's diameter up to all of it.</li>
 <li>Choose <strong>Add roughing passes</strong>. The message gives the number of levels, how deep the roughing goes and the number of passes.</li>
 </ol>
 <p>The roughing is added as one object ahead of the finishing relief of the same file, so it is cut first. Both objects get a tool identity (<strong>Roughing · 6.35 mm flat</strong>, <strong>Finishing · 3.175 mm ball</strong>), because they use different cutters and cannot share one program:</p>
@@ -4779,12 +4864,24 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 <p>A pass at a level runs along a raster wherever stock is left below the level above. It cuts at the level, or at the cutter's contact where that is higher. So each pass takes at most one step of depth, no pass goes below the contact, and when the last level is done the cutter has been to its contact everywhere. Along a level a pass is one straight move; where it follows the contact it has a point at each raster vertex, like the finishing pass.</p>
 <p>The passes carry their own levels, so the roughing object's step down is set to its whole depth: the job cuts each pass once.</p>
 <p>The limits are those of the relief: undercuts cannot be machined, the model is seen from above, and the cutter's overhang at the edges of the map must be clear. Roughing is refused beyond 400 levels or 400,000 points: use a larger step, a wider stepover or a coarser map.</p>
+<h2>Adaptive clearing</h2>
+<p>At each level the cutter goes down a helix in the widest room there is, turning at about five degrees, and then peels the stock away, always taking about the width of cut you set. When it runs out of stock it can take that way, it goes through what it has cleared to the nearest place where it can carry on; if that is far it lifts out and comes down again there. With a width of cut of 40% of the cutter and a step down of the cutter's diameter or more, the cutter works with its whole flute and a light, even load, where the level passes bury it at every entry.</p>
+<p>What to know before using it:</p>
+<ul>
+<li><strong>Slopes are left in steps.</strong> Each level is flat. On a slope the stock stands up to one step down above the allowance until the next level, and after the last level a staircase remains for the finishing pass. Use a smaller step down, or the level passes, where the finishing cutter is slender.</li>
+<li><strong>Walls keep a little more than the allowance.</strong> The cutter's position is worked out on a grid, of the smaller of a twentieth of its diameter and 0.4 of the width of cut, and it is kept far enough from every wall for any move on that grid to be clear. The extra is reported in the message and as <code>wall_extra</code> (0.54 mm for a 6 mm cutter).</li>
+<li><strong>Where there is no room for a helix the cutter goes straight down</strong>, which needs a centre-cutting end mill. The message counts those entries.</li>
+<li><strong>A channel no wider than the cutter is cut at full width</strong>, since there is no other way through it. The length cut that way is reported as <code>forced_length</code>.</li>
+<li><strong>Brief excursions.</strong> Over any stretch as long as the cutter's radius the width of cut stays near the figure set; over a single short move it can be up to 1.4 times it.</li>
+</ul>
+<p>The paths carry their own depths, like the level passes, and the roughing object is named <strong>Relief roughing (adaptive)</strong>.</p>
 <h2>Command line and route</h2>
 <pre><code>kerfkite-cam relief-roughing request.json
 </code></pre>
-<p>The request is the one <code>kerfkite-cam relief</code> takes, with <code>rough_step</code>, the depth of each level; give <code>tool_shape</code>, <code>tool_diameter</code>, <code>stepover</code> and <code>allowance</code> for the roughing cutter. The answer has <code>paths</code>, <code>path_depths</code>, <code>levels</code>, <code>step</code>, <code>lowest</code>, <code>surface</code> and <code>warnings</code>. <code>POST /api/relief-roughing</code> takes the same request, or an STL as <code>content_base64</code>, as <code>/api/relief</code> does.</p>
+<p>The request is the one <code>kerfkite-cam relief</code> takes, with <code>rough_step</code>, the depth of each level; give <code>tool_shape</code>, <code>tool_diameter</code>, <code>stepover</code> and <code>allowance</code> for the roughing cutter. The answer has <code>paths</code>, <code>path_depths</code>, <code>levels</code>, <code>step</code>, <code>lowest</code>, <code>strategy</code>, <code>surface</code> and <code>warnings</code>. With <code>&quot;rough_strategy&quot;: &quot;adaptive&quot;</code>, <code>stepover</code> is the width of cut to keep and the answer also has <code>engagement</code>, <code>grid</code>, <code>wall_extra</code>, <code>cut_length</code>, <code>forced_length</code>, <code>helix_entries</code> and <code>plunge_entries</code>. <code>POST /api/relief-roughing</code> takes the same request, or an STL as <code>content_base64</code>, as <code>/api/relief</code> does.</p>
 <h2>What has been checked</h2>
 <p><code>tests/test_relief_roughing.py</code> checks the passes against the cutter's contact: none goes below it, each is within its level, the levels come in order from the top, and after the last level every point has been taken to its contact. Separately from the core's contact, it checks every sample of the height field under the flat cutter's footprint at every pass point: the cutter stays the allowance above each. It also generates the passes as a router job. <code>validation/relief_roughing_workflow.py</code> roughs an STL pyramid in a browser, previews the roughing and plans the two tool stages.</p>
+<p>Adaptive clearing is checked in the same file on a grid of the test's own, apart from the core's. Every move, sampled every 0.4 mm, keeps the flat cutter the allowance above every sample of the field under it. The paths come level by level, each entered down a helix that never rises or straight down. The width of cut is measured by the stock each stretch of a cutter's radius takes from the test's cells: for widths of 2.4 and 1.2 mm with a 6 mm cutter its average is below the width set, less than 2% of the cutting is above 1.5 times it, and nowhere does it reach three quarters of the cutter's diameter. And on each level at least 97% of what a cutter can reach, standing as far from the walls as the core keeps it, is cleared.</p>
 <p>No relief has been roughed on a machine.</p>
 </section><section id="request-coverage"><h1>Compatibility and acceptance</h1>
 <p>The <a href="#product">feature matrix</a> records capabilities and open work. See the <a href="#release-review">release verification</a>, <a href="#lightburn-import">format compatibility</a>, <a href="#protocols">controller support</a> and <a href="#platforms">platform measurements</a>. Device commissioning requires an independently measured work envelope, tools, clearances, work origin and controller settings.</p>
@@ -5007,7 +5104,7 @@ kerfkite-cam level request.json           {&quot;lines&quot;:[...],&quot;height_
 <p><strong>Control → Machine setup tools</strong> holds five tools for setting a machine up: finding work zero on a touch plate, reading and changing the controller's settings, calibrating an axis, surfacing the spoilboard and running short macros of your own. The panel appears in the workstation editor, not in the hosted editor or the editor opened from a file.</p>
 <p>Every tool that moves the machine or writes to its controller needs the controller connected and idle, asks before it acts, and is refused while a job runs. They have been exercised on the simulator only. The first use of each on a real machine should be supervised, with a hand near the stop.</p>
 <h2>Zero on a touch plate</h2>
-<p>A touch plate is a metal block of known thickness wired to the controller's probe input, with a clip for the cutter. The tool finds the plate by probing and sets work zero from it. It needs a Grbl-family controller (Grbl 1.1, grblHAL, FluidNC, xPRO V5), which probes with <code>G38.2</code>.</p>
+<p>A touch plate is a metal block of known thickness wired to the controller's probe input, with a clip for the cutter. The tool finds the plate by probing and sets work zero from it. It works with the Grbl family (Grbl 1.1, grblHAL, FluidNC, xPRO V5) and with Marlin, which all probe with <code>G38.2</code>. A Marlin firmware has that move only when it is built with <code>G38_PROBE_TARGET</code>: see <a href="#marlin">Marlin</a> below.</p>
 <p>Test the circuit first: touch the clip to the plate and confirm that the controller's status report shows the probe pin (<code>Pn:P</code>). A probe that does not trigger drives the cutter into the plate until the probe travel is used up.</p>
 <p><strong>Z only.</strong> Lay the plate flat on the stock, place the cutter over it within 15 mm, enter the <strong>Plate thickness</strong>, tick the setup check and choose <strong>Probe and set work zero</strong>. The cutter touches the plate quickly, backs off 1 mm, touches again slowly, sets work Z so that the stock surface is zero, and retracts 5 mm.</p>
 <p><strong>X, Y and Z.</strong> A corner plate hangs over the front-left corner of the stock, with faces to the left and in front that stand a known distance outside the stock's edges. Enter that distance as the <strong>Plate wall</strong>, the <strong>Cutter diameter</strong>, and how near the cutter is to the plate's left and front faces (it must be over the plate, <strong>within</strong> the distance given: when unsure, give a larger figure). After Z, the cutter moves out past the left face, goes 4 mm below the plate's top, probes in against the face twice and sets work X; then the same in front for Y. Work zero is then the corner of the stock at its surface, and the cutter ends 10 mm inside the stock on both axes, above the plate. There must be clear space to the left of and in front of the plate for the cutter to go down.</p>
@@ -5033,15 +5130,48 @@ G0 X23.588                to 10 mm inside the stock
 ...                       the same for Y
 G90
 </code></pre>
+<h3>Marlin</h3>
+<p>On Marlin the zeroing program is the same, except that work zero is set by renaming the present position (<code>G92 Z15.000</code>) where the Grbl family sets a work offset (<code>G10 L20 P1 Z15.000</code>). Marlin has no status report of the probe pin: test the circuit with <code>M119</code> from a macro, which lists the probe's state in the log.</p>
+<p>Two things differ in what happens when it goes wrong:</p>
+<ul>
+<li><strong>A firmware without the probing move.</strong> Marlin answers an unknown command and carries on. A zeroing program that carried on would set work zero wherever the cutter happened to be, so the program is stopped at the first line the firmware says it does not know, and nothing is zeroed.</li>
+<li><strong>A probe that finds nothing.</strong> Marlin reports <code>Failed to reach target</code>. The driver treats any error as a fault: the program stops before zero is set and the controller has to be reconnected.</li>
+</ul>
+<p>Marlin does not report where a probe touched, so <a href="#probe-leveling">probe levelling</a> remains for the Grbl family.</p>
 <h2>Controller settings</h2>
 <p><strong>Show settings</strong> lists the numbered settings the controller reported, with the names of the common Grbl ones. Change a value and choose <strong>Write</strong>: after you confirm, the setting is written (<code>$100=80.125</code>) and every setting is read back, so the list shows what the controller now holds. <strong>Export settings…</strong> saves them all as a JSON file. Export before changing anything: a wrong value can make the machine move the wrong distance or the wrong way.</p>
 <p>Only numbered settings can be written, one at a time. The simulator reports <code>$30</code> and <code>$32</code> and keeps whatever is written to it.</p>
+<h3>Marlin</h3>
+<p>Marlin keeps these settings under M codes, not numbers. <strong>Show settings</strong> lists what the firmware's <code>M503</code> report gave for each of X, Y and Z:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>M92</code></td>
+<td>Steps per millimetre</td>
+</tr>
+<tr>
+<td><code>M203</code></td>
+<td>Maximum feed, in millimetres a second</td>
+</tr>
+<tr>
+<td><code>M201</code></td>
+<td>Maximum acceleration, in millimetres a second squared</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Write</strong> sends the one value (<code>M92 X80.125</code>) and then <code>M503</code>, so the list shows what the firmware now holds. Marlin keeps a change only until it is switched off. <strong>Store in the controller · M500</strong> writes the present settings to its memory, after you confirm; nothing is stored until you choose it, so a setting can be tried and abandoned by cycling the power. Other Marlin settings are not offered here.</p>
 <h2>Calibrate an axis</h2>
 <ol>
 <li>Mark where the axis is, against a rule or with a dial gauge.</li>
 <li>Move it a known distance: with the jog buttons, or with a macro such as <code>G91</code> / <code>G0 X100</code> / <code>G90</code> for a longer move.</li>
 <li>Measure how far it went, choose the <strong>Axis</strong>, and enter the <strong>Commanded</strong> and <strong>Measured</strong> distances. The tool reads the axis's steps per millimetre from the controller's settings and shows the corrected value: steps × commanded ÷ measured.</li>
-<li><strong>Write the corrected steps per mm</strong> writes it as a setting. Repeat the move to confirm.</li>
+<li><strong>Write the corrected steps per mm</strong> writes it as a setting: <code>$100</code>, <code>$101</code> or <code>$102</code> on the Grbl family, <code>M92</code> on Marlin (where it must then be stored to last). Repeat the move to confirm.</li>
 </ol>
 <p>A correction of more than 20% is refused: that is a wrong pulley, microstep setting or measurement, not a calibration.</p>
 <h2>Surface the spoilboard</h2>
@@ -5052,7 +5182,8 @@ G90
 <p>A macro holds plain G-code words only: letters, numbers, spaces and <code>. + -</code>, at most 100 lines of 78 characters. Controller commands that begin with <code>$</code>, such as settings and homing, are refused: use <strong>Controller settings</strong> and the <strong>Home</strong> and <strong>Unlock alarm</strong> buttons. Running a macro forgets a probed surface and cancels a preview armed for the phone, since a macro can move work zero.</p>
 <h2>What has been checked</h2>
 <p><code>tests/test_machine_setup.py</code> runs the routes against the simulator. The simulator's touch plate is at a place the zeroing program is not told; the test follows the program's own moves and the controller's probe reports, works out where work zero ended up, and compares it with the plate's faces, wall and top for several walls and cutters. It also checks a probe that finds nothing, each refusal, a setting written and read back, and what a macro may hold. <code>tests/js/setup-tools.test.cjs</code> checks the calibration arithmetic, that a surfacing pass covers its whole area and stays inside it, and the macro rules. <code>validation/setup_tools_workflow.py</code> drives the panel in a browser.</p>
-<p>None of these tools has been run on a physical controller.</p>
+<p>The Marlin tests in the same file use a simulated Marlin with the plate in the same place. Marlin reports no contacts, so they go by the position the simulator holds: after a corner plate the cutter is 10 mm inside the stock on both axes and 15 mm above it in the new coordinates, for several walls and cutters; a probe that finds nothing stops the program before any <code>G92</code>; a setting is written, read back from <code>M503</code> and stored only when asked; and the status the editor reads is unchanged. <code>validation/setup_tools_workflow.py</code> drives both controllers in a browser.</p>
+<p>None of these tools has been run on a physical controller. Marlin builds differ in what they include and in how they word their reports: the first use on one is the real test of this driver.</p>
 </section><section id="simulation"><h1>Simulation and acceptance</h1>
 <p>From a source checkout, build the native programs as the <a href="#install">installation guide</a> describes. Run the harness from the project root with Python 3.10 or later; the harness itself needs no Python packages. The extended run also requires Node.js with its built-in test runner and the dependencies used by the web tests.</p>
 <pre><code class="language-sh">python scripts/simulate_studio.py --all --json simulation-result.json
@@ -7204,12 +7335,12 @@ python ../kerfkite-reference/validation/solid_kernel_check.py --tool build/nativ
 <p>Templates contain geometry, not preconfigured cutting jobs. Toy designs and learning boards are scalable craft patterns, not validated mechanical assembly plans or certified children's products. Set dimensions, material thickness, hole sizes and fit allowances before fabrication. Some designs combine closed outlines and open engraving detail; assign appropriate operations. Stencil bridges, one-piece silhouette unions and automatic assembly tolerances are not included. Physical cut quality and suitability require review.</p>
 <p>MCP searches the bundled index and loads geometry when you select a template. Offline SVG export uses the same indexed artwork. Regenerate the catalogue and its packed geometry with <code>node scripts/build_templates.cjs</code>.</p>
 </section><section id="tiling"><h1>Tiling an oversized job</h1>
-<p>A design larger than the machine can reach is cut one tile at a time. <strong>CAM → Tile an oversized job</strong> divides the previewed router job into a grid of tiles from the origin, and gives each tile a program of its own in which the tile's front-left corner is X0 Y0. You cut a tile, slide the sheet along by exactly one tile, and cut the next.</p>
-<p>Tiling applies to router jobs. Laser, knife and rotary jobs are not tiled, and a tiled job does not follow a probed surface.</p>
+<p>A design larger than the machine can reach is cut one tile at a time. <strong>CAM → Tile an oversized job</strong> divides the previewed job into a grid of tiles from the origin, and gives each tile a program of its own in which the tile's front-left corner is X0 Y0. You cut a tile, slide the sheet along by exactly one tile, and cut the next.</p>
+<p>Router, knife and laser jobs can be tiled. Rotary jobs are not, and a tiled job does not follow a probed surface.</p>
 <h2>Divide the job</h2>
 <ol>
 <li>Set the <strong>work area</strong> to the size of the whole sheet, up to 2,000 mm each way, and place the design in it.</li>
-<li>Choose router mode, set the operations and generate a preview as usual.</li>
+<li>Choose the mode (router, knife or laser), set the operations and generate a preview as usual.</li>
 <li>Under <strong>Tile an oversized job</strong>, enter the <strong>Tile width</strong> and <strong>Tile height</strong>: the travel of the machine, or a little less.</li>
 <li>Choose <strong>Divide the previewed job into tiles</strong>. The panel lists each tile that has cutting in it, with the corner of the design it starts from and the length it cuts. Tiles with nothing to cut are left out.</li>
 </ol>
@@ -7222,15 +7353,17 @@ python ../kerfkite-reference/validation/solid_kernel_check.py --tool build/nativ
 </ol>
 <h2>What a tile's program does</h2>
 <p>A cut is kept in a tile only where it lies inside the tile. Where a cut leaves the tile, the tool retracts to the job's clearance height. Where a cut enters, the tool travels to the entry point at the clearance height and comes down to the cut's depth at the job's plunge feed. A cut along the shared edge of two tiles is made in both. Everything else in the job (units, spindle on, dwell, spindle off) is in every tile's program, so each is complete on its own. A tile that holds the whole job is the job, line for line.</p>
+<p><strong>A knife job</strong> is divided as a router job is: the blade lifts where a cut leaves a tile and comes down where one enters. A drag knife that comes down in the middle of a cut has not been turned to the cut's direction by a lead-in, so allow for the blade's offset where cuts cross a tile's edge, or place tile edges away from fine detail.</p>
+<p><strong>A laser job</strong> has no heights. In a tile the beam is put on (the job's own <code>M3</code> or <code>M4</code> with its power) only at the start of a cut inside the tile, with the head already there, and is put out (<code>M5</code>) wherever a cut leaves the tile and before every travel. Each burning move carries its feed and power. Engraving passes that repeat are divided pass by pass.</p>
 <p>The divider reads the job's own program, as the leveller does: absolute millimetre moves in straight lines. A job with a rapid across the work below its clearance height is refused, since the tool could not be lifted out of a tile safely.</p>
 <h2>Command line and route</h2>
 <pre><code>kerfkite-cam tile request.json        {&quot;lines&quot;: [...], &quot;tile_width&quot;: 300, &quot;tile_height&quot;: 200}
 </code></pre>
-<p>The answer has <code>columns</code>, <code>rows</code>, <code>bounds</code>, and <code>tiles</code>, each with <code>column</code>, <code>row</code>, <code>origin</code>, <code>lines</code> and <code>cut_length</code>. <code>plunge</code> sets the feed for coming back down into a cut; by default it is the feed of the job's own plunges. A request the tool rejects exits with status 2 and the reason on standard error.</p>
+<p>The answer has <code>columns</code>, <code>rows</code>, <code>bounds</code>, <code>kind</code> (<code>cutter</code> or <code>laser</code>, told by the power on the cutting moves) and <code>tiles</code>, each with <code>column</code>, <code>row</code>, <code>origin</code>, <code>lines</code> and <code>cut_length</code>. <code>plunge</code> sets the feed for coming back down into a cut; by default it is the feed of the job's own plunges. A request the tool rejects exits with status 2 and the reason on standard error.</p>
 <p><code>POST /api/tile</code> takes <code>{&quot;project&quot;, &quot;tile_width&quot;, &quot;tile_height&quot;}</code>, generates the project's job and answers the same. It makes files only. <code>POST /api/run</code> accepts <code>&quot;tile&quot;: {&quot;width&quot;, &quot;height&quot;, &quot;column&quot;, &quot;row&quot;}</code> to run one tile of the project.</p>
 <h2>What has been checked</h2>
-<p><code>tests/test_tiling.py</code> follows every tile's program with an interpreter written for the test. Moved back by the tile's origin, the cuts of all tiles must lie on the job's cuts at the job's depths, and their length must add up to the job's: nothing cut twice, nothing left out. Within a tile the tool never crosses the work below the clearance, never leaves the tile and never starts a cut from somewhere it is not. It checks several tile sizes, ramped cuts, each refusal, and a tile run on the simulator. <code>validation/tiling_workflow.py</code> drives the panel in a browser.</p>
-<p>No tiled job has been cut on a machine. The accuracy of the result depends on how truly the sheet is moved between tiles.</p>
+<p><code>tests/test_tiling.py</code> follows every tile's program with an interpreter written for the test. Moved back by the tile's origin, the cuts of all tiles must lie on the job's cuts at the job's depths, and their length must add up to the job's: nothing cut twice, nothing left out. Within a tile the tool never crosses the work below the clearance, never leaves the tile and never starts a cut from somewhere it is not. It checks several tile sizes, ramped cuts, each refusal, and a tile run on the simulator. A laser job's tiles are followed the same way with the beam in mind: it is on only during burning moves, never during travel and never at the end of a program, at the job's power, and the tiles burn the job's length exactly. A knife job's tiles are checked as a router's are. <code>validation/tiling_workflow.py</code> drives the panel in a browser.</p>
+<p>No tiled job has been cut or burnt on a machine. The accuracy of the result depends on how truly the sheet is moved between tiles.</p>
 </section><section id="tool-library"><h1>Tool library and starting feeds</h1>
 <p><strong>CAM → Tool library · feeds and speeds</strong> keeps a list of the cutters you own and works out starting settings for one of them in a material. <strong>Use these settings</strong> enters them in the CAM fields: cutter diameter, feed, plunge, spindle speed, step down and stepover, with the V-bit or drill angle where the tool has one. Nothing is sent to a machine, and the preview is cleared so that the next one uses the new values.</p>
 <p>The values are a place to begin. They come from a calculation, not from a test on your machine. Cut a sample in scrap, listen to the cut, look at the chips and adjust. Record what worked in the <a href="#materials">sample notebook</a> or save it with <strong>Save settings preset</strong>.</p>

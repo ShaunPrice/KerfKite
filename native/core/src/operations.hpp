@@ -54,7 +54,9 @@ struct VCarve {
 // a V-bit of the given whole angle in degrees and radius, sampled every `resolution` millimetres and cut
 // no deeper than max_depth. Throws the reference's message for an outline of more than 12,000 samples,
 // and the generator's for a carve of more than 200,000 points. The result may be empty. See vcarve.cpp.
-VCarve vcarve_paths(const polygon::PolygonSet &g, double resolution, double angle, double max_depth, double radius);
+// start: a depth below the stock top at which the outline is cut (0 for an ordinary carve); max_depth is then the
+// depth below that.
+VCarve vcarve_paths(const polygon::PolygonSet &g, double resolution, double angle, double max_depth, double radius, double start = 0);
 
 // depths is left empty unless the operation gives a depth to every point of its paths (V-carving).
 std::vector<std::string> prepare_operation(const json &project, std::vector<std::vector<std::array<double, 2>>> &paths,
