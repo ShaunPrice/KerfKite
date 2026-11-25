@@ -185,7 +185,7 @@ $('setupSettingsExport').onclick=task(async()=>{
  await features();
  const settings=marlin()?setup.report?.settings||{}:latest?.settings||{};
  if(!Object.keys(settings).length)throw Error('There are no settings to export; connect the controller first');
- download('controller-settings.json',JSON.stringify({format:'kerfkite-controller-settings/1',protocol:latest.protocol,identification:latest.identification||[],settings},null,1),'application/json');
+ download('controller-settings.json',JSON.stringify({format:'kerfkite-controller-settings/1',protocol:setup.protocol||latest?.protocol||null,identification:latest?.identification||[],settings},null,1),'application/json');
 });
 
 // ---- calibration ----

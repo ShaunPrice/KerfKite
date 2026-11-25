@@ -605,6 +605,7 @@ void tile_laser_program(const std::vector<std::string> &lines, const double box[
         py = y;
         if (out.size() > 2000000) throw ValueError("A tile's program exceeds 2,000,000 lines");
     }
+    dark();  // a program that never puts its beam out still leaves each tile dark
 }
 
 }  // namespace

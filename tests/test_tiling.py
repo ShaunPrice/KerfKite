@@ -291,6 +291,12 @@ class OtherHeadsTests(unittest.TestCase):
                     total += tile['cut_length']
                 self.assertAlmostEqual(total, length(whole), delta=0.05 + 0.002 * len(whole))
 
+    def test_a_program_that_leaves_its_beam_on_still_gives_dark_tiles(self):
+        lines = ['G21', 'G90', 'G0 X5 Y5', 'M4 S100', 'G1 X15 Y5 F300 S100']  # no M5 at the end
+        answer = call('tile', {'lines': lines, 'tile_width': 20, 'tile_height': 20})
+        self.assertEqual(answer['tiles'][0]['lines'][-1], 'M5')
+        follow_laser(answer['tiles'][0]['lines'], self, (20, 20))
+
     def test_a_laser_job_with_a_height_in_it_is_refused(self):
         with self.assertRaisesRegex(ValueError, 'a laser job with a height in it'):
             call(
