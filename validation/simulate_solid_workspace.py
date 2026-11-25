@@ -194,6 +194,11 @@ def lessons(args, url, step, server):
             from simulate_exchange_workspace import run as exchange
             from probe_leveling_workflow import run as probe_leveling
             from pcb_workflow import run as circuit_board
+            from tool_library_workflow import run as tool_library
+            from joinery_workflow import run as joinery
+            from setup_tools_workflow import run as setup_tools
+            from tiling_workflow import run as tiling
+            from relief_roughing_workflow import run as relief_roughing
 
             # Each lesson can modify the example or viewport.
             for lesson in (
@@ -224,6 +229,11 @@ def lessons(args, url, step, server):
                 machining_lessons,
                 probe_leveling,
                 circuit_board,
+                tool_library,
+                joinery,
+                setup_tools,
+                tiling,
+                relief_roughing,
             ):
                 with browser.new_context(viewport={"width": 1440, "height": 980}, accept_downloads=True) as context:
                     workshop = context.new_page()

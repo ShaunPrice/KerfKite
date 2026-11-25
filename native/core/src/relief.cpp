@@ -864,8 +864,86 @@ std::string relief_gpu_status() {
 
 std::string last_relief_contact() { return last_path; }
 
-bool relief_command(const std::string &command) { return command == "relief"; }
+// Roughing passes for a relief: the stock is taken down level by level before the finishing pass.
+//
+// The contact of the roughing cutter is prepare_relief's own, with the allowance left on: at each raster vertex it
+// is the deepest that cutter may go. Level k lies k steps below the stock top. A pass at level k runs along each
+// raster wherever stock is left below the level above, at the level or at the cutter's contact, whichever is
+// higher, so it takes at most one step of depth and never goes below the contact. Between vertices a pass is
+// straight, as the finishing pass is.
+Json relief_roughing(const Json &data) {
+    if (!data.is_object()) throw ValueError("Relief input must be an object");
+    const json *step_value = get(data, "rough_step");
+    if (!step_value || step_value->is_boolean() || !step_value->is_number() || !std::isfinite(step_value->get<double>()) ||
+        step_value->get<double>() < 0.05 || step_value->get<double>() > 100)
+        throw ValueError("Roughing step down must be between 0.05 and 100");
+    const double step = step_value->get<double>();
+    json request = data;
+    request.erase("rough_step");
+    const json finish = prepare_relief(request);
+    const json &rasters = finish.at("paths");
+    const json &contacts = finish.at("path_depths");
+    double lowest = 0;
+    for (const json &row : contacts)
+        for (const json &z : row) lowest = std::min(lowest, z.get<double>());
+    const double eps = 1e-9;
+    if (lowest > -eps) throw ValueError("There is nothing to rough: the relief leaves the whole stock at its top");
+    const int levels = static_cast<int>(std::ceil(-lowest / step - eps));
+    if (levels > 400) throw ValueError("That is more than 400 roughing levels; use a larger step down");
+    json::Array paths, depth_rows;
+    size_t points = 0;
+    for (int level = 1; level <= levels; ++level) {
+        const double above = -step * (level - 1), here = std::max(-step * level, lowest);
+        for (size_t r = 0; r < rasters.size(); ++r) {
+            const json &raster = rasters[r];
+            const json &row = contacts[r];
+            const size_t n = row.size();
+            size_t i = 0;
+            while (i < n) {
+                // A stretch of vertices with stock left below the level above.
+                if (!(row[i].get<double>() < above - eps)) {
+                    ++i;
+                    continue;
+                }
+                size_t last = i;
+                while (last + 1 < n && row[last + 1].get<double>() < above - eps) ++last;
+                // One vertex further each way, where the surface is at or above the level above: the pass starts
+                // and ends on the surface the level above left.
+                const size_t from = i > 0 ? i - 1 : i, to = last + 1 < n ? last + 1 : last;
+                json::Array path, z;
+                for (size_t k = from; k <= to; ++k) {
+                    const double depth = std::max(row[k].get<double>(), here);
+                    // Along a level the pass is one straight line: only its ends are kept.
+                    if (k > from && k < to && depth == here && !z.empty() && z.back().get<double>() == here &&
+                        std::max(row[k + 1].get<double>(), here) == here)
+                        continue;
+                    path.push_back(raster[k]);
+                    z.push_back(json(depth));
+                }
+                points += path.size();
+                if (points > 400000) throw ValueError("The roughing passes exceed 400,000 points; use a coarser map, a wider stepover or a larger step down");
+                paths.push_back(json(std::move(path)));
+                depth_rows.push_back(json(std::move(z)));
+                i = last + 1;
+            }
+        }
+    }
+    json warnings = finish.at("warnings");
+    warnings.push_back("Roughing passes cut at full width where they enter the stock: use a feed and a step down the cutter can take in a slot.");
+    return json{{"paths", json(std::move(paths))},
+                {"path_depths", json(std::move(depth_rows))},
+                {"levels", levels},
+                {"step", step},
+                {"lowest", lowest},
+                {"device", finish.at("device")},
+                {"surface", finish.at("surface")},
+                {"warnings", std::move(warnings)}};
+}
 
-Json relief_call(const std::string &, const Json &request) { return prepare_relief(request); }
+bool relief_command(const std::string &command) { return command == "relief" || command == "relief-roughing"; }
+
+Json relief_call(const std::string &command, const Json &request) {
+    return command == "relief-roughing" ? relief_roughing(request) : prepare_relief(request);
+}
 
 }  // namespace kerfkite

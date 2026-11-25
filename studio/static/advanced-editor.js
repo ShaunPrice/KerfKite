@@ -53,7 +53,7 @@ const nodeSelection=renderSelection;renderSelection=function(){nodeSelection();i
 $('canvas').addEventListener('pointerdown',e=>{if(!e.target.dataset.node)return;e.stopImmediatePropagation();const[pi,vi]=e.target.dataset.node.split(',').map(Number);nodeDrag={id:e.pointerId,pi,vi};$('canvas').setPointerCapture(e.pointerId);},true);
 $('canvas').addEventListener('pointermove',e=>{if(!nodeDrag)return;e.stopImmediatePropagation();const p=objects[selected].paths[nodeDrag.pi],wasClosed=p.length>2&&p[0][0]===p.at(-1)[0]&&p[0][1]===p.at(-1)[1],[x,y]=canvasPoint(e);p[nodeDrag.vi]=[Math.max(0,Math.min(Number($('width').value),x)),Math.max(0,Math.min(Number($('height').value),y))];if(wasClosed&&nodeDrag.vi===0)p[p.length-1]=[...p[0]];delete objects[selected].textOptions;repaintActiveObject();},true);
 $('canvas').addEventListener('pointerup',e=>{if(!nodeDrag)return;e.stopImmediatePropagation();nodeDrag=null;invalidate();draw();},true);
-$('makeRelief').onclick=task(async()=>{
+async function reliefRequest(){
   const file=$('reliefFile').files[0];
   if(!file) throw Error('Choose a grayscale image or STL');
   if(file.size>8e6) throw Error('File exceeds 8 MB');
@@ -85,6 +85,11 @@ $('makeRelief').onclick=task(async()=>{
       return (.2126*pixels[i]+.7152*pixels[i+1]+.0722*pixels[i+2])/255;
     }));
   }
+  return {file,data};
+}
+window.CNCReliefRequest=reliefRequest;
+$('makeRelief').onclick=task(async()=>{
+  const {file,data}=await reliefRequest();
   message('Calculating cutter contact…');
   const result=await api('relief',data);
   const link=await CNCSolidLinks.reliefLink(file,data,result);
