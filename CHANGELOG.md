@@ -4,6 +4,10 @@ Notable changes to KerfKite Studio and KerfKite Pocket. Versions before this fil
 
 ## Unreleased
 
+## 0.8.0 — 2026-11-27
+
+Studio 0.8.0 adds a tool library, machine setup tools, joinery and project wizards, tiling, relief roughing with adaptive clearing, V-carved inlays and a pen head for drawing, including round a cylinder. None of the new machine functions has been run on a physical machine: they were checked against the simulated controllers.
+
 ### Added
 - **Machine setup tools.** **Control → Machine setup tools** finds work zero on a touch plate (Z alone, or X, Y and Z on a corner plate, each touched twice), lists the controller's numbered settings and writes one at a time with a read-back, corrects an axis's steps per millimetre from a measured move, adds a spoilboard surfacing job to the design, and keeps and runs operator macros of plain G-code. The workstation server gains `GET /api/setup` and `POST /api/setup/probe`, `/setting` and `/macro`, which need the controller idle and the operator's confirmation; the Grbl simulator gains relative moves, a touch plate and settings that keep what is written. Exercised on the simulator only. See [Machine setup tools](docs/SETUP-TOOLS.md).
 - **Tiling an oversized job.** **CAM → Tile an oversized job** divides a router job larger than the machine into a program for each tile, with the tile's corner as X0 Y0: cuts are kept where they lie in the tile, with a retract where one leaves and a plunge where one enters. A tile is exported, or run at the workstation with the usual confirmation. In the core as `kerfkite-cam tile`, with `POST /api/tile` and a `tile` field of `POST /api/run`. See [Tiling an oversized job](docs/TILING.md).
@@ -25,7 +29,7 @@ Notable changes to KerfKite Studio and KerfKite Pocket. Versions before this fil
 ### Development
 - The board and levelling tests run against the native programs. `tests/test_pcb_import.py`, `test_pcb_isolation.py`, `test_pcb_api.py` and `test_leveling.py` are ported from the Python reference's tests of the same names: `tests/kerfkite_core.py` hands their requests to `kerfkite-cam`, and the route tests start `kerfkite-studio` and `kerfkite-web`. The **Build and check the native programs** workflow now runs every test in `tests/` on each platform, and stops if the programs or Shapely, the oracle, are missing. Tests of the reference's own Python wrapper (a missing or older extension, raw request text) had nothing left to test and are not carried over.
 - The launcher's shortcut tests pass on every host. Run on macOS and Windows for the first time, the tests of the Linux and macOS shortcut rules failed: they named a temporary folder through macOS's symbolic link, and expected POSIX paths and permissions on Windows. They now use the folder's real path, as the launcher does for its own program, and run on POSIX hosts. The launcher itself is unchanged.
-- The installer and SBC package checks default to the `v0.7.0` tag, and the performance guide records [Studio 0.7.0 against 0.6.1](docs/PERFORMANCE.md#studio-070-against-061).
+- The installer and SBC package checks default to the release's tag, and the performance guide records [Studio 0.7.0 against 0.6.1](docs/PERFORMANCE.md#studio-070-against-061).
 
 ## 0.7.0 — 2026-11-24
 
