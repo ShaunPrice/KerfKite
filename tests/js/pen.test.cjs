@@ -38,3 +38,26 @@ test('a broad nib and repeated passes match the core',()=>{
   assert.throws(()=>offline.generate(project({pen_lift:'magnet'})),/Pen lift must be z or servo/);
   assert.throws(()=>offline.generate(project({mode:'plasma'})),/Choose router, laser or knife/);
 });
+
+// ---- a pen on a rotary axis: the editor's wrapper against the same programs as the core's ----
+const {wrap}=require(path.join(root,'rotary-cam.js'));
+const ROUND=[[[0,10],[31.416,10],[31.416,40]],[[5,20],[15,30]]],SETUP={diameter:20,wrap_axis:'X',postprocessor:'grblhal'};
+test('a Z pen and a servo pen are wrapped round a cylinder as the core wraps them',()=>{
+  const z=wrap(offline.generate(project({paths:ROUND})),SETUP);
+  assert.deepEqual(z.lines,['G21','G90','G17','G93','G54','M5','G0 Z3.000000','G0 Z3.000000','G0 A0.000000 X10.000000','G1 Z-1.000000 F150.000000000',
+    'G1 A180.000421 X10.000000 F47.746371276','G1 A180.000421 X40.000000 F50.000000000','G0 Z3.000000','G0 Z3.000000','G0 A28.647890 X20.000000',
+    'G1 Z-1.000000 F150.000000000','G1 A85.943669 X30.000000 F106.066017178','G0 Z3.000000','M5','G94 F1500.000000']);
+  const servo=wrap(offline.generate(project({paths:ROUND,pen_lift:'servo'})),SETUP);
+  assert.deepEqual(servo.lines,['G21','G90','G17','G93','G54','M5','M5','G4 P0.200','G0 A0.000000 X10.000000','M3 S1000','G4 P0.200',
+    'G1 A180.000421 X10.000000 F47.746371276','G1 A180.000421 X40.000000 F50.000000000','M5','G4 P0.200','G0 A28.647890 X20.000000','M3 S1000','G4 P0.200',
+    'G1 A85.943669 X30.000000 F106.066017178','M5','G4 P0.200','M5','G94 F1500.000000']);
+  assert.deepEqual(servo.rotary.radial_bounds,[0,0]);
+});
+test('a holder held up by a value may end raised; nothing else may end without M5',()=>{
+  const held=wrap(offline.generate(project({paths:ROUND,pen_lift:'servo',pen_up_power:200})),SETUP);
+  assert.deepEqual(held.lines.slice(-3),['M3 S200','G4 P0.200','G94 F1500.000000']);
+  const head=['G21','G90','G17','G94','G54','M5'],stroke=['G0 X0 Y10','M3 S900','G4 P0.2','G1 X10 Y10 F600'];
+  assert.throws(()=>wrap({mode:'pen',lines:[...head,...stroke]},SETUP),/final M5/);
+  assert.throws(()=>wrap({mode:'router',lines:[...head,'G0 Z5',...stroke,'M3 S100']},SETUP),/final M5/);
+  assert.throws(()=>wrap({mode:'knife',lines:[...head,'M5']},SETUP));
+});

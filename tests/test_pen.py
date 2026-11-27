@@ -12,7 +12,7 @@ import time
 import unittest
 from pathlib import Path
 
-from kerfkite_core import CLI, generate
+from kerfkite_core import CLI, call, generate
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from validation import native_servers  # noqa: E402 - after the path of the checkout
@@ -225,6 +225,148 @@ class PenTests(unittest.TestCase):
         self.assertEqual(strokes[0], [(10.0, 10.0), (50.0, 10.0)])
         self.assertEqual(len(strokes), 1 + 3 + 3)
         self.assertFalse(any(line.startswith(('M3', 'M4')) for line in job['lines']))
+
+
+def wrapped(lines, diameter, axis='A', axial='X', radial='Z', down_value=None, up_value=None):
+    """The strokes a rotary program draws, as (angle in degrees, axial) points, with the checks of drawn()."""
+    angle = along = height = None
+    output = 0
+    strokes = []
+    for line in lines:
+        words = line.split()
+        if words[0] == 'M3':
+            output = float(words[1][1:])
+        elif words[0] == 'M5':
+            output = 0
+        if words[0] not in ('G0', 'G1'):
+            continue
+        at = {w[0]: float(w[1:]) for w in words[1:]}
+        assert not set(at) - {axis, axial, radial, 'F'}, f'an axis the setup does not use: {line}'
+        na, nx, nz = at.get(axis, angle), at.get(axial, along), at.get(radial, height)
+        moves = na != angle or nx != along
+        if down_value is None:
+            down = height is not None and height < 0 and nz < 0
+        else:
+            assert radial not in at, f'a servo pen moves the radial axis: {line}'
+            down = output == down_value
+            assert output in (down_value, up_value), line
+        if moves and words[0] == 'G0':
+            assert not down, f'travel with the pen down: {line}'
+        if moves and words[0] == 'G1' and down:
+            assert 'F' in at, f'a stroke without its feed: {line}'
+            if strokes and strokes[-1][-1] == (angle, along):
+                strokes[-1].append((na, nx))
+            else:
+                strokes.append([(angle, along), (na, nx)])
+        angle, along, height = na, nx, nz
+    return strokes
+
+
+@unittest.skipUnless(CLI, NOT_BUILT)
+class RotaryPenTests(unittest.TestCase):
+    """Drawing round a cylinder: the design's X becomes the angle and its Y the position along the axis."""
+
+    DIAMETER = 20
+    PATHS = [[[0, 10], [31.416, 10], [31.416, 40]], [[5, 20], [15, 30]]]
+
+    def rotary(self, changes=None, **options):
+        setup = {'diameter': self.DIAMETER, 'wrap_axis': 'X', 'postprocessor': 'grblhal', **options}
+        return call('rotary', {'project': project(**{'paths': self.PATHS, **(changes or {})}), 'options': setup})
+
+    def expected(self, direction=1, offset=0):
+        around = math.pi * self.DIAMETER
+        return [[(offset + direction * 360 * x / around, float(y)) for x, y in path] for path in self.PATHS]
+
+    def assert_strokes(self, strokes, expected):
+        self.assertEqual(len(strokes), len(expected))
+        for stroke, design in zip(strokes, expected):
+            self.assertEqual(len(stroke), len(design))
+            for (angle, along), (want_angle, want_along) in zip(stroke, design):
+                self.assertAlmostEqual(angle, want_angle, 5)
+                self.assertAlmostEqual(along, want_along, 5)
+
+    def test_a_z_pen_draws_round_the_cylinder_with_the_spindle_off(self):
+        job = self.rotary()
+        self.assertEqual(job['mode'], 'pen')
+        self.assertFalse(any(line.startswith(('M3', 'M4')) for line in job['lines']))
+        self.assert_strokes(wrapped(job['lines'], self.DIAMETER), self.expected())
+        # Half way round: 31.416 mm of a 62.832 mm circumference.
+        self.assertAlmostEqual(job['rotary']['angle_bounds'][1], 180, 2)
+        self.assertEqual(job['rotary']['radial_bounds'], [-1, 3])
+        # Strokes are fed in inverse time, and the feed mode is put back at the end.
+        self.assertIn('G93', job['lines'])
+        self.assertEqual(job['lines'][-2:], ['M5', 'G94 F1500.000000'])
+        self.assertTrue(any('spindle stays off' in warning for warning in job['warnings']))
+
+    def test_a_servo_pen_draws_at_the_surface_and_never_moves_the_radial_axis(self):
+        job = self.rotary({'pen_lift': 'servo'})
+        self.assert_strokes(wrapped(job['lines'], self.DIAMETER, down_value=1000, up_value=0), self.expected())
+        self.assertEqual(job['rotary']['radial_bounds'], [0, 0])
+        self.assertEqual(sum(line == 'G4 P0.200' for line in job['lines']), 5)  # raised once, then down and up twice
+        self.assertFalse(any('Z' in line for line in job['lines']))
+
+    def test_a_holder_held_up_by_a_value_ends_raised_not_switched_off(self):
+        job = self.rotary({'pen_lift': 'servo', 'pen_up_power': 200}, postprocessor='xpro-v5')
+        self.assert_strokes(wrapped(job['lines'], self.DIAMETER, down_value=1000, up_value=200), self.expected())
+        self.assertEqual(job['lines'][-3:], ['M3 S200', 'G4 P0.200', 'G94 F1500.000000'])
+        self.assertEqual(job['lines'].count('M5'), 1)  # the start-up line only
+        # Without a pause the program ends on the raising itself.
+        still = self.rotary({'pen_lift': 'servo', 'pen_up_power': 200, 'pen_dwell': 0})
+        self.assertEqual(still['lines'][-2:], ['M3 S200', 'G94 F1500.000000'])
+
+    def test_direction_start_angle_and_the_other_axes_are_followed(self):
+        job = self.rotary(direction=-1, angle_offset=15, output_axis='B')
+        self.assert_strokes(wrapped(job['lines'], self.DIAMETER, axis='B', axial='Y'), self.expected(-1, 15))
+        job = self.rotary({'pen_lift': 'servo'}, output_axis='C')
+        self.assert_strokes(
+            wrapped(job['lines'], self.DIAMETER, axis='C', axial='Z', radial='X', down_value=1000, up_value=0),
+            self.expected(),
+        )
+
+    def test_a_nib_and_hatching_are_wrapped_with_the_drawing(self):
+        nib = self.rotary({'pen_nib': 1.2, 'pen_nib_angle': 90, 'pen_tip': 0.4, 'paths': [[[5, 20], [25, 20]]]})
+        strokes = wrapped(nib['lines'], self.DIAMETER)
+        self.assertEqual(sorted(round(stroke[0][1], 3) for stroke in strokes), [19.4, 19.8, 20.2, 20.6])
+        square = [[5, 10], [25, 10], [25, 20], [5, 20], [5, 10]]
+        fill = self.rotary({'operation': 'fill', 'interval': 2, 'paths': [square]})
+        self.assertEqual(
+            sorted({round(stroke[0][1], 3) for stroke in wrapped(fill['lines'], self.DIAMETER)}),
+            [10, 12, 14, 16, 18, 20],
+        )
+
+    def test_linuxcnc_takes_a_pen_as_a_file_and_the_fixture_is_checked(self):
+        job = self.rotary({'protocol': 'linuxcnc'}, postprocessor='linuxcnc')
+        self.assertTrue(job['rotary']['export_only'])
+        self.assert_strokes(wrapped(job['lines'], self.DIAMETER), self.expected())
+        with self.assertRaisesRegex(ValueError, 'exceeds the fixture axial window'):
+            self.rotary(fixture={'axial_min': 0, 'axial_max': 30, 'min_radius': 0})
+        # A pen pressed into the fixture's protected core is refused like a cutter.
+        with self.assertRaisesRegex(ValueError, 'protected fixture core'):
+            self.rotary(fixture={'axial_min': 0, 'axial_max': 50, 'min_radius': 9.5})
+
+    def test_given_lines_are_held_to_the_same_rules(self):
+        setup = {'diameter': 20, 'wrap_axis': 'X', 'postprocessor': 'grblhal'}
+        head = ['G21', 'G90', 'G17', 'G94', 'G54', 'M5']
+        stroke = ['G0 X0 Y10', 'M3 S900', 'G4 P0.2', 'G1 X10 Y10 F600']
+        ok = call('rotary-wrap', {'job': {'mode': 'pen', 'lines': [*head, *stroke, 'M5']}, 'options': setup})
+        self.assertIn('M3 S900', ok['lines'])
+        held = call(
+            'rotary-wrap', {'job': {'mode': 'pen', 'lines': [*head, *stroke, 'M3 S100', 'G4 P0.2']}, 'options': setup}
+        )
+        self.assertEqual(held['lines'][-3:-1], ['M3 S100', 'G4 P0.2'])
+        # A program that ends with the pen down, or on anything else, is refused.
+        for tail in (['G4 P0.2'], ['G1 X12 Y10 F600'], []):
+            with self.assertRaisesRegex(ValueError, 'must end with spindle off'):
+                call('rotary-wrap', {'job': {'mode': 'pen', 'lines': [*head, *stroke, *tail]}, 'options': setup})
+        # Only a pen may end held up: a router's program must end with the spindle off, as before.
+        with self.assertRaisesRegex(ValueError, 'must end with spindle off'):
+            call(
+                'rotary-wrap',
+                {'job': {'mode': 'router', 'lines': [*head, 'G0 Z5', *stroke, 'M3 S100']}, 'options': setup},
+            )
+        # A knife is still not a rotary head.
+        with self.assertRaisesRegex(ValueError, 'LinuxCNC supports router jobs only'):
+            call('rotary-wrap', {'job': {'mode': 'knife', 'lines': [*head, 'M5']}, 'options': setup})
 
 
 @unittest.skipUnless(STUDIO, 'kerfkite-studio is not built: build native/ into build/native')

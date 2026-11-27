@@ -7,7 +7,7 @@
     <label>Design axis to wrap<select id="rotaryAxis"><option value="Y">Y → angle (X stays axial)</option><option value="X">X → angle (Y design becomes axial)</option></select></label>
     <label>Start angle · degrees<input id="rotaryAngle" type="number" min="-360000" max="360000" value="0" step="any"></label>
     <label>Direction<select id="rotaryDirection"><option value="1">Positive</option><option value="-1">Reverse</option></select></label>
-    <label>Postprocessor<select id="rotaryPost"><option value="linuxcnc">LinuxCNC · router export</option><option value="grblhal">grblHAL · rotary router or laser</option><option value="xpro-v5">xPRO V5 · independent A (XYAZ firmware)</option></select></label>
+    <label>Postprocessor<select id="rotaryPost"><option value="linuxcnc">LinuxCNC · router or pen export</option><option value="grblhal">grblHAL · rotary router, laser or pen</option><option value="xpro-v5">xPRO V5 · independent A (XYAZ firmware)</option></select></label>
     <label>Physical rotary axis<select id="rotaryOutput"><option value="A">A around X · radial Z</option><option value="B">B around Y · radial Z</option><option value="C">C around Z · radial X</option></select></label>
     <label>Feed reference<select id="rotaryFeed"><option value="surface">Nominal stock surface</option><option value="cut">At cutting radius</option></select></label>
     <label><input id="rotaryFixture" type="checkbox"> Check fixture clearance envelope</label>

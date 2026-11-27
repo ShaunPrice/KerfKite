@@ -1,4 +1,4 @@
-"""Draw with a pen: single-line lettering and a shape, by the Z axis and by a servo, with a broad nib and hatching."""
+"""Draw with a pen: lettering and a shape, by the Z axis and by a servo, with a nib and hatching; then round a cylinder."""
 
 from playwright.sync_api import expect
 
@@ -136,6 +136,71 @@ def run(page):
     loc('#operation').dispatch_event('input')
     loc('#mode').select_option('router')
     loc('#mode').dispatch_event('input')
+
+    # Round a cylinder: the same pen on a rotary axis, by Z and by a servo, then drawn on the simulator.
+    import json
+    import math
+
+    def load(lift):
+        tab('Projects')
+        loc('#loadProject').click()
+        around = math.pi * 20
+        settings = {
+            'mode': 'pen', 'protocol': 'grblhal', 'width': 80, 'height': 60, 'operation': 'line', 'feed': 1500, 'power': 900,
+            'plunge': 600, 'safe': 3, 'depth': 1, 'step': 1, 'passes': 1, 'pen_lift': lift, 'pen_dwell': 0.2,
+        }  # fmt: skip
+        ring = {'name': 'Band ' + lift, 'paths': [[[0, 10], [around / 2, 25], [around, 10]], [[5, 40], [20, 40]]]}
+        content = json.dumps({'format': 'pi-cnc-studio/1', 'objects': [ring], 'settings': settings}).encode()
+        loc('#file').set_input_files({'name': 'pen.cncstudio.json', 'mimeType': 'application/json', 'buffer': content})
+        page.wait_for_function('name => CNCProjects.document().objects[0]?.name === name', arg='Band ' + lift)
+        assert page.evaluate(
+            "() => [document.getElementById('mode').value, document.getElementById('pen_lift').value]"
+        ) == ['pen', lift]
+        tab('Rotary')
+        loc('#rotaryDiameter').fill('20')
+        loc('#rotaryAxis').select_option('X')
+        loc('#rotaryPost').select_option('grblhal')
+        loc('#rotaryOutput').select_option('A')
+        loc('#rotaryPreview').click()
+        expect(loc('#rotaryMetrics')).to_contain_text('A 0.000 to 360.000°')
+        return loc('#rotaryCode').text_content().splitlines()
+
+    program = load('z')
+    assert 'G1 A360.000000 X10.000000' in ' '.join(program) and 'G1 Z-1.000000 F150.000000000' in program
+    assert not any(line.startswith(('M3', 'M4')) for line in program), 'the spindle is started for a pen'
+    print('PASS a Z pen draws once round a 20 mm cylinder, pressed 1 mm, with the spindle off')
+    program = load('servo')
+    assert program.count('M3 S900') == 2 and not any('Z' in line for line in program), program[:12]
+    down = False
+    for line in program:
+        down = True if line.startswith('M3') else False if line == 'M5' else down
+        assert not (down and line.startswith('G0')), f'travel with the pen down: {line}'
+    tab('Control')
+    loc('#port').select_option('simulator')
+    loc('#connect').click()
+    page.wait_for_function(
+        "latest.simulated && latest.connected && latest.protocol==='grblhal' && latest.rotary_axes?.includes('A')"
+    )
+    tab('Rotary')
+    loc('#rotaryConfirmed').check()
+    expect(loc('#rotaryRun')).to_be_enabled()
+    with page.expect_response(lambda response: response.url.endswith('/api/run')) as submitted:
+        loc('#rotaryRun').click()
+    assert submitted.value.status == 200, submitted.value.text()
+    for _ in range(300):
+        status = page.evaluate("async () => await api('status')")
+        if not status['active'] and status['state'] == 'Idle' and status['progress'] == 100:
+            break
+        page.wait_for_timeout(100)
+    assert status['error'] is None and status['progress'] == 100, status
+    print(
+        'PASS a servo pen draws round the cylinder with no radial moves, and the job runs to its end on the simulator'
+    )
+    tab('Control')
+    loc('#disconnect').click()
+    page.evaluate(
+        "() => { for (const [id, value] of [['protocol', 'grbl'], ['mode', 'router'], ['pen_lift', 'z']]) { const e = document.getElementById(id); e.value = value; e.dispatchEvent(new Event('input', {bubbles: true})); } }"
+    )
 
 
 if __name__ == '__main__':
