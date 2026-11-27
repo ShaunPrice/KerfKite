@@ -47,7 +47,7 @@
     }else{
       const keys=['feed','power','passes','operation','interval','hatch_angle','crosshatch','knife_offset','depth','step','plunge'];
       for(const k of keys)if(item.settings[k]!=null)$(k).value=item.settings[k];
-      if(['laser','router','knife'].includes(item.mode))$('mode').value=item.mode;
+      if(['laser','router','knife','pen'].includes(item.mode))$('mode').value=item.mode;
     }
     modeUI();invalidate();draw();status('Workspace updated. Review CAM and generate a new preview.');
   });
@@ -155,7 +155,7 @@
     const extra={...window.projectExtras,importSetups:setups,designLayers:valid};
     const prospective={...CNCProjects.document(),objects:combined,extras:extra};
     if(new TextEncoder().encode(JSON.stringify(prospective,null,2)).length>4e6)throw Error('Import exceeds the portable project size limit');
-    if(wasEmpty&&r.objects.length&&['laser','router','knife'].includes(r.mode))$('mode').value=r.mode;
+    if(wasEmpty&&r.objects.length&&['laser','router','knife','pen'].includes(r.mode))$('mode').value=r.mode;
     window.projectExtras=extra;objects=combined;if(additions.length)selected=combined.length-1;
     modeUI();invalidate();draw();window.dispatchEvent(new Event('cnc-layers-changed'));window.dispatchEvent(new Event('cnc-project-changed'));
     clear();showShelf();status('Added '+additions.length+' objects and '+(r.devices.length+r.presets.length)+' setups.');

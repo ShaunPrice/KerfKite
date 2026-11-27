@@ -533,7 +533,7 @@ void add_machine_routes(Studio &studio) {
     studio.add("POST", "/api/head", [s](const Request &request) {
         const json data = payload(request);
         const std::string mode = text_of(member(data, "mode"), "");
-        if ((mode != "router" && mode != "laser" && mode != "knife") || !is_true(member(data, "confirmed")))
+        if ((mode != "router" && mode != "laser" && mode != "knife" && mode != "pen") || !is_true(member(data, "confirmed")))
             throw ValueError("Confirm the mounted head before applying mode");
         s->jobs().disarm();
         s->forget_level();

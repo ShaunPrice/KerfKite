@@ -31,11 +31,54 @@ namespace {
 
 using Path = std::vector<std::array<double, 2>>;
 
+// A broad nib drawn with a fine pen: every stroke is drawn again and again, side by side along the nib's edge,
+// so that a stroke across the edge is thick and one along it is thin, as a calligraphy pen writes. pen_nib is
+// the nib's width (0 or absent: none), pen_nib_angle the angle of its edge and pen_tip the width of the pen's
+// own line, which sets how many strokes fill the nib.
+void pen_nib(const json &project, std::vector<Path> &paths, std::vector<std::vector<double>> *depths, double width, double height) {
+    const double nib = setting(project, "pen_nib", 0, "Nib width", 0, 20, "0", "20");
+    if (nib <= 0) return;
+    const double tip = setting(project, "pen_tip", 0.4, "Pen line width", 0.1, 5, "0.1", "5");
+    const double angle = setting(project, "pen_nib_angle", 45, "Nib angle", -360, 360, "-360", "360");
+    double cosine, sine;
+    cos_sin_degrees(angle, cosine, sine);
+    const int copies = std::max(2, static_cast<int>(std::ceil(nib / tip - 1e-9)) + 1);
+    std::vector<Path> out;
+    std::vector<std::vector<double>> out_depths;
+    size_t count = 0;
+    for (size_t p = 0; p < paths.size(); ++p)
+        for (int k = 0; k < copies; ++k) {
+            const double along = -nib / 2 + nib * k / (copies - 1);
+            Path copy = paths[p];
+            for (std::array<double, 2> &point : copy) {
+                point[0] += along * cosine;
+                point[1] += along * sine;
+                if (point[0] < 0 || point[0] > width || point[1] < 0 || point[1] > height)
+                    throw ValueError("The broad nib takes the drawing outside the work area: move it in by half the nib's width");
+            }
+            std::vector<double> row;
+            if (depths) row = (*depths)[p];
+            // There and back: every other stroke is drawn the other way, to save travel.
+            if (k % 2) {
+                std::reverse(copy.begin(), copy.end());
+                std::reverse(row.begin(), row.end());
+            }
+            count += copy.size();
+            if (count > 100000) throw ValueError("Too many vertices; use a narrower nib, a wider pen line or a simpler design");
+            out.push_back(std::move(copy));
+            if (depths) out_depths.push_back(std::move(row));
+        }
+    paths = std::move(out);
+    if (depths) *depths = std::move(out_depths);
+}
+
 Job single(const json &project) {
     const json *mode_value = get(project, "mode");
     const bool router = is_text(mode_value, "router"), laser = is_text(mode_value, "laser"),
-               knife = is_text(mode_value, "knife");
-    if (!router && !laser && !knife) throw ValueError("Choose router, laser or knife");
+               knife = is_text(mode_value, "knife"), pen = is_text(mode_value, "pen");
+    if (!router && !laser && !knife && !pen)
+        // The words are the reference's, which CI compares: they do not name the pen.
+        throw ValueError("Choose router, laser or knife");
     const std::string mode = mode_value->get<std::string>();
     const json *operation = get(project, "operation");
     const json *tabs = get(project, "tabs");
@@ -87,6 +130,13 @@ Job single(const json &project) {
         clean.push_back(std::move(points));
     }
 
+    // A pen in place of the cutter or the laser. It is lifted by the Z axis (a spring-loaded holder pressed a
+    // little below Z zero) or by a servo or solenoid on the spindle or laser output (M3 S for down, M5 or M3 S
+    // for up, with a pause for the holder to move).
+    const bool pen_servo = pen && is_text(get(project, "pen_lift"), "servo");
+    if (pen && !pen_servo && !is_text_or_absent(get(project, "pen_lift"), "z")) throw ValueError("Pen lift must be z or servo");
+    if (pen && !(is_text_or_absent(operation, "line") || is_text(operation, "fill")))
+        throw ValueError("A pen draws lines or hatch fill, not cutting operations");
     const bool entry_plunge = is_text_or_absent(get(project, "router_entry"), "plunge");
     const bool drilling = is_text(operation, "drill");
     if (router && !entry_plunge && drilling)
@@ -148,6 +198,10 @@ Job single(const json &project) {
         }
         if (depth <= 0) throw ValueError("No contour cuts below the stock surface");
     }
+    if (pen) {
+        if (pen_servo && has_depths) throw ValueError("Drawing with depths at each point needs the Z axis to lift the pen");
+        pen_nib(project, clean, has_depths ? &depths : nullptr, width, height);
+    }
     if (router && !entry_plunge) {
         Job job = entry_job(project, drawn, clean, has_depths ? &depths : nullptr, depth, step, safe, feed, plunge,
                             power, width, height, operation_warnings);
@@ -201,6 +255,9 @@ Job single(const json &project) {
     std::vector<double> levels;
     if (laser) {
         levels.assign(static_cast<size_t>(passes), 0.0);
+    } else if (pen) {
+        // A pen goes over its lines as often as asked, always at the one height.
+        levels.assign(static_cast<size_t>(passes), -depth);
     } else {
         const double level_count = std::ceil(depth / step);
         for (double i = 0; i < level_count; ++i) levels.push_back(-py_min(depth, step * (i + 1)));
@@ -214,7 +271,7 @@ Job single(const json &project) {
     std::vector<std::string> &lines = job.lines;
     lines = {"G21", "G90", "G17", "G94", "G54", "M5"};
     const std::string safe_line = "G0 Z" + fixed(safe, 3);
-    if (!laser) {
+    if (!laser && !pen_servo) {
         lines.push_back(safe_line);
     }
     if (router) {
@@ -257,8 +314,51 @@ Job single(const json &project) {
             lines.push_back("M5");
         }
     }
+    if (pen_servo) {
+        // The holder is worked from the spindle or laser output; Z is not moved at all.
+        const Protocol &controller = get_protocol(get(project, "protocol"));
+        const double pause = setting(project, "pen_dwell", 0.2, "Pen pause", 0, 5, "0", "5");
+        const double up_value = setting(project, "pen_up_power", 0, "Pen-up S value", 0, 100000, "0", "100000");
+        // G4 P is seconds for the Grbl family and for RS274 controllers, milliseconds for Marlin and for a
+        // Mach3 or UCCNC set that way.
+        const bool configured = controller.id == "mach3" || controller.id == "uccnc";
+        if (configured && pause > 0 && !is_text(get(project, "dwell_units"), "seconds") && !is_text(get(project, "dwell_units"), "milliseconds"))
+            throw ValueError("Select configured dwell units: seconds or milliseconds");
+        const bool milliseconds = controller.family == "marlin" || (configured && is_text(get(project, "dwell_units"), "milliseconds"));
+        const std::string wait = "G4 P" + (milliseconds ? fixed(pause * 1000, 0) : fixed(pause, 3));
+        const std::string up = up_value > 0 ? "M3 S" + fixed(up_value, 0) : std::string("M5");
+        const std::string down = "M3 S" + fixed(power, 0);
+        const auto holder = [&](const std::string &command) {
+            lines.push_back(command);
+            if (pause > 0) lines.push_back(wait);
+        };
+        holder(up);
+        for (size_t pass = 0; pass < levels.size(); ++pass)
+            for (const Path &path : clean) {
+                double x = path[0][0], y = path[0][1];
+                lines.push_back("G0 X" + fixed(x, 3) + " Y" + fixed(y, 3));
+                holder(down);
+                for (size_t v = 1; v < path.size(); ++v) {
+                    const double nx = path[v][0], ny = path[v][1];
+                    text.assign("G1 X");
+                    text::fixed(text, nx, 3);
+                    text.append(" Y");
+                    text::fixed(text, ny, 3);
+                    text.append(feed_word);
+                    lines.push_back(text);
+                    Segment segment{x, y, nx, ny, 0, true, power, 0};
+                    segment.planar = true;
+                    segment.packed = true;
+                    job.segments.push_back(segment);
+                    length += std::sqrt(text::square(nx - x) + text::square(ny - y));
+                    x = nx;
+                    y = ny;
+                }
+                holder(up);
+            }
+    }
     for (const double z : levels) {
-        if (laser) break;
+        if (laser || pen_servo) break;
         for (size_t p = 0; p < clean.size(); ++p) {
             const Path &path = clean[p];
             const std::vector<double> *row = has_depths ? &depths[p] : nullptr;
@@ -293,7 +393,8 @@ Job single(const json &project) {
             lines.push_back(safe_line);
         }
     }
-    lines.push_back("M5");
+    // The output goes off at the end, except where a pen holder is held up by a value of its own.
+    if (!(pen_servo && setting(project, "pen_up_power", 0, "Pen-up S value", 0, 100000, "0", "100000") > 0)) lines.push_back("M5");
 
     const json *protocol = get(project, "protocol");
     const Protocol &profile = get_protocol(protocol);
@@ -307,7 +408,15 @@ Job single(const json &project) {
     if (laser && leads)
         job.warnings.push_back("Tangent leads are cutting moves and may mark outside the design. Power ramps use steps "
                                "of at most 0.5 mm; M4 also scales power with speed.");
-    job.lines = postprocess(std::move(lines), protocol, mode, get(project, "dwell_units"));
+    if (pen) {
+        job.warnings.push_back(pen_servo ? "The pen is lifted by the spindle or laser output and Z is not moved: set the holder's height by hand, "
+                                           "and check which S values lift and lower it before putting a pen in."
+                                         : "The spindle stays off. Z zero is where the pen touches the paper; the depth is how far the "
+                                           "holder's spring is pressed.");
+        job.warnings.push_back("Take the cutter or the laser off before drawing, and test on scrap paper first.");
+    }
+    // A pen is driven as a router is: any controller that can run a router job can draw.
+    job.lines = postprocess(std::move(lines), protocol, pen ? "router" : mode, get(project, "dwell_units"));
     job.cut_length = rounded(length, 2);
     job.cut_minutes = rounded(length / cut_feed, 2);
     // [min x, min y, max x, max y] over every vertex of what is cut: for a laser, the paths with their leads.
