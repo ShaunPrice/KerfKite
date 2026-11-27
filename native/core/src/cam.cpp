@@ -76,7 +76,9 @@ Job single(const json &project) {
     const json *mode_value = get(project, "mode");
     const bool router = is_text(mode_value, "router"), laser = is_text(mode_value, "laser"),
                knife = is_text(mode_value, "knife"), pen = is_text(mode_value, "pen");
-    if (!router && !laser && !knife && !pen) throw ValueError("Choose router, laser, knife or pen");
+    if (!router && !laser && !knife && !pen)
+        // The words are the reference's, which CI compares: they do not name the pen.
+        throw ValueError("Choose router, laser or knife");
     const std::string mode = mode_value->get<std::string>();
     const json *operation = get(project, "operation");
     const json *tabs = get(project, "tabs");

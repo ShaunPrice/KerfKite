@@ -161,14 +161,14 @@
         ...(jobs[0].simulation_tool&&jobs.every(j=>JSON.stringify(j.simulation_tool)===JSON.stringify(jobs[0].simulation_tool))?{simulation_tool:jobs[0].simulation_tool}:{})};
     }
     const mode=p.mode,protocol=p.protocol===undefined?'grbl':p.protocol,op=p.operation===undefined?'line':p.operation;
-    if(!['router','laser','knife','pen'].includes(mode)) fail('Choose router, laser, knife or pen');
+    if(!['router','laser','knife','pen'].includes(mode)) fail('Choose router, laser or knife');
     const pen=mode==='pen',penServo=pen&&p.pen_lift==='servo';
     if(pen&&!penServo&&p.pen_lift!==undefined&&p.pen_lift!=='z') fail('Pen lift must be z or servo');
     const entry=p.router_entry??'plunge';
     if(mode==='router' && entry!=='plunge' && (entry!=='ramp'||op!=='line')) fail('Only a closed-line ramp is available offline. Use Studio server CAM for compensated ramp or pocket helix entries. Drilling uses its own peck controls.');
     if(op!=='line'&&op!=='drill') fail('Offline CAM supports line operations only for contour work, plus router drilling. Use hosted CNC Studio for '+String(op)+' CAM.');
     const profile=protocols.get(protocol);
-    if(!profile.modes.includes(pen?'router':mode))fail(profile.name+' dynamic laser export is not implemented');
+    if(!profile.modes.includes(pen?'router':mode))fail(profile.name+' dynamic laser export is not implemented');  // a pen is checked as a router, which every profile has
 
     const width=value(p,'width',undefined,1,2000),height=value(p,'height',undefined,1,2000),feed=value(p,'feed',undefined,1,10000),power=value(p,'power',undefined,1,100000);
     const safe=value(p,'safe',5,.1,100),step=value(p,'step',.5,.01,10),plunge=value(p,'plunge',100,1,1000),passes=value(p,'passes',1,1,100);

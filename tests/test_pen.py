@@ -211,7 +211,7 @@ class PenTests(unittest.TestCase):
             generate(project(pen_lift='servo', pen_dwell=9))
         with self.assertRaisesRegex(ValueError, 'Nib width must be between 0 and 20'):
             generate(project(pen_nib=50))
-        with self.assertRaisesRegex(ValueError, 'Choose router, laser, knife or pen'):
+        with self.assertRaisesRegex(ValueError, 'Choose router, laser or knife'):  # the reference's words
             generate(project(mode='plasma'))
 
     def test_an_ordered_job_draws_each_object_with_its_own_settings(self):

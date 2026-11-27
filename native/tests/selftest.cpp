@@ -1714,7 +1714,7 @@ int main() {
            "the paths it cut");
     expect(job.bounds[0] == 10 && job.bounds[1] == 10 && job.bounds[2] == 20.5 && job.bounds[3] == 30, "its bounds");
 
-    expect(message<ValueError>(R"({"mode":"plasma"})") == "Choose router, laser, knife or pen", "an unknown head");
+    expect(message<ValueError>(R"({"mode":"plasma"})") == "Choose router, laser or knife", "an unknown head");
     expect(message<ValueError>(R"({"mode":"router","width":100,"height":50,"feed":600,"power":1,
         "paths":[[[0,0],[101,0]]]})") == "X must be between 0 and 100.0", "a point outside the work area");
     // float() reads digits of any script: fullwidth 600 is 600.

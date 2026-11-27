@@ -36,5 +36,5 @@ test('a broad nib and repeated passes match the core',()=>{
   assert.equal(offline.generate(project({passes:2})).lines.filter(l=>l==='G1 Z-1.000 F600.0').length,4);
   assert.throws(()=>offline.generate(project({paths:[[[.2,10],[50,10]]],pen_nib:2,pen_nib_angle:0})),/outside the work area/);
   assert.throws(()=>offline.generate(project({pen_lift:'magnet'})),/Pen lift must be z or servo/);
-  assert.throws(()=>offline.generate(project({mode:'plasma'})),/Choose router, laser, knife or pen/);
+  assert.throws(()=>offline.generate(project({mode:'plasma'})),/Choose router, laser or knife/);
 });
