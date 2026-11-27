@@ -1,6 +1,6 @@
 """Read the pairing QR codes Studio draws with the decoder Pocket uses.
 
-    python validation/pairing_qr_check.py --zxing path/to/core-3.5.3.jar
+    python validation/pairing_qr_check.py --zxing path/to/core-3.5.4.jar
 
 Studio's own encoder (studio/static/pairing-qr.js) writes the symbols for a pinned and a plain pairing link.
 Pocket's QrFrames class then decodes them from simulated camera frames: several sizes, a quarter turn,
