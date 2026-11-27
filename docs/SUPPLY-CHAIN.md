@@ -25,7 +25,7 @@ KerfKite prefers its own code to third-party components. The aim is a smaller su
 
 | Component | Use | Plan |
 | --- | --- | --- |
-| ZXing core 3.5.3 (Apache 2.0), from Maven | Reading the pairing QR code | **Replace later.** The app reads one kind of symbol for one purpose; a decoder for that case is a contained piece of work. Until then the version stays pinned. |
+| ZXing core 3.5.4 (Apache 2.0), from Maven; 3.5.3 in the published Pocket 0.5.0 | Reading the pairing QR code | **Replace later.** The app reads one kind of symbol for one purpose; a decoder for that case is a contained piece of work. Until then the version stays pinned. |
 | Android Gradle Plugin, Gradle, Android Build Tools | Building the app | Keep: build tools. Versions are pinned. |
 
 ## Studio editor (browser code, vendored in `studio/static/vendor/`)

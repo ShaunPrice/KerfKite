@@ -4,6 +4,9 @@ Notable changes to KerfKite Studio and KerfKite Pocket. Versions before this fil
 
 ## Unreleased
 
+### Development
+- Pocket builds with ZXing core 3.5.4 and the Gradle 8.14.8 wrapper. Debug and release builds, release lint and `validation/pairing_qr_check.py` pass with both. The published Pocket 0.5.0 APK contains ZXing core 3.5.3.
+
 ## Pocket 0.5.0 — 2026-11-28
 
 Released separately from Studio, under the tag `pocket-v0.5.0`. It installs over Pocket 0.4.1 and keeps its projects. The Studio 0.7.0 and 0.8.0 releases carry Pocket 0.4.1; the next Studio release carries this one.
