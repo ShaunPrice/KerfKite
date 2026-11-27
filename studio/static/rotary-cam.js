@@ -10,7 +10,7 @@ function wrap(job,o) {
   if(!job||typeof job!=='object'||!o||typeof o!=='object')throw Error('Supply a generated job and rotary setup.');
   const mode=job.mode,post=o.postprocessor,wrapAxis=o.wrap_axis,rotaryAxis=o.output_axis??'A',reference=o.feed_reference??'surface';
   if(!['linuxcnc','grblhal','xpro-v5'].includes(post))throw Error('Choose a supported rotary postprocessor.');
-  if(!['router','laser'].includes(mode)||(post==='linuxcnc'&&mode==='laser'))throw Error('LinuxCNC supports rotary router export; for dynamic laser choose a supported laser postprocessor.');
+  if(!['router','laser','pen'].includes(mode)||(post==='linuxcnc'&&mode==='laser'))throw Error('LinuxCNC supports rotary router export; for dynamic laser choose a supported laser postprocessor.');
   if(!Object.hasOwn(mapping,rotaryAxis)||post==='xpro-v5'&&rotaryAxis!=='A')throw Error('Choose a supported physical rotary axis.');
   if(!['X','Y'].includes(wrapAxis)||!['surface','cut'].includes(reference))throw Error('Choose a valid wrapped axis and feed reference.');
   const diameter=number(o.diameter,'Diameter',1,2000), radius=diameter/2, circumference=Math.PI*diameter;
@@ -27,7 +27,10 @@ function wrap(job,o) {
   let source=job.lines;
   if(!Array.isArray(source)||source.length<1||source.length>200000||source.some(l=>typeof l!=='string'||l.length>256))throw Error('Invalid or oversized rotary source.');
   if(source.at(-1)==='M30')source=source.slice(0,-1);
-  const state={X:null,Y:null,Z:laser?0:null}, lines=[];
+  // The program ends with the output off; or, for a pen holder that needs a signal to stay up, by raising it (M3 S…),
+  // perhaps with its pause after.
+  const tail=source.map(l=>String(l).trim()),endsOff=tail.at(-1)==='M5'||(mode==='pen'&&/^M3 S[\d.]+$/.test(/^G4 P[\d.]+$/.test(tail.at(-1)||'')?tail.at(-2)||'':tail.at(-1)||''));
+  const state={X:null,Y:null,Z:laser||mode==='pen'?0:null}, lines=[];  // a pen on a servo draws at the surface, with no heights
   let units=false, absolute=false, feedMode=false, inverseMode=false, on=false, lastFeed=null, moves=0,min=Infinity,max=-Infinity;
   let minAxial=Infinity,maxAxial=-Infinity,minZ=Infinity,maxZ=-Infinity,minutes=0;
   for(const raw of source){
@@ -89,7 +92,7 @@ function wrap(job,o) {
       lines.push('G0 '+output.join(' '));
     }
   }
-  if(!Number.isFinite(min)||!Number.isFinite(minAxial)||!Number.isFinite(minZ)||!moves||lastFeed===null||source.at(-1)?.trim()!=='M5')throw Error('Rotary job needs a wrapped cut and final M5.');
+  if(!Number.isFinite(min)||!Number.isFinite(minAxial)||!Number.isFinite(minZ)||!moves||lastFeed===null||!endsOff)throw Error('Rotary job needs a wrapped cut and final M5.');
   lines.push('G94 F'+lastFeed.toFixed(6));
   const warnings=[...(job.warnings||[]),`${rotaryAxis} rotates about ${axialOut}. Set the axial work zero, angular seam and surface work zero on ${radialOut} for this fixture.`,
     'Continuous angles retain full turns. Check angular travel and clearance of the tool, chuck and holder.'];

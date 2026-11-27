@@ -16,6 +16,8 @@ For a variable-depth router path, import or create the depth-bearing artwork, se
 
 For laser engraving, select **Laser** in CAM and a grblHAL or supported xPRO V5 rotary target. Retain the per-vertex power in the artwork and enable the intended layers for output. The posted program keeps dynamic `M4` and per-segment `S` values. Laser rapids require `M5`. Use the preview to check the wrap direction, seam placement and power transitions before exporting. A repeated pass at the same location changes the exposure. Power intensity in the drawing is a simulated command value; the actual mark depends on the laser, focus, feed and stock.
 
+For drawing, select **Pen · drawing** in CAM. A pen is wrapped as a router job is, lifted by the radial axis or by a servo; see [Drawing with a pen](PEN.md#round-a-cylinder).
+
 ## Axis and postprocessor selection
 
 | Target | Axis and working plane | Output available in Studio |

@@ -152,7 +152,7 @@ The plateau adds one cutter diameter to the nominal width along the path. Inspec
 
 ## Rotary design and export
 
-Use the **Rotary** tab to wrap a router or laser design around a cylinder, inspect the seam and preview the posted path. Enter the measured diameter, design wrap axis and physical rotary axis. A periodic border is one full-turn example. Use **Stream reviewed rotary job** with a qualified grblHAL or independent-A xPRO V5 workstation connection, or export the file. LinuxCNC supports router file export. The original xPRO V5 dual-Y gantry setup needs a separate independent rotary motor channel to perform independent fourth-axis machining. [Rotary setup, simulator walkthrough and controller requirements](ROTARY.md)
+Use the **Rotary** tab to wrap a router, laser or pen design around a cylinder, inspect the seam and preview the posted path. Enter the measured diameter, design wrap axis and physical rotary axis. A periodic border is one full-turn example. Use **Stream reviewed rotary job** with a qualified grblHAL or independent-A xPRO V5 workstation connection, or export the file. LinuxCNC supports router file export. The original xPRO V5 dual-Y gantry setup needs a separate independent rotary motor channel to perform independent fourth-axis machining. [Rotary setup, simulator walkthrough and controller requirements](ROTARY.md)
 
 ## Local machine, keyboard and gamepad control
 

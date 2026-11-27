@@ -69,6 +69,19 @@ A path that carries its own depths (`path_depths`) presses the pen by a differen
 
 Assign the current settings to a selected object to give it its own operation, nib or number of passes. Objects are drawn in order. To change the pen for another colour, turn the output of the other objects off and draw one colour at a time.
 
+## Round a cylinder
+
+A pen can draw on a cylinder turned by a rotary axis: a tumbler, a rolling pin, a tube. Set up the drawing as for flat paper, then use the **Rotary** tab as for a router job: enter the cylinder's diameter, choose which design axis wraps round it, and preview. See [Rotary machining](ROTARY.md) for the setup, the seam and the checks before running.
+
+- **A pen on the Z axis** is wrapped as a router job is. Work zero on the radial axis is the cylinder's surface, where the pen just touches; the pen is pressed below it and lifted above it, and the spindle is never started.
+- **A pen on a servo** draws at the surface and the radial axis is never moved, so set the holder's height over the cylinder by hand. The pauses for the holder are kept.
+- A holder that needs a signal to stay up ends the program raised (`M3` with its up value) and not switched off. Every other rotary program must still end with the output off.
+- The nib, the hatch and repeated passes are wrapped with the drawing. A nib's strokes lie side by side on the surface.
+- Output is for grblHAL and the xPRO V5 to run, and for LinuxCNC as a file, as for a router.
+- A fixture's clearance envelope is checked for a pen as for a cutter.
+
+A cylinder that is not round or not centred changes how hard the pen presses as it turns. The spring takes up a little of that; a servo holder with a fixed height does not.
+
 ## Larger than the machine
 
 A drawing made with a Z pen can be [tiled](TILING.md) like a router job. A servo pen's program cannot be tiled yet.
@@ -94,5 +107,7 @@ Any controller that can run a router job can draw. The editor's own generator, u
 ## What has been checked
 
 `tests/test_pen.py` follows the programs with an interpreter of the test's own: the strokes drawn are the design's, the pen is up for every travel, a Z pen's program never starts the spindle and a servo pen's never moves Z. It checks the nib's strokes by their geometry (a stroke along the nib's edge is thin, one across it is as wide as the nib), the hatch, repeated passes, the pause in each controller's units, a holder that is held up by a value, and each refusal. `tests/js/pen.test.cjs` holds the offline generator to the same programs line for line. `validation/pen_workflow.py` draws a rectangle and single-line lettering in a browser, runs the job on the simulator, and repeats it with a servo, a nib and hatching.
+
+For a cylinder, the same file follows the rotary programs: the strokes are the design's with X turned into degrees, for both lifts, each output axis, both directions and a start angle; a servo pen never moves the radial axis; a held-up holder ends raised; and given lines that end with the pen down are refused. `tests/js/pen.test.cjs` holds the editor's own wrapper to the core's programs line for line, and the browser workflow draws round a cylinder on the simulated rotary controller.
 
 No pen has been put in a machine. The two things only a machine can show are whether the spring's travel suits the depth chosen, and which S values work a particular holder.

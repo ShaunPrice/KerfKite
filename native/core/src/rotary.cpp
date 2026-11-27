@@ -245,7 +245,11 @@ Wrapped wrap(const Source &job, const json &options, bool generated) {
     if (!linuxcnc && !stream_post(post_value))
         throw ValueError("Select LinuxCNC, grblHAL or xPRO V5 independent-A rotary output");
     const std::string post = post_value->get<std::string>();
-    const bool router = is_text(mode_value, "router"), laser = is_text(mode_value, "laser");
+    const bool laser = is_text(mode_value, "laser");
+    // A pen is wrapped as a router job is: lifted by Z, its program is a router's without the spindle; lifted by
+    // a servo, it has no heights and the holder is worked with M3 and M5, with pauses.
+    const bool pen = is_text(mode_value, "pen");
+    const bool router = is_text(mode_value, "router") || pen;
     if ((!router && !laser) || (linuxcnc && !router))
         throw ValueError("LinuxCNC supports router jobs only; rotary laser engraving requires grblHAL or xPRO V5");
     const json *wrapped_value = get(options, "wrap_axis");
@@ -309,16 +313,28 @@ Wrapped wrap(const Source &job, const json &options, bool generated) {
     if (*source.back() == "M30") source.pop_back();
     if (source.empty()) throw ValueError("Rotary source must end with spindle off (M5)");
     {
-        const std::string &last = *source.back();
-        if (!ascii_text(last)) throw ValueError(kNotAscii);
-        size_t begin = 0, end = last.size();
-        while (begin < end && space(last[begin])) ++begin;
-        while (end > begin && space(last[end - 1])) --end;
-        if (last.compare(begin, end - begin, "M5") != 0 || end - begin != 2)
-            throw ValueError("Rotary source must end with spindle off (M5)");
+        const auto trimmed = [](const std::string &text) {
+            if (!ascii_text(text)) throw ValueError(kNotAscii);
+            size_t begin = 0, end = text.size();
+            while (begin < end && space(text[begin])) ++begin;
+            while (end > begin && space(text[end - 1])) --end;
+            return text.substr(begin, end - begin);
+        };
+        bool ends_off = trimmed(*source.back()) == "M5";
+        if (!ends_off && pen) {
+            // A pen holder that needs a signal to stay up: the program ends by raising it (M3 with its S value),
+            // perhaps with the pause after, and must not then switch the output off and let the pen drop.
+            size_t last = source.size() - 1;
+            Block tail;
+            parse(*source[last], tail);
+            if (last > 0 && tail.command == "G4" && tail.exactly("GP")) parse(*source[--last], tail);
+            ends_off = tail.command == "M3" && tail.exactly("MS");
+        }
+        if (!ends_off) throw ValueError("Rotary source must end with spindle off (M5)");
     }
     Coordinate state[3];
-    if (laser) state[axis('Z')] = {true, 0.0};  // Laser focus at the stock surface.
+    // Laser focus at the stock surface; and a pen on a servo draws there, with no heights in its program.
+    if (laser || pen) state[axis('Z')] = {true, 0.0};
     std::vector<std::string> output;
     output.reserve(source.size() + source.size() / 8 + 2);
     double min_angle = kInf, min_axial = kInf, min_z = kInf;
