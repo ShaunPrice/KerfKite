@@ -6,7 +6,7 @@ The minimum OS comes from the APK manifest. The editor and server-paired pendant
 
 ## Install and draw
 
-For normal installation, download the [signed KerfKite Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/latest/download/KerfKite-Pocket-Android.apk) on the phone, open it from Downloads and choose **Install**.
+For normal installation, download the [signed KerfKite Pocket APK](https://github.com/ShaunPrice/KerfKite/releases/download/pocket-v0.5.0/KerfKite-Pocket-Android.apk) on the phone, open it from Downloads and choose **Install**.
 
 For development, build the debug APK using Android Studio with JDK 17 or newer, Android SDK Platform 35 and Build Tools 35 installed. Open the repository’s android directory as the project. Alternatively, from the android directory run:
 
@@ -70,6 +70,17 @@ On 21 November 2026 the published Pocket 0.4.1 APK was exercised on a Samsung Ga
 `validation/android_handset_pendant_workflow.py` repeats the pendant and background-return rows on a supervised handset. The device workflows drive the debug build; set `KERFKITE_POCKET_PACKAGE=au.cncstudio.pocket` to drive the released app. Add `--encrypted` to pair through the workstation server's pinned HTTPS listener; its TLS ends inside the server, so the run then reads the phone's actions from the controller's log instead of recording each request. `validation/android_handset_selection_workflow.py` adds three overlapping rectangles to the debug build's drawing and checks that each can be selected by tapping the preview. `validation/pairing_qr_check.py --zxing <core jar>` needs no phone: it decodes the pairing codes Studio draws with Pocket's own decoder from simulated camera frames. The workstation firewall must admit the handset on the monitor port: the first attempt showed **The receiver timed out** until the inbound rule covered every network profile.
 
 **Selection defect found in this check.** In Pocket 0.4.1 a new shape is placed at the same default position and size as the previous one, and a tap in the drawing preview selects only the topmost shape whose bounding box contains it. Two shapes left at the defaults therefore overlap exactly, and the lower one can be selected only from the objects list. Of 44 pen taps on the preview, 31 landed inside the shared box and selected the topmost shape each time, and 13 missed the box by a few pixels because the test had no tolerance. Injected finger and stylus taps behaved identically, so this is not specific to the pen. The source after 0.4.1 steps each new shape clear of the last, cycles through overlapping shapes on repeated taps and accepts taps within 12 dp of a shape. Replaying the 13 recorded near-miss taps through that logic registers 12 of them. The change has been compiled and checked off-device; it has not yet been run on the handset.
+
+**Pocket 0.5.0 on the same handset.** On 21 November 2026 a debug build of the 0.5.0 source, installed beside the released app, was driven over wireless ADB:
+
+| Check | Result |
+| --- | --- |
+| Shape selection | With three overlapping default rectangles: a corner covered by one shape selected it, repeated taps over two shapes alternated between them, three taps at the common centre reached all three, and a tap clear of every shape kept the selection |
+| Encrypted pendant | The full pendant sequence over the pinned HTTPS link passed in 14 of 15 runs. In the first run **Home** was unavailable for about 25 seconds after the jog and the run stopped; it did not recur and is unexplained |
+| Plain pendant | The same sequence over a plain link, on the shrunk build |
+| QR pairing | The scanner asked for camera access, opened the rear camera at 1280 × 720 and released it on Cancel, Back and in the background. A code shown on a workstation screen was scanned by hand and Pocket paired and showed live status |
+
+The signed 0.5.0 release APK has the same contents, entry for entry, as the unsigned build of that source. It was then installed over the released 0.4.1 on the same handset: the existing project and its two shapes were kept, the first-install date was unchanged, and the app started cold in 251 ms without a crash.
 
 Not exercised on the handset: the **Keep screen awake** switch, the pendant in landscape, the panel's full-resolution display mode, USB and Bluetooth tethering, the HTTPS monitor, and any physical controller.
 

@@ -35,7 +35,7 @@
 </tr>
 <tr>
 <td>Android 8.0 (API 26) or later, minimum supported RAM 2 GB</td>
-<td><a href="https://github.com/ShaunPrice/KerfKite/releases/latest/download/KerfKite-Pocket-Android.apk">KerfKite Pocket APK</a></td>
+<td><a href="https://github.com/ShaunPrice/KerfKite/releases/download/pocket-v0.5.0/KerfKite-Pocket-Android.apk">KerfKite Pocket APK</a></td>
 <td>Open the download on the phone and tap <strong>Install</strong>. Choose <strong>CNC pendant</strong> to pair with Studio.</td>
 </tr>
 </tbody>
@@ -192,7 +192,7 @@
 <p>Studio Pocket combines an offline vector sketch editor with a native CNC pendant for Android. Pocket supports Android 8.0 (API 26) or later with a minimum supported device RAM of 2 GB. It uses a touch canvas and numerical dimensions. Files saved from the app open in the desktop and Raspberry Pi workstation. The current template, solid modelling and machining workflows run on that workstation.</p>
 <p>The minimum OS comes from the APK manifest. The editor and server-paired pendant were exercised on an ARM64 emulator configured with 2 GB of RAM, and on one physical handset (see Physical handset check below).</p>
 <h2>Install and draw</h2>
-<p>For normal installation, download the <a href="https://github.com/ShaunPrice/KerfKite/releases/latest/download/KerfKite-Pocket-Android.apk">signed KerfKite Pocket APK</a> on the phone, open it from Downloads and choose <strong>Install</strong>.</p>
+<p>For normal installation, download the <a href="https://github.com/ShaunPrice/KerfKite/releases/download/pocket-v0.5.0/KerfKite-Pocket-Android.apk">signed KerfKite Pocket APK</a> on the phone, open it from Downloads and choose <strong>Install</strong>.</p>
 <p>For development, build the debug APK using Android Studio with JDK 17 or newer, Android SDK Platform 35 and Build Tools 35 installed. Open the repository’s android directory as the project. Alternatively, from the android directory run:</p>
 <pre><code class="language-sh">./gradlew assembleDebug
 </code></pre>
@@ -272,6 +272,34 @@ While Pocket waits for a Start or jog response, you can still tap <strong>Stop</
 </table>
 <p><code>validation/android_handset_pendant_workflow.py</code> repeats the pendant and background-return rows on a supervised handset. The device workflows drive the debug build; set <code>KERFKITE_POCKET_PACKAGE=au.cncstudio.pocket</code> to drive the released app. Add <code>--encrypted</code> to pair through the workstation server's pinned HTTPS listener; its TLS ends inside the server, so the run then reads the phone's actions from the controller's log instead of recording each request. <code>validation/android_handset_selection_workflow.py</code> adds three overlapping rectangles to the debug build's drawing and checks that each can be selected by tapping the preview. <code>validation/pairing_qr_check.py --zxing &lt;core jar&gt;</code> needs no phone: it decodes the pairing codes Studio draws with Pocket's own decoder from simulated camera frames. The workstation firewall must admit the handset on the monitor port: the first attempt showed <strong>The receiver timed out</strong> until the inbound rule covered every network profile.</p>
 <p><strong>Selection defect found in this check.</strong> In Pocket 0.4.1 a new shape is placed at the same default position and size as the previous one, and a tap in the drawing preview selects only the topmost shape whose bounding box contains it. Two shapes left at the defaults therefore overlap exactly, and the lower one can be selected only from the objects list. Of 44 pen taps on the preview, 31 landed inside the shared box and selected the topmost shape each time, and 13 missed the box by a few pixels because the test had no tolerance. Injected finger and stylus taps behaved identically, so this is not specific to the pen. The source after 0.4.1 steps each new shape clear of the last, cycles through overlapping shapes on repeated taps and accepts taps within 12 dp of a shape. Replaying the 13 recorded near-miss taps through that logic registers 12 of them. The change has been compiled and checked off-device; it has not yet been run on the handset.</p>
+<p><strong>Pocket 0.5.0 on the same handset.</strong> On 21 November 2026 a debug build of the 0.5.0 source, installed beside the released app, was driven over wireless ADB:</p>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Shape selection</td>
+<td>With three overlapping default rectangles: a corner covered by one shape selected it, repeated taps over two shapes alternated between them, three taps at the common centre reached all three, and a tap clear of every shape kept the selection</td>
+</tr>
+<tr>
+<td>Encrypted pendant</td>
+<td>The full pendant sequence over the pinned HTTPS link passed in 14 of 15 runs. In the first run <strong>Home</strong> was unavailable for about 25 seconds after the jog and the run stopped; it did not recur and is unexplained</td>
+</tr>
+<tr>
+<td>Plain pendant</td>
+<td>The same sequence over a plain link, on the shrunk build</td>
+</tr>
+<tr>
+<td>QR pairing</td>
+<td>The scanner asked for camera access, opened the rear camera at 1280 × 720 and released it on Cancel, Back and in the background. A code shown on a workstation screen was scanned by hand and Pocket paired and showed live status</td>
+</tr>
+</tbody>
+</table>
+<p>The signed 0.5.0 release APK has the same contents, entry for entry, as the unsigned build of that source. It was then installed over the released 0.4.1 on the same handset: the existing project and its two shapes were kept, the first-install date was unchanged, and the app started cold in 251 ms without a crash.</p>
 <p>Not exercised on the handset: the <strong>Keep screen awake</strong> switch, the pendant in landscape, the panel's full-resolution display mode, USB and Bluetooth tethering, the HTTPS monitor, and any physical controller.</p>
 </section><section id="assemblies"><h1>Assemblies, mates and interference</h1>
 <p>Open <strong>3D CAD → Assembly mates &amp; interference</strong> in the running Studio app or hosted editor. You can fit a shaft to a bore, place a fixture plate or check the fit of several modelled components. Dimensions use millimetres and rotations use degrees.</p>
@@ -961,7 +989,7 @@ python ../kerfkite-reference/validation/server_route_parity.py --server build/na
 <li><strong>Windows 10 or Windows 11 on Intel/AMD x64.</strong> Open the setup wizard and choose <strong>Install</strong>. It installs for your account and always adds KerfKite Studio to Start. On <strong>Choose where KerfKite Studio appears</strong>, leave <strong>Desktop shortcut</strong> ticked to put a KerfKite Studio icon on the desktop, or untick it. Leave <strong>Open KerfKite Studio</strong> ticked on the last page to start it straight away. Windows may display a SmartScreen warning for this unsigned installer. Check the download came from the official release. On a managed PC, follow your organisation’s software approval process.</li>
 <li><strong>macOS.</strong> In <strong>Apple menu → About This Mac</strong>, check whether the computer has an Apple chip or an Intel processor. Open the matching DMG, drag KerfKite Studio onto Applications and launch it there or from Launchpad. If you open it straight from the disk image instead, the launcher says so and asks you to drag it to Applications first, because it disappears when the image is ejected. This community build has an ad-hoc signature and has not been notarised by Apple. If macOS blocks it, review the app under <strong>System Settings → Privacy &amp; Security</strong> after the first open attempt. Managed Macs may require administrator approval.</li>
 <li><strong>Raspberry Pi OS, Debian and Ubuntu.</strong> Use a 64-bit graphical desktop. Open the ARM64 DEB on a Pi 4/5 or other ARM64 system, or the AMD64 DEB on an Intel/AMD PC. Choose <strong>Install</strong> in the package manager and open KerfKite Studio from the applications menu. On another compatible glibc desktop with a browser and xdg-open, extract the matching Linux archive to a permanent folder and open the KerfKite executable inside once. Its first start offers to add KerfKite Studio to the applications menu, so later starts work like an installed package. If you move the folder, open the executable in its new place once and the shortcuts follow it. Menus cannot start a program from a folder whose name contains <code>%</code>.</li>
-<li><strong>Android.</strong> The minimum supported configuration is Android 8.0 (API 26) and 2 GB of device RAM. Download the <a href="https://github.com/ShaunPrice/KerfKite/releases/latest/download/KerfKite-Pocket-Android.apk">Pocket APK</a> on your phone, open <strong>Downloads</strong> in the file manager, tap the APK and choose <strong>Install</strong>. If prompted, allow this source to install apps and revoke that permission afterwards. Device management policies can restrict app installation. If replacing a development APK, export your draft first. Android requires the previous build to be removed if its signing certificate differs. <a href="#android">Pocket user guide</a></li>
+<li><strong>Android.</strong> The minimum supported configuration is Android 8.0 (API 26) and 2 GB of device RAM. Download the <a href="https://github.com/ShaunPrice/KerfKite/releases/download/pocket-v0.5.0/KerfKite-Pocket-Android.apk">Pocket APK</a> on your phone, open <strong>Downloads</strong> in the file manager, tap the APK and choose <strong>Install</strong>. If prompted, allow this source to install apps and revoke that permission afterwards. Device management policies can restrict app installation. If replacing a development APK, export your draft first. Android requires the previous build to be removed if its signing certificate differs. <a href="#android">Pocket user guide</a></li>
 </ul>
 <h3>First launch</h3>
 <ol>
@@ -1099,7 +1127,7 @@ kerfkite-web --data-dir web-data serve --public-url https://your-pi.local:8443 -
 <p>Every package puts KerfKite Studio where a new user looks for it. Windows Setup always adds it to Start, and its components page offers a desktop shortcut, ticked; the uninstaller removes both, and a reinstall without the shortcut removes an old one. The Debian package installs <code>org.kerfkite.Studio.desktop</code> in the applications menu. The DMG carries an Applications link to drag the app onto. The launcher does the rest on the first <strong>Choose your workshop</strong> page: a desktop shortcut on macOS and Linux, and for the portable Linux archive a menu entry pointing at wherever it was extracted, using the <code>kerfkite-studio.png</code> the archive carries. It marks the entries it writes with <code>X-KerfKite-Launcher=shortcut</code>, repoints them when the folder moves and leaves every other file alone. Opened from the disk image or its translocated copy, the Mac launcher asks the user to drag the app to Applications first.</p>
 </li>
 <li>
-<p>When releasing the Android companion, build its release from the android directory using <code>./gradlew assembleRelease</code>. Sign the aligned release APK with the project's existing release alias and Android SDK apksigner. Keep signing credentials in private storage. Verify the APK using <code>apksigner verify --verbose --print-certs</code>. Future upgrades must use the same certificate and increment the Android version code.</p>
+<p>When releasing the Android companion, build its release from the android directory using <code>./gradlew assembleRelease</code>. Sign the aligned release APK with the project's existing release alias and Android SDK apksigner. Keep signing credentials in private storage. Verify the APK using <code>apksigner verify --verbose --print-certs</code>. Future upgrades must use the same certificate and increment the Android version code. A Pocket release between Studio releases is published under its own tag, <code>pocket-vX.Y.Z</code>, at the commit it was built from, with the APK and <code>SHA256SUMS.txt</code>, and is not marked as the latest release, because the desktop download links follow the latest release. Point the Pocket download links at that tag, and set the <code>pocket</code> default of the <strong>Build the desktop programs and installers</strong> workflow to it so that the next Studio release carries the new APK.</p>
 </li>
 <li>
 <p>Before publishing, check the build: run <strong>Actions → Check desktop release installers</strong> and <strong>Check SBC release packages</strong> with <strong>run</strong> set to the workflow's run ID. They take the files from its <code>release-VERSION</code> artifact and check them against its <code>SHA256SUMS.txt</code>, which has a line for each release file. Then upload the packages and checksums to a release for the corresponding source commit, and run both checks again against the tag. On Linux and macOS the installer check installs the release, tests the window, generates a simulated toolpath, exercises STEP and relaunches offline. The hosted Windows Server runner checks that Setup rejects that operating system before installing any files. Run the graphical acceptance test on a Windows 10 or 11 x64 client.</p>
@@ -1297,7 +1325,7 @@ Include the ZIP in <code>SHA256SUMS.txt</code>. Extracting it produces the <code
 </section><section id="licensing"><h1>Licences and redistribution</h1>
 <p><strong>Shaun Price's Studio code and project documentation use MIT.</strong> Keep the copyright and permission notice with copies. The font licences, upstream software licences, and permission to publish a specific recording follow the material they cover. <a href="vendor/Studio-MIT.txt">Studio MIT licence</a></p>
 <h2>What the checked packages contain</h2>
-<p>On 19 November 2026, the five published Studio 0.6.1 wheels and the Pocket 0.4.1 release APK were matched to their SHA-256 digests and inspected. Pocket is versioned separately from Studio. <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.6.1">Release files and checksums</a></p>
+<p>On 19 November 2026, the five published Studio 0.6.1 wheels and the Pocket 0.4.1 release APK were matched to their SHA-256 digests and inspected. Pocket is versioned separately from Studio. On 21 November 2026 the signed Pocket 0.5.0 APK (version code 6, SHA-256 <code>8024ecd01d1bcd79bb1d68569c2bdaaa1340915fcac47ecd4fb513cb4e8ddd4f</code>) was verified with <code>apksigner</code>: APK Signature Scheme v2 and v3, and the same certificate as 0.4.1. It was verified again on 28 November 2026, when it was published as <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/pocket-v0.5.0"><code>pocket-v0.5.0</code></a>. <a href="https://github.com/ShaunPrice/KerfKite/releases/tag/v0.6.1">Release files and checksums</a></p>
 <table>
 <thead>
 <tr>
@@ -1319,7 +1347,7 @@ Include the ZIP in <code>SHA256SUMS.txt</code>. Extracting it produces the <code
 </tr>
 <tr>
 <td>Android source and release APK</td>
-<td>The published APK declares Pocket 0.4.1 (version code 5). Its signature verifies, and its embedded <code>assets/LICENSE.txt</code> matches the repository MIT licence byte for byte. The Gradle wrapper is part of the source tree. From Pocket 0.5.0 the APK also contains ZXing core 3.5.3 (Apache-2.0) for the pairing-code scanner, with its licence and notice embedded as <code>assets/ZXING-LICENSE.txt</code> and <code>assets/ZXING-NOTICE.txt</code>.</td>
+<td>The Studio releases up to 0.8.0 carry Pocket 0.4.1 (version code 5); Pocket 0.5.0 (version code 6) is published separately under the tag <code>pocket-v0.5.0</code>. Each signature verifies, and its embedded <code>assets/LICENSE.txt</code> matches the repository MIT licence byte for byte. The Gradle wrapper is part of the source tree. From Pocket 0.5.0 the APK also contains ZXing core 3.5.3 (Apache-2.0) for the pairing-code scanner, with its licence and notice embedded as <code>assets/ZXING-LICENSE.txt</code> and <code>assets/ZXING-NOTICE.txt</code>.</td>
 <td>Retain the Android source notices, the embedded MIT licence and the embedded ZXing licence and notice. The wrapper and build tools have their own terms. <a href="https://docs.gradle.org/current/userguide/licenses.html">Gradle licence information</a></td>
 </tr>
 <tr>
