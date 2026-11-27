@@ -199,6 +199,7 @@ def lessons(args, url, step, server):
             from setup_tools_workflow import run as setup_tools
             from tiling_workflow import run as tiling
             from relief_roughing_workflow import run as relief_roughing
+            from pen_workflow import run as pen_drawing
 
             # Each lesson can modify the example or viewport.
             for lesson in (
@@ -234,6 +235,7 @@ def lessons(args, url, step, server):
                 setup_tools,
                 tiling,
                 relief_roughing,
+                pen_drawing,
             ):
                 with browser.new_context(viewport={"width": 1440, "height": 980}, accept_downloads=True) as context:
                     workshop = context.new_page()

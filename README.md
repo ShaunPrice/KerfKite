@@ -64,6 +64,7 @@ The desktop examples in the following gallery were captured in Studio 0.4.0. The
 * [Project wizards](docs/PROJECT-WIZARDS.md) for a finger-jointed box, slot-together dividers and a sign blank, with [dog-bone corners, inlays and nesting](docs/JOINERY.md).
 * [Machine setup tools](docs/SETUP-TOOLS.md): touch-plate zeroing, controller settings, axis calibration, spoilboard surfacing and macros, on the simulator so far.
 * [Tiling](docs/TILING.md) of a job larger than the machine into one program for each tile.
+* [Pen drawing](docs/PEN.md): a spring-loaded pen in place of the cutter or the laser, lifted by the Z axis or by a servo, with hatching and a broad nib for calligraphy.
 * [Roughing](docs/RELIEF-ROUGHING.md) of a 3D relief level by level before the finishing pass, from an image or an STL.
 * A [tool library](docs/TOOL-LIBRARY.md) with starting feeds and speeds worked out from chip load for the cutter, the material and the machine.
 * Router relief, profile and pocket operations, drag-knife paths, rotary engraving and simulated fixture clearance. [Fourth-axis setup](docs/ROTARY.md) · [Laser depth slicing](docs/LASER-WORKSHOP.md)

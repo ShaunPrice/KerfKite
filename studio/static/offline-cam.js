@@ -161,12 +161,14 @@
         ...(jobs[0].simulation_tool&&jobs.every(j=>JSON.stringify(j.simulation_tool)===JSON.stringify(jobs[0].simulation_tool))?{simulation_tool:jobs[0].simulation_tool}:{})};
     }
     const mode=p.mode,protocol=p.protocol===undefined?'grbl':p.protocol,op=p.operation===undefined?'line':p.operation;
-    if(!['router','laser','knife'].includes(mode)) fail('Choose router, laser or knife');
+    if(!['router','laser','knife','pen'].includes(mode)) fail('Choose router, laser, knife or pen');
+    const pen=mode==='pen',penServo=pen&&p.pen_lift==='servo';
+    if(pen&&!penServo&&p.pen_lift!==undefined&&p.pen_lift!=='z') fail('Pen lift must be z or servo');
     const entry=p.router_entry??'plunge';
     if(mode==='router' && entry!=='plunge' && (entry!=='ramp'||op!=='line')) fail('Only a closed-line ramp is available offline. Use Studio server CAM for compensated ramp or pocket helix entries. Drilling uses its own peck controls.');
     if(op!=='line'&&op!=='drill') fail('Offline CAM supports line operations only for contour work, plus router drilling. Use hosted CNC Studio for '+String(op)+' CAM.');
     const profile=protocols.get(protocol);
-    if(!profile.modes.includes(mode))fail(profile.name+' dynamic laser export is not implemented');
+    if(!profile.modes.includes(pen?'router':mode))fail(profile.name+' dynamic laser export is not implemented');
 
     const width=value(p,'width',undefined,1,2000),height=value(p,'height',undefined,1,2000),feed=value(p,'feed',undefined,1,10000),power=value(p,'power',undefined,1,100000);
     const safe=value(p,'safe',5,.1,100),step=value(p,'step',.5,.01,10),plunge=value(p,'plunge',100,1,1000),passes=value(p,'passes',1,1,100);
@@ -193,10 +195,32 @@
       warnings.push('Knife alignment lead-in marks material before each contour. Test blade offset and corner swivels on scrap.');
     }
     if(depths!==null) {
-      if(mode!=='router' || !Array.isArray(depths) || depths.length!==clean.length) fail('Depth paths must match router XY paths');
+      if((mode!=='router'&&!pen) || !Array.isArray(depths) || depths.length!==clean.length) fail('Depth paths must match router XY paths');
       depths=depths.map((row,i)=>{if(!Array.isArray(row)||row.length!==clean[i].length) fail('Each vertex must have a matching depth');return row.map(z=>number(z,'Vertex Z',-50,0));});
       depth=0;for(const row of depths) for(const z of row) depth=Math.max(depth,-z);
       if(depth<=0) fail('No contour cuts below the stock surface');
+    }
+    if(pen) {
+      // A broad nib drawn with a fine pen: each stroke again and again, side by side along the nib's edge.
+      if(penServo&&depths!==null) fail('Drawing with depths at each point needs the Z axis to lift the pen');
+      const nib=value(p,'pen_nib',0,0,20);
+      if(nib>0) {
+        const tip=value(p,'pen_tip',.4,.1,5),angle=value(p,'pen_nib_angle',45,-360,360)*Math.PI/180;
+        const copies=Math.max(2,Math.ceil(nib/tip-1e-9)+1),out=[],outDepths=[];let total=0;
+        clean.forEach((path,index)=>{
+          for(let k=0;k<copies;k++) {
+            const along=-nib/2+nib*k/(copies-1);
+            const copy=path.map(([x,y])=>[x+along*Math.cos(angle),y+along*Math.sin(angle)]);
+            for(const [x,y] of copy) if(x<0||x>width||y<0||y>height) fail("The broad nib takes the drawing outside the work area: move it in by half the nib's width");
+            const row=depths===null?null:depths[index].slice();
+            if(k%2) {copy.reverse();if(row)row.reverse();}
+            total+=copy.length;if(total>100000) fail('Too many vertices; use a narrower nib, a wider pen line or a simpler design');
+            out.push(copy);if(row)outDepths.push(row);
+          }
+        });
+        clean=out;if(depths!==null)depths=outDepths;count=total;
+      }
+      warnings.push(penServo?"The pen is lifted by the spindle or laser output and Z is not moved: set the holder's height by hand, and check which S values lift and lower it before putting a pen in.":"The spindle stays off. Z zero is where the pen touches the paper; the depth is how far the holder's spring is pressed.",'Take the cutter or the laser off before drawing, and test on scrap paper first.');
     }
     const pixelPowers=p.path_powers===undefined ? null : p.path_powers;
     if(pixelPowers!==null && mode!=='laser') fail('Pixel powers require laser mode');
@@ -221,12 +245,33 @@
       });
       if(options.slice(0,4).some(Boolean)) warnings.push('Tangent leads are cutting moves and may mark outside the design. Power ramps use steps of at most 0.5 mm; M4 also scales power with speed.');
     }
-    const levels=mode==='laser'?Array(passes).fill(null):Array.from({length:Math.ceil(depth/step)},(_,i)=>-Math.min(depth,step*(i+1)));
+    const levels=mode==='laser'?Array(passes).fill(null):pen?Array(passes).fill(-depth):Array.from({length:Math.ceil(depth/step)},(_,i)=>-Math.min(depth,step*(i+1)));
     if(count*levels.length>MAX) fail('Job exceeds 200000 cutting segments');
     let lines=['G21','G90','G17','G94','G54','M5'];
-    if(mode!=='laser') {lines.push('G0 Z'+safe.toFixed(3));if(mode==='router') lines.push('M3 S'+integer(power),'G4 P2');}
+    if(mode!=='laser'&&!penServo) {lines.push('G0 Z'+safe.toFixed(3));if(mode==='router') lines.push('M3 S'+integer(power),'G4 P2');}
     const segments=[];let length=0;
-    for(const z of levels) clean.forEach((original,pathIndex)=>{
+    let penUp=0;
+    if(penServo) {
+      // The holder is worked from the spindle or laser output; Z is not moved at all.
+      const pause=value(p,'pen_dwell',.2,0,5);penUp=value(p,'pen_up_power',0,0,100000);
+      const configured=profile.id==='mach3'||profile.id==='uccnc';
+      if(configured&&pause>0&&p.dwell_units!=='seconds'&&p.dwell_units!=='milliseconds') fail('Select configured dwell units: seconds or milliseconds');
+      const milliseconds=profile.family==='marlin'||(configured&&p.dwell_units==='milliseconds');
+      const wait='G4 P'+(milliseconds?integer(pause*1000):pause.toFixed(3)),up=penUp>0?'M3 S'+integer(penUp):'M5',down='M3 S'+integer(power);
+      const holder=command=>{lines.push(command);if(pause>0)lines.push(wait);};
+      holder(up);
+      for(const _ of levels) for(const path of clean) {
+        let [x,y]=path[0];
+        lines.push(`G0 X${x.toFixed(3)} Y${y.toFixed(3)}`);holder(down);
+        for(let i=1;i<path.length;i++) {
+          const [nx,ny]=path[i];
+          lines.push(`G1 X${nx.toFixed(3)} Y${ny.toFixed(3)} F${feed.toFixed(1)}`);
+          segments.push([x,y,nx,ny,0,power,0]);length+=Math.hypot(nx-x,ny-y);x=nx;y=ny;
+        }
+        holder(up);
+      }
+    }
+    for(const z of penServo?[]:levels) clean.forEach((original,pathIndex)=>{
       const path=mode==='laser'?laserPaths[pathIndex]:original.map(([x,y])=>[x,y,null]);
       let [x,y]=path[0],currentZ=depths!==null?Math.max(z,depths[pathIndex][0]):z;
       if(mode!=='laser') lines.push('G0 Z'+safe.toFixed(3),`G0 X${x.toFixed(3)} Y${y.toFixed(3)}`,`G1 Z${currentZ.toFixed(3)} F${plunge.toFixed(1)}`);
@@ -241,8 +286,8 @@
       }
       lines.push(mode==='laser'?'M5':'G0 Z'+safe.toFixed(3));
     });
-    lines.push('M5');
-    lines=protocols.postprocess(lines,protocol,mode,p.dwell_units===undefined?'':p.dwell_units);
+    if(!(penServo&&penUp>0)) lines.push('M5');
+    lines=protocols.postprocess(lines,protocol,pen?'router':mode,p.dwell_units===undefined?'':p.dwell_units);
     warnings.push(profile.notes);
     if(profile.family==='rs274')warnings.push('Before loading, clear controller scaling, rotation and local offsets. Set G54 Z zero for the current tool tip with tool-length compensation off. Exact-stop output may run slower on dense curves.');
     const envelope=mode==='laser'?laserPaths:clean,bounds=[Infinity,Infinity,-Infinity,-Infinity];

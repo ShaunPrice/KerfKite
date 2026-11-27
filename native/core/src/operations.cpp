@@ -212,7 +212,7 @@ std::vector<std::string> prepare(const json &project, std::vector<Path> &paths, 
         warnings.push_back("Concentric pocket clearing preserves islands. Narrow residual features may remain.");
         if (is_text_or_absent(get(project, "router_entry"), "plunge")) warnings.push_back("Plunge entry requires a centre-cutting tool.");
     } else if (is_text(operation, "fill")) {
-        if (!laser) throw ValueError("Hatch fill requires laser mode");
+        if (!laser && !is_text(get(project, "mode"), "pen")) throw ValueError("Hatch fill requires laser mode");
         const double interval = value(project, "interval", 0.2, 0.02, 20, "0.02", "20");
         const double angle = value(project, "hatch_angle", 0, -360, 360, "-360", "360");
         paths = fill_paths(g, interval, angle, truthy(get(project, "crosshatch")));
