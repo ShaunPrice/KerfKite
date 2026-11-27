@@ -4,6 +4,17 @@ Notable changes to KerfKite Studio and KerfKite Pocket. Versions before this fil
 
 ## Unreleased
 
+## Pocket 0.5.0 — 2026-11-28
+
+Released separately from Studio, under the tag `pocket-v0.5.0`. It installs over Pocket 0.4.1 and keeps its projects. The Studio 0.7.0 and 0.8.0 releases carry Pocket 0.4.1; the next Studio release carries this one.
+
+- Pair by QR code: **CNC pendant → Scan QR code** reads the pairing code Studio 0.7.0 and later draw. Camera access is requested when the scanner is first opened and used for nothing else.
+- Encrypted pairing: a pairing link that carries a certificate fingerprint is used over HTTPS, and only that certificate is accepted. A plain link is still used after a confirmation.
+- The light navigation bar attribute, which needs API 27, is no longer referenced on API 26.
+- Every shape can be selected from the drawing preview. New shapes no longer start exactly on top of the previous one, a repeated tap moves to the next overlapping shape, and a tap within 12 dp of an outline counts.
+- The preview no longer allocates while drawing, and computes each shape's outline once.
+- Version code 6, built from `fefa8913` and signed with the certificate of 0.4.1.
+
 ## 0.8.0 — 2026-11-27
 
 Studio 0.8.0 adds a tool library, machine setup tools, joinery and project wizards, tiling, relief roughing with adaptive clearing, V-carved inlays and a pen head for drawing, including round a cylinder. None of the new machine functions has been run on a physical machine: they were checked against the simulated controllers.
