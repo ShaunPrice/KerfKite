@@ -48,6 +48,16 @@ jobs:
         with:
           go-version: "1.24.7"
           cache: false
+      - name: Give the reference the version under test
+        # The reference is frozen at the release it was last part of and reports that version. The programs report
+        # VERSION. The comparisons are of behaviour, so the reference is told the version being compared with it.
+        shell: bash
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          sed -i.bak -E "s/^__version__ = \"[^\"]*\"/__version__ = \"$version\"/" reference/studio/__init__.py
+          rm reference/studio/__init__.py.bak
+          printf '%s\n' "$version" > reference/VERSION
+          grep -qx "__version__ = \"$version\"" reference/studio/__init__.py
       - name: Install the Python reference with its compiled extension
         # The reference computes offsets, pockets, fills and V-carves through its extension, so it must have been
         # built. The step extra (OCP) is the reference for STEP exchange.
